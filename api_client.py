@@ -6,11 +6,12 @@ a structured response matching a Pydantic schema, (b) records the audit trail
 (c) raises a clear, specific error when no API key is configured -- rather
 than stages each reimplementing API calls and silently behaving differently.
 
-Structured output is implemented via forced tool use: the Pydantic model's
-JSON schema becomes a single tool's input_schema, and tool_choice forces the
-model to call it, so the response is always valid JSON matching the schema
-(the SDK/Pydantic validation step still runs on the way back, to catch cases
-where the model's output technically parses but violates a constraint).
+Structured output uses the API's native structured-outputs feature via
+`client.messages.stream(output_format=<PydanticModel>)`: the API constrains the
+response to the model's JSON schema and the SDK validates it back into the
+Pydantic class. (This replaced an earlier forced-tool-use approach --
+tool_choice {"type": "tool"} -- which current models such as
+claude-sonnet-5-5 reject with a 400.)
 """
 from __future__ import annotations
 import base64
@@ -62,8 +63,8 @@ def call_structured(
     image_paths: Optional[List[Path]] = None,
 ) -> T:
     """
-    Calls the model, forces its response into `response_model`'s schema via
-    tool use, validates it, writes the full audit trail to `run_dir`, and
+    Calls the model, constrains its response to `response_model`'s schema via
+    structured outputs, validates it, writes the full audit trail to `run_dir`, and
     returns the validated Pydantic instance.
 
     `image_paths`, when given, are attached as image blocks BEFORE the text
@@ -74,8 +75,6 @@ def call_structured(
     """
     client = _client()
     model = settings.MODELS.get(stage, settings.MODELS["chemistry"])
-    schema = response_model.model_json_schema()
-    tool_name = f"emit_{response_model.__name__.lower()}"
 
     if image_paths:
         content = [_image_block(p) for p in image_paths] + [{"type": "text", "text": user_content}]
@@ -83,19 +82,28 @@ def call_structured(
         content = user_content
 
     started = time.time()
-    response = client.messages.create(
+    # Streamed because chemistry output for a table-heavy paper can run to tens
+    # of thousands of tokens; the SDK requires streaming for max_tokens that
+    # large (non-streaming requests risk HTTP timeouts).
+    with client.messages.stream(
         model=model,
         max_tokens=settings.MAX_TOKENS,
         system=system_prompt,
         messages=[{"role": "user", "content": content}],
-        tools=[{"name": tool_name, "description": f"Return the extracted {response_model.__name__}.",
-                "input_schema": schema}],
-        tool_choice={"type": "tool", "name": tool_name},
-    )
+        output_format=response_model,
+    ) as stream:
+        response = stream.get_final_message()
     elapsed = time.time() - started
 
-    tool_use_block = next(b for b in response.content if b.type == "tool_use")
-    parsed = response_model.model_validate(tool_use_block.input)
+    if response.stop_reason in ("refusal", "max_tokens") or response.parsed_output is None:
+        raise RuntimeError(
+            f"[{stage}] no usable structured output from {model}: stop_reason="
+            f"{response.stop_reason!r}, stop_details={getattr(response, 'stop_details', None)!r}, "
+            f"message_id={response.id}. If stop_reason is 'max_tokens', raise "
+            f"config.settings.MAX_TOKENS."
+        )
+    parsed = response.parsed_output
+    raw_text = next((b.text for b in response.content if b.type == "text"), None)
 
     run_dir.mkdir(parents=True, exist_ok=True)
     audit = {
@@ -107,7 +115,9 @@ def call_structured(
         "images_attached": [str(p) for p in (image_paths or [])],
         "system_prompt": system_prompt,
         "user_content": user_content,
-        "raw_response": tool_use_block.input,
+        "stop_reason": response.stop_reason,
+        "message_id": response.id,
+        "raw_response": json.loads(raw_text) if raw_text else None,
     }
     (run_dir / f"{stage}.audit.json").write_text(json.dumps(audit, indent=2))
     (run_dir / f"{stage}.output.json").write_text(parsed.model_dump_json(indent=2))

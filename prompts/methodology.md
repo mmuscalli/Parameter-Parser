@@ -25,8 +25,8 @@ Fields to extract:
 If a field's value differs by experiment set (e.g. several sets at slightly
 different temperatures) rather than being constant across the whole paper,
 set it "ambiguous" at the top level with a note pointing to
-`per_set_overrides`, and fill `per_set_overrides` keyed by the exact
-`set_label` strings used in the structure plan below.
+`per_set_overrides`, and add one `per_set_overrides` entry per (set, field),
+using the exact `set_label` strings from the structure plan below.
 
 Return a Methodology object.
 

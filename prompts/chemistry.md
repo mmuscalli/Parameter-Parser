@@ -21,6 +21,12 @@ For each species:
 - `set_label`: match exactly to a `set_label` from the structure plan, or null
   if the value is constant across the whole paper (e.g. a fixed background
   reagent concentration present in every condition).
+- `sample_label`: for every "sampled" value, match exactly to the
+  `sample_label` (within that set) from the structure plan, so each measured
+  value can be placed on the right row. Leave null for "initial" values.
+- Reported percent yields (e.g. "% (Gly)2") go in `concentration_value` with
+  the unit as stated in `concentration_unit_raw`; leave `concentration_mM`
+  null for them.
 - Do not extract values that only appear as a point on a scatter plot/figure
   -- table and in-text values only, for this pass.
 - Every entry needs a `quote` and `source`.

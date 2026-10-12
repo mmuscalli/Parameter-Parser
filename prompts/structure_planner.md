@@ -16,7 +16,7 @@ Guidance:
 - set_type "Time Series" when samples within a set differ only by elapsed
   time/duration under otherwise-fixed conditions. "Independent" when each row
   is its own self-contained condition with no shared sweep. "Evaporation
-  Cycle" for wet-dry cycling (should already have been excluded at triage).
+  Cycle" for wet-dry cycling.
 - Only plan rows for data given as explicit text or table values. Data that
   only exists as a point read off a scatter plot/figure is OUT OF SCOPE for
   this pass -- list it under `excluded_data` instead of planning a row for it.

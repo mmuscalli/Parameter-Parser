@@ -36,6 +36,12 @@ class SoluteEntry(BaseModel):
                     "constant across the whole paper (e.g. the fixed 0.5 mol dm-3 CuCl2 "
                     "background present in every condition in eder1994).",
     )
+    sample_label: Optional[str] = Field(
+        default=None,
+        description="For role 'sampled': the exact structure-plan sample_label (within "
+                    "set_label) this measurement belongs to, e.g. 't = 97.3 h'. Null for "
+                    "initial-composition values that apply to the whole set.",
+    )
     concentration_value: Optional[float] = Field(description="Numeric value in the ORIGINAL reported unit.")
     concentration_unit_raw: Optional[str] = Field(description="Unit exactly as stated, e.g. 'mol dm-3'.")
     concentration_mM: Optional[float] = Field(

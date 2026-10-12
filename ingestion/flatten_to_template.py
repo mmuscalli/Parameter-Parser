@@ -43,6 +43,19 @@ def resolve_template_column(species_name: str, role: str) -> str:
     return f"{aq_form}__UNRECOGNIZED_COLUMN"
 
 
+def _pct_yield(entries, peptide_prefix: str):
+    """The sampled entry reporting a % yield for e.g. '2peptide' / '2peptide_Gly'."""
+    return next((s for s in entries
+                 if s.name.startswith(peptide_prefix) and s.concentration_value is not None
+                 and "%" in (s.concentration_unit_raw or "")), None)
+
+
+def _lowest_confidence(entries) -> Optional[str]:
+    order = ["low", "medium", "high"]
+    levels = [s.confidence for s in entries]
+    return min(levels, key=order.index) if levels else None
+
+
 def build_rows(
     metadata: PaperMetadata,
     structure: StructurePlan,
@@ -75,17 +88,20 @@ def build_rows(
             if s.set_label == pset.set_label and s.role == "sampled"
         ]
 
-        override = methodology.per_set_overrides.get(pset.set_label, {})
+        override = methodology.overrides_for(pset.set_label)
 
         for sample_idx, sample in enumerate(pset.samples, start=1):
             entry_number += 1
             sample_id = f"{sample_idx:03d}"
             full_id = f"{set_id}{sample_id}"
 
-            pct2 = next((s for s in sampled_for_set
-                         if s.name == "2peptide" and s.set_label == pset.set_label), None)
-            pct3 = next((s for s in sampled_for_set
-                         if s.name == "3peptide" and s.set_label == pset.set_label), None)
+            sampled_here = [s for s in sampled_for_set if s.sample_label == sample.sample_label]
+            pct2 = _pct_yield(sampled_here, "2peptide")
+            pct3 = _pct_yield(sampled_here, "3peptide")
+            sampled_mM = {
+                resolve_template_column(s.name, "sampled"): s.concentration_mM
+                for s in sampled_here if s.concentration_mM is not None
+            }
 
             rows.append(ExtractedRow(
                 full_id=full_id, set_id=set_id, sample_id=sample_id,
@@ -105,7 +121,10 @@ def build_rows(
                 initial_pressure_bar=methodology.initial_pressure_bar.value,
                 sampled_temperature_C=override.get(
                     "sampled_temperature_C", methodology.sampled_temperature_C.value),
-                species_mM=species_mM,
+                species_mM={**species_mM, **sampled_mM},
+                sampled_2peptide_Gly_pct_yield=pct2.concentration_value if pct2 else None,
+                sampled_3peptide_Gly_pct_yield=pct3.concentration_value if pct3 else None,
+                extraction_confidence=_lowest_confidence(sampled_here),
                 source_notes=f"set: {pset.varying_condition_summary}; sample source: {sample.source}",
             ))
 

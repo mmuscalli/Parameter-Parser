@@ -1,7 +1,11 @@
 """
-Chains the stages for ONE paper. Each stage's output is validated (Pydantic)
-and written to runs/<paper_id>/ before the next stage runs, so a failure
-partway through still leaves the earlier stages' work inspectable.
+Chains the extraction stages for ONE pre-selected paper. Each stage's output
+is validated (Pydantic) and written to runs/<paper_id>/ before the next stage
+runs, so a failure partway through still leaves the earlier stages' work
+inspectable.
+
+Paper selection is the user's job -- triage is NOT run here. See
+run_triage_only() below (`main.py --triage-only`) for optional screening.
 """
 from __future__ import annotations
 import json
@@ -36,11 +40,6 @@ def run_pipeline(pdf_path: str, paper_prefix: str = "001") -> Path:
         print(f"[{parsed.paper_id}] rasterized {len(table_images)} table page(s): "
               f"{[str(p) for p in table_images]}")
 
-    triage = run_triage(parsed.paper_id, parsed.text, run_dir)
-    if triage.recommendation == "exclude":
-        print(f"[{parsed.paper_id}] EXCLUDED at triage: {triage.reasoning}")
-        return run_dir
-
     structure = run_structure_planner(parsed.paper_id, parsed.text, run_dir, table_images=table_images)
     metadata = run_metadata_extraction(parsed.paper_id, parsed.page_texts[0], run_dir)
     methodology = run_methodology_extraction(parsed.paper_id, parsed.text, structure, run_dir)
@@ -71,4 +70,24 @@ def run_pipeline(pdf_path: str, paper_prefix: str = "001") -> Path:
         print(f"[{parsed.paper_id}] gold-standard scoring is OFF (config.settings.USE_GOLD_STANDARD "
               f"= False) -- enable it once the curated subset is ready.")
 
+    return run_dir
+
+
+def run_triage_only(pdf_path: str) -> Path:
+    """Optional screening: parse the PDF and run ONLY the triage stage, then
+    stop. Meant for filtering a pile of candidate papers before extraction --
+    the criteria in prompts/triage.md are one curator's own dataset scope, not
+    a general requirement, so the extraction pipeline never gates on them."""
+    parsed = parse_pdf(pdf_path)
+    run_dir = settings.RUNS_DIR / parsed.paper_id
+    run_dir.mkdir(parents=True, exist_ok=True)
+    (run_dir / "parsed_paper.json").write_text(parsed.to_json())
+    if not parsed.has_text_layer:
+        raise RuntimeError(f"{parsed.paper_id}: no text layer -- OCR needed, not implemented.")
+
+    triage = run_triage(parsed.paper_id, parsed.text, run_dir)
+    print(f"[{parsed.paper_id}] triage recommendation: {triage.recommendation}")
+    print(triage.reasoning)
+    if triage.excluded_experiment_note:
+        print(f"Excluded-experiment note: {triage.excluded_experiment_note}")
     return run_dir

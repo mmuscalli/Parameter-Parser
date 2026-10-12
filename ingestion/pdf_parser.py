@@ -1,6 +1,6 @@
 """
 PDF -> clean structured input, done ONCE per paper and cached, so every
-downstream stage (triage/structure/metadata/methodology/chemistry) reuses the
+downstream stage (structure/metadata/methodology/chemistry, optional triage) reuses the
 same parsed text instead of re-parsing the PDF on every stage call.
 
 This intentionally does NOT attempt figure/scatter-plot digitization yet

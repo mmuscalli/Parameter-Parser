@@ -20,19 +20,19 @@ EVAL_DIR = ROOT / "eval"
 
 ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY", "")
 
-# Model per stage. Cheap/simple stages (metadata lookup, triage) can use a
+# Model per stage. Cheap/simple stages (metadata lookup, optional triage) can use a
 # smaller/faster model; stages that require careful reading (chemistry,
 # methodology) should use a stronger one. Placeholder names -- set to
 # whatever's current when you wire up real calls.
 MODELS = {
-    "triage": "claude-haiku-4-5",
-    "structure_planner": "claude-sonnet-4-5",
-    "metadata": "claude-haiku-4-5",
-    "methodology": "claude-sonnet-4-5",
-    "chemistry": "claude-sonnet-4-5",
+    "triage": "claude-haiku-5-5",
+    "structure_planner": "claude-sonnet-5-5",
+    "metadata": "claude-haiku-5-5",
+    "methodology": "claude-sonnet-5-5",
+    "chemistry": "claude-sonnet-5-5",
 }
 
-MAX_TOKENS = 4096
+MAX_TOKENS = 64000  # streamed (api_client.py); eder1994 chemistry alone overflowed 16000
 
 # --- Validation / gold-standard scoring -------------------------------------
 # Left OFF until the curated "most certain and exhaustive" paper subset exists.

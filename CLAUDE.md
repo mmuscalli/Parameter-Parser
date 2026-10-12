@@ -15,12 +15,36 @@ level up). The original dataset (50 papers, 1,356 rows) was built entirely
 by manual reading — this pipeline is an attempt to speed that up with an
 LLM-based extraction pipeline, NOT to replace human review of the output.
 
-## Status as of 2026-10 — read before assuming anything works end-to-end
+Scope (Mickey, 2026-10-12): parse a paper the USER has already selected and
+pull out metadata, experimental methodology, and reported solution
+chemistry. Paper selection is the user's job, so triage is NOT a gate in
+`pipeline.py` -- its criteria were Mickey's own dataset scope. It's kept as
+an optional screening tool (`main.py --triage-only`) for bulk-filtering
+candidates later; don't wire it back in as a gate.
 
-- **No `ANTHROPIC_API_KEY` has ever been set in the environment this was
-  built in.** `stages/*.py` (the actual API-calling code) has therefore
-  NEVER been exercised live. It compiles, it's structurally sound, but treat
-  it as unverified until you've run it for real.
+## Status as of 2026-10-12 — read before assuming anything works end-to-end
+
+- **First live run done (2026-10-12, Mickey's Mac):** `main.py` on eder1994
+  runs end to end in ~2 min (~81K input / ~22K output tokens) and writes
+  `runs/eder1994_auto/` (the PDF was copied as `eder1994_auto.pdf` so it
+  wouldn't overwrite the manual demo). Against `runs/eder1994/`: 42/42 rows
+  identical on composition, temperatures, both yields and set_type. (The
+  auto run initially disagreed on set 001013 -- Table 2's unlabelled
+  "2.50 mol dm-3, 87 C" block. Mickey confirmed it's Ca2+, as the auto run
+  read it; the manual demo had mis-transcribed it as Ba2+ and was corrected
+  in place, with a `corrections` note in the affected `*.provenance.json`.)
+- **Local setup that works:** Python deps in the project venv one level up
+  (`../.venv/bin/python`, pydantic 2). Poppler comes from a dedicated conda
+  env (`/opt/anaconda3/envs/poppler/bin` -- prepend to PATH) because
+  Homebrew has no poppler bottles for macOS 14.1 and builds from source for
+  over an hour.
+- **API integration notes:** `api_client.py` uses native structured outputs
+  (`client.messages.stream(output_format=Model)`), not forced tool use --
+  current models 400 on `tool_choice` "tool"/"any". Consequence: schemas
+  sent to the model can't contain free-form dicts (they become always-empty
+  objects), hence `Methodology.per_set_overrides` is a list. Streaming +
+  `MAX_TOKENS = 64000` because eder1994's chemistry output alone overflowed
+  16K.
 - The one demo (`runs/eder1994/`) was produced by Claude manually acting as
   the model — reading eder1994.pdf, filling in the exact same Pydantic
   schemas a real call would return — because no key was available. Every
@@ -28,10 +52,9 @@ LLM-based extraction pipeline, NOT to replace human review of the output.
   `*.provenance.json`. Do not treat those as a real pipeline run when judging
   whether stages/* actually works; they only validate the schemas/prompts
   are reasonable, not that the API integration is correct.
-- First real thing to do in a new environment with a key: `cp
-  config/.env.example config/.env`, add the key, run `python main.py --pdf
-  "<some PDF>"` on eder1994.pdf first (ground truth already worked out by
-  hand, in `runs/eder1994/`, to compare against) before trying a new paper.
+- New environment: `cp config/.env.example config/.env` and add the key
+  (gitignored; `config/settings.py` loads it itself, no VS Code env-file
+  injection needed).
 - Validation against a curated answer set is OFF on purpose
   (`config/settings.py: USE_GOLD_STANDARD = False`,
   `validation/gold_standard_eval.py: ENABLED = False`) — Mickey is building
@@ -59,7 +82,10 @@ LLM-based extraction pipeline, NOT to replace human review of the output.
   `_aq_` infix). `ingestion/flatten_to_template.py:resolve_template_column()`
   handles both — if you add new species categories, check which pattern they
   actually use in the real header before assuming.
-- **CrossRef (`ingestion/crossref_lookup.py`) has never been live-tested.**
+- **CrossRef (`ingestion/crossref_lookup.py`) WORKS from Mickey's local
+  machine (verified 2026-10-12: eder1994 -> 10.1039/dt9940001125, title
+  similarity 0.98, score 102.6) -- the block below was sandbox-only.** It
+  isn't called from `pipeline.py` yet. Original note:
   `api.crossref.org` was blocked by this account's sandboxed-session egress
   policy — confirmed via the proxy's own response body:
   `request blocked: no rule or allowlist entry allows host "api.crossref.org"`.
@@ -91,10 +117,11 @@ this pipeline's work began, in case anything here needs to be rolled back.
 
 ## Immediate next steps (as of last session)
 
-1. Add a real API key and run `main.py` on eder1994.pdf; diff the result
+1. DONE 2026-10-12 (see Status). Was: add a real API key and run `main.py` on eder1994.pdf; diff the result
    against `runs/eder1994/eder1994_extracted.csv` (the manual version) to
    see how close the automated pipeline gets.
-2. Re-test `ingestion/crossref_lookup.py` with real network access.
+2. DONE 2026-10-12 -- CrossRef works locally; next is wiring it into the
+   metadata stage when the paper has no printed DOI.
 3. Wait on Mickey's curated gold-standard paper subset before touching
    `validation/gold_standard_eval.py`.
 4. Figure/scatter-plot digitization is explicitly out of scope so far — a

@@ -1,10 +1,19 @@
-"""Stage 1: should this paper even be processed further?
+"""Optional screening stage (NOT part of the extraction pipeline): should this
+paper even be processed further? Run via `main.py --triage-only`.
 
 Mirrors the inclusion/exclusion criteria from the project's own draft paper
 (Muscalli_Literature_Database_Paper_Draft.docx, "Dataset Scope and Selection
 Criteria"): aqueous solution system, single amino acid per experiment,
 quantifiable peptide yield, prebiotically plausible conditions, not a
 wet-dry/alternating-phase system, not a mixed-peptide (heteropolymer) system.
+
+Those criteria are one curator's own dataset scope, kept for bulk-filtering
+candidate papers -- the extraction pipeline assumes the user already chose
+the paper and never gates on this. Known issue: `is_mixed_peptide_system` is
+described paper-wide here, which conflicts with prompts/triage.md's rule that
+a paper with SOME single-amino-acid experiments can still be included; newer
+models resolved that toward "exclude" for eder1994. Reconcile before relying
+on triage for real screening.
 """
 from __future__ import annotations
 from typing import Literal, Optional
