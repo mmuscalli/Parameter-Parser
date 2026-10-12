@@ -1,0 +1,136 @@
+"""
+Combine StructurePlan + Methodology + ChemistryExtraction (+ calculators) into
+one ExtractedRow per planned sample, and flatten a list of ExtractedRow into
+the wide, PaperDataTemplate-shaped CSV your existing pipeline expects.
+
+This is the one place that's allowed to know about the wide template's column
+names -- every stage upstream of this deliberately stays schema-narrow.
+"""
+from __future__ import annotations
+import csv
+import json
+from pathlib import Path
+from typing import List, Optional
+
+from schemas.chemistry import ChemistryExtraction
+from schemas.methodology import Methodology
+from schemas.paper_metadata import PaperMetadata
+from schemas.row_schema import ExtractedRow
+from schemas.structure_plan import StructurePlan
+from calculators.peptide_yield import peptide_mM_from_yield_pct
+
+_VOCAB_PATH = Path(__file__).resolve().parent.parent / "schemas" / "template_vocab.json"
+_TEMPLATE_COLUMNS = set(json.loads(_VOCAB_PATH.read_text())["all_columns"]) if _VOCAB_PATH.exists() else set()
+
+
+def resolve_template_column(species_name: str, role: str) -> str:
+    """
+    The real template is NOT uniform: salts/ions use '<role>_<name>_aq_mM'
+    (e.g. initial_NaCl_aq_mM) while amino acids/peptides use '<role>_<name>_mM'
+    with no '_aq_' infix (e.g. initial_Gly_mM, sampled_2peptide_Gly_mM) --
+    confirmed against PaperDataTemplate.xlsx's own headers, not guessed. Try
+    the real column name patterns in order; if neither exists yet, fall back
+    to the _aq_mM form and mark it so a human can decide whether it's a new
+    column or a naming mismatch, rather than silently writing a column the
+    template will never recognize.
+    """
+    aq_form = f"{role}_{species_name}_aq_mM"
+    plain_form = f"{role}_{species_name}_mM"
+    if aq_form in _TEMPLATE_COLUMNS:
+        return aq_form
+    if plain_form in _TEMPLATE_COLUMNS:
+        return plain_form
+    return f"{aq_form}__UNRECOGNIZED_COLUMN"
+
+
+def build_rows(
+    metadata: PaperMetadata,
+    structure: StructurePlan,
+    methodology: Methodology,
+    chemistry: ChemistryExtraction,
+    paper_prefix: str,
+) -> List[ExtractedRow]:
+    rows: List[ExtractedRow] = []
+
+    # species constant across the whole paper (set_label is None)
+    constant_species = {
+        s.name: s for s in chemistry.solutes if s.set_label is None and s.role == "initial"
+    }
+
+    entry_number = 0
+    for set_idx, pset in enumerate(structure.experiment_sets, start=1):
+        set_id = f"{paper_prefix}{set_idx:03d}"
+        set_species = {
+            s.name: s for s in chemistry.solutes
+            if s.set_label == pset.set_label and s.role == "initial"
+        }
+        merged_species = {**constant_species, **set_species}
+        species_mM = {
+            resolve_template_column(name, "initial"): s.concentration_mM
+            for name, s in merged_species.items() if s.concentration_mM is not None
+        }
+
+        sampled_for_set = [
+            s for s in chemistry.solutes
+            if s.set_label == pset.set_label and s.role == "sampled"
+        ]
+
+        override = methodology.per_set_overrides.get(pset.set_label, {})
+
+        for sample_idx, sample in enumerate(pset.samples, start=1):
+            entry_number += 1
+            sample_id = f"{sample_idx:03d}"
+            full_id = f"{set_id}{sample_id}"
+
+            pct2 = next((s for s in sampled_for_set
+                         if s.name == "2peptide" and s.set_label == pset.set_label), None)
+            pct3 = next((s for s in sampled_for_set
+                         if s.name == "3peptide" and s.set_label == pset.set_label), None)
+
+            rows.append(ExtractedRow(
+                full_id=full_id, set_id=set_id, sample_id=sample_id,
+                set_type=pset.set_type, entry_number=entry_number,
+                paper_doi=metadata.paper_doi, paper_title=metadata.paper_title,
+                authors=metadata.authors, year_published=metadata.year_published,
+                journal_published=metadata.journal_published,
+                experiment_type=methodology.experiment_type.value or "",
+                solution_type=methodology.solution_type.value or "",
+                duration_hr=sample.duration_hr,
+                vessel_material=methodology.vessel_material.value,
+                solvent_name=methodology.solvent_name.value,
+                analysis_method=methodology.analysis_method.value,
+                headspace_gas=methodology.headspace_gas.value,
+                initial_temperature_C=override.get(
+                    "initial_temperature_C", methodology.initial_temperature_C.value),
+                initial_pressure_bar=methodology.initial_pressure_bar.value,
+                sampled_temperature_C=override.get(
+                    "sampled_temperature_C", methodology.sampled_temperature_C.value),
+                species_mM=species_mM,
+                source_notes=f"set: {pset.varying_condition_summary}; sample source: {sample.source}",
+            ))
+
+    return rows
+
+
+def write_csv(rows: List[ExtractedRow], out_path: Path) -> None:
+    fixed_cols = [
+        "full_id", "set_id", "sample_id", "set_type", "entry_number",
+        "paper_doi", "paper_title", "authors", "year_published", "journal_published",
+        "experiment_type", "solution_type", "duration_hr", "vessel_material",
+        "solvent_name", "analysis_method", "headspace_gas",
+        "initial_temperature_C", "initial_pressure_bar", "sampled_temperature_C",
+        "sampled_2peptide_Gly_mM", "sampled_3peptide_Gly_mM",
+        "sampled_2peptide_Gly_pct_yield", "sampled_3peptide_Gly_pct_yield",
+        "yield_below_threshold_note", "source_notes", "extraction_confidence",
+    ]
+    species_cols = sorted({c for r in rows for c in r.species_mM})
+    header = fixed_cols + species_cols
+
+    with open(out_path, "w", newline="") as f:
+        writer = csv.writer(f)
+        writer.writerow(header)
+        for r in rows:
+            row_dict = r.model_dump()
+            base = [row_dict.get(c) if c != "authors" else "; ".join(r.authors) for c in fixed_cols]
+            species_vals = [r.species_mM.get(c, "") for c in species_cols]
+            writer.writerow(base + species_vals)
