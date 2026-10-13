@@ -45,6 +45,16 @@ candidates later; don't wire it back in as a gate.
   objects), hence `Methodology.per_set_overrides` is a list. Streaming +
   `MAX_TOKENS = 64000` because eder1994's chemistry output alone overflowed
   16K.
+- **Flags and confidence (added 2026-10-12):** `plausibility_flags.json` is
+  `{"paper_level": [...], "rows": {full_id: [...]}}`. Paper-level covers
+  paper-wide methodology fields, initial compositions, and "ambiguous
+  paper-wide" species (given with no set_label AND for specific sets -- left
+  out of the CSV rather than copied onto every row; this happened with NaCl
+  in `runs/eder1994_check/`, model run-to-run variance). Thresholds:
+  `settings.CONFIDENCE_FLAG_BELOW = "high"` (flag), `CONFIDENCE_DROP_BELOW =
+  None` (blanking off by default -- Mickey's choice to turn on). Model
+  confidence is self-reported and was "high" even on the mislabelled NaCl,
+  so keep structural checks alongside it.
 - The one demo (`runs/eder1994/`) was produced by Claude manually acting as
   the model — reading eder1994.pdf, filling in the exact same Pydantic
   schemas a real call would return — because no key was available. Every

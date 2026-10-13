@@ -13,6 +13,17 @@ from pydantic import BaseModel, Field
 T = TypeVar("T")
 
 Confidence = Literal["high", "medium", "low"]
+CONFIDENCE_ORDER = ("low", "medium", "high")
+
+
+def confidence_below(confidence: Optional[str], threshold: Optional[str]) -> bool:
+    """True if `confidence` ranks strictly below `threshold`. A None threshold
+    means "no threshold" (never below); a None confidence counts as lowest."""
+    if threshold is None:
+        return False
+    if confidence is None:
+        return True
+    return CONFIDENCE_ORDER.index(confidence) < CONFIDENCE_ORDER.index(threshold)
 
 # First-class states -- the point made in the design discussion: never let a
 # missing/ambiguous value collapse silently into a guess or a bare null.

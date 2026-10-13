@@ -7,7 +7,23 @@ corrects a value.
 """
 from __future__ import annotations
 from typing import List
+from config import settings
+from schemas.chemistry import ChemistryExtraction
+from schemas.common import confidence_below
+from schemas.methodology import Methodology
 from schemas.row_schema import ExtractedRow
+
+_METHOD_FIELDS = (
+    "experiment_type", "solution_type", "vessel_material", "solvent_name", "analysis_method",
+    "headspace_gas", "initial_pressure_bar", "initial_temperature_C", "sampled_temperature_C",
+    "initial_pH",
+)
+
+
+def _drop_suffix(confidence) -> str:
+    if confidence_below(confidence, settings.CONFIDENCE_DROP_BELOW):
+        return f" -- left BLANK in the CSV (CONFIDENCE_DROP_BELOW={settings.CONFIDENCE_DROP_BELOW!r})"
+    return ""
 
 
 def check_row(row: ExtractedRow) -> List[str]:
@@ -34,5 +50,45 @@ def check_row(row: ExtractedRow) -> List[str]:
 
     if row.duration_hr is not None and row.duration_hr < 0:
         flags.append("duration_hr is negative.")
+
+    if row.extraction_confidence and confidence_below(row.extraction_confidence,
+                                                      settings.CONFIDENCE_FLAG_BELOW):
+        flags.append(f"lowest confidence among this row's measured values is "
+                     f"'{row.extraction_confidence}' -- verify against the paper"
+                     f"{_drop_suffix(row.extraction_confidence)}.")
+
+    return flags
+
+
+def check_extraction(methodology: Methodology, chemistry: ChemistryExtraction) -> List[str]:
+    """Paper-level flags: problems with values that apply to many rows at once
+    (paper-wide methodology, initial compositions), reported once here rather
+    than repeated on every row they affect."""
+    flags: List[str] = []
+
+    for name in sorted(chemistry.ambiguous_paper_wide_species()):
+        entries = [s for s in chemistry.solutes
+                   if s.name == name and s.role == "initial" and s.set_label is None]
+        for s in entries:
+            flags.append(
+                f"{name} = {s.concentration_value} {s.concentration_unit_raw} was extracted as "
+                f"paper-wide (no set_label), but {name} is also given for specific sets -- most "
+                f"likely a set-specific value missing its set_label. NOT applied to any row; "
+                f"assign it to the right set by hand. Quote: {s.quote!r} ({s.source})."
+            )
+
+    for field in _METHOD_FIELDS:
+        f = getattr(methodology, field)
+        if f.value is not None and confidence_below(f.confidence, settings.CONFIDENCE_FLAG_BELOW):
+            flags.append(f"methodology.{field} = {f.value!r} has confidence '{f.confidence}' "
+                         f"(applies to every row){_drop_suffix(f.confidence)}. "
+                         f"Quote: {f.quote!r} ({f.source}).")
+
+    for s in chemistry.solutes:
+        if s.role == "initial" and confidence_below(s.confidence, settings.CONFIDENCE_FLAG_BELOW):
+            where = f"set {s.set_label!r}" if s.set_label else "every set"
+            flags.append(f"initial {s.name} = {s.concentration_value} {s.concentration_unit_raw} "
+                         f"({where}) has confidence '{s.confidence}'{_drop_suffix(s.confidence)}. "
+                         f"Quote: {s.quote!r} ({s.source}).")
 
     return flags

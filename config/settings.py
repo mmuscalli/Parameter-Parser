@@ -40,6 +40,22 @@ MAX_TOKENS = 64000  # streamed (api_client.py); eder1994 chemistry alone overflo
 USE_GOLD_STANDARD = False
 GOLD_STANDARD_PATH = EVAL_DIR / "gold_standard" / "curated_subset.csv"  # not created yet
 
+# --- Confidence flagging / filtering -----------------------------------------
+# Every extracted chemistry value and methodology field carries the model's own
+# high/medium/low confidence. These are self-reports, not calibrated
+# probabilities -- in the 2026-10-12 eder1994 runs every chemistry value was
+# "high", including one mislabelled value -- so they complement the
+# structural checks in validation/plausibility_checks.py, not replace them.
+#
+# Values used in the CSV whose confidence is below CONFIDENCE_FLAG_BELOW are
+# listed in plausibility_flags.json. ("high" = flag medium and low.)
+CONFIDENCE_FLAG_BELOW = "high"
+# Values below CONFIDENCE_DROP_BELOW are left BLANK in the CSV instead of
+# written (still listed in the flags). None = never drop. Off by default: a
+# blank cell is indistinguishable from "not reported" once the CSV leaves
+# this pipeline, so dropping should be a deliberate choice.
+CONFIDENCE_DROP_BELOW = None  # e.g. "medium" to drop low-confidence values
+
 # --- Scope for this prototype pass -------------------------------------------
 # Figures/scatter-plot digitization isn't implemented yet -- stages should
 # skip any value that only exists as a plotted point, not as table/text.

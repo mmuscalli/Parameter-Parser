@@ -64,3 +64,14 @@ class ChemistryExtraction(BaseModel):
         description="Species names encountered that don't match the controlled vocabulary "
                     "-- surfaced for human review / ontology extension, never silently dropped.",
     )
+
+    def ambiguous_paper_wide_species(self) -> set:
+        """Initial species given BOTH as paper-wide (set_label null) and for a
+        specific set somewhere else. A genuinely paper-wide background reagent
+        never also varies by set, so the null-labelled entry is most likely a
+        set-specific value missing its set_label -- applying it to every set
+        would put it on rows where it doesn't belong (seen with NaCl in one
+        eder1994 run)."""
+        paper_wide = {s.name for s in self.solutes if s.role == "initial" and s.set_label is None}
+        per_set = {s.name for s in self.solutes if s.role == "initial" and s.set_label is not None}
+        return paper_wide & per_set

@@ -12,7 +12,9 @@ import json
 from pathlib import Path
 from typing import List, Optional
 
+from config import settings
 from schemas.chemistry import ChemistryExtraction
+from schemas.common import CONFIDENCE_ORDER, confidence_below
 from schemas.methodology import Methodology
 from schemas.paper_metadata import PaperMetadata
 from schemas.row_schema import ExtractedRow
@@ -51,9 +53,18 @@ def _pct_yield(entries, peptide_prefix: str):
 
 
 def _lowest_confidence(entries) -> Optional[str]:
-    order = ["low", "medium", "high"]
     levels = [s.confidence for s in entries]
-    return min(levels, key=order.index) if levels else None
+    return min(levels, key=CONFIDENCE_ORDER.index) if levels else None
+
+
+def _kept(confidence: Optional[str]) -> bool:
+    """False when settings.CONFIDENCE_DROP_BELOW says to blank this value out."""
+    return not confidence_below(confidence, settings.CONFIDENCE_DROP_BELOW)
+
+
+def _method_value(field):
+    """A paper-wide methodology value, unless it's below the drop threshold."""
+    return field.value if _kept(field.confidence) else None
 
 
 def build_rows(
@@ -65,9 +76,14 @@ def build_rows(
 ) -> List[ExtractedRow]:
     rows: List[ExtractedRow] = []
 
-    # species constant across the whole paper (set_label is None)
+    # species constant across the whole paper (set_label is None) -- minus any
+    # that also appear per-set, which are left out and flagged instead (see
+    # ChemistryExtraction.ambiguous_paper_wide_species)
+    ambiguous = chemistry.ambiguous_paper_wide_species()
     constant_species = {
-        s.name: s for s in chemistry.solutes if s.set_label is None and s.role == "initial"
+        s.name: s for s in chemistry.solutes
+        if s.set_label is None and s.role == "initial" and s.name not in ambiguous
+        and _kept(s.confidence)
     }
 
     entry_number = 0
@@ -75,7 +91,7 @@ def build_rows(
         set_id = f"{paper_prefix}{set_idx:03d}"
         set_species = {
             s.name: s for s in chemistry.solutes
-            if s.set_label == pset.set_label and s.role == "initial"
+            if s.set_label == pset.set_label and s.role == "initial" and _kept(s.confidence)
         }
         merged_species = {**constant_species, **set_species}
         species_mM = {
@@ -96,11 +112,12 @@ def build_rows(
             full_id = f"{set_id}{sample_id}"
 
             sampled_here = [s for s in sampled_for_set if s.sample_label == sample.sample_label]
-            pct2 = _pct_yield(sampled_here, "2peptide")
-            pct3 = _pct_yield(sampled_here, "3peptide")
+            sampled_kept = [s for s in sampled_here if _kept(s.confidence)]
+            pct2 = _pct_yield(sampled_kept, "2peptide")
+            pct3 = _pct_yield(sampled_kept, "3peptide")
             sampled_mM = {
                 resolve_template_column(s.name, "sampled"): s.concentration_mM
-                for s in sampled_here if s.concentration_mM is not None
+                for s in sampled_kept if s.concentration_mM is not None
             }
 
             rows.append(ExtractedRow(
@@ -109,21 +126,23 @@ def build_rows(
                 paper_doi=metadata.paper_doi, paper_title=metadata.paper_title,
                 authors=metadata.authors, year_published=metadata.year_published,
                 journal_published=metadata.journal_published,
-                experiment_type=methodology.experiment_type.value or "",
-                solution_type=methodology.solution_type.value or "",
+                experiment_type=_method_value(methodology.experiment_type) or "",
+                solution_type=_method_value(methodology.solution_type) or "",
                 duration_hr=sample.duration_hr,
-                vessel_material=methodology.vessel_material.value,
-                solvent_name=methodology.solvent_name.value,
-                analysis_method=methodology.analysis_method.value,
-                headspace_gas=methodology.headspace_gas.value,
+                vessel_material=_method_value(methodology.vessel_material),
+                solvent_name=_method_value(methodology.solvent_name),
+                analysis_method=_method_value(methodology.analysis_method),
+                headspace_gas=_method_value(methodology.headspace_gas),
                 initial_temperature_C=override.get(
-                    "initial_temperature_C", methodology.initial_temperature_C.value),
-                initial_pressure_bar=methodology.initial_pressure_bar.value,
+                    "initial_temperature_C", _method_value(methodology.initial_temperature_C)),
+                initial_pressure_bar=_method_value(methodology.initial_pressure_bar),
                 sampled_temperature_C=override.get(
-                    "sampled_temperature_C", methodology.sampled_temperature_C.value),
+                    "sampled_temperature_C", _method_value(methodology.sampled_temperature_C)),
                 species_mM={**species_mM, **sampled_mM},
                 sampled_2peptide_Gly_pct_yield=pct2.concentration_value if pct2 else None,
                 sampled_3peptide_Gly_pct_yield=pct3.concentration_value if pct3 else None,
+                # lowest confidence among this row's MEASURED values, including any
+                # dropped by CONFIDENCE_DROP_BELOW, so check_row still flags them
                 extraction_confidence=_lowest_confidence(sampled_here),
                 source_notes=f"set: {pset.varying_condition_summary}; sample source: {sample.source}",
             ))

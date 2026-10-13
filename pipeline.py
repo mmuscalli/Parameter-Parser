@@ -19,7 +19,7 @@ from stages.structure_planner import run_structure_planner
 from stages.metadata_extractor import run_metadata_extraction
 from stages.methodology_extractor import run_methodology_extraction
 from stages.chemistry_extractor import run_chemistry_extraction
-from validation.plausibility_checks import check_row
+from validation.plausibility_checks import check_extraction, check_row
 
 
 def run_pipeline(pdf_path: str, paper_prefix: str = "001") -> Path:
@@ -52,11 +52,13 @@ def run_pipeline(pdf_path: str, paper_prefix: str = "001") -> Path:
 
     rows = build_rows(metadata, structure, methodology, chemistry, paper_prefix)
 
-    flags_by_row = {r.full_id: check_row(r) for r in rows}
-    n_flagged = sum(1 for f in flags_by_row.values() if f)
-    if n_flagged:
-        print(f"[{parsed.paper_id}] {n_flagged}/{len(rows)} rows have plausibility flags -- see flags.json")
-        (run_dir / "plausibility_flags.json").write_text(json.dumps(flags_by_row, indent=2))
+    paper_flags = check_extraction(methodology, chemistry)
+    row_flags = {r.full_id: f for r in rows if (f := check_row(r))}
+    if paper_flags or row_flags:
+        print(f"[{parsed.paper_id}] {len(paper_flags)} paper-level flag(s), "
+              f"{len(row_flags)}/{len(rows)} rows flagged -- see plausibility_flags.json")
+        (run_dir / "plausibility_flags.json").write_text(json.dumps(
+            {"paper_level": paper_flags, "rows": row_flags}, indent=2, ensure_ascii=False))
 
     out_csv = run_dir / f"{parsed.paper_id}_extracted.csv"
     write_csv(rows, out_csv)
