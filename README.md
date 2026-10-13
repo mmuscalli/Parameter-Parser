@@ -1,124 +1,178 @@
-# EORE literature-extraction pipeline — initial scaffold
+# Parameter Extractor
 
-Status: **early prototype**. This is not tuned or validated yet — it exists to test
-whether a simple, well-scoped paper can be parsed reliably and to work out the right
-shape for the prompts/schemas before any real tuning or scoring happens.
+Extracts experimental parameters from published prebiotic peptide-synthesis
+papers (metadata, experimental methodology, and reported solution chemistry)
+into the row/column shape of the EORE `PaperDataTemplate.xlsx` dataset, using
+the Claude API.
 
-## What's here
+**Status: prototype.** It runs end to end and reproduces the hand-curated
+eder1994 dataset (42/42 rows), but it has been validated on one paper only.
+Every output is meant for human review: each run lists anything it's unsure
+about in `plausibility_flags.json`. A desktop app is planned (see "Roadmap").
 
-```
-extraction_pipeline/
-├── config/            # settings + where the API key goes (never commit .env)
-├── prompts/           # one instruction file per extraction stage
-├── schemas/           # Pydantic models = single source of truth for each stage's
-│                       output, plus template_vocab.json (controlled vocabulary
-│                       pulled directly from PaperDataTemplate.xlsx's own headers)
-├── ingestion/          # PDF -> clean text/tables (pdfinfo/pdftotext/pdfplumber),
-│                       # table-page rasterization, and CrossRef DOI lookup
-├── calculators/        # deterministic, non-LLM math (unit conversion, %yield).
-│                       # Does NOT duplicate your R ionic-strength/pKa/WORM code —
-│                       # those stay in Calculators/ and should be wrapped here later.
-├── validation/         # plausibility checks + the gold-standard scorer (OFF by
-│                       # default — see "Turning validation on" below)
-├── stages/             # one module per extraction stage; calls the API via
-│                       # api_client.py and validates the response against schemas/
-├── eval/gold_standard/ # empty — drop your curated subset CSV here when ready
-├── runs/                # per-paper output + audit trail (raw responses, prompts
-│                        # used, token counts, model name/version)
-├── api_client.py       # thin Anthropic API wrapper; reads ANTHROPIC_API_KEY
-├── pipeline.py         # chains the stages for one paper
-└── main.py             # CLI entry point
+## Install
+
+Requires Python 3.10+. No other software is needed: PDF handling is pure
+Python.
+
+```bash
+python -m venv .venv
+.venv/bin/pip install -e .          # from this folder
 ```
 
-## Current scope (deliberately narrow)
+This installs the `parameter-extract` command. (Without installing, `python main.py`
+from this folder does the same thing.)
 
-Per your instructions, this first pass only targets **one** paper
-(`eder1994.pdf`), only pulls parameters that are stated in **running text and
-tables** (not the scatter-plot figures — Figs. 1–5 in this paper are out of scope
-for now), and does **no** exhaustive testing or tuning.
+## API key
 
-## No API key is configured yet
+Runs call the Anthropic API, so you need your own API key. **The paper's text
+and table images are sent to Anthropic** as part of each run.
 
-`api_client.py` is real, working code — it calls the Anthropic Messages API with
-structured output — but there is no key in this environment, so it cannot actually
-run yet. To activate it:
+For the command line, either set `ANTHROPIC_API_KEY` in your shell, or copy
+`config/.env.example` to `config/.env` and fill in the key. `config/.env` is
+git-ignored; never commit a real key.
 
-1. Copy `config/.env.example` to `config/.env`
-2. Add `ANTHROPIC_API_KEY=sk-...`
-3. Run `python main.py --pdf "<path to a paper>"`
+## Usage
 
-**Because no key was available, the `runs/eder1994/` outputs in this scaffold were
-produced by me (Claude) manually reading the paper and filling in the exact same
-prompts/schemas a real API call would use** — so you can judge extraction quality
-and parameter design right now. They are labeled `"model": "manual-claude-demo"` in
-their metadata, specifically so they're never mistaken for an automated run. Once a
-key is added, `main.py` exercises the real code path end to end.
+```bash
+parameter-extract --pdf "path/to/paper.pdf"                 # extract a paper
+parameter-extract --pdf "path/to/paper.pdf" --out results/  # choose the output folder (default: ./runs)
+parameter-extract --pdf "path/to/paper.pdf" --triage-only   # optional screening only (see below)
+```
 
-## Turning validation on later
+A run takes about two minutes for a 6-page paper and uses roughly 75K input /
+21K output tokens.
 
-`validation/gold_standard_eval.py` has `ENABLED = False` at the top. When your
-curated "most certain" paper subset is ready, drop its CSV into
-`eval/gold_standard/`, flip that flag, and point `GOLD_STANDARD_PATH` in
-`config/settings.py` at the file. Nothing else needs to change.
+The paper is assumed to be one you've already chosen. `--triage-only` is an
+optional screen against one curator's inclusion criteria
+(`prompts/triage.md`), meant for filtering a pile of candidate papers. It never
+stops a normal extraction run.
 
-## Table-page rasterization
+## What a run produces
 
-`ingestion/pdf_parser.py` scans each page's text for a `Table N` caption
-(`find_table_pages`) and, when `config.settings.RASTERIZE_TABLE_PAGES` is
-true (the default), renders exactly those pages to JPEG via `pdftoppm`
-(`rasterize_table_pages`) into `runs/<paper_id>/page_images/`. `pipeline.py`
-hands those images to the structure-planning and chemistry stages alongside
-the OCR'd text, and both prompts (`prompts/structure_planner.md`,
-`prompts/chemistry.md`) tell the model to trust the image over the text when
-they disagree. This exists because eder1994's Tables 1/2 are a two-column
-layout that plain `pdftotext` genuinely garbles — row order and which salt a
-value belongs to becomes ambiguous from text alone (confirmed by hand while
-building the original demo). Real, tested code: `find_table_pages` correctly
-identified eder1994's pages 3 and 4, and `rasterize_table_pages` produced the
-actual JPEGs now sitting in `runs/eder1994/page_images/` — this part doesn't
-need an API key to verify, only `stages/*.py` does.
+Each run writes a new folder, `<output>/<pdf name>_<date-time>/`, and never
+overwrites an earlier run:
 
-Caveat: the caption regex is a simple heuristic (`^\s*Table\s+\d+\b` at the
-start of a line) — it can pick up a stray in-text reference that happens to
-start a line that way (harmless false positive: just rasterizes one extra
-page), and it won't catch a table that continues onto a page with no caption
-of its own. Good enough for a first pass; revisit if a paper's tables are
-getting missed.
+| File | Contents |
+|---|---|
+| `<pdf name>_extracted.csv` | One row per sample, in PaperDataTemplate's column naming |
+| `plausibility_flags.json` | Anything to check by hand (see below); absent if nothing was flagged |
+| `run_summary.json` | Settings used (never the key), models, token usage, timings |
+| `<stage>.output.json` / `<stage>.audit.json` | Each step's structured result, plus the exact prompt sent and the raw response |
+| `parsed_paper.json`, `page_images/` | The extracted text, and renders of pages containing tables |
 
-## CrossRef DOI lookup
+### Flags and confidence
 
-`ingestion/crossref_lookup.py` queries CrossRef's public `works` API by
-title/author when a paper's own text doesn't state a DOI (common for older
-scanned papers). `stages/metadata_extractor.py` calls it automatically
-whenever the LLM-extracted `paper_doi` comes back null. It only accepts a
-match when BOTH a local title-similarity check and CrossRef's own relevance
-score clear conservative thresholds (`config.settings.CROSSREF_MIN_*`) —
-a wrong-but-plausible DOI attached silently would be worse than no DOI, so a
-weak match is rejected with a `reason` rather than guessed.
+Every extracted value carries the model's own confidence rating
+(high/medium/low) and a supporting quote from the paper. `plausibility_flags.json`
+lists:
 
-**Network restriction discovered while building this**: `api.crossref.org`
-is blocked by this account's egress policy — confirmed with a direct `curl`
-from both the cloud workspace and (separately) the linked computer's shell,
-both returning a 403 at the proxy. So this has NOT been live-tested end to
-end yet. What it has been tested against:
-- An offline mock test suite (`tests/test_crossref_lookup.py`, 4/4 passing)
-  using a realistic recorded fixture for eder1994's actual CrossRef record
-  (independently confirmed via the RSC article landing page during this
-  session: DOI `10.1039/DT9940001125`) plus a wrong-paper case, an
-  empty-results case, and a network-failure case.
-- A real (unmocked) call against the live, blocked endpoint, confirming it
-  fails with a clear, non-crashing `CrossRefMatch(accepted=False, reason=...)`
-  rather than an unhandled exception.
+- **Paper-level issues**: values below the confidence threshold, and
+  structural problems such as a concentration given both paper-wide and for
+  specific sets (it's left out of the CSV rather than copied onto every row).
+- **Row-level issues**: out-of-range values (temperatures, negative
+  concentrations, yields outside 0–100%) and low-confidence measured values.
 
-Try it again once this runs somewhere with normal internet access (your own
-machine outside this sandboxed session, most likely) — the code should work
-unmodified; verify the first few real calls before trusting it unattended.
-If you want the "polite pool" rate limits, set `CROSSREF_CONTACT_MAILTO` in
-`config/settings.py` yourself — it's left blank on purpose rather than
-auto-filled.
+The thresholds are `CONFIDENCE_FLAG_BELOW` (default `"high"`, so medium and low
+values are flagged) and `CONFIDENCE_DROP_BELOW` (default off; set it to blank
+low-confidence values out of the CSV) in `src/parameter_extractor/config/settings.py`.
+The confidence ratings are the model's self-assessment and vary between runs,
+so treat them as a prompt to check, not a guarantee.
 
-`runs/eder1994/build_manual_demo.py` calls the real `lookup_doi()` (not a
-re-implementation) so you can see this failure handling in action; it then
-records the RSC-verified DOI with `doi_source: "manual_fallback"` —
-deliberately a different value from `"crossref_api"`, so the data itself
-always shows whether a DOI was resolved automatically or by a human.
+## How it works
+
+1. **Parse** the PDF to text (pdfplumber) and render pages with a "Table N"
+   caption to images (pypdfium2). Two-column tables often garble in plain text,
+   so the model is shown both and told to trust the image.
+2. **Plan structure**: identify experiment sets and samples (the CSV's rows).
+3. **Metadata**: title, authors, year, journal, DOI. If the paper doesn't
+   print a DOI, CrossRef is queried; a match is only accepted when both title
+   similarity and CrossRef's own score clear conservative thresholds.
+4. **Methodology**: vessel, solvent, temperature, pressure, analysis method, …
+5. **Chemistry**: every species and concentration (initial and measured),
+   mapped onto the template's controlled vocabulary. Unknown species are
+   kept and listed for review, never dropped.
+6. **Assemble** the rows, run the checks, and write the outputs.
+
+Figures and scatter plots are not read yet. Only values given in text or
+tables are extracted.
+
+## Using it from Python
+
+The command line is a thin wrapper over a library call that a GUI uses too:
+
+```python
+from parameter_extractor.config.run_config import RunConfig
+from parameter_extractor.pipeline import run_pipeline
+
+result = run_pipeline("paper.pdf", RunConfig(api_key="sk-ant-...", output_dir="results"),
+                      on_progress=lambda e: print(e.step, e.total_steps, e.message))
+result.csv_path, result.paper_flags, result.row_flags, result.input_tokens
+```
+
+Failures raise `parameter_extractor.errors.PipelineError` subclasses whose message
+is written for the end user (bad key, model unavailable, scanned PDF, …).
+Passing a `threading.Event` as `cancel_event` lets a caller stop a run
+between steps.
+
+## Project layout
+
+```
+src/parameter_extractor/
+  pipeline.py        run_pipeline() / run_triage_only(): the library entry points
+  cli.py             the parameter-extract command
+  config/            settings.py (defaults) and run_config.py (one run's settings)
+  run_context.py     progress events, cancellation, per-run API client and usage log
+  errors.py          user-facing error types
+  api_client.py      the only place that calls the Anthropic API
+  stages/            one module per extraction step
+  prompts/           the instructions sent for each step
+  schemas/           Pydantic models for each step's output, plus template_vocab.json
+                     (the controlled vocabulary, generated from PaperDataTemplate.xlsx)
+  ingestion/         PDF parsing, CrossRef lookup, flattening to template rows
+  validation/        plausibility/confidence checks; gold-standard scorer (off)
+  calculators/       simple deterministic conversions (unit conversion, % yield)
+tests/               offline tests: no API calls, run in a few seconds
+runs/                reference runs for eder1994 (see below)
+eval/gold_standard/  empty until a curated answer set exists
+```
+
+## Tests
+
+```bash
+.venv/bin/python tests/test_pipeline_offline.py
+.venv/bin/python tests/test_crossref_lookup.py
+```
+
+`test_pipeline_offline.py` replays the saved model responses from
+`runs/eder1994_auto/` through the full pipeline (real parsing, rendering,
+flattening and checks, with no API calls) and requires the output to match
+the committed CSV exactly. Run it after any change.
+
+## Reference runs in `runs/`
+
+- `eder1994/`: the original **hand-built** demo, produced by Claude reading the
+  paper and filling the same schemas, before any API key existed. Marked
+  `"model": "manual-claude-demo"` in its provenance files. One transcription
+  error (set 001013 is Ca²⁺, not Ba²⁺) was found by the automated run and
+  corrected, with a note in the provenance files.
+- `eder1994_auto/`: the first real automated run. It matches the hand-built
+  demo on all 42 rows and is used by the offline test.
+- `eder1994_check/`: a later run where the model mislabelled one NaCl value as
+  paper-wide; kept as the example that motivated the paper-wide species check.
+
+## Gold-standard validation (off)
+
+`validation/gold_standard_eval.py` scores output against a curated answer set.
+It's off (`ENABLED = False`, `settings.USE_GOLD_STANDARD = False`) until that
+set exists. Then drop its CSV into `eval/gold_standard/` and switch both on.
+
+## Roadmap
+
+1. ✅ Pipeline as a library (progress, cancellation, user-facing errors, run folders)
+2. ✅ Pure-Python PDF handling and installable package
+3. Desktop app (PySide6): choose a PDF, enter a key (stored in the system
+   keychain), watch progress, review rows and flags; then packaged installers
+4. Reading figures and scatter plots
+
+Before a public release: choose a project license and a final name.

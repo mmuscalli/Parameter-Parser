@@ -1,7 +1,7 @@
-from api_client import call_structured
-from run_context import RunContext
-from schemas.paper_metadata import PaperMetadata
-from ingestion.crossref_lookup import lookup_doi
+from parameter_extractor.api_client import call_structured
+from parameter_extractor.run_context import RunContext
+from parameter_extractor.schemas.paper_metadata import PaperMetadata
+from parameter_extractor.ingestion.crossref_lookup import lookup_doi
 from .prompt_loader import load_prompt
 
 

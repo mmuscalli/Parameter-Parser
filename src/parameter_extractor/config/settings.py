@@ -1,22 +1,35 @@
 """
 Central place for pipeline configuration. Nothing here should require code
 changes elsewhere when you tune it -- that's the point of keeping it separate.
+
+These are DEFAULTS. A run only uses what's in its RunConfig
+(config/run_config.py); the GUI builds that from user input, the CLI from
+these values via RunConfig.from_settings().
 """
 from pathlib import Path
 import os
 
+# Files that ship inside the package (found the same way in a source checkout,
+# a pip install, or a bundled app).
+PACKAGE_DIR = Path(__file__).resolve().parent.parent      # .../parameter_extractor
+PROMPTS_DIR = PACKAGE_DIR / "prompts"
+SCHEMAS_DIR = PACKAGE_DIR / "schemas"
+
+# Source-checkout locations: <repo>/src/parameter_extractor -> <repo>. Only
+# meaningful when running from the repository (CLI/development), never
+# relied on by the app itself.
+PROJECT_ROOT = PACKAGE_DIR.parent.parent
+EVAL_DIR = PROJECT_ROOT / "eval"
+
+# CLI defaults: outputs under ./runs, key from <repo>/config/.env or a .env in
+# the current folder or the environment. The GUI supplies both itself.
+RUNS_DIR = Path.cwd() / "runs"
 try:
     from dotenv import load_dotenv
-    load_dotenv(Path(__file__).parent / ".env")
+    load_dotenv(PROJECT_ROOT / "config" / ".env")
+    load_dotenv(Path.cwd() / ".env")  # doesn't override anything already set
 except ImportError:
-    pass  # python-dotenv not installed yet; ANTHROPIC_API_KEY must be set some other way
-
-ROOT = Path(__file__).resolve().parent.parent
-
-PROMPTS_DIR = ROOT / "prompts"
-SCHEMAS_DIR = ROOT / "schemas"
-RUNS_DIR = ROOT / "runs"
-EVAL_DIR = ROOT / "eval"
+    pass  # python-dotenv not installed; ANTHROPIC_API_KEY must be set some other way
 
 ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY", "")
 
@@ -79,7 +92,7 @@ CROSSREF_CONTACT_MAILTO = ""
 
 
 def crossref_user_agent() -> str:
-    base = "EORE-extraction-pipeline/0.1 (https://github.com/; mailto:{})"
+    base = "parameter-extractor/0.1 (https://github.com/; mailto:{})"
     return base.format(CROSSREF_CONTACT_MAILTO or "no-contact-set@example.invalid")
 
 

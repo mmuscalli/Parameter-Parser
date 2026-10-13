@@ -25,8 +25,8 @@ from typing import List, Optional, Type, TypeVar
 
 from pydantic import BaseModel, ValidationError
 
-import errors
-from run_context import RunContext, StageUsage
+from parameter_extractor import errors
+from parameter_extractor.run_context import RunContext, StageUsage
 
 T = TypeVar("T", bound=BaseModel)
 

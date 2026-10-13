@@ -25,20 +25,20 @@ from datetime import datetime
 from pathlib import Path
 from typing import Dict, List, Optional
 
-from config import settings
-from config.run_config import RunConfig
-from errors import ApiKeyMissingError, PdfNotReadableError
-from ingestion.flatten_to_template import build_rows, write_csv
-from ingestion.pdf_parser import ParsedPaper, parse_pdf, rasterize_table_pages
-from run_context import ProgressCallback, RunContext, StageUsage
-from schemas.row_schema import ExtractedRow
-from schemas.triage import TriageResult
-from stages.chemistry_extractor import run_chemistry_extraction
-from stages.metadata_extractor import run_metadata_extraction
-from stages.methodology_extractor import run_methodology_extraction
-from stages.structure_planner import run_structure_planner
-from stages.triage import run_triage
-from validation.plausibility_checks import Flag, check_extraction, check_row, flags_to_json
+from parameter_extractor.config import settings
+from parameter_extractor.config.run_config import RunConfig
+from parameter_extractor.errors import ApiKeyMissingError, PdfNotReadableError
+from parameter_extractor.ingestion.flatten_to_template import build_rows, write_csv
+from parameter_extractor.ingestion.pdf_parser import ParsedPaper, parse_pdf, rasterize_table_pages
+from parameter_extractor.run_context import ProgressCallback, RunContext, StageUsage
+from parameter_extractor.schemas.row_schema import ExtractedRow
+from parameter_extractor.schemas.triage import TriageResult
+from parameter_extractor.stages.chemistry_extractor import run_chemistry_extraction
+from parameter_extractor.stages.metadata_extractor import run_metadata_extraction
+from parameter_extractor.stages.methodology_extractor import run_methodology_extraction
+from parameter_extractor.stages.structure_planner import run_structure_planner
+from parameter_extractor.stages.triage import run_triage
+from parameter_extractor.validation.plausibility_checks import Flag, check_extraction, check_row, flags_to_json
 
 
 @dataclass
@@ -165,7 +165,7 @@ def run_pipeline(
 
     gold_score = None
     if settings.USE_GOLD_STANDARD:  # OFF until the curated subset exists
-        from validation.gold_standard_eval import load_gold_standard, score_paper
+        from parameter_extractor.validation.gold_standard_eval import load_gold_standard, score_paper
         gold_score = score_paper([r.model_dump() for r in rows], load_gold_standard())
 
     _write_summary(ctx, pdf_path, started, rows=len(rows),

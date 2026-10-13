@@ -2,6 +2,8 @@
 
 Read this first in any new session before touching code here. It's written
 for you (the agent), not for Mickey — human-facing docs are in README.md;
+**all code lives under `src/parameter_extractor/` since Phase 2 (2026-10-13)** --
+module paths below like `ingestion/pdf_parser.py` are relative to it;
 read that too for the file-by-file structure and usage instructions. This
 file exists so a fresh session (VS Code, CLI, wherever) doesn't have to
 re-derive decisions that were already made deliberately.
@@ -33,11 +35,13 @@ candidates later; don't wire it back in as a gate.
   "2.50 mol dm-3, 87 C" block. Mickey confirmed it's Ca2+, as the auto run
   read it; the manual demo had mis-transcribed it as Ba2+ and was corrected
   in place, with a `corrections` note in the affected `*.provenance.json`.)
-- **Local setup that works:** Python deps in the project venv one level up
-  (`../.venv/bin/python`, pydantic 2). Poppler comes from a dedicated conda
-  env (`/opt/anaconda3/envs/poppler/bin` -- prepend to PATH) because
-  Homebrew has no poppler bottles for macOS 14.1 and builds from source for
-  over an hour.
+- **Local setup that works:** project venv one level up (`../.venv`), with
+  this package installed editable (`pip install -e .`, gives the
+  `parameter-extract` command; `python main.py` also works without installing).
+  Dependencies are declared in `pyproject.toml` (requirements.txt removed).
+  **Poppler is no longer used** (Phase 2): PDF text via pdfplumber, page
+  renders via pypdfium2. The conda `poppler` env and Homebrew poppler on
+  Mickey's Mac are leftovers, not needed.
 - **API integration notes:** `api_client.py` uses native structured outputs
   (`client.messages.stream(output_format=Model)`), not forced tool use --
   current models 400 on `tool_choice` "tool"/"any". Consequence: schemas
@@ -77,8 +81,11 @@ Mickey wants a standalone app with a simple GUI: a user picks a PDF, enters
 an API key, and the parsing runs semi-automatically. Decisions: **public
 release**, **native desktop window** (plan: PySide6 -- LGPL, unlike PyQt's
 GPL), **drop poppler** for the pure-Python pdfplumber/pypdfium2 (verify on
-eder1994 first). Phases: (1) core as a library -- DONE on branch
-`app-structure`; (2) pure-Python PDF engine + package layout/pyproject;
+eder1994 first). Phases: (1) core as a library -- DONE; (2) pure-Python
+PDF engine + src/ package layout + pyproject -- DONE 2026-10-13 (live
+eder1994 run without poppler: 42/42 rows vs reference, ~8% fewer input
+tokens; wheel installed into a fresh venv reproduces the committed CSV
+from outside the repo), both on branch `app-structure`;
 (3) GUI + packaging (keychain for keys, show token usage, tell users PDFs
 are sent to Anthropic; pick a project license before release).
 

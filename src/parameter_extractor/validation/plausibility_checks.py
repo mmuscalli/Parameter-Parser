@@ -13,11 +13,11 @@ from __future__ import annotations
 from dataclasses import asdict, dataclass
 from typing import Dict, List, Literal, Optional
 
-from config import settings
-from schemas.chemistry import ChemistryExtraction
-from schemas.common import confidence_below
-from schemas.methodology import Methodology
-from schemas.row_schema import ExtractedRow
+from parameter_extractor.config import settings
+from parameter_extractor.schemas.chemistry import ChemistryExtraction
+from parameter_extractor.schemas.common import confidence_below
+from parameter_extractor.schemas.methodology import Methodology
+from parameter_extractor.schemas.row_schema import ExtractedRow
 
 FlagKind = Literal["out_of_range", "low_confidence", "ambiguous_paper_wide_species"]
 

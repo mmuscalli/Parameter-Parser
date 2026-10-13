@@ -14,8 +14,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Callable, List, Optional
 
-from config.run_config import RunConfig
-from errors import ApiKeyMissingError, RunCancelledError
+from parameter_extractor.config.run_config import RunConfig
+from parameter_extractor.errors import ApiKeyMissingError, RunCancelledError
 
 
 @dataclass

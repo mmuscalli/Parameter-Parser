@@ -7,8 +7,8 @@ real: PDF parsing, table rasterization, stage wiring, structured-output
 handling, audit files, flattening, checks, progress events, run folders.
 The replayed run must reproduce the committed eder1994_auto CSV exactly.
 
-Needs eder1994.pdf at its usual place in the EORE Data Project folder and
-poppler on PATH; skips the end-to-end tests otherwise.
+Needs eder1994.pdf at its usual place in the EORE Data Project folder;
+skips the end-to-end tests otherwise.
 
 Run with: python -m pytest tests/ -v   (or just: python tests/test_pipeline_offline.py)
 """
@@ -21,12 +21,12 @@ from types import SimpleNamespace
 from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(ROOT))
+sys.path.insert(0, str(ROOT / "src"))
 
-import api_client
-import errors
-from config.run_config import RunConfig
-from pipeline import run_pipeline
+from parameter_extractor import api_client
+from parameter_extractor import errors
+from parameter_extractor.config.run_config import RunConfig
+from parameter_extractor.pipeline import run_pipeline
 
 PDF = ROOT.parent / "Paper Files" / "Paper Lists" / "Initial Easy Papers" / "Eder1994" / "eder1994.pdf"
 REPLAY_DIR = ROOT / "runs" / "eder1994_auto"
@@ -52,9 +52,8 @@ def _config(out: Path, **kw) -> RunConfig:
 
 
 def _have_inputs() -> bool:
-    import shutil
-    if not PDF.is_file() or not shutil.which("pdftotext"):
-        print(f"SKIP: needs {PDF} and poppler on PATH")
+    if not PDF.is_file():
+        print(f"SKIP: needs {PDF}")
         return False
     return True
 

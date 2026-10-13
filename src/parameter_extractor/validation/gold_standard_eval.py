@@ -18,7 +18,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Dict, List
 
-from config import settings
+from parameter_extractor.config import settings
 
 ENABLED = False  # flip once eval/gold_standard/curated_subset.csv exists
 

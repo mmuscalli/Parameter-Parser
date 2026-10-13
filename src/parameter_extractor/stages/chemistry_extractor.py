@@ -1,10 +1,10 @@
 import json
 from pathlib import Path
 from typing import List, Optional
-from api_client import call_structured
-from run_context import RunContext
-from schemas.chemistry import ChemistryExtraction
-from schemas.structure_plan import StructurePlan
+from parameter_extractor.api_client import call_structured
+from parameter_extractor.run_context import RunContext
+from parameter_extractor.schemas.chemistry import ChemistryExtraction
+from parameter_extractor.schemas.structure_plan import StructurePlan
 from .prompt_loader import load_prompt
 
 

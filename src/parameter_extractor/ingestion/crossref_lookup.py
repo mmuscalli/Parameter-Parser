@@ -24,7 +24,7 @@ import difflib
 from dataclasses import dataclass
 from typing import List, Optional
 
-from config import settings
+from parameter_extractor.config import settings
 
 CROSSREF_WORKS_URL = "https://api.crossref.org/works"
 

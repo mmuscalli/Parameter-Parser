@@ -16,9 +16,9 @@ import sys
 from pathlib import Path
 from unittest.mock import patch, MagicMock
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
-from ingestion.crossref_lookup import lookup_doi
+from parameter_extractor.ingestion.crossref_lookup import lookup_doi
 
 GOOD_FIXTURE = {
     "message": {

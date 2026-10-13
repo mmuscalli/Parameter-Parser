@@ -12,14 +12,14 @@ import json
 from pathlib import Path
 from typing import List, Optional
 
-from config import settings
-from schemas.chemistry import ChemistryExtraction
-from schemas.common import CONFIDENCE_ORDER, confidence_below
-from schemas.methodology import Methodology
-from schemas.paper_metadata import PaperMetadata
-from schemas.row_schema import ExtractedRow
-from schemas.structure_plan import StructurePlan
-from calculators.peptide_yield import peptide_mM_from_yield_pct
+from parameter_extractor.config import settings
+from parameter_extractor.schemas.chemistry import ChemistryExtraction
+from parameter_extractor.schemas.common import CONFIDENCE_ORDER, confidence_below
+from parameter_extractor.schemas.methodology import Methodology
+from parameter_extractor.schemas.paper_metadata import PaperMetadata
+from parameter_extractor.schemas.row_schema import ExtractedRow
+from parameter_extractor.schemas.structure_plan import StructurePlan
+from parameter_extractor.calculators.peptide_yield import peptide_mM_from_yield_pct
 
 _VOCAB_PATH = Path(__file__).resolve().parent.parent / "schemas" / "template_vocab.json"
 _TEMPLATE_COLUMNS = set(json.loads(_VOCAB_PATH.read_text())["all_columns"]) if _VOCAB_PATH.exists() else set()

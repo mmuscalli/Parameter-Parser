@@ -12,7 +12,7 @@ from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Dict, Optional
 
-from config import settings
+from parameter_extractor.config import settings
 
 
 @dataclass

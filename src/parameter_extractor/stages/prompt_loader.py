@@ -1,5 +1,5 @@
 from pathlib import Path
-from config import settings
+from parameter_extractor.config import settings
 
 
 def load_prompt(name: str, **placeholders: str) -> str:
