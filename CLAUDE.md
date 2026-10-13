@@ -119,8 +119,19 @@ non-secret prefs only. Live run through the window: 42/42 vs reference.
 holds the GIL and the worker thread never runs (looks like a hang in
 `import pdfplumber`). `tests/test_gui_offline.py` pumps with
 processEvents()+time.sleep; set GUI_SCREENSHOT_DIR to save PNGs of each tab.
-Next: packaging (.app/.exe, e.g. PyInstaller or Briefcase), app icon,
-maybe a settings dialog (models, thresholds).
+Packaging (2026-10-13): PyInstaller 6.22.3 + hooks-contrib 2026.7 (pinned,
+`.[build]` extra); `packaging/parameter_extractor.spec`,
+`packaging/build_macos.sh` -> `dist/Parameter Extractor.app` (~123 MB,
+arm64) + .dmg (~59 MB). `--self-check` (diagnostics.py) verifies a bundle
+for free -- all checks pass in the built app run with an empty environment.
+pandas is excluded in the spec (pulled in optionally, dead weight 19 MB).
+Unsigned (ad-hoc): public macOS release needs Mickey's Apple Developer ID +
+notarization, and a real BUNDLE_ID -- his decision. Windows build untested.
+**Deferred by Mickey (2026-10-13):** signing/notarization and the Windows
+build wait until development has progressed further; until then the app
+only needs to run on his own Mac. Don't start on them unprompted.
+Remaining ideas: settings dialog (models, thresholds), drop-PDF-on-Dock-icon
+handling (Info.plist already declares PDFs).
 
 ## Non-obvious decisions — don't redo this research
 

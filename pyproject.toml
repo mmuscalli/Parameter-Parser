@@ -26,6 +26,12 @@ gui = [
     "PySide6-Essentials>=6.11,<6.12",   # LGPL; 6.12.0 was <2 weeks old when this was pinned
     "keyring>=25",                      # API key in the OS keychain (MIT)
 ]
+# Building the standalone app (packaging/build_macos.sh). Pinned to versions
+# that were >= 2 weeks old when chosen.
+build = [
+    "pyinstaller==6.22.3",
+    "pyinstaller-hooks-contrib==2026.7",
+]
 
 [project.scripts]
 parameter-extract = "parameter_extractor.cli:main"
@@ -37,4 +43,4 @@ parameter-extractor-gui = "parameter_extractor.gui.app:main"
 where = ["src"]
 
 [tool.setuptools.package-data]
-parameter_extractor = ["prompts/*.md", "schemas/*.json"]
+parameter_extractor = ["prompts/*.md", "schemas/*.json", "gui/resources/*.png"]

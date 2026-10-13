@@ -7,6 +7,7 @@ interface can't drift apart in behaviour.
     parameter-extract --pdf "/path/to/paper.pdf"                  # extract a pre-selected paper
     parameter-extract --pdf "/path/to/paper.pdf" --out results/   # choose where results go
     parameter-extract --pdf "/path/to/paper.pdf" --triage-only    # optional screening only
+    parameter-extract --self-check [--pdf paper.pdf]             # check the installation (free)
 
 (From a source checkout without installing: python main.py ... does the same.)
 
@@ -29,6 +30,10 @@ def print_progress(event: ProgressEvent) -> None:
 
 
 def main() -> int:
+    if "--self-check" in sys.argv:
+        from parameter_extractor.diagnostics import main as self_check
+        return self_check(sys.argv[1:])
+
     parser = argparse.ArgumentParser(description="Extract experimental data from a paper PDF.")
     parser.add_argument("--pdf", required=True, help="Path to the paper PDF")
     parser.add_argument("--out", type=Path, help="Folder for run outputs (default: runs/)")

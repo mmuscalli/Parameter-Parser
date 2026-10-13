@@ -30,6 +30,12 @@ For the desktop app, install the `gui` extra as well:
 .venv/bin/parameter-extractor-gui   # or: .venv/bin/python -m parameter_extractor.gui
 ```
 
+To build a standalone, double-clickable app (no Python needed to run it), see
+[packaging/README.md](packaging/README.md).
+
+To check an installation without running an extraction (free):
+`parameter-extract --self-check --pdf some-paper.pdf`.
+
 ## API key
 
 Runs call the Anthropic API, so you need your own API key. **The paper's text
@@ -157,6 +163,8 @@ src/parameter_extractor/
   validation/        plausibility/confidence checks; gold-standard scorer (off)
   calculators/       simple deterministic conversions (unit conversion, % yield)
   gui/               the desktop app (PySide6): main_window, background worker, keychain
+  diagnostics.py     --self-check: verifies an install or packaged app (no API cost)
+packaging/           build the standalone app: PyInstaller spec, build script, icons
 tests/               offline tests: no API calls, run in a few seconds
 runs/                reference runs for eder1994 (see below)
 eval/gold_standard/  empty until a curated answer set exists
@@ -168,6 +176,7 @@ eval/gold_standard/  empty until a curated answer set exists
 .venv/bin/python tests/test_pipeline_offline.py
 .venv/bin/python tests/test_crossref_lookup.py
 .venv/bin/python tests/test_gui_offline.py      # needs the [gui] extra; runs off-screen
+.venv/bin/python tests/test_diagnostics.py
 ```
 
 `test_pipeline_offline.py` replays the saved model responses from
@@ -197,8 +206,8 @@ set exists. Then drop its CSV into `eval/gold_standard/` and switch both on.
 
 1. ✅ Pipeline as a library (progress, cancellation, user-facing errors, run folders)
 2. ✅ Pure-Python PDF handling and installable package
-3. Desktop app (PySide6): window ✅ (choose a PDF, key in the system keychain,
-   progress, review rows and flags); packaged installers next
+3. Desktop app (PySide6): window ✅; macOS app + .dmg build ✅ (unsigned);
+   still to do: code signing/notarization, Windows build
 4. Reading figures and scatter plots
 
 Before a public release: choose a project license and a final name.
