@@ -108,6 +108,20 @@ Phase 1 architecture -- keep front ends thin over this:
   through the real pipeline (patches `api_client._send`) and must reproduce
   the committed CSV byte for byte -- run it after any refactor (~4 s, free).
 
+Phase 3 (started 2026-10-13, branch `app-structure`): `gui/` = PySide6
+window over run_pipeline() -- `main_window.py`, `worker.py` (QThread +
+signals, cancel via threading.Event), `key_store.py` (keyring; fails soft),
+`app.py` (`parameter-extractor-gui`). Optional extra `.[gui]` =
+**PySide6-Essentials** pinned `>=6.11,<6.12` (6.12.0 was 5 days old; the
+full PySide6 package adds ~1 GB of unused Qt modules). QSettings holds
+non-secret prefs only. Live run through the window: 42/42 vs reference.
+**Testing gotcha:** never use `QTest.qWait` to wait for the worker -- it
+holds the GIL and the worker thread never runs (looks like a hang in
+`import pdfplumber`). `tests/test_gui_offline.py` pumps with
+processEvents()+time.sleep; set GUI_SCREENSHOT_DIR to save PNGs of each tab.
+Next: packaging (.app/.exe, e.g. PyInstaller or Briefcase), app icon,
+maybe a settings dialog (models, thresholds).
+
 ## Non-obvious decisions — don't redo this research
 
 - **Schema shape is grounded in `../POLO_variable_mapping.csv`** (one level

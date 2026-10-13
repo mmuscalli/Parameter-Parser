@@ -23,6 +23,13 @@ python -m venv .venv
 This installs the `parameter-extract` command. (Without installing, `python main.py`
 from this folder does the same thing.)
 
+For the desktop app, install the `gui` extra as well:
+
+```bash
+.venv/bin/pip install -e ".[gui]"
+.venv/bin/parameter-extractor-gui   # or: .venv/bin/python -m parameter_extractor.gui
+```
+
 ## API key
 
 Runs call the Anthropic API, so you need your own API key. **The paper's text
@@ -32,7 +39,24 @@ For the command line, either set `ANTHROPIC_API_KEY` in your shell, or copy
 `config/.env.example` to `config/.env` and fill in the key. `config/.env` is
 git-ignored; never commit a real key.
 
-## Usage
+## Desktop app
+
+Choose a PDF (or drop it onto the window), paste your API key, pick where
+results go, and click **Extract data**. A progress bar follows the six steps.
+Cancel stops after the current step. When the run finishes:
+
+- **Rows**: the extracted CSV, measured values first. Flagged rows are
+  highlighted; hover for the reason.
+- **Flags**: everything to check by hand. Select one to see the full issue,
+  the supporting quote from the paper, and where it appears.
+- **Summary**: token usage per step, plus buttons to open the results folder
+  or the CSV.
+
+Tick *Remember on this computer* to keep the key in the system keychain
+(macOS Keychain / Windows Credential Manager). It's never written to a file.
+Results are saved exactly as with the command line.
+
+## Command line
 
 ```bash
 parameter-extract --pdf "path/to/paper.pdf"                 # extract a paper
@@ -132,6 +156,7 @@ src/parameter_extractor/
   ingestion/         PDF parsing, CrossRef lookup, flattening to template rows
   validation/        plausibility/confidence checks; gold-standard scorer (off)
   calculators/       simple deterministic conversions (unit conversion, % yield)
+  gui/               the desktop app (PySide6): main_window, background worker, keychain
 tests/               offline tests: no API calls, run in a few seconds
 runs/                reference runs for eder1994 (see below)
 eval/gold_standard/  empty until a curated answer set exists
@@ -142,6 +167,7 @@ eval/gold_standard/  empty until a curated answer set exists
 ```bash
 .venv/bin/python tests/test_pipeline_offline.py
 .venv/bin/python tests/test_crossref_lookup.py
+.venv/bin/python tests/test_gui_offline.py      # needs the [gui] extra; runs off-screen
 ```
 
 `test_pipeline_offline.py` replays the saved model responses from
@@ -171,8 +197,8 @@ set exists. Then drop its CSV into `eval/gold_standard/` and switch both on.
 
 1. ✅ Pipeline as a library (progress, cancellation, user-facing errors, run folders)
 2. ✅ Pure-Python PDF handling and installable package
-3. Desktop app (PySide6): choose a PDF, enter a key (stored in the system
-   keychain), watch progress, review rows and flags; then packaged installers
+3. Desktop app (PySide6): window ✅ (choose a PDF, key in the system keychain,
+   progress, review rows and flags); packaged installers next
 4. Reading figures and scatter plots
 
 Before a public release: choose a project license and a final name.

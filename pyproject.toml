@@ -19,8 +19,19 @@ dependencies = [
     "requests>=2.31",       # CrossRef DOI lookup
 ]
 
+[project.optional-dependencies]
+# Desktop app: pip install -e ".[gui]". Essentials only -- the full PySide6
+# package adds ~1 GB of Qt modules (web engine, 3D, ...) the app doesn't use.
+gui = [
+    "PySide6-Essentials>=6.11,<6.12",   # LGPL; 6.12.0 was <2 weeks old when this was pinned
+    "keyring>=25",                      # API key in the OS keychain (MIT)
+]
+
 [project.scripts]
 parameter-extract = "parameter_extractor.cli:main"
+
+[project.gui-scripts]
+parameter-extractor-gui = "parameter_extractor.gui.app:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
