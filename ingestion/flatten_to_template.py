@@ -57,14 +57,6 @@ def _lowest_confidence(entries) -> Optional[str]:
     return min(levels, key=CONFIDENCE_ORDER.index) if levels else None
 
 
-def _kept(confidence: Optional[str]) -> bool:
-    """False when settings.CONFIDENCE_DROP_BELOW says to blank this value out."""
-    return not confidence_below(confidence, settings.CONFIDENCE_DROP_BELOW)
-
-
-def _method_value(field):
-    """A paper-wide methodology value, unless it's below the drop threshold."""
-    return field.value if _kept(field.confidence) else None
 
 
 def build_rows(
@@ -73,8 +65,18 @@ def build_rows(
     methodology: Methodology,
     chemistry: ChemistryExtraction,
     paper_prefix: str,
+    drop_below: Optional[str] = settings.CONFIDENCE_DROP_BELOW,
 ) -> List[ExtractedRow]:
+    """`drop_below`: values whose confidence ranks below this are left blank
+    (None = keep everything). They're still reported by the plausibility checks."""
     rows: List[ExtractedRow] = []
+
+    def _kept(confidence: Optional[str]) -> bool:
+        return not confidence_below(confidence, drop_below)
+
+    def _method_value(field):
+        """A paper-wide methodology value, unless it's below the drop threshold."""
+        return field.value if _kept(field.confidence) else None
 
     # species constant across the whole paper (set_label is None) -- minus any
     # that also appear per-set, which are left out and flagged instead (see
@@ -142,7 +144,7 @@ def build_rows(
                 sampled_2peptide_Gly_pct_yield=pct2.concentration_value if pct2 else None,
                 sampled_3peptide_Gly_pct_yield=pct3.concentration_value if pct3 else None,
                 # lowest confidence among this row's MEASURED values, including any
-                # dropped by CONFIDENCE_DROP_BELOW, so check_row still flags them
+                # dropped by drop_below, so check_row still flags them
                 extraction_confidence=_lowest_confidence(sampled_here),
                 source_notes=f"set: {pset.varying_condition_summary}; sample source: {sample.source}",
             ))

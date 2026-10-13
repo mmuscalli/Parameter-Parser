@@ -71,6 +71,36 @@ candidates later; don't wire it back in as a gate.
   that curated subset separately. Don't turn it on without checking with him
   first; `eval/gold_standard/` is empty by design, not an oversight.
 
+## Goal: standalone public desktop app (decided 2026-10-12)
+
+Mickey wants a standalone app with a simple GUI: a user picks a PDF, enters
+an API key, and the parsing runs semi-automatically. Decisions: **public
+release**, **native desktop window** (plan: PySide6 -- LGPL, unlike PyQt's
+GPL), **drop poppler** for the pure-Python pdfplumber/pypdfium2 (verify on
+eder1994 first). Phases: (1) core as a library -- DONE on branch
+`app-structure`; (2) pure-Python PDF engine + package layout/pyproject;
+(3) GUI + packaging (keychain for keys, show token usage, tell users PDFs
+are sent to Anthropic; pick a project license before release).
+
+Phase 1 architecture -- keep front ends thin over this:
+- `pipeline.run_pipeline(pdf, RunConfig, on_progress, cancel_event) ->
+  RunResult` (and `run_triage_only`). No prints; progress via
+  `run_context.ProgressEvent`; cancellation checked between stages.
+- `config/run_config.RunConfig` carries the key/models/thresholds/output
+  dir explicitly; `config/settings.py` + `.env` are only CLI defaults. Don't
+  read settings.ANTHROPIC_API_KEY anywhere else.
+- `run_context.RunContext` is passed to every stage (config, run_dir,
+  client, token usage log).
+- `errors.py`: every user-facing failure is a `PipelineError` subclass
+  with a plain-language message; `api_client` maps SDK exceptions to them.
+- Each run writes `<output_dir>/<pdf stem>_<YYYYmmdd-HHMMSS>/` (never
+  overwrites) incl. `run_summary.json` (config minus key, token usage).
+- Flags are `validation.plausibility_checks.Flag` objects (kind/message/
+  quote/source).
+- `tests/test_pipeline_offline.py` replays `runs/eder1994_auto/` responses
+  through the real pipeline (patches `api_client._send`) and must reproduce
+  the committed CSV byte for byte -- run it after any refactor (~4 s, free).
+
 ## Non-obvious decisions — don't redo this research
 
 - **Schema shape is grounded in `../POLO_variable_mapping.csv`** (one level

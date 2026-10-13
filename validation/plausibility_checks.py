@@ -1,17 +1,40 @@
 """
 Cheap, always-on sanity checks -- these don't require a gold-standard answer
-key, just physical/chemical plausibility. Distinct from gold_standard_eval.py
-(which DOES require a known-correct answer and is toggled off until that
-exists). Returns a list of human-readable flags; never raises or silently
-corrects a value.
+key, just physical/chemical plausibility and the model's own confidence.
+Distinct from gold_standard_eval.py (which DOES require a known-correct answer
+and is toggled off until that exists). Returns Flag objects; never raises or
+silently corrects a value.
+
+Flags are structured (kind / message / quote / source) rather than bare
+strings so a front end can group, sort and highlight them; `message` alone is
+still a complete human-readable sentence.
 """
 from __future__ import annotations
-from typing import List
+from dataclasses import asdict, dataclass
+from typing import Dict, List, Literal, Optional
+
 from config import settings
 from schemas.chemistry import ChemistryExtraction
 from schemas.common import confidence_below
 from schemas.methodology import Methodology
 from schemas.row_schema import ExtractedRow
+
+FlagKind = Literal["out_of_range", "low_confidence", "ambiguous_paper_wide_species"]
+
+
+@dataclass
+class Flag:
+    kind: FlagKind
+    message: str
+    quote: Optional[str] = None
+    source: Optional[str] = None
+
+    def to_dict(self) -> dict:
+        return {k: v for k, v in asdict(self).items() if v is not None}
+
+    def __str__(self) -> str:
+        return self.message
+
 
 _METHOD_FIELDS = (
     "experiment_type", "solution_type", "vessel_material", "solvent_name", "analysis_method",
@@ -20,75 +43,97 @@ _METHOD_FIELDS = (
 )
 
 
-def _drop_suffix(confidence) -> str:
-    if confidence_below(confidence, settings.CONFIDENCE_DROP_BELOW):
-        return f" -- left BLANK in the CSV (CONFIDENCE_DROP_BELOW={settings.CONFIDENCE_DROP_BELOW!r})"
+def _drop_suffix(confidence, drop_below) -> str:
+    if confidence_below(confidence, drop_below):
+        return f" -- left BLANK in the CSV (values below '{drop_below}' are dropped)"
     return ""
 
 
-def check_row(row: ExtractedRow) -> List[str]:
-    flags: List[str] = []
+def check_row(
+    row: ExtractedRow,
+    flag_below: Optional[str] = settings.CONFIDENCE_FLAG_BELOW,
+    drop_below: Optional[str] = settings.CONFIDENCE_DROP_BELOW,
+) -> List[Flag]:
+    flags: List[Flag] = []
+    out_of_range = lambda msg: flags.append(Flag("out_of_range", msg))
 
     if row.initial_temperature_C is not None and not (-20 <= row.initial_temperature_C <= 400):
-        flags.append(f"initial_temperature_C={row.initial_temperature_C} is outside a plausible "
-                      f"range for an aqueous-phase prebiotic experiment -- check extraction.")
+        out_of_range(f"initial_temperature_C={row.initial_temperature_C} is outside a plausible "
+                     f"range for an aqueous-phase prebiotic experiment -- check extraction.")
 
     if row.sampled_temperature_C is not None and not (-20 <= row.sampled_temperature_C <= 400):
-        flags.append(f"sampled_temperature_C={row.sampled_temperature_C} is outside a plausible range.")
+        out_of_range(f"sampled_temperature_C={row.sampled_temperature_C} is outside a plausible range.")
 
     if row.initial_pressure_bar is not None and row.initial_pressure_bar < 0:
-        flags.append("initial_pressure_bar is negative -- not physically possible.")
+        out_of_range("initial_pressure_bar is negative -- not physically possible.")
 
     for pct_field in ("sampled_2peptide_Gly_pct_yield", "sampled_3peptide_Gly_pct_yield"):
         val = getattr(row, pct_field)
         if val is not None and not (0 <= val <= 100):
-            flags.append(f"{pct_field}={val} is outside 0-100%.")
+            out_of_range(f"{pct_field}={val} is outside 0-100%.")
 
     for name, conc in row.species_mM.items():
         if conc is not None and conc < 0:
-            flags.append(f"{name}={conc} mM is negative -- not physically possible.")
+            out_of_range(f"{name}={conc} mM is negative -- not physically possible.")
 
     if row.duration_hr is not None and row.duration_hr < 0:
-        flags.append("duration_hr is negative.")
+        out_of_range("duration_hr is negative.")
 
-    if row.extraction_confidence and confidence_below(row.extraction_confidence,
-                                                      settings.CONFIDENCE_FLAG_BELOW):
-        flags.append(f"lowest confidence among this row's measured values is "
-                     f"'{row.extraction_confidence}' -- verify against the paper"
-                     f"{_drop_suffix(row.extraction_confidence)}.")
+    if row.extraction_confidence and confidence_below(row.extraction_confidence, flag_below):
+        flags.append(Flag("low_confidence",
+                          f"lowest confidence among this row's measured values is "
+                          f"'{row.extraction_confidence}' -- verify against the paper"
+                          f"{_drop_suffix(row.extraction_confidence, drop_below)}."))
 
     return flags
 
 
-def check_extraction(methodology: Methodology, chemistry: ChemistryExtraction) -> List[str]:
+def check_extraction(
+    methodology: Methodology,
+    chemistry: ChemistryExtraction,
+    flag_below: Optional[str] = settings.CONFIDENCE_FLAG_BELOW,
+    drop_below: Optional[str] = settings.CONFIDENCE_DROP_BELOW,
+) -> List[Flag]:
     """Paper-level flags: problems with values that apply to many rows at once
     (paper-wide methodology, initial compositions), reported once here rather
     than repeated on every row they affect."""
-    flags: List[str] = []
+    flags: List[Flag] = []
 
     for name in sorted(chemistry.ambiguous_paper_wide_species()):
-        entries = [s for s in chemistry.solutes
-                   if s.name == name and s.role == "initial" and s.set_label is None]
-        for s in entries:
-            flags.append(
-                f"{name} = {s.concentration_value} {s.concentration_unit_raw} was extracted as "
-                f"paper-wide (no set_label), but {name} is also given for specific sets -- most "
-                f"likely a set-specific value missing its set_label. NOT applied to any row; "
-                f"assign it to the right set by hand. Quote: {s.quote!r} ({s.source})."
-            )
+        for s in chemistry.solutes:
+            if s.name == name and s.role == "initial" and s.set_label is None:
+                flags.append(Flag(
+                    "ambiguous_paper_wide_species",
+                    f"{name} = {s.concentration_value} {s.concentration_unit_raw} was extracted "
+                    f"as paper-wide (no set_label), but {name} is also given for specific sets "
+                    f"-- most likely a set-specific value missing its set_label. NOT applied to "
+                    f"any row; assign it to the right set by hand.",
+                    quote=s.quote, source=s.source))
 
     for field in _METHOD_FIELDS:
         f = getattr(methodology, field)
-        if f.value is not None and confidence_below(f.confidence, settings.CONFIDENCE_FLAG_BELOW):
-            flags.append(f"methodology.{field} = {f.value!r} has confidence '{f.confidence}' "
-                         f"(applies to every row){_drop_suffix(f.confidence)}. "
-                         f"Quote: {f.quote!r} ({f.source}).")
+        if f.value is not None and confidence_below(f.confidence, flag_below):
+            flags.append(Flag(
+                "low_confidence",
+                f"methodology.{field} = {f.value!r} has confidence '{f.confidence}' "
+                f"(applies to every row){_drop_suffix(f.confidence, drop_below)}.",
+                quote=f.quote, source=f.source))
 
     for s in chemistry.solutes:
-        if s.role == "initial" and confidence_below(s.confidence, settings.CONFIDENCE_FLAG_BELOW):
+        if s.role == "initial" and confidence_below(s.confidence, flag_below):
             where = f"set {s.set_label!r}" if s.set_label else "every set"
-            flags.append(f"initial {s.name} = {s.concentration_value} {s.concentration_unit_raw} "
-                         f"({where}) has confidence '{s.confidence}'{_drop_suffix(s.confidence)}. "
-                         f"Quote: {s.quote!r} ({s.source}).")
+            flags.append(Flag(
+                "low_confidence",
+                f"initial {s.name} = {s.concentration_value} {s.concentration_unit_raw} "
+                f"({where}) has confidence '{s.confidence}'{_drop_suffix(s.confidence, drop_below)}.",
+                quote=s.quote, source=s.source))
 
     return flags
+
+
+def flags_to_json(paper_flags: List[Flag], row_flags: Dict[str, List[Flag]]) -> dict:
+    """The plausibility_flags.json layout."""
+    return {
+        "paper_level": [f.to_dict() for f in paper_flags],
+        "rows": {row_id: [f.to_dict() for f in fs] for row_id, fs in row_flags.items()},
+    }

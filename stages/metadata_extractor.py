@@ -1,18 +1,18 @@
-from pathlib import Path
 from api_client import call_structured
+from run_context import RunContext
 from schemas.paper_metadata import PaperMetadata
 from ingestion.crossref_lookup import lookup_doi
 from .prompt_loader import load_prompt
 
 
-def run_metadata_extraction(paper_id: str, title_page_text: str, run_dir: Path) -> PaperMetadata:
+def run_metadata_extraction(ctx: RunContext, title_page_text: str) -> PaperMetadata:
     prompt = load_prompt("metadata", PAPER_TEXT=title_page_text)
     metadata = call_structured(
+        ctx,
         stage="metadata",
         system_prompt="Extract bibliographic metadata only. Do not fabricate a DOI.",
         user_content=prompt,
         response_model=PaperMetadata,
-        run_dir=run_dir,
     )
 
     if metadata.paper_doi:
@@ -31,5 +31,5 @@ def run_metadata_extraction(paper_id: str, title_page_text: str, run_dir: Path) 
             metadata.doi_note = match.reason
             metadata.doi_match_title = match.matched_title  # kept for a human to eyeball, even when rejected
 
-    (run_dir / "metadata.output.json").write_text(metadata.model_dump_json(indent=2))
+    (ctx.run_dir / "metadata.output.json").write_text(metadata.model_dump_json(indent=2))
     return metadata
