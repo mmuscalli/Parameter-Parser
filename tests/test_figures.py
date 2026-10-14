@@ -99,7 +99,7 @@ def _meta_and_method():
 
 def test_rows_from_a_digitized_figure():
     meta, meth = _meta_and_method()
-    rows, problems = build_figure_rows([_figure()], meta, meth, "001", first_set_index=14,
+    rows, problems, new_vars = build_figure_rows([_figure()], meta, meth, "001", first_set_index=14,
                                        first_entry_number=43)
     assert problems == [] and len(rows) == 2
     r1, r2 = rows                                   # sorted by x: (15 h, 0.6 %) then (30 h, 1.0 %)
@@ -118,7 +118,7 @@ def test_multiplier_other_columns_and_unusable_series():
     fig = _figure(y_col="sampled_4peptide_Gly_%yield", y_mult=0.001)
     fig.panels.append(DigitizedPanel(name="uncalibrated"))
     fig.series.append(DigitizedSeries(label="orphan", panel=1, points=[DigitizedPoint(px=1, py=1)]))
-    rows, problems = build_figure_rows([fig], meta, meth, "001", 1, 1)
+    rows, problems, new_vars = build_figure_rows([fig], meta, meth, "001", 1, 1)
     assert rows[0].extra["sampled_4peptide_Gly_%yield"] == 0.0006
     assert len(problems) == 1 and "orphan" in problems[0]
 

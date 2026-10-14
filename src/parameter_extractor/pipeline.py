@@ -43,6 +43,10 @@ from parameter_extractor.digitizing.annotate import save_digitized
 from parameter_extractor.ingestion.figure_finder import find_figures
 from parameter_extractor.ingestion.figure_rows import build_figure_rows
 from parameter_extractor.ingestion.flatten_to_template import build_rows, write_csv
+from parameter_extractor.ingestion.new_variables import (
+    VariableDecision, VariableGroup, apply_decisions, collect_new_variables, group_new_variables, row_index,
+    split_known, write_values)
+from parameter_extractor.registry import VariableRegistry
 from parameter_extractor.ingestion.pdf_parser import ParsedPaper, parse_pdf, rasterize_table_pages
 from parameter_extractor.run_context import ProgressCallback, RunContext, StageUsage
 from parameter_extractor.schemas.chemistry import ChemistryExtraction
@@ -51,12 +55,14 @@ from parameter_extractor.schemas.methodology import Methodology
 from parameter_extractor.schemas.paper_metadata import PaperMetadata
 from parameter_extractor.schemas.row_schema import ExtractedRow
 from parameter_extractor.schemas.structure_plan import StructurePlan
+from parameter_extractor.schemas.variables import NewVariable, TermSearch
 from parameter_extractor.schemas.triage import TriageResult
 from parameter_extractor.stages.chemistry_extractor import run_chemistry_extraction
 from parameter_extractor.stages.figure_planner import run_figure_planner
 from parameter_extractor.stages.metadata_extractor import run_metadata_extraction
 from parameter_extractor.stages.methodology_extractor import run_methodology_extraction
 from parameter_extractor.stages.structure_planner import run_structure_planner
+from parameter_extractor.stages.term_search import run_term_search
 from parameter_extractor.stages.triage import run_triage
 from parameter_extractor.validation.plausibility_checks import Flag, check_extraction, check_row, flags_to_json
 
@@ -73,6 +79,9 @@ class RunResult:
     flags_path: Optional[Path] = None   # None when nothing was flagged
     gold_standard_score: Optional[dict] = None
     figures: List[dict] = field(default_factory=list)   # [{figure_id, status, series, points}]
+    new_variables: List[NewVariable] = field(default_factory=list)   # left out of the CSV (not accepted)
+    accepted_variables: List[dict] = field(default_factory=list)     # [{name, kind, column, values, how}]
+    unfound_terms: List[str] = field(default_factory=list)           # searched for, not stated in the paper
 
     @property
     def input_tokens(self) -> int:
@@ -153,6 +162,7 @@ class Extraction:
     metadata: Optional[PaperMetadata] = None
     methodology: Optional[Methodology] = None
     chemistry: Optional[ChemistryExtraction] = None
+    term_search: Optional[TermSearch] = None
     structure_ready: threading.Event = field(default_factory=threading.Event)
     failure: Optional[str] = None
 
@@ -171,7 +181,8 @@ def extract(
     """Steps 1-5: read the PDF (finding figures on the way) and run the automatic
     extraction stages. Call finish() afterwards to write the dataset."""
     started = datetime.now()
-    pdf_path, ctx = _start(pdf_path, config, 6, on_progress, cancel_event)
+    terms = [t.strip() for t in config.focus_terms if t.strip()]
+    pdf_path, ctx = _start(pdf_path, config, 7 if terms else 6, on_progress, cancel_event)
 
     ctx.step("parse", "Reading the PDF")
     parsed = _parse(pdf_path, ctx.run_dir)
@@ -200,6 +211,11 @@ def extract(
         ctx.step("methodology", "Extracting experimental methodology")
         ex.methodology = run_methodology_extraction(ctx, parsed.text, ex.structure)
 
+        if terms:
+            ctx.step("term_search", f"Searching for the {len(terms)} parameter(s) you asked for")
+            columns = VariableRegistry(config.registry_path).known_columns()
+            ex.term_search = run_term_search(ctx, terms, parsed.text, ex.structure, columns)
+
         ctx.step("chemistry", "Extracting solution chemistry")
         ex.chemistry = run_chemistry_extraction(ctx, parsed.text, ex.structure, vocab["species_names"],
                                                 table_images=table_images)
@@ -222,26 +238,36 @@ def plan_figure(extraction: Extraction, figure: FigureCandidate) -> FigurePlan:
                               extraction.vocab["species_names"], extraction.vocab["all_columns"])
 
 
+# review(groups, unfound_terms, registry) -> decisions: shows the user the variables
+# that have no column yet and returns what to do with each (GUI: the "Review new
+# variables" window). Without one (CLI), nothing new is added to the CSV.
+ReviewCallback = Callable[[List[VariableGroup], List[str], VariableRegistry], List[VariableDecision]]
+
+
 def finish(
     extraction: Extraction,
     digitized: Sequence[DigitizedFigure] = (),
     skipped_figures: Sequence[str] = (),
+    review: Optional[ReviewCallback] = None,
 ) -> RunResult:
-    """Step 6: rows from text/tables plus any digitized figures, checks, files."""
+    """Step 6: rows from text/tables plus any digitized figures, new-variable
+    review, checks, files."""
     ex, ctx, config = extraction, extraction.ctx, extraction.ctx.config
     ctx.step("assemble", "Assembling rows and running checks")
+    registry = VariableRegistry(config.registry_path)
     rows = build_rows(ex.metadata, ex.structure, ex.methodology, ex.chemistry, config.paper_prefix,
-                      drop_below=config.confidence_drop_below)
+                      drop_below=config.confidence_drop_below, registry=registry)
     thresholds = dict(flag_below=config.confidence_flag_below,
                       drop_below=config.confidence_drop_below)
     paper_flags = check_extraction(ex.methodology, ex.chemistry, **thresholds)
+    n_text_rows = len(rows)
 
-    figure_summary = []
+    figure_summary, fig_new_vars = [], []
     if digitized:
-        fig_rows, problems = build_figure_rows(
+        fig_rows, problems, fig_new_vars = build_figure_rows(
             list(digitized), ex.metadata, ex.methodology, config.paper_prefix,
             first_set_index=len(ex.structure.experiment_sets) + 1,
-            first_entry_number=len(rows) + 1)
+            first_entry_number=len(rows) + 1, registry=registry)
         rows += fig_rows
         paper_flags += [Flag("figure_problem", p) for p in problems]
         for fig in digitized:
@@ -262,6 +288,38 @@ def finish(
             figure_summary.append({"figure_id": fig.figure_id, "status": status,
                                    "series": 0, "points": 0})
 
+    # ---- variables without a column: registry first, then the user's review ----
+    index = row_index(ex.structure, rows, config.paper_prefix)
+    new_vars = collect_new_variables(ex.methodology, ex.chemistry, registry, index, ex.term_search)
+    new_vars += fig_new_vars
+    known, pending = split_known(new_vars, registry)
+    accepted = []
+    for column, v in known:
+        write_values(rows, column, [v])
+        accepted.append({"name": v.name, "kind": v.kind, "column": column, "values": 1,
+                         "how": "recognised from an earlier review"})
+    groups = group_new_variables(pending)
+    unfound = _unfound_terms(ex.term_search)
+    decisions = review(groups, unfound, registry) if (review and (groups or unfound)) else []
+    left_out = apply_decisions(rows, groups, decisions, registry)
+    by_key = {(d.kind, d.alias_name): d for d in decisions}
+    for g in groups:
+        d = by_key.get((g.kind, g.alias_name))
+        if g not in left_out and d:
+            accepted.append({"name": g.name, "kind": g.kind, "column": d.column.strip(),
+                             "values": len(g.values), "how": f"accepted in review ({d.action})"})
+    if decisions:
+        registry.save()
+    held_out = [v for g in left_out for v in g.values]
+    paper_flags += _new_variable_flags(left_out)
+    paper_flags += [Flag("term_not_found", f"You asked for '{t}': the paper doesn't state it "
+                                           f"(targeted search found nothing).") for t in unfound]
+    if new_vars:
+        (ctx.run_dir / "new_variables.json").write_text(json.dumps(
+            {"left_out": [v.model_dump(exclude_none=True) for v in held_out],
+             "accepted": accepted,
+             "decisions": [d.__dict__ for d in decisions]}, indent=2, ensure_ascii=False))
+
     row_flags = {r.full_id: f for r in rows if (f := check_row(r, **thresholds))}
     flags_path = None
     if paper_flags or row_flags:
@@ -279,12 +337,45 @@ def finish(
 
     _write_summary(ctx, ex.pdf_path, ex.started, rows=len(rows),
                    paper_flags=len(paper_flags), rows_flagged=len(row_flags),
+                   new_variables_left_out=len(left_out),
+                   new_variables_accepted=[a["name"] for a in accepted],
+                   searched_terms=list(config.focus_terms), unfound_terms=unfound,
                    figures=sorted(figure_summary, key=lambda f: f["figure_id"]))
 
     return RunResult(paper_id=ex.paper_id, run_dir=ctx.run_dir, csv_path=csv_path, rows=rows,
                      paper_flags=paper_flags, row_flags=row_flags, usage=list(ctx.usage),
                      flags_path=flags_path, gold_standard_score=gold_score,
-                     figures=sorted(figure_summary, key=lambda f: f["figure_id"]))
+                     figures=sorted(figure_summary, key=lambda f: f["figure_id"]),
+                     new_variables=held_out, accepted_variables=accepted, unfound_terms=unfound)
+
+
+def _unfound_terms(term_search: Optional[TermSearch]) -> List[str]:
+    if not term_search:
+        return []
+    found = {f.term.strip().lower() for f in term_search.findings if f.found}
+    out = []
+    for f in term_search.findings:
+        if not f.found and f.term.strip().lower() not in found and f.term not in out:
+            out.append(f.term)
+    return out
+
+
+def _new_variable_flags(groups: List[VariableGroup]) -> List[Flag]:
+    """One flag per variable left out of the CSV, with an example quote."""
+    flags = []
+    for g in groups:
+        what = {"species": "species", "parameter": "experimental parameter",
+                "figure_axis": "figure axis column"}[g.kind]
+        first = g.values[0]
+        role = f", {first.role}" if first.role else ""
+        example = next((v for v in g.values if v.quote), first)
+        flags.append(Flag(
+            "new_variable",
+            f"New {what} '{g.name}'{role}: no column for it, so its {len(g.values)} value(s) were "
+            f"left out of the CSV (not accepted in review)"
+            + (f"; it would become '{g.proposed_column}'" if g.proposed_column else "") + ".",
+            quote=example.quote, source=example.source or first.origin))
+    return flags
 
 
 def run_pipeline(

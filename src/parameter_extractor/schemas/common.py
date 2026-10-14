@@ -8,7 +8,7 @@ used where that would be overkill (e.g. "how many solute entries did we find").
 """
 from __future__ import annotations
 from typing import Generic, Literal, Optional, TypeVar
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 T = TypeVar("T")
 
@@ -48,19 +48,29 @@ class Extracted(BaseModel, Generic[T]):
     """
     value: Optional[T] = None
     status: Status = "not_reported"
-    quote: Optional[str] = Field(
-        default=None,
-        description="Short verbatim snippet from the paper that supports this value. "
-                    "Required whenever status == 'found'; absence of a quote is itself "
+    # quote/source/note are plain strings ("" = none) rather than Optional: every
+    # optional field adds an alternative to the structured-output grammar, and the
+    # Methodology schema (10 of these) hit the API's grammar size limit with them.
+    quote: str = Field(
+        default="",
+        description="Short verbatim snippet from the paper that supports this value; empty "
+                    "if none. Required whenever status == 'found'; absence of a quote is itself "
                     "a signal to distrust the value.",
     )
-    source: Optional[str] = Field(
-        default=None,
-        description="Where in the paper, e.g. 'Table 1', 'Experimental section, para 2', 'page 3'.",
+    source: str = Field(
+        default="",
+        description="Where in the paper, e.g. 'Table 1', 'Experimental section, para 2', "
+                    "'page 3'; empty if not found.",
     )
     confidence: Confidence = "low"
-    note: Optional[str] = Field(
-        default=None,
+    note: str = Field(
+        default="",
         description="Free-text explanation when status is ambiguous/conflicting/below_threshold "
-                    "-- e.g. 'paper states <0.15% for all samples, exact value not given'.",
+                    "-- e.g. 'paper states <0.15% for all samples, exact value not given'; "
+                    "empty otherwise.",
     )
+
+    @field_validator("quote", "source", "note", mode="before")
+    @classmethod
+    def _none_to_empty(cls, v):
+        return "" if v is None else v       # outputs saved before this change used null

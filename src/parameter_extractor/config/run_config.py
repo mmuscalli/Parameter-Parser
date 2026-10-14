@@ -10,7 +10,7 @@ that's what lets a GUI accept a key at run time.
 from __future__ import annotations
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
-from typing import Dict, Optional
+from typing import Dict, List, Optional
 
 from parameter_extractor.config import settings
 
@@ -26,6 +26,12 @@ class RunConfig:
     confidence_flag_below: Optional[str] = settings.CONFIDENCE_FLAG_BELOW
     confidence_drop_below: Optional[str] = settings.CONFIDENCE_DROP_BELOW
     paper_prefix: str = "001"
+    # Local variable registry (accepted new columns + aliases). None = template
+    # columns only -- the GUI and CLI pass registry.default_registry_path().
+    registry_path: Optional[Path] = None
+    # Terms the user especially wants found ("extraction solvent volume", ...):
+    # each gets an explicit found / not-found answer from a targeted search step.
+    focus_terms: List[str] = field(default_factory=list)
 
     @classmethod
     def from_settings(cls, **overrides) -> "RunConfig":
@@ -43,4 +49,5 @@ class RunConfig:
         d = asdict(self)
         d.pop("api_key")
         d["output_dir"] = str(self.output_dir)
+        d["registry_path"] = str(self.registry_path) if self.registry_path else None
         return d

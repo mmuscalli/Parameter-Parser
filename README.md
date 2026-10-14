@@ -58,6 +58,32 @@ Cancel stops after the current step. When the run finishes:
 - **Summary**: token usage per step, plus buttons to open the results folder
   or the CSV.
 
+### Parameters to look for
+
+Optionally list parameters you especially want found, one per line (e.g.
+"extraction solvent volume", "flowthrough recirculation time"). A targeted
+search (one extra API call, ~$0.05) then answers every term explicitly: its
+value with a quote, or "not stated in the paper". Found values go to the
+review below. From the command line: `--look-for "term"` (repeatable).
+
+### Review new variables (before the CSV is written)
+
+PaperDataTemplate has a fixed set of columns. When a paper reports something
+without one -- a salt no curated paper used, a condition like stirring or
+irradiation (the methodology step lists these as "other parameters"), a
+searched-for parameter, a figure axis typed in by hand -- the app asks before
+writing the CSV. For each: **Don't add** (the default), **New column** (name
+editable; added after the template's 280 columns), or **Existing column**
+(merge, e.g. a reaction volume into `solvent_volume_mL`). Values can be edited
+first (e.g. "300 rpm" -> 300).
+
+With *Remember* ticked, choices are saved to your local variable registry
+(`~/Library/Application Support/Parameter Extractor/variable_registry.json`
+on macOS), so later papers fill those columns automatically without asking.
+The bundled template list is never modified. Values not added are kept in
+`new_variables.json`. The command line uses the same registry but never
+adds new variables itself.
+
 ### Figures (digitizing plots)
 
 If the paper has figures ("Fig. N" captions), a review window opens as soon
@@ -130,6 +156,7 @@ overwrites an earlier run:
 | `run_summary.json` | Settings used (never the key), models, token usage, timings |
 | `<stage>.output.json` / `<stage>.audit.json` | Each step's structured result, plus the exact prompt sent and the raw response |
 | `parsed_paper.json`, `page_images/` | The extracted text, and renders of pages containing tables |
+| `new_variables.json` | Variables beyond the template: what was accepted into which column, the review decisions, and every value not added (with set, sample and quote) |
 | `figures_found.json`, `figures/` | Detected figures (caption, location) with page renders; for each digitized figure, `fig-N.digitized.json` (calibration, every click and its value) and `fig-N.digitized.png` (the points drawn on the figure) |
 
 ### Flags and confidence
@@ -143,6 +170,10 @@ lists:
   specific sets (it's left out of the CSV rather than copied onto every row).
 - **Row-level issues**: out-of-range values (temperatures, negative
   concentrations, yields outside 0–100%) and low-confidence measured values.
+
+- **New variables not added**: anything the paper reports that has no
+  column and wasn't added in the review (see below).
+- **Searched-for terms not found** in the paper.
 
 The thresholds are `CONFIDENCE_FLAG_BELOW` (default `"high"`, so medium and low
 values are flagged) and `CONFIDENCE_DROP_BELOW` (default off; set it to blank

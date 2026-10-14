@@ -29,6 +29,25 @@ class SetOverride(BaseModel):
     value: float
 
 
+class OtherParameter(BaseModel):
+    """A condition or parameter the fixed fields don't cover (open-ended, so
+    papers aren't limited to what PaperDataTemplate anticipated).
+
+    Deliberately flat -- one text `value` rather than number/text/unit fields:
+    every optional field multiplies the structured-output grammar, and adding
+    three of them pushed the Methodology schema over the API's grammar size
+    limit (400 "compiled grammar is too large"). Splitting value and unit is
+    left to the review step."""
+    name: str = Field(description="Short descriptive name, e.g. 'stirring rate', 'UV irradiation "
+                                  "wavelength', 'mineral surface', 'reaction volume'.")
+    value: str = Field(description="As stated, with its unit, e.g. '300 rpm', '254 nm', 'montmorillonite'.")
+    set_label: Optional[str] = Field(default=None, description="Exact structure-plan set_label if it "
+                                                               "applies to one set only; null if paper-wide.")
+    quote: str
+    source: str
+    confidence: Literal["high", "medium", "low"]
+
+
 class Methodology(BaseModel):
     paper_id: str
     experiment_type: Extracted[ExperimentType]
@@ -53,6 +72,11 @@ class Methodology(BaseModel):
                     "{set_label: 'Na+ 3.33 mol dm-3, 81 C', field_name: 'initial_temperature_C', "
                     "value: 81.0}",
     )
+
+    other_parameters: List[OtherParameter] = Field(
+        default_factory=list,
+        description="Any other experimental condition that could affect the outcome but isn't one "
+                    "of the fields above. Empty if none.")
 
     @field_validator("per_set_overrides", mode="before")
     @classmethod

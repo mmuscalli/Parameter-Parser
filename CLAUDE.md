@@ -178,6 +178,52 @@ extract+finish with no figures (CLI unchanged; CSV byte-identical).
   "Show only the selected series" hides others; Shift+click adds on top.
   Region estimates can be well off -- accepted, users pan.
 
+## Variables beyond PaperDataTemplate (started 2026-10-14, branch `flexible-variables`)
+
+Restore point before this work: tag `v0.2-figure-digitizer` (= figure-digitizer
+branch head). Mickey's decisions (see memory too): registry = bundled base +
+local additions; PaperDataTemplate.xlsx is FROZEN (never edited by the app;
+CSV export in its exact layout stays); a new variable must be ACCEPTED before
+its values go in the CSV.
+Plan: (1) open-ended capture + surfacing -- DONE; (3) registry + review
+screen -- DONE early at Mickey's request (see below); (2) long-format
+canonical record, CSV generated from it -- not yet; (4) name normalization
+(PubChem/ChEBI) + units -- not yet.
+Registry + review (2026-10-14): `registry.py` VariableRegistry = bundled
+template columns + local JSON (`default_registry_path()`, app-data dir):
+added columns + aliases ("kind:name" -> column; species alias names are
+role-qualified, e.g. "initial RbCl", "sampled Foo %"). finish(...,
+review=callback): registry-known values written directly; the rest grouped
+(`new_variables.VariableGroup`) -> GUI `gui/variable_review.py` (default
+Don't add; New column / Existing column; editable values; Remember) ->
+`apply_decisions` + registry.save(). CLI: no review (nothing new added) but
+uses the registry. RunConfig.registry_path=None means template only (tests).
+Only explicit aliases auto-apply for parameters -- a model-suggested column
+never writes without the user's acceptance once.
+Focus terms: RunConfig.focus_terms / GUI "Parameters to look for" / CLI
+--look-for -> optional `term_search` step (flat schema, explicit
+found/not-found per term; missing terms padded as not found) -> findings
+go to review; unfound -> `term_not_found` flags. Live on eder1994: reaction
+volume 1 cm3 (vials, suggests solvent_volume_mL), recirculation time not
+stated, stirring "without stirring".
+Step 1 as built:
+- `Methodology.other_parameters` (flat: name, value-as-text, set_label,
+  quote, source, confidence) + prompt section (excludes dissolved species
+  and analysis details). Live on eder1994: stirring none, sand-bath/reflux
+  heating, foil-sealed condenser (sometimes also the 1 cm3 vial setup).
+- `flatten_to_template.column_for_solute`: values go to the CSV only if
+  their template column exists (no more `__UNRECOGNIZED_COLUMN` columns);
+  any sampled %-yield with a template column is written (was only Gly2/3).
+- `ingestion/new_variables.py` collects the rest (+ figure_rows returns
+  held-out axis columns/species) -> `new_variables.json`, one
+  `new_variable` flag per variable, own group atop the GUI Flags tab.
+- **Structured-output grammar limit**: adding other_parameters made the API
+  reject Methodology ("compiled grammar is too large"). Every Optional field
+  adds a grammar alternative; fixed by making Extracted.quote/source/note
+  plain `str` (default "", validator maps old nulls). Keep new schemas
+  flat and avoid Optional where "" works; check
+  `json.dumps(transform_schema(Model)).count("anyOf")` (Methodology: 21->6).
+
 ## Non-obvious decisions — don't redo this research
 
 - **Schema shape is grounded in `../POLO_variable_mapping.csv`** (one level

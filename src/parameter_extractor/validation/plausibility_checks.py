@@ -20,7 +20,8 @@ from parameter_extractor.schemas.methodology import Methodology
 from parameter_extractor.schemas.row_schema import ExtractedRow
 
 FlagKind = Literal["out_of_range", "low_confidence", "ambiguous_paper_wide_species",
-                   "possible_duplicate", "figure_problem"]
+                   "possible_duplicate", "figure_problem", "new_variable",
+                   "term_not_found"]
 
 
 @dataclass
@@ -118,7 +119,7 @@ def check_extraction(
                 "low_confidence",
                 f"methodology.{field} = {f.value!r} has confidence '{f.confidence}' "
                 f"(applies to every row){_drop_suffix(f.confidence, drop_below)}.",
-                quote=f.quote, source=f.source))
+                quote=f.quote or None, source=f.source or None))
 
     for s in chemistry.solutes:
         if s.role == "initial" and confidence_below(s.confidence, flag_below):

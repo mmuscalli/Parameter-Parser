@@ -9,7 +9,7 @@ one shot. Species concentrations stay as a dict keyed by template column name
 (e.g. 'initial_NaCl_aq_mM') rather than ~150 static fields.
 """
 from __future__ import annotations
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Union
 from pydantic import BaseModel
 
 
@@ -46,9 +46,9 @@ class ExtractedRow(BaseModel):
     sampled_3peptide_Gly_pct_yield: Optional[float] = None
     yield_below_threshold_note: Optional[str] = None
 
-    # any other template column -> value (e.g. {"initial_pH": 2.6}), for values
-    # that don't have a dedicated field above -- currently only from digitized figures
-    extra: Dict[str, float] = {}
+    # any other column -> value (e.g. {"initial_pH": 2.6}, {"stirring": "none"}): template
+    # columns without a dedicated field above, and columns the user accepted in review
+    extra: Dict[str, Union[float, str]] = {}
 
     source_notes: Optional[str] = None
     extraction_confidence: Optional[str] = None

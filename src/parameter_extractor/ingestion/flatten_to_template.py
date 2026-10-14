@@ -28,6 +28,9 @@ _TEMPLATE_COLUMNS_ORDERED = json.loads(_VOCAB_PATH.read_text())["all_columns"] i
 _TEMPLATE_COLUMNS = set(_TEMPLATE_COLUMNS_ORDERED)
 
 
+UNRECOGNIZED_SUFFIX = "__UNRECOGNIZED_COLUMN"
+
+
 def resolve_template_column(species_name: str, role: str) -> str:
     """
     The real template is NOT uniform: salts/ions use '<role>_<name>_aq_mM'
@@ -45,14 +48,73 @@ def resolve_template_column(species_name: str, role: str) -> str:
         return aq_form
     if plain_form in _TEMPLATE_COLUMNS:
         return plain_form
-    return f"{aq_form}__UNRECOGNIZED_COLUMN"
+    return f"{aq_form}{UNRECOGNIZED_SUFFIX}"
 
 
-def _pct_yield(entries, peptide_prefix: str):
-    """The sampled entry reporting a % yield for e.g. '2peptide' / '2peptide_Gly'."""
-    return next((s for s in entries
-                 if s.name.startswith(peptide_prefix) and s.concentration_value is not None
-                 and "%" in (s.concentration_unit_raw or "")), None)
+def is_percent(entry) -> bool:
+    return "%" in (entry.concentration_unit_raw or "")
+
+
+_BASE_REGISTRY = None
+
+
+def base_registry():
+    """Template columns only (no local additions)."""
+    global _BASE_REGISTRY
+    if _BASE_REGISTRY is None:
+        from parameter_extractor.registry import VariableRegistry
+        _BASE_REGISTRY = VariableRegistry(None)
+    return _BASE_REGISTRY
+
+
+def species_alias_name(entry) -> str:
+    """How the registry remembers a species value: role and % vs concentration
+    matter ("initial RbCl" and "sampled RbCl %" are different variables)."""
+    return f"{entry.role} {entry.name}" + (" %" if entry.role == "sampled" and is_percent(entry) else "")
+
+
+def column_for_solute(entry, registry=None) -> Optional[str]:
+    """The column an extracted value belongs in -- a template column, or one the
+    user accepted earlier (local registry: column or alias) -- or None, making
+    it a new variable that stays out of the CSV until the user accepts it (see
+    ingestion/new_variables.py). Percent yields go to sampled_<name>_%yield."""
+    registry = registry or base_registry()
+    alias = registry.column_for("species", species_alias_name(entry))
+    if alias:
+        return alias
+    if entry.role == "sampled" and is_percent(entry):
+        candidates = (f"sampled_{entry.name}_%yield", f"sampled_{entry.name}_aq_%yield")
+    else:
+        candidates = (f"{entry.role}_{entry.name}_aq_mM", f"{entry.role}_{entry.name}_mM")
+    return next((c for c in candidates if registry.is_known_column(c)), None)
+
+
+def set_row_value(row: ExtractedRow, column: str, value) -> None:
+    """Write a value into any column of a row: a dedicated field if the row has
+    one, a concentration column, or `extra` (other template / accepted columns)."""
+    field = _FIELD_FOR_TEMPLATE.get(column, column)
+    if field in ExtractedRow.model_fields and field not in _NOT_VALUE_FIELDS:
+        setattr(row, field, value)
+    elif column.endswith("_mM") and isinstance(value, (int, float)):
+        row.species_mM[column] = value
+    else:
+        row.extra[column] = value
+
+
+_NOT_VALUE_FIELDS = {"full_id", "set_id", "sample_id", "set_type", "entry_number", "paper_doi",
+                     "paper_title", "authors", "year_published", "journal_published",
+                     "species_mM", "extra", "source_notes", "extraction_confidence"}
+
+
+def proposed_column_for_solute(entry) -> str:
+    """What the column would be called if this new variable were accepted."""
+    if entry.role == "sampled" and is_percent(entry):
+        return f"sampled_{entry.name}_%yield"
+    return resolve_template_column(entry.name, entry.role).removesuffix(UNRECOGNIZED_SUFFIX)
+
+
+def _solute_value(entry) -> Optional[float]:
+    return entry.concentration_value if is_percent(entry) else entry.concentration_mM
 
 
 def _lowest_confidence(entries) -> Optional[str]:
@@ -69,6 +131,7 @@ def build_rows(
     chemistry: ChemistryExtraction,
     paper_prefix: str,
     drop_below: Optional[str] = settings.CONFIDENCE_DROP_BELOW,
+    registry=None,
 ) -> List[ExtractedRow]:
     """`drop_below`: values whose confidence ranks below this are left blank
     (None = keep everything). They're still reported by the plausibility checks."""
@@ -100,8 +163,8 @@ def build_rows(
         }
         merged_species = {**constant_species, **set_species}
         species_mM = {
-            resolve_template_column(name, "initial"): s.concentration_mM
-            for name, s in merged_species.items() if s.concentration_mM is not None
+            col: s.concentration_mM for s in merged_species.values()
+            if s.concentration_mM is not None and (col := column_for_solute(s, registry))
         }
 
         sampled_for_set = [
@@ -118,12 +181,17 @@ def build_rows(
 
             sampled_here = [s for s in sampled_for_set if s.sample_label == sample.sample_label]
             sampled_kept = [s for s in sampled_here if _kept(s.confidence)]
-            pct2 = _pct_yield(sampled_kept, "2peptide")
-            pct3 = _pct_yield(sampled_kept, "3peptide")
-            sampled_mM = {
-                resolve_template_column(s.name, "sampled"): s.concentration_mM
-                for s in sampled_kept if s.concentration_mM is not None
-            }
+            sampled_mM, extra, yield_fields = {}, {}, {}
+            for s in sampled_kept:
+                col, value = column_for_solute(s, registry), _solute_value(s)
+                if col is None or value is None:
+                    continue
+                if col in _FIELD_FOR_TEMPLATE:          # e.g. the Gly 2-/3-peptide % yields
+                    yield_fields[_FIELD_FOR_TEMPLATE[col]] = value
+                elif col.endswith("_mM"):
+                    sampled_mM[col] = value
+                else:
+                    extra[col] = value
 
             rows.append(ExtractedRow(
                 full_id=full_id, set_id=set_id, sample_id=sample_id,
@@ -144,8 +212,8 @@ def build_rows(
                 sampled_temperature_C=override.get(
                     "sampled_temperature_C", _method_value(methodology.sampled_temperature_C)),
                 species_mM={**species_mM, **sampled_mM},
-                sampled_2peptide_Gly_pct_yield=pct2.concentration_value if pct2 else None,
-                sampled_3peptide_Gly_pct_yield=pct3.concentration_value if pct3 else None,
+                extra=extra,
+                **yield_fields,
                 # lowest confidence among this row's MEASURED values, including any
                 # dropped by drop_below, so check_row still flags them
                 extraction_confidence=_lowest_confidence(sampled_here),
@@ -163,6 +231,7 @@ FIELD_TO_TEMPLATE = {
     "sampled_2peptide_Gly_pct_yield": "sampled_2peptide_Gly_%yield",
     "sampled_3peptide_Gly_pct_yield": "sampled_3peptide_Gly_%yield",
 }
+_FIELD_FOR_TEMPLATE = {col: field for field, col in FIELD_TO_TEMPLATE.items()}
 MAX_AUTHOR_COLUMNS = 7          # template has author1..author7
 def row_to_template_dict(row: ExtractedRow) -> dict:
     """{template column: value} for one row, using the template's own names."""

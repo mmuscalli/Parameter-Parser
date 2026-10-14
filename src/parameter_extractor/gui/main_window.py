@@ -19,7 +19,8 @@ from PySide6.QtCore import QSettings, Qt, QThread, QUrl
 from PySide6.QtGui import QAction, QBrush, QColor, QDesktopServices, QKeySequence
 from PySide6.QtWidgets import (
     QAbstractItemView, QCheckBox, QFileDialog, QFormLayout, QGroupBox, QHBoxLayout,
-    QHeaderView, QLabel, QLineEdit, QMainWindow, QMessageBox, QProgressBar, QPushButton, QSplitter,
+    QHeaderView, QLabel, QLineEdit, QMainWindow, QMessageBox, QPlainTextEdit, QProgressBar, QPushButton,
+    QSplitter,
     QTableWidget, QTableWidgetItem, QTabWidget, QTextBrowser, QTreeWidget, QTreeWidgetItem,
     QVBoxLayout, QWidget,
 )
@@ -30,7 +31,9 @@ from parameter_extractor.gui import key_store
 from parameter_extractor.digitizing.annotate import save_digitized
 from parameter_extractor.errors import PipelineError
 from parameter_extractor.gui.figure_dialog import FigureReviewDialog, PlanBridge
+from parameter_extractor.gui.variable_review import VariableReviewDialog
 from parameter_extractor.gui.worker import PipelineWorker
+from parameter_extractor.registry import default_registry_path
 from parameter_extractor.pipeline import Extraction, finish, plan_figure
 
 DEFAULT_OUTPUT_DIR = Path.home() / "Documents" / "Parameter Extractor"
@@ -66,6 +69,7 @@ class MainWindow(QMainWindow):
         self._extraction: Optional[Extraction] = None   # live object, filled in as steps complete
         self._extraction_ok = False
         self._review: Optional[FigureReviewDialog] = None
+        self.registry_path = default_registry_path()     # local additions to the variable list
 
         central = QWidget()
         layout = QVBoxLayout(central)
@@ -106,6 +110,14 @@ class MainWindow(QMainWindow):
         self.out_edit.textChanged.connect(self._update_run_enabled)
         out_btn = QPushButton("Choose…", clicked=self._choose_output_dir)
         form.addRow("Save results to:", self._row(self.out_edit, out_btn))
+
+        self.terms_edit = QPlainTextEdit()
+        self.terms_edit.setPlaceholderText("Optional: parameters you especially want found, one per line "
+                                           "(e.g. extraction solvent volume, flowthrough recirculation time)")
+        self.terms_edit.setFixedHeight(54)
+        self.terms_edit.setToolTip("Each term gets an explicit answer from a targeted search -- its value, "
+                                   "or 'not stated in the paper'. One extra API call when used.")
+        form.addRow("Parameters to look for:", self.terms_edit)
 
         note = QLabel(PRIVACY_NOTE, wordWrap=True)
         note.setStyleSheet("color: palette(placeholder-text);")
@@ -178,14 +190,20 @@ class MainWindow(QMainWindow):
 
     def _load_preferences(self) -> None:
         self.out_edit.setText(self._settings.value("output_dir", str(DEFAULT_OUTPUT_DIR)))
+        self.terms_edit.setPlainText(self._settings.value("focus_terms", ""))
         stored_key = key_store.load_key()
         self._key_was_stored = bool(stored_key)
         if stored_key:
             self.key_edit.setText(stored_key)
             self.remember_key_box.setChecked(True)
 
+    def focus_terms(self) -> list:
+        text = self.terms_edit.toPlainText().replace(";", "\n")
+        return [t.strip() for t in text.splitlines() if t.strip()]
+
     def _save_preferences(self) -> None:
         self._settings.setValue("output_dir", self.out_edit.text().strip())
+        self._settings.setValue("focus_terms", self.terms_edit.toPlainText())
         key = self.key_edit.text().strip()
         if self.remember_key_box.isChecked():
             if not key_store.save_key(key):
@@ -258,7 +276,8 @@ class MainWindow(QMainWindow):
         out_dir = Path(self.out_edit.text().strip()).expanduser()
         self._save_preferences()
 
-        config = RunConfig(api_key=self.key_edit.text().strip(), output_dir=out_dir)
+        config = RunConfig(api_key=self.key_edit.text().strip(), output_dir=out_dir,
+                           registry_path=self.registry_path, focus_terms=self.focus_terms())
         self._extraction, self._extraction_ok, self._review = None, False, None
         self._worker = PipelineWorker(pdf, config)
         self._thread = QThread(self)
@@ -362,11 +381,18 @@ class MainWindow(QMainWindow):
         if self._close_when_done:
             self.close()
 
+    def _review_new_variables(self, groups, unfound_terms, registry):
+        """Asked by pipeline.finish() before the CSV is written, if anything new was found."""
+        self.status.setText("Review the new variables to finish building the dataset…")
+        dialog = VariableReviewDialog(groups, unfound_terms, registry, parent=self)
+        dialog.exec()
+        return dialog.decisions()
+
     def _finish(self, extraction: Extraction, digitized, skipped) -> None:
         # the worker that reported progress so far is gone; report the last step here
         extraction.ctx.on_progress = lambda e: self._on_progress(e.step, e.total_steps, e.message)
         try:
-            result = finish(extraction, digitized, skipped)
+            result = finish(extraction, digitized, skipped, review=self._review_new_variables)
         except PipelineError as e:
             self._on_failed(str(e))
             return
@@ -380,7 +406,7 @@ class MainWindow(QMainWindow):
 
     def _set_inputs_enabled(self, enabled: bool) -> None:
         for w in (self.pdf_edit, self.key_edit, self.out_edit, self.remember_key_box,
-                  self.show_key_box):
+                  self.show_key_box, self.terms_edit):
             w.setEnabled(enabled)
         self._update_run_enabled()
 
@@ -443,8 +469,12 @@ class MainWindow(QMainWindow):
             tree.addTopLevelItem(group)
             group.setExpanded(True)
 
-        if result.paper_flags:
-            add_group("Whole paper", result.paper_flags)
+        new_var_flags = [f for f in result.paper_flags if f.kind == "new_variable"]
+        other_paper_flags = [f for f in result.paper_flags if f.kind != "new_variable"]
+        if new_var_flags:
+            add_group("New variables not added to the CSV", new_var_flags)
+        if other_paper_flags:
+            add_group("Whole paper", other_paper_flags)
         for row_id, flags in result.row_flags.items():
             add_group(f"Row {row_id}", flags)
         if not result.paper_flags and not result.row_flags:
@@ -472,6 +502,7 @@ class MainWindow(QMainWindow):
             <p><b>{len(result.rows)}</b> rows extracted &middot;
                <b>{len(result.paper_flags)}</b> paper-level flag(s) &middot;
                <b>{len(result.row_flags)}</b> row(s) flagged</p>
+            {self._new_variables_html(result)}
             <p>Results folder: <code>{result.run_dir}</code><br>
                CSV: <code>{result.csv_path.name}</code></p>
             {self._figures_html(result)}
@@ -484,6 +515,22 @@ class MainWindow(QMainWindow):
             </table>
             <p style="color:gray">Parameter Extractor {__version__}. Every value should be
             checked against the paper; flagged items first.</p>""")
+
+    @staticmethod
+    def _new_variables_html(result) -> str:
+        parts = []
+        if result.accepted_variables:
+            items = "".join(f"<li>{html.escape(a['name'])} &rarr; <code>{html.escape(a['column'])}</code> "
+                            f"({html.escape(a['how'])})</li>" for a in result.accepted_variables)
+            parts.append(f"<h4>Variables beyond the template</h4><ul>{items}</ul>")
+        names = sorted({v.name for v in result.new_variables})
+        if names:
+            parts.append(f"<p>Not added: {html.escape(', '.join(names))} "
+                         f"(kept in <code>new_variables.json</code>).</p>")
+        if result.unfound_terms:
+            parts.append(f"<p>Searched for but not stated in the paper: "
+                         f"{html.escape('; '.join(result.unfound_terms))}.</p>")
+        return "".join(parts)
 
     @staticmethod
     def _figures_html(result) -> str:

@@ -86,6 +86,8 @@ def _window(keys: FakeKeyStore, out: Path):
     with patch.object(main_window, "key_store", keys):
         w = main_window.MainWindow()
     w.out_edit.setText(str(out))
+    w.registry_path = out / "test_registry.json"     # never the user's real variable registry
+    w.terms_edit.setPlainText("")
     return w
 
 
@@ -220,6 +222,71 @@ def test_review_still_open_when_extraction_finishes():
         w.close()
 
 
+def test_new_variables_shown_separately():
+    if not PDF.is_file():
+        print(f"SKIP: needs {PDF}"); return
+    from parameter_extractor.config.run_config import RunConfig
+    from parameter_extractor.pipeline import extract, finish
+    from test_new_variables import _add_extras
+    keys = FakeKeyStore()
+    with tempfile.TemporaryDirectory() as tmp, patch.object(api_client, "_send", _replay_send), \
+            patch.object(main_window, "key_store", keys):
+        ex = extract(PDF, RunConfig.from_settings(api_key="replay", output_dir=Path(tmp)))
+        _add_extras(ex)
+        result = finish(ex)
+        w = _window(keys, Path(tmp))
+        w.show_result(result)
+        top = [w.flags_tree.topLevelItem(i).text(0) for i in range(w.flags_tree.topLevelItemCount())]
+        assert top[0] == "New variables not added to the CSV (3)", top
+        assert "Not added: Foo, RbCl, stirring rate" in w.summary_text.toPlainText(), w.summary_text.toPlainText()
+        assert "RbCl" in w.summary_text.toPlainText()
+        w.close()
+
+
+def test_variable_review_window():
+    if not PDF.is_file():
+        print(f"SKIP: needs {PDF}"); return
+    from parameter_extractor.config.run_config import RunConfig
+    from parameter_extractor.gui.variable_review import VariableReviewDialog
+    from parameter_extractor.ingestion.new_variables import collect_new_variables, group_new_variables
+    from parameter_extractor.pipeline import extract
+    from parameter_extractor.registry import VariableRegistry
+    from test_new_variables import _add_extras
+    shown = []
+    with tempfile.TemporaryDirectory() as tmp, patch.object(api_client, "_send", _replay_send), \
+            patch.object(main_window.QMessageBox, "warning", lambda parent, title, msg: shown.append(msg)):
+        ex = extract(PDF, RunConfig.from_settings(api_key="replay", output_dir=Path(tmp)))
+        _add_extras(ex)
+        groups = group_new_variables(collect_new_variables(ex.methodology, ex.chemistry))
+        dlg = VariableReviewDialog(groups, ["flowthrough recirculation time"], VariableRegistry(Path(tmp) / "r.json"))
+        dlg.show(); _pump()
+        names = [dlg.table.item(r, 0).text() for r in range(dlg.table.rowCount())]
+        assert names == ["RbCl", "Foo", "stirring rate"], names
+        assert [d.action for d in dlg.decisions()] == ["ignore"] * 3          # nothing added by default
+
+        dlg.set_action(0, "new_column")                                       # proposed name pre-filled
+        dlg.set_action(1, "existing_column", "not_a_column")                  # invalid -> blocked
+        dlg.table.selectRow(2); dlg._show_values(2)
+        dlg.values_table.item(0, 1).setText("300")                            # edit "300 rpm" -> 300
+        dlg.set_action(2, "new_column", "stirring_rate_rpm")
+        dlg._finish()
+        assert shown and "isn't an existing column" in shown[0] and dlg.isVisible()
+        dlg.set_action(1, "existing_column", "sampled_DKP_Gly_%yield")
+        _pump(); _screenshot(dlg, "6_variable_review")
+        dlg._finish()
+        assert dlg.result() == dlg.DialogCode.Accepted
+        d = {x.alias_name: (x.action, x.column) for x in dlg.decisions()}
+        assert d == {"initial RbCl": ("new_column", "initial_RbCl_aq_mM"),
+                     "sampled Foo %": ("existing_column", "sampled_DKP_Gly_%yield"),
+                     "stirring rate": ("new_column", "stirring_rate_rpm")}
+        assert groups[2].values[0].value == 300.0
+
+        # closing the window = add nothing
+        dlg2 = VariableReviewDialog(groups, [], VariableRegistry(None))
+        dlg2.set_action(0, "new_column"); dlg2.reject()
+        assert all(x.action == "ignore" for x in dlg2.decisions())
+
+
 class InstantPlans:
     """Stands in for PlanBridge: delivers a fixed plan immediately."""
     def __init__(self, plan): self.plan, self.requests = plan, []
@@ -278,7 +345,7 @@ def test_digitize_a_figure_by_clicking():
 
         meta = PaperMetadata.model_validate_json((REPLAY_DIR / "metadata.output.json").read_text())
         meth = Methodology.model_validate_json((REPLAY_DIR / "methodology.output.json").read_text())
-        rows, problems = build_figure_rows(dlg.digitized, meta, meth, "001", 14, 43)
+        rows, problems, new_vars = build_figure_rows(dlg.digitized, meta, meth, "001", 14, 43)
         assert problems == [] and len(rows) == 1
         r = rows[0]
         assert (round(r.duration_hr, 6), round(r.sampled_2peptide_Gly_pct_yield, 6)) == (20.0, 0.4)

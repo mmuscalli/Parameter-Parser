@@ -28,6 +28,19 @@ set it "ambiguous" at the top level with a note pointing to
 `per_set_overrides`, and add one `per_set_overrides` entry per (set, field),
 using the exact `set_label` strings from the structure plan below.
 
+Also list, in `other_parameters`, any OTHER experimental condition or parameter
+that could affect the outcome but isn't one of the fields above -- for
+example stirring or agitation, light/UV irradiation, mineral or solid
+surfaces, buffers, reaction or sample volume, heating method, wet-dry
+cycling details, sealing or atmosphere details. One entry per parameter (one
+per set if it differs between sets), each with a quote and source. Leave out:
+- anything already covered by the fields above;
+- dissolved species and their concentrations, including catalysts and
+  reactants (a separate step extracts those);
+- how the products were analysed (HPLC columns, mobile phases, detection
+  wavelengths, standards) -- `analysis_method` covers the analysis.
+Leave the list empty if there's nothing else.
+
 Return a Methodology object.
 
 ---

@@ -11,16 +11,22 @@ are filled the same way as for table rows.
 Rows are marked extraction_confidence="digitized" and their source_notes say
 which figure and series they came from: the values are approximate readings
 of a plot, not numbers printed in the paper.
+
+An axis column or a series species that isn't a template column (typed in by
+hand in the digitizer) is a new variable: its values are held out of the CSV
+and returned as NewVariable records, like any other unaccepted variable.
 """
 from __future__ import annotations
 from typing import List, Optional, Tuple
 
 from parameter_extractor.digitizing.calibration import pixel_to_data
-from parameter_extractor.ingestion.flatten_to_template import FIELD_TO_TEMPLATE, resolve_template_column
+from parameter_extractor.ingestion.flatten_to_template import (
+    FIELD_TO_TEMPLATE, UNRECOGNIZED_SUFFIX, _TEMPLATE_COLUMNS, resolve_template_column)
 from parameter_extractor.schemas.figures import DigitizedFigure
 from parameter_extractor.schemas.methodology import Methodology
 from parameter_extractor.schemas.paper_metadata import PaperMetadata
 from parameter_extractor.schemas.row_schema import ExtractedRow
+from parameter_extractor.schemas.variables import NewVariable
 
 DIGITIZED = "digitized"
 # Template columns whose ExtractedRow field has a different name.
@@ -30,9 +36,15 @@ _ID_FIELDS = {"full_id", "set_id", "sample_id", "set_type", "entry_number", "pap
               "species_mM", "extra", "source_notes", "extraction_confidence"}
 
 
-def _assign(fields: dict, species: dict, extra: dict, column: Optional[str], value: float) -> None:
+def _assign(fields: dict, species: dict, extra: dict, column: Optional[str], value: float,
+            registry) -> bool:
+    """Puts the value in its column; False (nothing written) if the column isn't known
+    (neither a template column, one accepted earlier, nor mapped by an alias)."""
     if not column:
-        return
+        return True
+    column = registry.alias_for("figure_axis", column) or column
+    if not registry.is_known_column(column):
+        return False
     field = _FIELD_FOR_COLUMN.get(column, column)
     if field in ExtractedRow.model_fields and field not in _ID_FIELDS:
         fields[field] = value
@@ -40,6 +52,7 @@ def _assign(fields: dict, species: dict, extra: dict, column: Optional[str], val
         species[column] = value
     else:
         extra[column] = value
+    return True
 
 
 def build_figure_rows(
@@ -49,11 +62,16 @@ def build_figure_rows(
     paper_prefix: str,
     first_set_index: int,
     first_entry_number: int,
-) -> Tuple[List[ExtractedRow], List[str]]:
-    """Returns (rows, problems). A series is left out, with a reason in
-    `problems`, if its panel isn't calibrated or neither axis has a column."""
+    registry=None,
+) -> Tuple[List[ExtractedRow], List[str], List[NewVariable]]:
+    """Returns (rows, problems, new_variables). A series is left out, with a
+    reason in `problems`, if its panel isn't calibrated or neither axis has a
+    column."""
+    from parameter_extractor.ingestion.flatten_to_template import base_registry
+    registry = registry or base_registry()
     rows: List[ExtractedRow] = []
     problems: List[str] = []
+    new_vars: List[NewVariable] = []
     set_idx, entry = first_set_index, first_entry_number
 
     for fig in figures:
@@ -72,8 +90,23 @@ def build_figure_rows(
             set_id = f"{paper_prefix}{set_idx:03d}"
             set_idx += 1
             set_type = "Time Series" if "duration_hr" in (panel.x.column, panel.y.column) else "Independent"
-            species = {resolve_template_column(s.name, "initial"): s.concentration_mM
-                       for s in series.initial_species if s.concentration_mM is not None}
+            where = f"{fig.figure_id}, series '{series.label}'"
+            species, held_species = {}, []
+            for sp in series.initial_species:
+                if sp.concentration_mM is None or not sp.name:
+                    continue
+                candidates = (f"initial_{sp.name}_aq_mM", f"initial_{sp.name}_mM")
+                col = (registry.alias_for("species", f"initial {sp.name}")
+                       or next((c for c in candidates if registry.is_known_column(c)), None))
+                if col is None:
+                    held_species.append(NewVariable(
+                        kind="species", name=sp.name, alias_name=f"initial {sp.name}",
+                        proposed_column=resolve_template_column(sp.name, "initial").removesuffix(UNRECOGNIZED_SUFFIX),
+                        role="initial", value=sp.concentration_mM, unit="mM", set_label=where,
+                        source=where, origin=fig.figure_id))
+                else:
+                    species[col] = sp.concentration_mM
+            series_row_ids = []
 
             points = sorted(series.points, key=lambda p: pixel_to_data(panel, p.px, p.py)[0])
             for sample_idx, pt in enumerate(points, start=1):
@@ -87,10 +120,18 @@ def build_figure_rows(
                 row_species, extra = dict(species), {}
                 if series.initial_pH is not None:
                     extra["initial_pH"] = series.initial_pH
-                _assign(fields, row_species, extra, panel.x.column, round(x * panel.x.multiplier, 6))
-                _assign(fields, row_species, extra, panel.y.column, round(y * panel.y.multiplier, 6))
+                for axis, value in ((panel.x, x), (panel.y, y)):
+                    value = round(value * axis.multiplier, 6)
+                    if not _assign(fields, row_species, extra, axis.column, value, registry):
+                        new_vars.append(NewVariable(
+                            kind="figure_axis", name=axis.column, alias_name=axis.column,
+                            proposed_column=axis.column, value=value,
+                            set_label=where, sample_label=f"point {sample_idx}", source=where,
+                            quote=f"axis '{axis.label}'", origin=fig.figure_id,
+                            row_ids=[f"{set_id}{sample_idx:03d}"]))
 
                 sample_id = f"{sample_idx:03d}"
+                series_row_ids.append(f"{set_id}{sample_id}")
                 row = dict(
                     full_id=f"{set_id}{sample_id}", set_id=set_id, sample_id=sample_id,
                     set_type=set_type, entry_number=entry,
@@ -113,4 +154,7 @@ def build_figure_rows(
                 row.update(fields)   # axis/series values win over paper-wide defaults
                 rows.append(ExtractedRow(**row))
                 entry += 1
-    return rows, problems
+            for v in held_species:
+                v.row_ids = list(series_row_ids)
+            new_vars += held_species
+    return rows, problems, new_vars
