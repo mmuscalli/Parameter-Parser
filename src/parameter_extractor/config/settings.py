@@ -43,6 +43,7 @@ MODELS = {
     "metadata": "claude-haiku-5-5",
     "methodology": "claude-sonnet-5-5",
     "chemistry": "claude-sonnet-5-5",
+    "figure_planner": "claude-sonnet-5-5",   # only for figures the user chooses to digitize
 }
 
 MAX_TOKENS = 64000  # streamed (api_client.py); eder1994 chemistry alone overflowed 16000

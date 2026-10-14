@@ -6,7 +6,8 @@ needs, WITHOUT running an extraction or spending API credit.
     "Parameter Extractor.app/Contents/MacOS/Parameter Extractor" --self-check [--pdf paper.pdf]
 
 Checks: the bundled prompts and vocabulary are present; the PDF libraries
-load (and, with --pdf, actually parse and render that file); the system
+load (and, with --pdf, actually parse and render that file and look for
+figures); the system
 keychain is reachable; and, if an API key is available (ANTHROPIC_API_KEY or
 config/.env), that the Anthropic API accepts it and the configured models
 exist -- via the free models endpoint, not a billed request.
@@ -38,7 +39,8 @@ def run_checks(pdf: Optional[Path] = None, api_key: Optional[str] = None) -> Lis
 
     def resources() -> str:
         prompts = sorted(p.stem for p in settings.PROMPTS_DIR.glob("*.md"))
-        expected = {"chemistry", "metadata", "methodology", "structure_planner", "triage"}
+        expected = {"chemistry", "figure_planner", "metadata", "methodology",
+                    "structure_planner", "triage"}
         missing = expected - set(prompts)
         if missing:
             raise FileNotFoundError(f"missing prompts: {sorted(missing)} in {settings.PROMPTS_DIR}")
@@ -53,13 +55,16 @@ def run_checks(pdf: Optional[Path] = None, api_key: Optional[str] = None) -> Lis
 
     if pdf is not None:
         def parse_and_render() -> str:
+            from parameter_extractor.ingestion.figure_finder import find_figures
             from parameter_extractor.ingestion.pdf_parser import parse_pdf, rasterize_table_pages
             parsed = parse_pdf(str(pdf))
             with tempfile.TemporaryDirectory() as tmp:
                 images = rasterize_table_pages(parsed, Path(tmp))
                 sizes = [p.stat().st_size for p in images.values()]
+                figures = find_figures(str(pdf), Path(tmp) / "figures")
             return (f"{parsed.page_count} pages, {len(parsed.text):,} chars of text, table pages "
-                    f"{sorted(parsed.table_pages)}, rendered {len(sizes)} image(s)")
+                    f"{sorted(parsed.table_pages)}, rendered {len(sizes)} image(s), figures found: "
+                    f"{', '.join(f.figure_id for f in figures) or 'none'}")
         checks.append(_run(f"Parse & render {pdf.name}", parse_and_render))
 
     def keychain() -> str:

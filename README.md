@@ -58,6 +58,46 @@ Cancel stops after the current step. When the run finishes:
 - **Summary**: token usage per step, plus buttons to open the results folder
   or the CSV.
 
+### Figures (digitizing plots)
+
+If the paper has figures ("Fig. N" captions), a review window opens as soon
+as the PDF has been read, while the text extraction carries on in the
+background (its progress shows in the window). It steps through the figures
+one at a time. For each, choose
+**Skip** (it stays out of the dataset) or **Digitize this figure**, which opens a
+plot digitizer on the page, zoomed to the figure:
+
+1. **Set X axis / Set Y axis**: click two well-separated points on each axis
+   (labelled ticks) and type their values. Log axes and slightly tilted scans
+   are handled.
+2. Check the **columns** each axis feeds (e.g. `duration_hr`,
+   `sampled_2peptide_Gly_%yield`) and the **multiplier** for unit conversion.
+3. Check the **series** (one per marker or legend entry) and their conditions
+   (composition in mM, temperature, pH).
+4. **Add points**: select a series and click its points. Drag to adjust,
+   right-click to remove, Ctrl+Z to undo. Only the selected series is
+   editable, so you can click right on top of another series' points.
+   **Show only the selected series** hides the others in crowded areas, and
+   Shift+click adds a point even on top of one of the same series.
+
+Navigation: pinch on a trackpad (or Cmd/Ctrl+scroll, or a mouse wheel) to
+zoom; two-finger scroll, or drag in **Pan / zoom** mode, to move around.
+
+Finding figures costs nothing (it's done locally from the PDF). Only for a
+figure you choose to digitize does the model suggest the axis columns, series
+and conditions, from the figure image, caption and the passages that mention
+it (one API call, about 15K input tokens or $0.05). If the text extraction
+hasn't reached the experiment structure yet, the request waits for it, so
+start calibrating meanwhile. It also warns if the figure seems to repeat a table's
+data. Everything it suggests is editable. Figures with several panels, or a
+second y-axis, get one coordinate system each (**Add axes**).
+
+The dataset is built once both the extraction and the figure review are
+finished, whichever ends last. Each digitized series becomes a new set of
+rows after the table rows, marked
+`extraction_confidence = digitized` with the figure and series named in
+`source_notes`.
+
 Tick *Remember on this computer* to keep the key in the system keychain
 (macOS Keychain / Windows Credential Manager). It's never written to a file.
 Results are saved exactly as with the command line.
@@ -85,11 +125,12 @@ overwrites an earlier run:
 
 | File | Contents |
 |---|---|
-| `<pdf name>_extracted.csv` | One row per sample, in PaperDataTemplate's column naming |
+| `<pdf name>_extracted.csv` | One row per sample. The first 280 columns are exactly PaperDataTemplate's, in its order (empty ones included), so rows paste straight into the template. After them: any columns the template doesn't have (e.g. a new species), then our provenance columns (`yield_below_threshold_note`, `source_notes`, `extraction_confidence`) |
 | `plausibility_flags.json` | Anything to check by hand (see below); absent if nothing was flagged |
 | `run_summary.json` | Settings used (never the key), models, token usage, timings |
 | `<stage>.output.json` / `<stage>.audit.json` | Each step's structured result, plus the exact prompt sent and the raw response |
 | `parsed_paper.json`, `page_images/` | The extracted text, and renders of pages containing tables |
+| `figures_found.json`, `figures/` | Detected figures (caption, location) with page renders; for each digitized figure, `fig-N.digitized.json` (calibration, every click and its value) and `fig-N.digitized.png` (the points drawn on the figure) |
 
 ### Flags and confidence
 
@@ -122,10 +163,11 @@ so treat them as a prompt to check, not a guarantee.
 5. **Chemistry**: every species and concentration (initial and measured),
    mapped onto the template's controlled vocabulary. Unknown species are
    kept and listed for review, never dropped.
-6. **Assemble** the rows, run the checks, and write the outputs.
+6. **Figures** (desktop app): skip or digitize each detected figure (above).
+7. **Assemble** the rows, run the checks, and write the outputs.
 
-Figures and scatter plots are not read yet. Only values given in text or
-tables are extracted.
+The command line extracts text and tables only. It lists the figures it found
+in `run_summary.json` as "not digitized".
 
 ## Using it from Python
 
@@ -163,6 +205,7 @@ src/parameter_extractor/
   validation/        plausibility/confidence checks; gold-standard scorer (off)
   calculators/       simple deterministic conversions (unit conversion, % yield)
   gui/               the desktop app (PySide6): main_window, background worker, keychain
+  digitizing/        plot calibration maths and the audit image for digitized figures
   diagnostics.py     --self-check: verifies an install or packaged app (no API cost)
 packaging/           build the standalone app: PyInstaller spec, build script, icons
 tests/               offline tests: no API calls, run in a few seconds
@@ -177,6 +220,7 @@ eval/gold_standard/  empty until a curated answer set exists
 .venv/bin/python tests/test_crossref_lookup.py
 .venv/bin/python tests/test_gui_offline.py      # needs the [gui] extra; runs off-screen
 .venv/bin/python tests/test_diagnostics.py
+.venv/bin/python tests/test_figures.py
 ```
 
 `test_pipeline_offline.py` replays the saved model responses from
@@ -208,6 +252,7 @@ set exists. Then drop its CSV into `eval/gold_standard/` and switch both on.
 2. ✅ Pure-Python PDF handling and installable package
 3. Desktop app (PySide6): window ✅; macOS app + .dmg build ✅ (unsigned);
    still to do: code signing/notarization, Windows build
-4. Reading figures and scatter plots
+4. Reading figures and scatter plots: hand digitizing with AI-suggested
+   variables ✅ (foundation; refinements to come)
 
 Before a public release: choose a project license and a final name.

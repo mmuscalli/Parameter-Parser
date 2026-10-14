@@ -1,7 +1,9 @@
 """
-Runs the pipeline on a background thread so the window stays responsive
-during the ~2 minutes a paper takes. Results, progress and errors come back
-to the GUI thread as Qt signals.
+Runs the automatic part of the pipeline (pipeline.extract: reading the PDF and
+the API extraction steps) on a background thread so the window stays
+responsive during the ~2 minutes a paper takes. Progress, the resulting
+Extraction and errors come back to the GUI thread as Qt signals; the window
+then runs the figure review and pipeline.finish() itself.
 """
 from __future__ import annotations
 import threading
@@ -12,12 +14,13 @@ from PySide6.QtCore import QObject, Signal, Slot
 
 from parameter_extractor.config.run_config import RunConfig
 from parameter_extractor.errors import PipelineError, RunCancelledError
-from parameter_extractor.pipeline import run_pipeline
+from parameter_extractor.pipeline import extract
 
 
 class PipelineWorker(QObject):
     progress = Signal(int, int, str)   # step, total_steps, message
-    succeeded = Signal(object)         # RunResult
+    figures_found = Signal(object)     # pipeline.Extraction, partly filled: figures can be reviewed now
+    succeeded = Signal(object)         # pipeline.Extraction
     failed = Signal(str)               # message written for the user
     cancelled = Signal()
     done = Signal()                    # always emitted last, whatever the outcome
@@ -36,9 +39,10 @@ class PipelineWorker(QObject):
     @Slot()
     def run(self) -> None:
         try:
-            result = run_pipeline(
+            result = extract(
                 self.pdf_path, self.config, cancel_event=self._cancel,
                 on_progress=lambda e: self.progress.emit(e.step, e.total_steps, e.message),
+                on_figures=self.figures_found.emit,
             )
         except RunCancelledError:
             self.cancelled.emit()

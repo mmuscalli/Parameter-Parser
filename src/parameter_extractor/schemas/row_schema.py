@@ -46,5 +46,9 @@ class ExtractedRow(BaseModel):
     sampled_3peptide_Gly_pct_yield: Optional[float] = None
     yield_below_threshold_note: Optional[str] = None
 
+    # any other template column -> value (e.g. {"initial_pH": 2.6}), for values
+    # that don't have a dedicated field above -- currently only from digitized figures
+    extra: Dict[str, float] = {}
+
     source_notes: Optional[str] = None
     extraction_confidence: Optional[str] = None

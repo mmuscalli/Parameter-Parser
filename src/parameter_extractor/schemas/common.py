@@ -18,11 +18,15 @@ CONFIDENCE_ORDER = ("low", "medium", "high")
 
 def confidence_below(confidence: Optional[str], threshold: Optional[str]) -> bool:
     """True if `confidence` ranks strictly below `threshold`. A None threshold
-    means "no threshold" (never below); a None confidence counts as lowest."""
+    means "no threshold" (never below); a None confidence counts as lowest.
+    A label outside the high/medium/low scale (e.g. "digitized" for values
+    read off a figure by the user) isn't ranked, so it's never "below"."""
     if threshold is None:
         return False
     if confidence is None:
         return True
+    if confidence not in CONFIDENCE_ORDER:
+        return False
     return CONFIDENCE_ORDER.index(confidence) < CONFIDENCE_ORDER.index(threshold)
 
 # First-class states -- the point made in the design discussion: never let a

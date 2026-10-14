@@ -19,7 +19,8 @@ from parameter_extractor.schemas.common import confidence_below
 from parameter_extractor.schemas.methodology import Methodology
 from parameter_extractor.schemas.row_schema import ExtractedRow
 
-FlagKind = Literal["out_of_range", "low_confidence", "ambiguous_paper_wide_species"]
+FlagKind = Literal["out_of_range", "low_confidence", "ambiguous_paper_wide_species",
+                   "possible_duplicate", "figure_problem"]
 
 
 @dataclass

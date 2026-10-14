@@ -84,6 +84,7 @@ def call_structured(
     user_content: str,
     response_model: Type[T],
     image_paths: Optional[List[Path]] = None,
+    audit_name: Optional[str] = None,
 ) -> T:
     """
     Calls the model, constrains its response to `response_model`'s schema via
@@ -92,7 +93,9 @@ def call_structured(
 
     `image_paths`, when given, are attached as image blocks BEFORE the text
     block (images first, then the prompt referencing them, matches Anthropic's
-    recommended ordering). Used for table-page rasterizations -- see
+    recommended ordering). `audit_name` names the audit/output files (default:
+    the stage name) -- for stages that run more than once per paper. Used for
+    table-page rasterizations -- see
     ingestion/pdf_parser.py:rasterize_table_pages -- so the model has the
     actual page layout available, not just the OCR'd/column-garbled text.
     """
@@ -138,7 +141,8 @@ def call_structured(
         "message_id": response.id,
         "raw_response": json.loads(raw_text) if raw_text else None,
     }
-    (run_dir / f"{stage}.audit.json").write_text(json.dumps(audit, indent=2))
-    (run_dir / f"{stage}.output.json").write_text(parsed.model_dump_json(indent=2))
+    name = audit_name or stage
+    (run_dir / f"{name}.audit.json").write_text(json.dumps(audit, indent=2))
+    (run_dir / f"{name}.output.json").write_text(parsed.model_dump_json(indent=2))
 
     return parsed

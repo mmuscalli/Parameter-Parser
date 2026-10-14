@@ -133,6 +133,51 @@ only needs to run on his own Mac. Don't start on them unprompted.
 Remaining ideas: settings dialog (models, thresholds), drop-PDF-on-Dock-icon
 handling (Info.plist already declares PDFs).
 
+## Figure digitizing (started 2026-10-14, branch `figure-digitizer`)
+
+Mickey used PlotDigitizer by hand for the original dataset; this replicates
+it in-app. Flow: `pipeline.extract()` (steps 1-5, also runs
+`ingestion/figure_finder.find_figures`) -> GUI `FigureReviewDialog` (Skip /
+Digitize per figure; `gui/digitizer.py` editor) -> `pipeline.finish(ex,
+digitized, skipped)` -> `ingestion/figure_rows.build_figure_rows` appends one
+set per series, one row per point (`extraction_confidence="digitized"`,
+`extra` dict for non-field columns like initial_pH). `run_pipeline()` =
+extract+finish with no figures (CLI unchanged; CSV byte-identical).
+- **Finder**: column-aware ("Fig. N" captions match with whitespace removed
+  -- eder1994's OCR letter-spaces "F i g . 2"); drops sideways text (the
+  publisher watermark broke Fig. 5); a bare "Fig. 4" fragment (tail of a
+  table caption) is rejected; area = above caption up to the nearest long
+  body-text line. eder1994 is a SCAN (one image per page), so figures must
+  be located from text, not embedded images. All 5 eder figures found.
+- **Calibration** (`digitizing/calibration.py`): basis of the two axis
+  vectors, so rotated/skewed scans work; log axes in log10 space.
+- **Suggestions** (`stages/figure_planner.py`, prompt `figure_planner.md`,
+  model settings key `figure_planner`): only requested when the user picks
+  Digitize, on a Python thread via `gui/figure_dialog.PlanBridge`; ~28K input
+  tokens/figure (mostly paper text). Live-tested on eder Figs 1/3/5: correct
+  series, markers, compositions, dual-axis detection, duplicate check.
+- **CSV uses the template's names and order** (Mickey, 2026-10-14):
+  `write_csv` maps ExtractedRow fields via `FIELD_TO_TEMPLATE`
+  (paper_doi->paper_DOI, headspace_gas->headspace_gas_name, *_pct_yield ->
+  *_%yield; authors -> author1..7), writes ALL 280 template columns in
+  template order (paste parity, Mickey's choice), then non-template columns
+  (e.g. unrecognized species), then provenance columns. Python field names keep
+  `_pct_yield` (no '%' in identifiers). The committed runs/*.csv were
+  converted to this format.
+- **Review runs alongside extraction** (Mickey's request): extract(...,
+  on_figures=cb) hands over the partly filled Extraction right after parsing;
+  `Extraction.structure_ready` gates plan_figure(); a failure sets it too
+  (with `failure`) so waiters get a PipelineError. MainWindow builds the
+  dataset when both the worker and the non-modal FigureReviewDialog are done
+  (`_maybe_finish`); if the run fails, digitized work is still saved.
+- **Planner context trimmed** to passages mentioning the figure
+  (`figure_passages`): ~28K -> ~15K input tokens; Figs 1/5 suggestions
+  unchanged, Fig 3 slightly worse (duplicated a series across its 2 axes).
+- Digitizer UX (Mickey's feedback): pinch zoom (QNativeGestureEvent) and
+  trackpad two-finger scroll pans; only the selected series is editable,
+  "Show only the selected series" hides others; Shift+click adds on top.
+  Region estimates can be well off -- accepted, users pan.
+
 ## Non-obvious decisions — don't redo this research
 
 - **Schema shape is grounded in `../POLO_variable_mapping.csv`** (one level

@@ -30,7 +30,43 @@ except ImportError:
 
 from parameter_extractor import api_client
 from parameter_extractor.gui import key_store, main_window
-from test_pipeline_offline import PDF, _replay_send
+from parameter_extractor.gui.figure_dialog import FigureReviewDialog
+from parameter_extractor.ingestion.figure_finder import find_figures
+from parameter_extractor.ingestion.figure_rows import build_figure_rows
+from parameter_extractor.schemas.figures import (AxisVariable, FigurePlan, PlannedPanel, PlannedSeries,
+                                                 SpeciesAmount)
+from parameter_extractor.schemas.methodology import Methodology
+from parameter_extractor.schemas.paper_metadata import PaperMetadata
+from test_pipeline_offline import PDF, REPLAY_DIR, _replay_send
+
+
+from PySide6.QtCore import QObject, QTimer, Signal
+
+
+class SkipAllFigures(QObject):
+    """Stands in for FigureReviewDialog in the end-to-end test (a human would
+    choose): opens, notes whether the extraction was still running at that
+    point, then skips every figure a moment later."""
+    finished = Signal(int)
+    seen, opened_while_extracting, statuses = [], None, []
+    close_after_ms = 300
+
+    def __init__(self, figures, columns, plan_bridge=None, parent=None):
+        super().__init__()
+        SkipAllFigures.seen = [f.figure_id for f in figures]
+        SkipAllFigures.statuses = []
+        self.window, self.digitized, self.skipped = parent, [], [f.figure_id for f in figures]
+        self._visible = False
+    def set_background_status(self, text): SkipAllFigures.statuses.append(text)
+    def isVisible(self): return self._visible
+    def show(self):
+        self._visible = True
+        SkipAllFigures.opened_while_extracting = self.window._running
+        QTimer.singleShot(SkipAllFigures.close_after_ms, self.reject)
+    def reject(self):
+        if self._visible:
+            self._visible = False
+            self.finished.emit(0)
 
 APP = QApplication.instance() or QApplication([])
 QCoreApplication.setOrganizationName("ParameterExtractorTests")  # keep the user's prefs untouched
@@ -81,7 +117,8 @@ def test_full_run_fills_results():
     keys = FakeKeyStore()
     with tempfile.TemporaryDirectory() as tmp, \
             patch.object(api_client, "_send", _replay_send), \
-            patch.object(main_window, "key_store", keys):
+            patch.object(main_window, "key_store", keys), \
+            patch.object(main_window, "FigureReviewDialog", SkipAllFigures):
         w = _window(keys, Path(tmp))
         w.show()
         assert not w.run_btn.isEnabled(), "Extract should be disabled until inputs are filled"
@@ -99,11 +136,15 @@ def test_full_run_fills_results():
         _wait_until_idle(w)
 
         assert "Done: 42 rows" in w.status.text(), w.status.text()
+        assert SkipAllFigures.seen == ["Fig. 1", "Fig. 2", "Fig. 3", "Fig. 4", "Fig. 5"]
+        assert SkipAllFigures.opened_while_extracting, "figure review should open during extraction"
+        assert any("step" in t for t in SkipAllFigures.statuses), SkipAllFigures.statuses
+        assert "Fig. 3: skipped" in w.summary_text.toPlainText()
         assert w.rows_table.rowCount() == 42
         headers = [w.rows_table.horizontalHeaderItem(i).text() for i in range(w.rows_table.columnCount())]
-        assert "sampled_2peptide_Gly_pct_yield" in headers and "full_id" in headers
+        assert "sampled_2peptide_Gly_%yield" in headers and "full_id" in headers
         assert w.flags_tree.topLevelItemCount() >= 1
-        assert headers[0] == "full_id" and headers.index("sampled_2peptide_Gly_pct_yield") < headers.index("paper_title")
+        assert headers[0] == "full_id" and headers.index("sampled_2peptide_Gly_%yield") < headers.index("paper_title")
         first_flag = w.flags_tree.topLevelItem(0).child(0)
         w.flags_tree.setCurrentItem(first_flag)
         assert "confidence" in w.flag_details.toPlainText()
@@ -148,6 +189,162 @@ def test_remember_key_uses_keychain_and_unticking_forgets_it():
         w._save_preferences()
         assert keys.deleted == 1
         w.close()
+
+
+def test_review_still_open_when_extraction_finishes():
+    """The other ordering: extraction done first, dataset built only once the review closes."""
+    if not PDF.is_file():
+        print(f"SKIP: needs {PDF}"); return
+    keys = FakeKeyStore()
+    with tempfile.TemporaryDirectory() as tmp, \
+            patch.object(api_client, "_send", _replay_send), \
+            patch.object(main_window, "key_store", keys), \
+            patch.object(main_window, "FigureReviewDialog", SkipAllFigures), \
+            patch.object(SkipAllFigures, "close_after_ms", 8000):
+        w = _window(keys, Path(tmp))
+        w.pdf_edit.setText(str(PDF)); w.key_edit.setText("replay-not-a-real-key")
+        w.run_btn.click()
+        for _ in range(400):                        # until the extraction thread is done
+            _pump()
+            if not w._running:
+                break
+        assert w._review is not None and w._review.isVisible()
+        assert "finish reviewing the figures" in w.status.text(), w.status.text()
+        assert not w.run_btn.isEnabled() and not w.tabs.isEnabled()
+        for _ in range(400):                        # until the review closes and the dataset is built
+            _pump()
+            if "Done:" in w.status.text():
+                break
+        assert "Done: 42 rows" in w.status.text(), w.status.text()
+        assert w.run_btn.isEnabled()
+        w.close()
+
+
+class InstantPlans:
+    """Stands in for PlanBridge: delivers a fixed plan immediately."""
+    def __init__(self, plan): self.plan, self.requests = plan, []
+    def request(self, figure, on_success, on_error):
+        self.requests.append(figure.figure_id); on_success(self.plan); return 1
+    def cancel(self, rid): pass
+
+
+def test_digitize_a_figure_by_clicking():
+    if not PDF.is_file():
+        print(f"SKIP: needs {PDF}"); return
+    plan = FigurePlan(figure_id="Fig. 5", is_data_plot=True, plot_kind="scatter",
+                      duplicates_tabulated_data=False, panels=[PlannedPanel(
+                          name="main",
+                          x=AxisVariable(label="t/h", column="duration_hr"),
+                          y=AxisVariable(label="% Gly-Gly", column="sampled_2peptide_Gly_%yield"),
+                          series=[PlannedSeries(label="Na+", marker="plus", initial_temperature_C=80,
+                                                initial_species=[SpeciesAmount(name="NaCl", concentration_mM=3000)]),
+                                  PlannedSeries(label="K+", marker="open circle", initial_temperature_C=80,
+                                                initial_species=[SpeciesAmount(name="KCl", concentration_mM=3000)])])])
+    with tempfile.TemporaryDirectory() as tmp:
+        figures = [f for f in find_figures(str(PDF), Path(tmp)) if f.number in (3, 5)]
+        bridge = InstantPlans(plan)
+        dlg = FigureReviewDialog(figures, ["duration_hr", "sampled_2peptide_Gly_%yield"], plan_bridge=bridge)
+        dlg.show(); _pump()
+        assert "Fig. 3" in dlg.header.text()
+        dlg.skip_btn.click()                                  # skip Fig. 3
+        assert "Fig. 5" in dlg.header.text()
+        dlg.digitize_btn.click()
+        ed = dlg.editor
+        assert bridge.requests == ["Fig. 5"]
+        assert [s.label for s in ed.fig.series] == ["Na+ [plus]", "K+ [open circle]"]   # suggestions applied
+        assert ed.panel.x.column == "duration_hr"
+
+        # calibrate like a user: two clicks per axis + typed values
+        s = ed.fig.render_scale
+        for axis, pts, vals in (("x", [(60, 200), (240, 200)], ("0", "40")),
+                                ("y", [(60, 200), (60, 40)], ("0", "0.8"))):
+            ed.set_mode(axis)
+            for (px, py), v, k in zip(pts, vals, (1, 2)):
+                ed.place_calibration(axis, px * s, py * s)
+                edit = ed.cal_edits[(axis, k)][1]
+                edit.setText(v); ed._on_cal_value(axis, k)
+        ed.set_mode("points")
+        ed.series_list.setCurrentRow(1)                       # K+
+        ed.add_point(150 * s, 120 * s)                        # -> t = 20 h, yield = 0.4 %
+        ed.add_point(195 * s, 100 * s)
+        ed.undo()                                             # removes the second point
+        assert len(ed.fig.series[1].points) == 1
+        assert ed.points_table.item(0, 0).text() == "20" and ed.points_table.item(0, 1).text() == "0.4"
+        _pump(); _screenshot(dlg, "4_digitizer")
+
+        dlg._save(confirm=False)
+        assert dlg.result() == dlg.DialogCode.Accepted
+        assert dlg.skipped == ["Fig. 3"] and [d.figure_id for d in dlg.digitized] == ["Fig. 5"]
+
+        meta = PaperMetadata.model_validate_json((REPLAY_DIR / "metadata.output.json").read_text())
+        meth = Methodology.model_validate_json((REPLAY_DIR / "methodology.output.json").read_text())
+        rows, problems = build_figure_rows(dlg.digitized, meta, meth, "001", 14, 43)
+        assert problems == [] and len(rows) == 1
+        r = rows[0]
+        assert (round(r.duration_hr, 6), round(r.sampled_2peptide_Gly_pct_yield, 6)) == (20.0, 0.4)
+        assert r.species_mM == {"initial_KCl_aq_mM": 3000} and "K+" in r.source_notes
+
+
+def test_trackpad_zoom_and_overlapping_points():
+    if not PDF.is_file():
+        print(f"SKIP: needs {PDF}"); return
+    from PySide6.QtCore import QEvent, QPoint, QPointF, Qt
+    from PySide6.QtGui import QNativeGestureEvent, QPointingDevice, QWheelEvent
+    from PySide6.QtTest import QTest
+    from parameter_extractor.gui.digitizer import DigitizerWidget
+    from parameter_extractor.schemas.figures import DigitizedFigure
+
+    with tempfile.TemporaryDirectory() as tmp:
+        f = next(f for f in find_figures(str(PDF), Path(tmp)) if f.number == 5)
+        ed = DigitizerWidget(DigitizedFigure(figure_id=f.figure_id, number=5, page=5, caption="",
+                                             render_scale=f.render_scale, page_image=f.page_image,
+                                             figure_bbox=f.figure_bbox), ["duration_hr"])
+        ed.resize(1200, 800); ed.show(); _pump()
+        view, vp = ed.canvas, ed.canvas.viewport()
+        centre = QPointF(vp.width() / 2, vp.height() / 2)
+
+        z0 = view.transform().m11()
+        pinch = QNativeGestureEvent(Qt.NativeGestureType.ZoomNativeGesture, QPointingDevice.primaryPointingDevice(),
+                                    2, centre, centre, vp.mapToGlobal(centre), 0.25, QPointF(), 1)
+        APP.sendEvent(vp, pinch)
+        assert abs(view.transform().m11() / z0 - 1.25) < 1e-6, "pinch should zoom"
+
+        z1, h0 = view.transform().m11(), view.horizontalScrollBar().value()
+        two_finger = QWheelEvent(centre, vp.mapToGlobal(centre), QPoint(-40, 0), QPoint(-120, 0),
+                                 Qt.MouseButton.NoButton, Qt.KeyboardModifier.NoModifier,
+                                 Qt.ScrollPhase.ScrollUpdate, False)
+        APP.sendEvent(vp, two_finger)
+        assert view.transform().m11() == z1, "two-finger scroll must not zoom"
+        assert view.horizontalScrollBar().value() != h0, "two-finger scroll should pan"
+        wheel = QWheelEvent(centre, vp.mapToGlobal(centre), QPoint(), QPoint(0, 120),
+                            Qt.MouseButton.NoButton, Qt.KeyboardModifier.NoModifier, Qt.ScrollPhase.NoScrollPhase, False)
+        APP.sendEvent(vp, wheel)
+        assert view.transform().m11() > z1, "mouse wheel should zoom"
+
+        # two series; a click right on top of series A's point, while B is selected, adds to B
+        ed.set_mode("points")
+        a = ed.add_series("A")
+        target = view.mapToScene(centre.toPoint())
+        ed.add_point(target.x(), target.y())
+        ed.add_series("B"); ed.redraw(); _pump()
+        QTest.mouseClick(vp, Qt.MouseButton.LeftButton, Qt.KeyboardModifier.NoModifier, centre.toPoint())
+        assert len(a.points) == 1 and len(ed.fig.series[1].points) == 1, "click on another series' point adds"
+
+        # on the selected series' own point: plain click grabs it, Shift+click adds another
+        QTest.mouseClick(vp, Qt.MouseButton.LeftButton, Qt.KeyboardModifier.NoModifier, centre.toPoint())
+        assert len(ed.fig.series[1].points) == 1, "plain click on own point should not add"
+        QTest.mouseClick(vp, Qt.MouseButton.LeftButton, Qt.KeyboardModifier.ShiftModifier, centre.toPoint())
+        assert len(ed.fig.series[1].points) == 2, "Shift+click should add on top"
+
+        # isolation hides other series; delete only touches the selected series
+        ed.isolate_box.setChecked(True)
+        shown = {i.series_idx for i in view.scene().items() if type(i).__name__ == "PointItem"}
+        assert shown == {1}, shown
+        ed.set_mode("delete")
+        QTest.mouseClick(vp, Qt.MouseButton.LeftButton, Qt.KeyboardModifier.NoModifier, centre.toPoint())
+        assert len(a.points) == 1 and len(ed.fig.series[1].points) == 1
+        _screenshot(ed, "5_isolated")
+        ed.close()
 
 
 if __name__ == "__main__":

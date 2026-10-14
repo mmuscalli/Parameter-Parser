@@ -1,7 +1,9 @@
 """
 Combine StructurePlan + Methodology + ChemistryExtraction (+ calculators) into
 one ExtractedRow per planned sample, and flatten a list of ExtractedRow into
-the wide, PaperDataTemplate-shaped CSV your existing pipeline expects.
+the wide, PaperDataTemplate-shaped CSV your existing pipeline expects -- with
+the template's own column names (e.g. paper_DOI, author1..7,
+sampled_2peptide_Gly_%yield) and column order.
 
 This is the one place that's allowed to know about the wide template's column
 names -- every stage upstream of this deliberately stays schema-narrow.
@@ -22,7 +24,8 @@ from parameter_extractor.schemas.structure_plan import StructurePlan
 from parameter_extractor.calculators.peptide_yield import peptide_mM_from_yield_pct
 
 _VOCAB_PATH = Path(__file__).resolve().parent.parent / "schemas" / "template_vocab.json"
-_TEMPLATE_COLUMNS = set(json.loads(_VOCAB_PATH.read_text())["all_columns"]) if _VOCAB_PATH.exists() else set()
+_TEMPLATE_COLUMNS_ORDERED = json.loads(_VOCAB_PATH.read_text())["all_columns"] if _VOCAB_PATH.exists() else []
+_TEMPLATE_COLUMNS = set(_TEMPLATE_COLUMNS_ORDERED)
 
 
 def resolve_template_column(species_name: str, role: str) -> str:
@@ -152,25 +155,52 @@ def build_rows(
     return rows
 
 
-def write_csv(rows: List[ExtractedRow], out_path: Path) -> None:
-    fixed_cols = [
-        "full_id", "set_id", "sample_id", "set_type", "entry_number",
-        "paper_doi", "paper_title", "authors", "year_published", "journal_published",
-        "experiment_type", "solution_type", "duration_hr", "vessel_material",
-        "solvent_name", "analysis_method", "headspace_gas",
-        "initial_temperature_C", "initial_pressure_bar", "sampled_temperature_C",
-        "sampled_2peptide_Gly_mM", "sampled_3peptide_Gly_mM",
-        "sampled_2peptide_Gly_pct_yield", "sampled_3peptide_Gly_pct_yield",
-        "yield_below_threshold_note", "source_notes", "extraction_confidence",
-    ]
-    species_cols = sorted({c for r in rows for c in r.species_mM})
-    header = fixed_cols + species_cols
+# ExtractedRow field -> template column, where the names differ (Python field
+# names can't contain '%'). Every other field already uses the template's name.
+FIELD_TO_TEMPLATE = {
+    "paper_doi": "paper_DOI",
+    "headspace_gas": "headspace_gas_name",
+    "sampled_2peptide_Gly_pct_yield": "sampled_2peptide_Gly_%yield",
+    "sampled_3peptide_Gly_pct_yield": "sampled_3peptide_Gly_%yield",
+}
+MAX_AUTHOR_COLUMNS = 7          # template has author1..author7
+def row_to_template_dict(row: ExtractedRow) -> dict:
+    """{template column: value} for one row, using the template's own names."""
+    data = row.model_dump(exclude={"species_mM", "extra", "authors"})
+    out = {FIELD_TO_TEMPLATE.get(k, k): v for k, v in data.items()}
+    authors = list(row.authors)
+    if len(authors) > MAX_AUTHOR_COLUMNS:   # keep the template's 7 columns: overflow joins the last
+        authors = authors[:MAX_AUTHOR_COLUMNS - 1] + ["; ".join(authors[MAX_AUTHOR_COLUMNS - 1:])]
+    for i, name in enumerate(authors, start=1):
+        out[f"author{i}"] = name
+    out.update(row.species_mM)
+    out.update(row.extra)
+    return out
 
+
+# Not template columns: our provenance, always last.
+PROVENANCE_COLUMNS = ["yield_below_threshold_note", "source_notes", "extraction_confidence"]
+
+
+def ordered_columns(present: set) -> List[str]:
+    """ALL of PaperDataTemplate's columns, in its exact order (empty ones too),
+    so the rows can be pasted straight into the template. Columns the template
+    doesn't have (e.g. a species with no template column yet) come after that
+    block, then our provenance columns."""
+    extras = sorted(c for c in present if c not in _TEMPLATE_COLUMNS and c not in PROVENANCE_COLUMNS)
+    return list(_TEMPLATE_COLUMNS_ORDERED) + extras + PROVENANCE_COLUMNS
+
+
+def write_template_csv(records: List[dict], out_path: Path) -> None:
+    present = {k for r in records for k, v in r.items() if v not in (None, "")}
+    header = ordered_columns(present)
     with open(out_path, "w", newline="") as f:
         writer = csv.writer(f)
         writer.writerow(header)
-        for r in rows:
-            row_dict = r.model_dump()
-            base = [row_dict.get(c) if c != "authors" else "; ".join(r.authors) for c in fixed_cols]
-            species_vals = [r.species_mM.get(c, "") for c in species_cols]
-            writer.writerow(base + species_vals)
+        for r in records:
+            writer.writerow(["" if r.get(c) is None else r.get(c) for c in header])
+
+
+def write_csv(rows: List[ExtractedRow], out_path: Path) -> None:
+    """The dataset CSV, with PaperDataTemplate.xlsx's column names and order."""
+    write_template_csv([row_to_template_dict(r) for r in rows], out_path)

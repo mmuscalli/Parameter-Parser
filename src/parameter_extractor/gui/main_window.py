@@ -27,7 +27,11 @@ from PySide6.QtWidgets import (
 from parameter_extractor import __version__
 from parameter_extractor.config.run_config import RunConfig
 from parameter_extractor.gui import key_store
+from parameter_extractor.digitizing.annotate import save_digitized
+from parameter_extractor.errors import PipelineError
+from parameter_extractor.gui.figure_dialog import FigureReviewDialog, PlanBridge
 from parameter_extractor.gui.worker import PipelineWorker
+from parameter_extractor.pipeline import Extraction, finish, plan_figure
 
 DEFAULT_OUTPUT_DIR = Path.home() / "Documents" / "Parameter Extractor"
 FLAGGED_ROW_COLOR = QColor(255, 243, 205)   # soft amber, readable in light and dark themes
@@ -35,11 +39,11 @@ MAX_COLUMN_WIDTH = 260
 # Rows tab column order: identify the row, then the measured data, then the
 # paper-level details that repeat on every row (DOI, title, ...).
 LEADING_COLUMNS = ["full_id", "set_type", "duration_hr", "initial_temperature_C",
-                   "sampled_temperature_C", "sampled_2peptide_Gly_pct_yield",
-                   "sampled_3peptide_Gly_pct_yield", "extraction_confidence"]
+                   "sampled_temperature_C", "sampled_2peptide_Gly_%yield",
+                   "sampled_3peptide_Gly_%yield", "extraction_confidence"]
 TRAILING_COLUMNS = ["set_id", "sample_id", "entry_number", "experiment_type", "solution_type",
-                    "vessel_material", "solvent_name", "analysis_method", "headspace_gas",
-                    "paper_doi", "paper_title", "authors", "year_published",
+                    "vessel_material", "solvent_name", "analysis_method", "headspace_gas_name",
+                    "paper_DOI", "paper_title", *[f"author{i}" for i in range(1, 8)], "year_published",
                     "journal_published", "source_notes"]
 PRIVACY_NOTE = ("The paper's text, and images of its table pages, are sent to Anthropic's API "
                 "to extract the data. API usage is billed to the key you enter.")
@@ -56,7 +60,12 @@ class MainWindow(QMainWindow):
         self._thread: Optional[QThread] = None
         self._worker: Optional[PipelineWorker] = None
         self._close_when_done = False
+        self._quitting = False
         self._key_was_stored = False
+        # one run = background extraction + (optionally) a figure review running alongside it
+        self._extraction: Optional[Extraction] = None   # live object, filled in as steps complete
+        self._extraction_ok = False
+        self._review: Optional[FigureReviewDialog] = None
 
         central = QWidget()
         layout = QVBoxLayout(central)
@@ -221,14 +230,25 @@ class MainWindow(QMainWindow):
 
     @property
     def _running(self) -> bool:
+        """The background extraction is running."""
         return self._thread is not None
+
+    @property
+    def _busy(self) -> bool:
+        """A run is in progress: extracting, and/or the figure review is open."""
+        return self._running or self._review is not None
 
     def _update_run_enabled(self) -> None:
         ready = bool(self.pdf_edit.text().strip() and self.key_edit.text().strip()
                      and self.out_edit.text().strip())
-        self.run_btn.setEnabled(ready and not self._running)
+        self.run_btn.setEnabled(ready and not self._busy)
 
     # ---- running ---------------------------------------------------------------
+    #
+    # A run has two parts that overlap: the extraction on a worker thread
+    # (pipeline.extract) and, if the paper has figures, the figure review,
+    # opened as soon as the PDF has been read. The dataset is built
+    # (pipeline.finish) when BOTH are done, whichever finishes last.
 
     def _start_run(self) -> None:
         pdf = Path(self.pdf_edit.text().strip())
@@ -239,11 +259,13 @@ class MainWindow(QMainWindow):
         self._save_preferences()
 
         config = RunConfig(api_key=self.key_edit.text().strip(), output_dir=out_dir)
+        self._extraction, self._extraction_ok, self._review = None, False, None
         self._worker = PipelineWorker(pdf, config)
         self._thread = QThread(self)
         self._worker.moveToThread(self._thread)
         self._thread.started.connect(self._worker.run)
         self._worker.progress.connect(self._on_progress)
+        self._worker.figures_found.connect(self._on_figures_found)
         self._worker.succeeded.connect(self._on_succeeded)
         self._worker.failed.connect(self._on_failed)
         self._worker.cancelled.connect(self._on_cancelled)
@@ -265,13 +287,25 @@ class MainWindow(QMainWindow):
         self.progress.setMaximum(total)
         self.progress.setValue(step - 1)
         self.status.setText(f"Step {step} of {total}: {message}…")
+        if self._review is not None:
+            self._review.set_background_status(f"Text extraction: step {step} of {total} ({message})")
 
-    def _on_succeeded(self, result) -> None:
-        self.progress.setValue(self.progress.maximum())
-        n_flags = len(result.paper_flags) + sum(len(f) for f in result.row_flags.values())
-        self.status.setText(f"Done: {len(result.rows)} rows extracted, {n_flags} item(s) "
-                            f"flagged for review. Saved to {result.run_dir}")
-        self.show_result(result)
+    def _on_figures_found(self, extraction: Extraction) -> None:
+        """The PDF has been read and has figures: start the review now, while the
+        extraction carries on in the background."""
+        self._extraction = extraction
+        if self._quitting:
+            return
+        bridge = PlanBridge(lambda fig: plan_figure(extraction, fig), parent=self)
+        self._review = FigureReviewDialog(extraction.figures, extraction.vocab["all_columns"],
+                                          plan_bridge=bridge, parent=self)
+        self._review.finished.connect(self._on_review_closed)
+        self._review.set_background_status("Text extraction running in the background…")
+        self._review.show()
+        self._update_run_enabled()
+
+    def _on_succeeded(self, extraction: Extraction) -> None:
+        self._extraction, self._extraction_ok = extraction, True
 
     def _on_failed(self, message: str) -> None:
         self.status.setText("The run stopped with an error.")
@@ -287,9 +321,62 @@ class MainWindow(QMainWindow):
         self._worker.deleteLater()
         self._thread = self._worker = None
         self.cancel_btn.setEnabled(False)
+        self._maybe_finish()
+
+    def _on_review_closed(self, _result: int) -> None:
+        self._maybe_finish()
+
+    def _maybe_finish(self) -> None:
+        review_open = self._review is not None and self._review.isVisible()
+        if self._running:
+            if not review_open and self._review is not None:
+                self.status.setText("Figures reviewed — waiting for the text extraction to finish…")
+            return
+        if review_open:
+            if self._extraction_ok and not self._quitting:
+                self._review.set_background_status("Text extraction finished. Finish reviewing the "
+                                                   "figures to build the dataset.")
+                self.status.setText("Text extraction finished — finish reviewing the figures to build "
+                                    "the dataset.")
+                return
+            self._review.reject()     # run failed / cancelled / quitting: closes -> back here
+            return
+
+        review, self._review = self._review, None
+        digitized = review.digitized if review else []
+        skipped = review.skipped if review else []
+        extraction = self._extraction
+        if self._extraction_ok and not self._quitting:
+            self._finish(extraction, digitized, skipped)
+        elif digitized and extraction is not None:
+            # don't lose the user's clicking: keep the records even though no dataset was built
+            for fig in digitized:
+                save_digitized(fig, extraction.ctx.run_dir / "figures")
+            if not self._quitting:
+                QMessageBox.information(
+                    self, "Figure work saved",
+                    f"The dataset wasn't built, but the {len(digitized)} digitized figure(s) were "
+                    f"saved to:\n{extraction.ctx.run_dir / 'figures'}")
+        self._extraction, self._extraction_ok = None, False
         self._set_inputs_enabled(True)
         if self._close_when_done:
             self.close()
+
+    def _finish(self, extraction: Extraction, digitized, skipped) -> None:
+        # the worker that reported progress so far is gone; report the last step here
+        extraction.ctx.on_progress = lambda e: self._on_progress(e.step, e.total_steps, e.message)
+        try:
+            result = finish(extraction, digitized, skipped)
+        except PipelineError as e:
+            self._on_failed(str(e))
+            return
+        self.progress.setValue(self.progress.maximum())
+        n_flags = len(result.paper_flags) + sum(len(f) for f in result.row_flags.values())
+        n_fig_rows = sum(f["points"] for f in result.figures)
+        self.status.setText(f"Done: {len(result.rows)} rows extracted"
+                            + (f" ({n_fig_rows} digitized from figures)" if n_fig_rows else "")
+                            + f", {n_flags} item(s) flagged for review. Saved to {result.run_dir}")
+        self.show_result(result)
 
     def _set_inputs_enabled(self, enabled: bool) -> None:
         for w in (self.pdf_edit, self.key_edit, self.out_edit, self.remember_key_box,
@@ -387,6 +474,7 @@ class MainWindow(QMainWindow):
                <b>{len(result.row_flags)}</b> row(s) flagged</p>
             <p>Results folder: <code>{result.run_dir}</code><br>
                CSV: <code>{result.csv_path.name}</code></p>
+            {self._figures_html(result)}
             <h4>API usage</h4>
             <table cellspacing=0 cellpadding=4 border=1>
               <tr><th>Step</th><th>Model</th><th>Input tokens</th><th>Output tokens</th><th>Time</th></tr>
@@ -398,21 +486,34 @@ class MainWindow(QMainWindow):
             checked against the paper; flagged items first.</p>""")
 
     @staticmethod
+    def _figures_html(result) -> str:
+        if not result.figures:
+            return ""
+        items = "".join(
+            f"<li>{f['figure_id']}: {f['status']}"
+            + (f" ({f['series']} series, {f['points']} points)" if f["status"] == "digitized" else "")
+            + "</li>" for f in result.figures)
+        return f"<h4>Figures</h4><ul>{items}</ul>"
+
+    @staticmethod
     def _open(path: Path) -> None:
         QDesktopServices.openUrl(QUrl.fromLocalFile(str(path)))
 
     # ---- closing ---------------------------------------------------------------
 
     def closeEvent(self, event) -> None:
-        if not self._running:
+        if not self._busy:
             self._settings.setValue("output_dir", self.out_edit.text().strip())
             event.accept()
             return
+        detail = ("The current step will finish first (this can take up to a minute)."
+                  if self._running else "Figures not yet saved will be lost.")
         answer = QMessageBox.question(
-            self, "Extraction in progress",
-            "A paper is still being processed. Stop it and quit?\n\n"
-            "The current step will finish first (this can take up to a minute).")
+            self, "Run in progress",
+            f"A paper is still being processed. Stop it and quit without building the dataset?\n\n{detail}")
         if answer == QMessageBox.StandardButton.Yes:
-            self._close_when_done = True
+            self._close_when_done = self._quitting = True
             self._cancel_run()
+            if self._review is not None and self._review.isVisible():
+                self._review.reject()       # -> _maybe_finish(), which closes once all has stopped
         event.ignore()
