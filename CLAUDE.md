@@ -149,8 +149,12 @@ extract+finish with no figures (CLI unchanged; CSV byte-identical).
   table caption) is rejected; area = above caption up to the nearest long
   body-text line. eder1994 is a SCAN (one image per page), so figures must
   be located from text, not embedded images. All 5 eder figures found.
-- **Calibration** (`digitizing/calibration.py`): basis of the two axis
-  vectors, so rotated/skewed scans work; log axes in log10 space.
+- **Calibration** (`digitizing/calibration.py`): each axis read only from
+  its own markers (perpendicular projection onto X1->X2 / Y1->Y2) -- handles
+  rotated scans. Replaced (2026-10-15) an oblique-basis method that let a Y
+  marker clicked a few px off the axis make x drift with vertical cursor
+  moves (Mickey, truman2024). Dashed guide lines through each axis's markers
+  show misplacement. Log axes in log10 space.
 - **Suggestions** (`stages/figure_planner.py`, prompt `figure_planner.md`,
   model settings key `figure_planner`): only requested when the user picks
   Digitize, on a Python thread via `gui/figure_dialog.PlanBridge`; ~28K input
@@ -282,6 +286,9 @@ Rodriguez-Garcia 2015 and Campbell 2019 -- the first non-curated test paper.
 - `new_variables.stored_value()` converts review/registry values to the
   column unit (provenance: "read from '1 cm3'"); unconvertible -> text +
   `unit_conversion` flag; the review window blocks building with them.
+
+Digitizer text fields "Data reproduced from" and series "Notes" are
+`gui/widgets.ExpandingLineEdit`: wrapped full-text tooltip + pop-out editor.
 
 ## Remembered-variables window (2026-10-15)
 

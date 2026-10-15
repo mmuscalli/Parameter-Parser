@@ -2,11 +2,14 @@
 Pixel -> data-value conversion for a digitized plot panel.
 
 The user marks two points on the x axis (X1, X2) and two on the y axis
-(Y1, Y2) and types their values, as in PlotDigitizer. Rather than assuming
-the image is perfectly level, the two axis directions ex = X2 - X1 and
-ey = Y2 - Y1 (in pixels) are used as a basis: any clicked point P is written
-as P = origin + s*ex + t*ey, which stays correct for scans that are slightly
-rotated or sheared. A log axis interpolates in log10 space.
+(Y1, Y2) and types their values, as in PlotDigitizer. Each axis is read
+independently: the x value comes from projecting the point onto the line
+X1->X2, the y value from projecting it onto Y1->Y2. That stays correct for
+scans that are rotated (both axes turn together), and -- unlike treating the
+two marker lines as a skewed coordinate system, which this replaced -- a Y
+marker clicked a few pixels off the axis doesn't make x drift as the cursor
+moves vertically (found by Mickey on truman2024). A log axis interpolates in
+log10 space.
 """
 from __future__ import annotations
 import math
@@ -19,15 +22,11 @@ class CalibrationError(ValueError):
     pass
 
 
-def _solve(ex, ey, d) -> Tuple[float, float]:
-    """Solve s*ex + t*ey = d for (s, t)."""
-    det = ex[0] * ey[1] - ex[1] * ey[0]
-    if abs(det) < 1e-9:
-        raise CalibrationError("The x and y axis reference points are parallel -- set the x "
-                               "points along the x axis and the y points along the y axis.")
-    s = (d[0] * ey[1] - d[1] * ey[0]) / det
-    t = (ex[0] * d[1] - ex[1] * d[0]) / det
-    return s, t
+def _fraction_along(origin, direction, point) -> float:
+    """How far `point` lies along origin->origin+direction (0 at origin, 1 at the
+    end), by perpendicular projection onto that line."""
+    dx, dy = direction
+    return ((point[0] - origin[0]) * dx + (point[1] - origin[1]) * dy) / (dx * dx + dy * dy)
 
 
 def _interp(frac: float, v1: float, v2: float, log: bool) -> float:
@@ -51,10 +50,15 @@ def pixel_to_data(panel: DigitizedPanel, px: float, py: float) -> Tuple[float, f
     _check(yc, "y")
     ex = (xc.p2.px - xc.p1.px, xc.p2.py - xc.p1.py)
     ey = (yc.p2.px - yc.p1.px, yc.p2.py - yc.p1.py)
-    # fraction along the x axis: decompose P - X1 in the (ex, ey) basis
-    s, _ = _solve(ex, ey, (px - xc.p1.px, py - xc.p1.py))
-    # fraction along the y axis: decompose P - Y1 in the same basis
-    _, t = _solve(ex, ey, (px - yc.p1.px, py - yc.p1.py))
+    lx, ly = math.hypot(*ex), math.hypot(*ey)
+    if lx < 1e-6 or ly < 1e-6:
+        raise CalibrationError(f"The two {'X' if lx < 1e-6 else 'Y'} reference points are at the same "
+                               f"place -- put them far apart on the axis.")
+    if abs(ex[0] * ey[0] + ex[1] * ey[1]) / (lx * ly) > 0.9:
+        raise CalibrationError("The x and y axis reference points run in the same direction -- set the "
+                               "X points along the x axis and the Y points along the y axis.")
+    s = _fraction_along((xc.p1.px, xc.p1.py), ex, (px, py))
+    t = _fraction_along((yc.p1.px, yc.p1.py), ey, (px, py))
     return (_interp(s, xc.p1.value, xc.p2.value, xc.log),
             _interp(t, yc.p1.value, yc.p2.value, yc.log))
 

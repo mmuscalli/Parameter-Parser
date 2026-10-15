@@ -91,6 +91,26 @@ def test_calibration_level_rotated_and_log():
         raise AssertionError("uncalibrated panel should raise")
 
 
+def test_misplaced_marker_does_not_leak_into_the_other_axis():
+    """Mickey's truman2024 report: with Y2 clicked a few pixels off the axis, moving the
+    cursor straight up made x drift. Each axis is now read only from its own markers."""
+    p = _panel()
+    p.y_cal.p2 = C(px=108, py=200, value=1.2)                  # 8 px right of the true axis
+    xs = [pixel_to_data(p, 250, py)[0] for py in (480, 350, 220, 120)]
+    assert all(abs(x - 15.0) < 1e-9 for x in xs), xs
+    p = _panel()
+    p.x_cal.p2 = C(px=400, py=494, value=30)                   # X2 6 px high
+    ys = [pixel_to_data(p, px, 350)[1] for px in (120, 250, 390)]
+    assert all(abs(y - 0.6) < 1e-9 for y in ys), ys
+    try:
+        bad = _panel(); bad.y_cal.p2 = C(px=400, py=505, value=1.2)   # Y markers along the x axis
+        pixel_to_data(bad, 1, 1)
+    except CalibrationError as e:
+        assert "same direction" in str(e)
+    else:
+        raise AssertionError("axes in the same direction should be refused")
+
+
 def _meta_and_method():
     meta = PaperMetadata.model_validate_json((REPLAY_DIR / "metadata.output.json").read_text())
     meth = Methodology.model_validate_json((REPLAY_DIR / "methodology.output.json").read_text())

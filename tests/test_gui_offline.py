@@ -289,6 +289,21 @@ def test_variable_review_window():
         assert all(x.action == "ignore" for x in dlg2.decisions())
 
 
+def test_expanding_text_fields():
+    from PySide6.QtCore import QTimer
+    from parameter_extractor.gui.widgets import ExpandingLineEdit
+    text = "Campbell, T.D. et al., Prebiotic condensation through wet-dry cycling regulated by " \
+           "deliquescence, Nat. Commun. 10:4508, 2019 (ref. 15; Supplementary table 8)"
+    w = ExpandingLineEdit("Data reproduced from", hint="a hint")
+    w.setText(text)
+    assert w.toolTip().startswith("<qt>") and "Supplementary table 8" in w.toolTip()
+    edits = []
+    w.editingFinished.connect(lambda: edits.append(w.text()))
+    QTimer.singleShot(0, lambda: (w._editor.setPlainText("New ref\nline two"), w._editor.parent().accept()))
+    w.open_editor()
+    assert w.text() == "New ref line two" and edits == ["New ref line two"]
+
+
 class InstantPlans:
     """Stands in for PlanBridge: delivers a fixed plan immediately."""
     def __init__(self, plan): self.plan, self.requests = plan, []

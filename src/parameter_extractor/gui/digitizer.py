@@ -42,6 +42,7 @@ from PySide6.QtWidgets import (
 )
 
 from parameter_extractor.digitizing.annotate import CALIBRATION_COLOR, SERIES_COLORS
+from parameter_extractor.gui.widgets import ExpandingLineEdit
 from parameter_extractor.digitizing.calibration import try_pixel_to_data
 from parameter_extractor.schemas.figures import (
     AxisCalibration, AxisVariable, CalibrationPoint, DigitizedFigure, DigitizedPanel,
@@ -50,8 +51,10 @@ from parameter_extractor.schemas.figures import (
 
 MODES = [("pan", "Pan / zoom", "Drag to move around; scroll to zoom."),
          ("x", "Set X axis", "Click two well-separated points on the x axis (e.g. two labelled "
-                             "ticks), then type their values below."),
-         ("y", "Set Y axis", "Click two well-separated points on the y axis, then type their values below."),
+                             "ticks), then type their values below. The dashed guide through the two "
+                             "points should lie on the printed axis."),
+         ("y", "Set Y axis", "Click two well-separated points on the y axis, then type their values below. "
+                             "The dashed guide through the two points should lie on the printed axis."),
          ("points", "Add points", "Click each data point of the selected series. Drag to adjust; "
                                   "right-click to remove; Shift+click adds a point on top of an "
                                   "existing one; Ctrl+Z undoes."),
@@ -288,10 +291,11 @@ class DigitizerWidget(QWidget):
             h.addStretch(1)
             form.addRow(f"{axis.upper()} axis:", row)
 
-        self.source_edit = QLineEdit(placeholderText="leave empty if this paper measured it")
+        self.source_edit = ExpandingLineEdit(
+            "Data reproduced from", hint="If the figure reproduces another publication's data, its original "
+                                         "reference. The rows will say so, and a warning is added.")
+        self.source_edit.setPlaceholderText("leave empty if this paper measured it")
         self.source_edit.setText(self.fig.data_source)
-        self.source_edit.setToolTip("If the figure reproduces another publication's data, its original "
-                                    "reference. The rows will say so, and a warning is added.")
         self.source_edit.editingFinished.connect(
             lambda: setattr(self.fig, "data_source", self.source_edit.text().strip()))
 
@@ -344,7 +348,8 @@ class DigitizerWidget(QWidget):
         details.addRow("Read against:", self.series_panel_combo)
         self.temp_edit = QLineEdit(placeholderText="°C")
         self.ph_edit = QLineEdit(placeholderText="pH")
-        self.notes_edit = QLineEdit()
+        self.notes_edit = ExpandingLineEdit("Series notes", hint="Notes about this series; they end up in "
+                                                                  "each row's source_notes.")
         for w in (self.temp_edit, self.ph_edit, self.notes_edit):
             w.editingFinished.connect(self._on_conditions_edited)
         cond = QWidget()
@@ -484,6 +489,24 @@ class DigitizerWidget(QWidget):
             active = pi == self.panel_idx
             color = QColor(CALIBRATION_COLOR if active else "#8a8a8a")
             for axis, cal in (("X", panel.x_cal), ("Y", panel.y_cal)):
+                if active and cal.p1 is not None and cal.p2 is not None:
+                    # guide line through the two markers, extended: if it doesn't sit on the
+                    # printed axis, a marker is misplaced (values are read along this line)
+                    dx, dy = cal.p2.px - cal.p1.px, cal.p2.py - cal.p1.py
+                    length = max((dx * dx + dy * dy) ** 0.5, 1e-6)
+                    ext = 0.25 * length
+                    ux, uy = dx / length, dy / length
+                    guide = QGraphicsPathItem()
+                    gp = QPainterPath()
+                    gp.moveTo(cal.p1.px - ux * ext, cal.p1.py - uy * ext)
+                    gp.lineTo(cal.p2.px + ux * ext, cal.p2.py + uy * ext)
+                    guide.setPath(gp)
+                    pen = QPen(QColor(CALIBRATION_COLOR), 0)          # cosmetic: 1 px at any zoom
+                    pen.setStyle(Qt.PenStyle.DashLine)
+                    guide.setPen(pen)
+                    guide.setOpacity(0.7)
+                    guide.setZValue(1)
+                    scene.addItem(guide)
                 for k, cp in enumerate((cal.p1, cal.p2), start=1):
                     if cp is None:
                         continue
