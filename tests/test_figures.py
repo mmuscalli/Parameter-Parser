@@ -171,7 +171,10 @@ def test_replayed_run_with_a_digitized_figure():
         assert status == {"Fig. 1": "skipped", "Fig. 2": "skipped", "Fig. 3": "not digitized",
                           "Fig. 4": "not digitized", "Fig. 5": "digitized"}
         summary = json.loads((result.run_dir / "run_summary.json").read_text())
-        assert summary["figures"][-1] == {"figure_id": "Fig. 5", "status": "digitized", "series": 1, "points": 2}
+        last = summary["figures"][-1]
+        assert {k: last[k] for k in ("figure_id", "status", "series", "points")} == {
+            "figure_id": "Fig. 5", "status": "digitized", "series": 1, "points": 2}
+        assert Path(last["annotated_image"]).is_file() and Path(last["image"]).is_file(), last
         assert any(f.kind == "possible_duplicate" for f in result.paper_flags)
 
 

@@ -125,6 +125,21 @@ def find_table_pages(page_texts: List[str]) -> Dict[int, List[str]]:
     return found
 
 
+def render_offset(pdfium_page) -> tuple:
+    """pdfplumber measures positions on the full page (MediaBox); pypdfium2 renders only
+    the CropBox. Subtract this (dx, dtop) from a pdfplumber position to get its place on
+    the rendered image (Zamaraev1996: crop box 57 pt in from the left and top)."""
+    mx0, _, _, my1 = pdfium_page.get_mediabox()
+    cx0, _, _, cy1 = pdfium_page.get_cropbox()
+    return cx0 - mx0, my1 - cy1
+
+
+def to_render_box(box, offset) -> list:
+    """A pdfplumber (x0, top, x1, bottom) in rendered-page points."""
+    dx, dtop = offset
+    return [box[0] - dx, box[1] - dtop, box[2] - dx, box[3] - dtop]
+
+
 def rasterize_pages(pdf_path: str, page_numbers: List[int], out_dir: Path, dpi: int = 150) -> Dict[int, Path]:
     """Renders the given 1-indexed pages to JPEG and returns {page_number:
     image_path}. Only renders the pages asked for -- NOT the whole document

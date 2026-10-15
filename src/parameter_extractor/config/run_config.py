@@ -35,6 +35,9 @@ class RunConfig:
     # Look up species names on PubChem to recognise synonyms (pubchem.py). Off
     # by default so library use and tests stay offline; the GUI and CLI turn it on.
     use_pubchem: bool = False
+    # Convert the labelled equations found in the paper to LaTeX: one small extra API call
+    # (stages/equations.py). Finding and cropping them is free and always done.
+    equations_to_latex: bool = False
     pubchem_cache_path: Optional[Path] = None
 
     @classmethod

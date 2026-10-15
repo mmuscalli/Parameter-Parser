@@ -56,7 +56,8 @@ PRIVACY_NOTE = ("The paper's text, and images of its table pages, are sent to An
 STEP_LABELS = {"structure_planner": "Experiment structure", "metadata": "Bibliographic metadata",
                "methodology": "Methodology", "term_search": "Parameters to look for",
                "wet_dry": "Wet-dry cycling", "chemistry": "Solution chemistry",
-               "figure_planner": "Figure suggestions", "triage": "Screening"}
+               "figure_planner": "Figure suggestions", "triage": "Screening",
+               "equations": "Equations to LaTeX"}
 
 
 class MainWindow(QMainWindow):
@@ -134,6 +135,11 @@ class MainWindow(QMainWindow):
                                     "species names are sent to PubChem (NIH); results are kept on this "
                                     "computer.")
         form.addRow("", self.pubchem_box)
+        self.equations_box = QCheckBox("Convert labelled equations to LaTeX")
+        self.equations_box.setToolTip("Equations the authors number or name ('(1)', 'Eq. 2') are always found and "
+                                      "shown in the Equations tab. Ticked, they're also transcribed to LaTeX: "
+                                      "one small API call (about 2 cents for a dozen equations).")
+        form.addRow("", self.equations_box)
 
         note = QLabel(PRIVACY_NOTE, wordWrap=True)
         note.setStyleSheet("color: palette(placeholder-text);")
@@ -175,6 +181,15 @@ class MainWindow(QMainWindow):
         flags_split.setSizes([400, 160])
         tabs.addTab(flags_split, "Flags")
 
+        # captured figures and labelled equations, at a glance (rich text: images + captions)
+        self.figures_view = QTextBrowser(placeholderText="Figures found in the paper appear here.")
+        self.figures_view.setOpenExternalLinks(False)
+        tabs.addTab(self.figures_view, "Figures")
+        self.equations_view = QTextBrowser(placeholderText="Equations the authors label, e.g. '(1)' or "
+                                                           "'Eq. 2', appear here.")
+        self.equations_view.setTextInteractionFlags(Qt.TextInteractionFlag.TextBrowserInteraction)
+        tabs.addTab(self.equations_view, "Equations")
+
         summary = QWidget()
         s_layout = QVBoxLayout(summary)
         self.summary_text = QTextBrowser()
@@ -208,6 +223,7 @@ class MainWindow(QMainWindow):
         self.out_edit.setText(self._settings.value("output_dir", str(DEFAULT_OUTPUT_DIR)))
         self.terms_edit.setPlainText(self._settings.value("focus_terms", ""))
         self.pubchem_box.setChecked(self._settings.value("use_pubchem", True, type=bool))
+        self.equations_box.setChecked(self._settings.value("equations_to_latex", False, type=bool))
         stored_key = key_store.load_key()
         self._key_was_stored = bool(stored_key)
         if stored_key:
@@ -222,6 +238,7 @@ class MainWindow(QMainWindow):
         self._settings.setValue("output_dir", self.out_edit.text().strip())
         self._settings.setValue("focus_terms", self.terms_edit.toPlainText())
         self._settings.setValue("use_pubchem", self.pubchem_box.isChecked())
+        self._settings.setValue("equations_to_latex", self.equations_box.isChecked())
         key = self.key_edit.text().strip()
         if self.remember_key_box.isChecked():
             if not key_store.save_key(key):
@@ -297,6 +314,7 @@ class MainWindow(QMainWindow):
         config = RunConfig(api_key=self.key_edit.text().strip(), output_dir=out_dir,
                            registry_path=self.registry_path, focus_terms=self.focus_terms(),
                            use_pubchem=self.pubchem_box.isChecked(),
+                           equations_to_latex=self.equations_box.isChecked(),
                            pubchem_cache_path=default_pubchem_cache_path())
         self._extraction, self._extraction_ok, self._review = None, False, None
         self._worker = PipelineWorker(pdf, config)
@@ -441,6 +459,8 @@ class MainWindow(QMainWindow):
         self._last_run_dir, self._last_csv = result.run_dir, result.csv_path
         self._fill_rows(result)
         self._fill_flags(result)
+        self._fill_figures(result)
+        self._fill_equations(result)
         self._fill_summary(result)
         self.open_folder_btn.setEnabled(True)
         self.open_csv_btn.setEnabled(True)
@@ -563,6 +583,59 @@ class MainWindow(QMainWindow):
             quote += f"<p><b>Model's note</b><br>{html.escape(flag.model_note)}</p>"
         source = f"<p><b>Where</b><br>{html.escape(flag.source)}</p>" if flag.source else ""
         self.flag_details.setHtml(f"<p>{html.escape(flag.message)}</p>{quote}{source}")
+
+    @staticmethod
+    def _image_html(path: str, max_width: int = 900) -> str:
+        """An <img> no wider than max_width (QTextBrowser shows images at full size)."""
+        from PySide6.QtGui import QImageReader
+        size = QImageReader(path).size()
+        width = min(size.width(), max_width) if size.isValid() else max_width
+        return f"<img src='{QUrl.fromLocalFile(path).toString()}' width={width}>"
+
+    def _fill_figures(self, result) -> None:
+        figures = result.figures
+        self.tabs.setTabText(self.tabs.indexOf(self.figures_view), f"Figures ({len(figures)})")
+        if not figures:
+            self.figures_view.setHtml("<p>No figures were found in this paper.</p>")
+            return
+        status_text = {"digitized": "digitized", "skipped": "skipped", "not digitized": "not digitized"}
+        parts = []
+        for f in figures:
+            image = f.get("annotated_image") or f.get("image")
+            detail = (f" &middot; {f['series']} series, {f['points']} points (clicked points marked)"
+                      if f["status"] == "digitized" else "")
+            parts.append(
+                f"<h3>{html.escape(f['figure_id'])}"
+                + (f" <span style='font-weight:normal;color:gray'>(page {f['page']})</span>" if f.get("page") else "")
+                + f"</h3><p><b>{status_text.get(f['status'], f['status'])}</b>{detail}</p>"
+                + (f"<p>{self._image_html(image)}</p>" if image else "")
+                + (f"<p style='color:gray'>{html.escape(f.get('caption', ''))}</p>" if f.get("caption") else "")
+                + "<hr>")
+        self.figures_view.setHtml("".join(parts))
+
+    def _fill_equations(self, result) -> None:
+        equations = result.equations
+        self.tabs.setTabText(self.tabs.indexOf(self.equations_view), f"Equations ({len(equations)})")
+        if not equations:
+            self.equations_view.setHtml(
+                "<p>No labelled equations found. Only equations the authors number or name "
+                "(&ldquo;(1)&rdquo;, &ldquo;Eq. 2&rdquo;) are collected; reaction schemes drawn as images "
+                "are figures.</p>")
+            return
+        converted = any(e.latex for e in equations)
+        parts = [] if converted else [
+            "<p style='color:gray'>Tick &ldquo;Convert labelled equations to LaTeX&rdquo; before a run to "
+            "get each one as LaTeX as well (one small API call).</p>"]
+        for e in equations:
+            parts.append(f"<h3>Equation ({html.escape(e.label)}) "
+                         f"<span style='font-weight:normal;color:gray'>page {e.page}</span></h3>"
+                         f"<p>{self._image_html(e.image)}</p>")
+            if e.latex:
+                parts.append(f"<p><b>LaTeX</b> (select to copy):</p><pre>{html.escape(e.latex)}</pre>")
+            if e.latex_note:
+                parts.append(f"<p style='color:gray'>{html.escape(e.latex_note)}</p>")
+            parts.append("<hr>")
+        self.equations_view.setHtml("".join(parts))
 
     def _fill_summary(self, result) -> None:
         usage_rows = "".join(

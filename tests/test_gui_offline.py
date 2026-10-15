@@ -160,7 +160,11 @@ def test_full_run_fills_results():
         assert keys.saved == [] and keys.deleted == 0, "keychain touched without 'remember' ticked"
         assert w.run_btn.isEnabled() and not w.cancel_btn.isEnabled()
 
-        for i, name in enumerate(["1_rows", "2_flags", "3_summary"]):
+        figures_tab = w.tabs.indexOf(w.figures_view)
+        assert w.tabs.tabText(figures_tab) == "Figures (5)"
+        assert "Fig. 3" in w.figures_view.toPlainText() and "skipped" in w.figures_view.toPlainText()
+        assert w.tabs.tabText(w.tabs.indexOf(w.equations_view)) == "Equations (0)"   # eder1994 numbers none
+        for i, name in enumerate(["1_rows", "2_flags", "3_figures", "4_equations", "5_summary"]):
             w.tabs.setCurrentIndex(i); _pump(); _screenshot(w, name)
         w.close()
 
@@ -395,6 +399,25 @@ def test_choose_every_figure_first_then_digitize():
         assert dlg.editor.fig.figure_id == "Fig. 5" and "2 of 2 chosen" in dlg.header.text()
         dlg.reject()                                          # closing: Fig. 5 not done -> skipped
         assert sorted(dlg.skipped) == ["Fig. 1", "Fig. 3", "Fig. 5"] and dlg.digitized == []
+
+
+def test_equations_tab_shows_found_equations():
+    pdf = PDF.parents[1] / "Truman2024" / "truman2024.pdf"
+    if not pdf.is_file():
+        print(f"SKIP: needs {pdf}"); return
+    from types import SimpleNamespace
+    from parameter_extractor.ingestion.equation_finder import find_equations
+    app = QApplication.instance() or QApplication([])
+    with tempfile.TemporaryDirectory() as tmp:
+        eqs = find_equations(str(pdf), Path(tmp))
+        assert [e.label for e in eqs] == ["1", "2", "3"]
+        eqs[2].latex = "K_{eq} = k_{cond} / k_{hyd}"
+        w = main_window.MainWindow()
+        w._fill_equations(SimpleNamespace(equations=eqs))
+        text = w.equations_view.toPlainText()
+        assert w.tabs.tabText(w.tabs.indexOf(w.equations_view)) == "Equations (3)"
+        assert "Equation (1)" in text and "page 2" in text and "K_{eq} = k_{cond} / k_{hyd}" in text
+        w.close()
 
 
 def test_trackpad_zoom_and_overlapping_points():

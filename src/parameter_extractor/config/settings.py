@@ -44,6 +44,7 @@ MODELS = {
     "methodology": "claude-sonnet-5-5",
     "chemistry": "claude-sonnet-5-5",
     "figure_planner": "claude-sonnet-5-5",   # only for figures the user chooses to digitize
+    "equations": "claude-sonnet-5-5",        # optional LaTeX conversion; ~2 cents for 13 equations
 }
 
 MAX_TOKENS = 64000  # streamed (api_client.py); eder1994 chemistry alone overflowed 16000

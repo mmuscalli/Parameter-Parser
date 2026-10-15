@@ -359,6 +359,22 @@ keep it for now, refresh after the open issues are sorted).
   in the text but sourced from a table that was rasterized for the model) and the Rows-tab hover text
   ("Model's wording ..."). Pipeline-generated text is no longer put in quote
   fields (set summaries, the cited-data marker).
+- **Equations** (Mickey: only ones the authors LABEL): `ingestion/equation_finder.py`
+  finds "(N)" set apart from a relation-bearing block (or "Equation N:") --
+  column-aware (one/two-column pages), grows the block over stacked lines,
+  fractions and sub/superscript fragments, stops at prose; rejects table rows.
+  Crops -> `<run>/equations/`, `equations.json`. Over all 76 dataset PDFs: 13
+  found in 5 papers, all real (truman2024, Zamaraev1996, lemke2009,
+  kawamura2011, otake2011), no false positives. Free, ~0.5 s/paper.
+  Optional LaTeX (`RunConfig.equations_to_latex`, GUI checkbox, CLI
+  `--equations-latex`): `stages/equations.py`, ONE batched Sonnet call
+  (~$0.02 for 13). Tested pix2tex (~half wrong) and pix2text (accurate except
+  the per-mille sign, but torch: 1.8 GB) -- rejected for the app's size.
+- **CropBox bug fixed**: pdfplumber positions are MediaBox-based but pypdfium2
+  renders the CropBox -- `pdf_parser.render_offset/to_render_box`; figure and
+  equation crops (and the digitizer's figure region) now use it.
+- **GUI tabs**: Figures (crop or annotated digitized image, status, caption)
+  and Equations (crop + LaTeX) next to Rows/Flags/Summary.
 - **total_sampled_peptides_yield** (`calculators/peptide_totals.py`, runs after
   the review): sum of the row's peptide %yields (linear and cyclic),
   origin "calculated" with the parts listed; a stated total ("Total Gly in

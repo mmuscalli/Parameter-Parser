@@ -140,6 +140,7 @@ def find_figures(pdf_path: str, out_dir: Path, render_scale: float = RENDER_SCAL
     with "Fig. N"), the line in the smaller font -- the caption -- wins."""
     import pdfplumber
     import pypdfium2 as pdfium
+    from parameter_extractor.ingestion.pdf_parser import render_offset, to_render_box
 
     with pdfplumber.open(pdf_path) as doc:
         caps = [c for i, page in enumerate(doc.pages, start=1) for c in _find_on_page(page, i)]
@@ -164,14 +165,17 @@ def find_figures(pdf_path: str, out_dir: Path, render_scale: float = RENDER_SCAL
                 img.save(out_dir / f"page-{page_no}.png")
                 rendered[page_no] = img
             img = rendered[page_no]
-            fx0, ftop, fx1, _ = c["figure_bbox"]
-            _, _, cx1, cbottom = c["caption_bbox"]
+            # boxes in rendered-page points (the render shows the CropBox only)
+            offset = render_offset(pdf[page_no - 1])
+            figure_bbox, caption_bbox = to_render_box(c["figure_bbox"], offset), to_render_box(c["caption_bbox"], offset)
+            fx0, ftop, fx1, _ = figure_bbox
+            _, _, cx1, cbottom = caption_bbox
             crop_box = [round(v * render_scale) for v in (fx0, ftop, max(fx1, cx1), cbottom + 2)]
             crop_path = out_dir / f"fig-{number}.png"
             img.crop(crop_box).save(crop_path)
             candidates.append(FigureCandidate(
                 figure_id=f"Fig. {number}", number=number, page=page_no, caption=c["caption"],
-                figure_bbox=c["figure_bbox"], caption_bbox=c["caption_bbox"],
+                figure_bbox=figure_bbox, caption_bbox=caption_bbox,
                 page_image=str(out_dir / f"page-{page_no}.png"), crop_image=str(crop_path),
                 render_scale=render_scale))
     finally:

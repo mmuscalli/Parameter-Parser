@@ -43,6 +43,7 @@ from parameter_extractor.config.run_config import RunConfig
 from parameter_extractor.errors import ApiKeyMissingError, PdfNotReadableError, PipelineError
 from parameter_extractor.digitizing.annotate import save_digitized
 from parameter_extractor.ingestion.duplicates import drop_repeated_amounts
+from parameter_extractor.ingestion.equation_finder import find_equations
 from parameter_extractor.ingestion.figure_finder import find_figures
 from parameter_extractor.ingestion.figure_rows import build_figure_rows
 from parameter_extractor.ingestion.flatten_to_template import build_rows, write_template_csv
@@ -59,6 +60,8 @@ from parameter_extractor.pricing import PRICES_CHECKED
 from parameter_extractor.pubchem import PubChem
 from parameter_extractor.validation.quotes import check_flag_quotes, check_row_quotes, image_table_numbers
 from parameter_extractor.schemas.chemistry import ChemistryExtraction
+from parameter_extractor.schemas.equations import EquationCandidate
+from parameter_extractor.stages.equations import transcribe_equations
 from parameter_extractor.schemas.figures import DigitizedFigure, FigureCandidate, FigurePlan
 from parameter_extractor.schemas.methodology import Methodology
 from parameter_extractor.schemas.paper_metadata import PaperMetadata
@@ -90,7 +93,8 @@ class RunResult:
     flags_path: Optional[Path] = None   # None when nothing was flagged
     observations_path: Optional[Path] = None   # long format: one value per line, with provenance
     gold_standard_score: Optional[dict] = None
-    figures: List[dict] = field(default_factory=list)   # [{figure_id, status, series, points}]
+    figures: List[dict] = field(default_factory=list)   # [{figure_id, status, series, points, image, ...}]
+    equations: List[EquationCandidate] = field(default_factory=list)   # labelled equations found
     new_variables: List[NewVariable] = field(default_factory=list)   # left out of the CSV (not accepted)
     accepted_variables: List[dict] = field(default_factory=list)     # [{name, kind, column, values, how}]
     unfound_terms: List[str] = field(default_factory=list)           # searched for, not stated in the paper
@@ -182,6 +186,7 @@ class Extraction:
     chemistry: Optional[ChemistryExtraction] = None
     term_search: Optional[TermSearch] = None
     wet_dry: Optional[WetDryConditions] = None
+    equations: List[EquationCandidate] = field(default_factory=list)
     structure_ready: threading.Event = field(default_factory=threading.Event)
     failure: Optional[str] = None
 
@@ -213,9 +218,11 @@ def extract(
     figures = find_figures(str(pdf_path), ctx.run_dir / "figures")
     (ctx.run_dir / "figures_found.json").write_text(
         json.dumps([f.model_dump() for f in figures], indent=2, ensure_ascii=False))
+    equations = find_equations(str(pdf_path), ctx.run_dir / "equations")     # local, no API call
+    _write_equations(ctx, equations)
     vocab = json.loads((settings.SCHEMAS_DIR / "template_vocab.json").read_text())
     ex = Extraction(ctx=ctx, pdf_path=pdf_path, started=started, parsed=parsed, vocab=vocab,
-                    figures=figures)
+                    figures=figures, equations=equations)
     if figures and on_figures:
         on_figures(ex)
 
@@ -243,11 +250,27 @@ def extract(
         ctx.step("chemistry", "Extracting solution chemistry")
         ex.chemistry = run_chemistry_extraction(ctx, parsed.text, ex.structure, vocab["species_names"],
                                                 table_images=table_images)
+
+        if config.equations_to_latex and equations:
+            ctx.total_steps += 1        # optional (RunConfig.equations_to_latex), one small call
+            ctx.step("equations", f"Converting {len(equations)} labelled equation(s) to LaTeX")
+            try:
+                transcribe_equations(ctx, equations)
+            except PipelineError as e:  # not worth failing the whole extraction over
+                for eq in equations:
+                    eq.latex_note = f"LaTeX conversion failed: {e}"
+            _write_equations(ctx, equations)
     except BaseException as e:
         ex.failure = str(e) or type(e).__name__
         ex.structure_ready.set()     # release anyone waiting in plan_figure()
         raise
     return ex
+
+
+def _write_equations(ctx: RunContext, equations: List[EquationCandidate]) -> None:
+    if equations:
+        (ctx.run_dir / "equations.json").write_text(
+            json.dumps([e.model_dump() for e in equations], indent=2, ensure_ascii=False))
 
 
 def plan_figure(extraction: Extraction, figure: FigureCandidate) -> FigurePlan:
@@ -314,8 +337,9 @@ def finish(
             first_entry_number=len(rows) + 1, registry=registry)
         rows += fig_rows
         paper_flags += [Flag("figure_problem", p) for p in problems]
+        annotated = {}
         for fig in digitized:
-            save_digitized(fig, ctx.run_dir / "figures")
+            annotated[fig.figure_id] = str(save_digitized(fig, ctx.run_dir / "figures")[1])
             if fig.data_source:
                 paper_flags.append(Flag(
                     "cited_data",
@@ -330,13 +354,18 @@ def finish(
             n_points = sum(len(s.points) for s in fig.series)
             figure_summary.append({"figure_id": fig.figure_id, "status": "digitized",
                                    "series": len([s for s in fig.series if s.points]),
-                                   "points": n_points})
+                                   "points": n_points, "annotated_image": annotated[fig.figure_id]})
     done = {f["figure_id"] for f in figure_summary}
     for fig in ex.figures:
         if fig.figure_id not in done:
             status = "skipped" if fig.figure_id in skipped_figures else "not digitized"
             figure_summary.append({"figure_id": fig.figure_id, "status": status,
                                    "series": 0, "points": 0})
+    found = {f.figure_id: f for f in ex.figures}           # for the Figures tab: image + caption
+    for f in figure_summary:
+        if f["figure_id"] in found:
+            c = found[f["figure_id"]]
+            f.update(image=c.crop_image, caption=c.caption, page=c.page)
 
     # ---- variables without a column: registry first, then the user's review ----
     index = row_index(ex.structure, rows, config.paper_prefix)
@@ -429,14 +458,16 @@ def finish(
                    new_variables_accepted=[a["name"] for a in accepted],
                    searched_terms=list(config.focus_terms), unfound_terms=unfound,
                    normalization=[{"kind": n.kind, "change": n.message} for n in normalization],
-                   figures=sorted(figure_summary, key=lambda f: f["figure_id"]))
+                   figures=sorted(figure_summary, key=lambda f: f["figure_id"]),
+                   equations=[{"label": e.label, "page": e.page, "latex": e.latex} for e in ex.equations])
 
     return RunResult(paper_id=ex.paper_id, run_dir=ctx.run_dir, csv_path=csv_path, rows=rows,
                      paper_flags=paper_flags, row_flags=row_flags, usage=list(ctx.usage),
                      flags_path=flags_path, gold_standard_score=gold_score,
                      observations_path=observations_path,
                      figures=sorted(figure_summary, key=lambda f: f["figure_id"]),
-                     new_variables=held_out, accepted_variables=accepted, unfound_terms=unfound)
+                     new_variables=held_out, accepted_variables=accepted, unfound_terms=unfound,
+                     equations=list(ex.equations))
 
 
 def _cited_data_flags(structure: StructurePlan) -> List[Flag]:

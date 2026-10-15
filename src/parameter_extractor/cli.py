@@ -53,11 +53,15 @@ def main() -> int:
     parser.add_argument("--no-pubchem", action="store_true",
                         help="Don't look up species names on PubChem (used to recognise synonyms; "
                              "only the names are sent)")
+    parser.add_argument("--equations-latex", action="store_true",
+                        help="Convert the paper's labelled equations to LaTeX (one small extra API call); "
+                             "they're found and cropped either way")
     args = parser.parse_args()
 
     from parameter_extractor.registry import default_pubchem_cache_path, default_registry_path
     overrides = {"paper_prefix": args.prefix, "registry_path": default_registry_path(),
                  "focus_terms": args.look_for, "use_pubchem": not args.no_pubchem,
+                 "equations_to_latex": args.equations_latex,
                  "pubchem_cache_path": default_pubchem_cache_path()}
     if args.out:
         overrides["output_dir"] = args.out
@@ -89,6 +93,12 @@ def main() -> int:
               f"review screen): {', '.join(names)}")
     if result.unfound_terms:
         print(f"Not stated in the paper: {'; '.join(result.unfound_terms)}")
+    if result.equations:
+        print(f"{len(result.equations)} labelled equation(s) -> {result.run_dir / 'equations'} "
+              f"(details in equations.json)")
+        for e in result.equations:
+            if e.latex:
+                print(f"  ({e.label})  {e.latex}")
     print(f"Tokens: {result.input_tokens:,} in / {result.output_tokens:,} out "
           f"(estimated cost {format_usd(result.cost_usd)})")
     return 0
