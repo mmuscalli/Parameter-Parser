@@ -251,8 +251,19 @@ Rodriguez-Garcia 2015 and Campbell 2019 -- the first non-curated test paper.
   the chemistry prompt -- it had said "sample_label null for initial";
   unlabelled differing values are now left out + `conflicting_values` flag
   rather than last-one-wins); per-set pH override dropped; caption case.
-- Open: SetOverride has no confidence (truman Table 2's "perhaps 130 C"
-  guess was written as fact).
+- Assumed values (Mickey: always flag, never include automatically, user
+  decides): `Basis` = stated/derived/assumed (+ confidence, quote, source)
+  on SetOverride and CycleParameter; prompts forbid assuming and treat the
+  paper's hedges as not stated. "assumed" values are skipped by build_rows
+  and become `NewVariable(kind="assumed_value")` in the review (default
+  Don't add, excluded from "Add all as suggested", never remembered in the
+  registry) + `assumed_value` flags. Low/medium per-set and cycling values
+  are flagged. Registry.save() now only writes when something changed.
+- Reference run `runs/truman2024_auto/` (2026-10-14, all fixes in): 11 rows
+  (Table 2 as 4 single-row sets, Gly 0.1/1/10/100 mM), 8 cited_data flags,
+  no assumed values (the model left the Table 2 temperature out).
+  `tests/test_truman2024_replay.py` replays it byte for byte;
+  `test_pipeline_offline.make_replay(dir)` replays any reference run.
 
 ## Non-obvious decisions — don't redo this research
 

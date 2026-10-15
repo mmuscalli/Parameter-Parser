@@ -15,6 +15,12 @@ T = TypeVar("T")
 Confidence = Literal["high", "medium", "low"]
 CONFIDENCE_ORDER = ("low", "medium", "high")
 
+# Where a value comes from. "assumed" (the paper doesn't state it -- including
+# when the paper itself hedges: "perhaps", "probably", "not documented") is never
+# written to the CSV automatically: it's flagged and offered in the review, where
+# the user decides (and that decision is never remembered for later papers).
+Basis = Literal["stated", "derived", "assumed"]
+
 
 def confidence_below(confidence: Optional[str], threshold: Optional[str]) -> bool:
     """True if `confidence` ranks strictly below `threshold`. A None threshold

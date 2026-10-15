@@ -26,7 +26,8 @@ from parameter_extractor.ingestion.new_variables import VariableDecision, Variab
 from parameter_extractor.registry import VariableRegistry
 
 ACTIONS = [("ignore", "Don't add"), ("new_column", "New column"), ("existing_column", "Existing column")]
-KIND_LABELS = {"species": "Species", "parameter": "Experimental parameter", "figure_axis": "Figure axis"}
+KIND_LABELS = {"species": "Species", "parameter": "Experimental parameter", "figure_axis": "Figure axis",
+               "assumed_value": "ASSUMED value (not stated in the paper)"}
 COLS = ["Variable", "Type", "Values", "Example", "Add as", "Column", "Remember"]
 
 
@@ -89,8 +90,12 @@ class VariableReviewDialog(QDialog):
             column.setCurrentText(g.proposed_column)
             column.setEnabled(False)
             remember = QCheckBox()
-            remember.setChecked(True)
+            remember.setChecked(g.kind != "assumed_value")
             remember.setEnabled(False)
+            if g.kind == "assumed_value":     # a guess is decided per paper: never remembered
+                remember.setToolTip("Assumed values are never remembered for later papers.")
+                for c in range(4):
+                    self.table.item(r, c).setForeground(Qt.GlobalColor.darkRed)
             action.currentIndexChanged.connect(lambda i, row=r: self._on_action(row, i))
             self.table.setCellWidget(r, 4, action)
             self.table.setCellWidget(r, 5, column)
@@ -144,10 +149,14 @@ class VariableReviewDialog(QDialog):
     def _on_action(self, row: int, index: int) -> None:
         action = ACTIONS[index][0]
         self.column_boxes[row].setEnabled(action != "ignore")
-        self.remember_boxes[row].setEnabled(action != "ignore")
+        self.remember_boxes[row].setEnabled(action != "ignore" and self.groups[row].kind != "assumed_value")
 
     def _accept_suggestions(self) -> None:
+        """Suggested columns for new variables -- but assumed values stay "Don't add":
+        including a guess is always a deliberate, per-value choice."""
         for r, g in enumerate(self.groups):
+            if g.kind == "assumed_value":
+                continue
             known = self.registry.is_known_column(g.proposed_column)
             self.set_action(r, "existing_column" if known else "new_column", g.proposed_column)
 

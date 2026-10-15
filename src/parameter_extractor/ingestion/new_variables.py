@@ -75,7 +75,7 @@ def _rows_for(set_label, sample_label, index) -> List[str]:
 def collect_new_variables(
     methodology: Methodology, chemistry: ChemistryExtraction,
     registry: Optional[VariableRegistry] = None, index=None,
-    term_search: Optional[TermSearch] = None,
+    term_search: Optional[TermSearch] = None, wet_dry=None, structure=None,
 ) -> List[NewVariable]:
     """Every value without a known column (species) or not yet mapped by the user
     (parameters, search findings). `index` (from row_index) fills row_ids."""
@@ -98,6 +98,21 @@ def collect_new_variables(
             proposed_column=suggest_column_name("parameter", p.name), value_text=p.value,
             set_label=p.set_label or None, quote=p.quote, source=p.source, confidence=p.confidence,
             origin="methodology", row_ids=rows_for(p.set_label or None, None)))
+    # values the model marked "assumed" (not stated in the paper): never written
+    # automatically -- offered in the review, where the user decides
+    for o in methodology.per_set_overrides:
+        if o.basis == "assumed":
+            found.append(_assumed(o.field_name, o.value, o.set_label, o.quote, o.source, o.confidence,
+                                  "methodology", rows_for))
+    if wet_dry is not None:
+        cycling = [s.set_label for s in structure.experiment_sets
+                   if s.set_type == "Evaporation Cycle" or any(x.cycle_number is not None for x in s.samples)
+                   ] if structure else []
+        for cp in wet_dry.parameters:
+            if cp.basis == "assumed":
+                for label in ([cp.set_label] if cp.set_label else cycling):
+                    found.append(_assumed(cp.parameter, cp.value, label, cp.quote, cp.source, cp.confidence,
+                                          "wet-dry cycling", rows_for))
     for f in (term_search.findings if term_search else []):
         if not f.found:
             continue
@@ -110,13 +125,20 @@ def collect_new_variables(
     return found
 
 
+def _assumed(column, value, set_label, quote, source, confidence, origin, rows_for) -> NewVariable:
+    return NewVariable(
+        kind="assumed_value", name=column, alias_name=f"{column} @ {set_label}", proposed_column=column,
+        value=value, set_label=set_label, quote=quote, source=source, confidence=confidence,
+        origin=f"{origin} (assumed)", row_ids=rows_for(set_label, None))
+
+
 def split_known(new_vars: List[NewVariable], registry: VariableRegistry):
     """(already mapped by the registry -> [(column, value)], still pending).
     Only explicit aliases count here: a parameter isn't written to a column
     just because the model suggested one -- the user decides that once."""
     known, pending = [], []
     for v in new_vars:
-        column = registry.alias_for(v.kind, v.alias_name or v.name)
+        column = None if v.kind == "assumed_value" else registry.alias_for(v.kind, v.alias_name or v.name)
         if column:
             known.append((column, v))
         else:
@@ -166,7 +188,7 @@ def apply_decisions(rows: List[ExtractedRow], groups: List[VariableGroup],
             continue
         column = d.column.strip()
         write_values(rows, column, g.values)
-        if d.remember:
+        if d.remember and g.kind != "assumed_value":     # a guess is decided per paper, never remembered
             if d.action == "new_column":
                 registry.add_column(column, g.kind, note=f"accepted for '{g.name}'")
             registry.add_alias(g.kind, g.alias_name, column)

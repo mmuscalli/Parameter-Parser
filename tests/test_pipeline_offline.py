@@ -31,20 +31,27 @@ from parameter_extractor.pipeline import run_pipeline
 PDF = ROOT.parent / "Paper Files" / "Paper Lists" / "Initial Easy Papers" / "Eder1994" / "eder1994.pdf"
 REPLAY_DIR = ROOT / "runs" / "eder1994_auto"
 STAGE_FOR_MODEL = {"StructurePlan": "structure_planner", "PaperMetadata": "metadata",
-                   "Methodology": "methodology", "ChemistryExtraction": "chemistry"}
+                   "Methodology": "methodology", "ChemistryExtraction": "chemistry",
+                   "WetDryConditions": "wet_dry", "TermSearch": "term_search"}
 
 
-def _replay_send(ctx, *, model, system_prompt, content, response_model, stop_reason="end_turn"):
-    stage = STAGE_FOR_MODEL[response_model.__name__]
-    audit = json.loads((REPLAY_DIR / f"{stage}.audit.json").read_text())
-    output = (REPLAY_DIR / f"{stage}.output.json").read_text()
-    return SimpleNamespace(
-        id=f"replay-{stage}", stop_reason=stop_reason,
-        parsed_output=response_model.model_validate_json(output),
-        content=[SimpleNamespace(type="text", text=json.dumps(audit["raw_response"]))],
-        usage=SimpleNamespace(input_tokens=audit["input_tokens"],
-                              output_tokens=audit["output_tokens"]),
-    )
+def make_replay(replay_dir: Path):
+    """An api_client._send stand-in that returns the saved responses from a reference run."""
+    def send(ctx, *, model, system_prompt, content, response_model, stop_reason="end_turn"):
+        stage = STAGE_FOR_MODEL[response_model.__name__]
+        audit = json.loads((replay_dir / f"{stage}.audit.json").read_text())
+        output = (replay_dir / f"{stage}.output.json").read_text()
+        return SimpleNamespace(
+            id=f"replay-{stage}", stop_reason=stop_reason,
+            parsed_output=response_model.model_validate_json(output),
+            content=[SimpleNamespace(type="text", text=json.dumps(audit["raw_response"]))],
+            usage=SimpleNamespace(input_tokens=audit["input_tokens"],
+                                  output_tokens=audit["output_tokens"]),
+        )
+    return send
+
+
+_replay_send = make_replay(REPLAY_DIR)
 
 
 def _config(out: Path, **kw) -> RunConfig:
@@ -74,7 +81,7 @@ def test_replay_reproduces_committed_csv():
                                              "methodology", "chemistry", "assemble"]
 
         audits = [json.loads((REPLAY_DIR / f"{s}.audit.json").read_text())
-                  for s in STAGE_FOR_MODEL.values()]
+                  for s in STAGE_FOR_MODEL.values() if (REPLAY_DIR / f"{s}.audit.json").exists()]
         assert result.input_tokens == sum(a["input_tokens"] for a in audits)
 
         summary = json.loads((result.run_dir / "run_summary.json").read_text())

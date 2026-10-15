@@ -68,6 +68,7 @@ class VariableRegistry:
         self._base_set: Set[str] = self._template_set | set(self.standard_columns)
         self.added_columns: Dict[str, dict] = {}     # column -> {kind, added, note}
         self.aliases: Dict[str, str] = {}            # "kind:name" -> column
+        self._changed = False
         if self.path and self.path.is_file():
             data = json.loads(self.path.read_text())
             self.added_columns = data.get("columns", {})
@@ -103,12 +104,15 @@ class VariableRegistry:
     def add_column(self, column: str, kind: str, note: str = "") -> None:
         if column not in self._base_set and column not in self.added_columns:
             self.added_columns[column] = {"kind": kind, "added": date.today().isoformat(), "note": note}
+            self._changed = True
 
     def add_alias(self, kind: str, name: str, column: str) -> None:
         self.aliases[_alias_key(kind, name)] = column
+        self._changed = True
 
     def save(self) -> None:
-        if self.path is None:
+        """Writes the local additions -- only if something was actually added."""
+        if self.path is None or not self._changed:
             return
         self.path.parent.mkdir(parents=True, exist_ok=True)
         self.path.write_text(json.dumps({"columns": self.added_columns, "aliases": self.aliases},

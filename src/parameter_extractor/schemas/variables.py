@@ -17,7 +17,7 @@ from parameter_extractor.schemas.common import Confidence
 
 
 class NewVariable(BaseModel):
-    kind: Literal["species", "parameter", "figure_axis"]
+    kind: Literal["species", "parameter", "figure_axis", "assumed_value"]   # assumed: not stated in the paper
     name: str                                   # as extracted, e.g. "Na2HPO4", "stirring rate"
     alias_name: str = ""                        # what the registry remembers it by (see registry.py)
     proposed_column: Optional[str] = None       # what its column would be called, if accepted

@@ -11,6 +11,8 @@ from typing import List, Literal
 
 from pydantic import BaseModel, Field
 
+from parameter_extractor.schemas.common import Basis
+
 CycleParameterName = Literal[
     "cycle_duration_hr",                  # template column
     "wet_phase_temperature_C", "wet_phase_duration_hr", "wet_phase_relative_humidity_pct",
@@ -22,6 +24,8 @@ class CycleParameter(BaseModel):
     set_label: str = Field(description="Exact structure-plan set_label; '' if it applies to every cycling set.")
     parameter: CycleParameterName
     value: float = Field(description="In the parameter's unit: hours, degrees C, or % relative humidity.")
+    basis: Basis = Field(default="stated", description="'stated' in the paper; 'derived' by arithmetic "
+                                                       "from stated values; 'assumed' if not stated.")
     quote: str
     source: str
     confidence: Literal["high", "medium", "low"]

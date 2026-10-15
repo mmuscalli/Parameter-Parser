@@ -112,6 +112,88 @@ def test_cited_figure():
     assert rows[0].provenance["original_data_reference"].origin == "Fig. 5"
 
 
+def test_assumed_values_are_never_written_automatically():
+    """truman2024's "perhaps 130 C": a value the paper doesn't state is flagged and offered
+    in the review -- written only if the user chooses, and never remembered."""
+    if not PDF.is_file():
+        print(f"SKIP: needs {PDF}"); return
+    from parameter_extractor.ingestion.new_variables import VariableDecision
+    from parameter_extractor.schemas.methodology import SetOverride
+    structure = _cycling_structure()
+    set2 = structure.experiment_sets[1].set_label
+    wet_dry = WetDryConditions(parameters=WET_DRY.parameters + [
+        CycleParameter(set_label="", parameter="dry_phase_duration_hr", value=4, basis="assumed",
+                       quote="", source="", confidence="low")])
+    seen = {}
+
+    def review(groups, unfound, registry):
+        seen["groups"] = [(g.kind, g.alias_name) for g in groups]
+        return [VariableDecision(f"initial_temperature_C @ {set2}", "assumed_value", "existing_column",
+                                 "initial_temperature_C", remember=True)]
+
+    def add_overrides(ex):
+        ex.methodology.per_set_overrides = [o for o in ex.methodology.per_set_overrides if o.set_label != set2]
+        ex.methodology.per_set_overrides += [
+            SetOverride(set_label=set2, field_name="initial_temperature_C", value=130, basis="assumed",
+                        confidence="low", quote="conditions not documented; perhaps 130 C", source="Table 2"),
+            SetOverride(set_label=set2, field_name="initial_pH", value=2.5, basis="stated",
+                        confidence="medium", quote="pH 2.5", source="Methods")]
+
+    def send(ctx, **kw):
+        resp = _replay_send(ctx, **kw)
+        if kw["response_model"] is StructurePlan:
+            resp.parsed_output = structure
+        return resp
+
+    for decide in (None, review):
+        with tempfile.TemporaryDirectory() as tmp, patch.object(api_client, "_send", send), \
+                patch.object(pipeline, "run_wet_dry", lambda *a: wet_dry):
+            config = RunConfig.from_settings(api_key="x", output_dir=Path(tmp), registry_path=Path(tmp) / "r.json")
+            ex = pipeline.extract(PDF, config)
+            add_overrides(ex)
+            result = pipeline.finish(ex, review=decide)
+            with open(result.csv_path, newline="") as f:
+                rows = list(csv.DictReader(f))
+            set2_rows = [r for r in rows if r["set_id"] == "001002"]
+            set1_rows = [r for r in rows if r["set_id"] == "001001"]
+            assert all(r.get("dry_phase_duration_hr", "") == "" for r in set1_rows)   # assumed: not written
+            assert all(r["initial_pH"] == "2.5" for r in set2_rows)                  # stated: written...
+            assert any(f.kind == "low_confidence" and "initial_pH" in f.message for f in result.paper_flags)  # ...flagged
+            assumed_flags = [f for f in result.paper_flags if f.kind == "assumed_value"]
+            if decide is None:
+                assert all(r["initial_temperature_C"] == "" for r in set2_rows)
+                assert len(assumed_flags) == 2 and all("NOT written" in f.message for f in assumed_flags)
+            else:
+                assert ("assumed_value", f"initial_temperature_C @ {set2}") in seen["groups"]
+                assert ("assumed_value", "dry_phase_duration_hr @ " + structure.experiment_sets[0].set_label) in seen["groups"]
+                assert all(r["initial_temperature_C"] == "130.0" for r in set2_rows)   # user chose to include it
+                assert any("included because you chose" in f.message for f in assumed_flags)
+                assert not (Path(tmp) / "r.json").exists()          # never remembered, even with remember=True
+
+
+def test_review_window_never_auto_includes_assumed_values():
+    try:
+        from PySide6.QtWidgets import QApplication
+    except ImportError:
+        return
+    import os
+    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+    app = QApplication.instance() or QApplication([])
+    from parameter_extractor.gui.variable_review import VariableReviewDialog
+    from parameter_extractor.ingestion.new_variables import VariableGroup
+    from parameter_extractor.registry import VariableRegistry
+    from parameter_extractor.schemas.variables import NewVariable
+    g = VariableGroup(kind="assumed_value", name="initial_temperature_C", alias_name="t @ s",
+                      proposed_column="initial_temperature_C",
+                      values=[NewVariable(kind="assumed_value", name="initial_temperature_C", value=130,
+                                          set_label="s", origin="methodology (assumed)")])
+    dlg = VariableReviewDialog([g], [], VariableRegistry(None))
+    dlg._accept_suggestions()
+    assert dlg.decisions()[0].action == "ignore"
+    assert not dlg.remember_boxes[0].isChecked()
+    assert dlg.table.item(0, 1).text().startswith("ASSUMED")
+
+
 def test_standard_columns_file():
     assert standard_columns() == ["wet_phase_temperature_C", "wet_phase_duration_hr",
                                   "wet_phase_relative_humidity_pct", "dry_phase_temperature_C",

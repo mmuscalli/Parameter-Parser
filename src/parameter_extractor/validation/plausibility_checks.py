@@ -21,7 +21,8 @@ from parameter_extractor.schemas.row_schema import ExtractedRow
 
 FlagKind = Literal["out_of_range", "low_confidence", "ambiguous_paper_wide_species",
                    "possible_duplicate", "figure_problem", "new_variable",
-                   "term_not_found", "cited_data", "conflicting_values"]
+                   "term_not_found", "cited_data", "conflicting_values",
+                   "assumed_value"]
 
 
 @dataclass
@@ -95,6 +96,7 @@ def check_extraction(
     chemistry: ChemistryExtraction,
     flag_below: Optional[str] = settings.CONFIDENCE_FLAG_BELOW,
     drop_below: Optional[str] = settings.CONFIDENCE_DROP_BELOW,
+    wet_dry=None,
 ) -> List[Flag]:
     """Paper-level flags: problems with values that apply to many rows at once
     (paper-wide methodology, initial compositions), reported once here rather
@@ -130,6 +132,19 @@ def check_extraction(
                 f"methodology.{field} = {f.value!r} has confidence '{f.confidence}' "
                 f"(applies to every row){_drop_suffix(f.confidence, drop_below)}.",
                 quote=f.quote or None, source=f.source or None))
+
+    # per-set and cycling values (assumed ones are reported separately: never written)
+    per_set = [(o.field_name, o.value, o.set_label, o.confidence, o.basis, o.quote, o.source)
+               for o in methodology.per_set_overrides]
+    per_set += [(c.parameter, c.value, c.set_label or "every cycling set", c.confidence, c.basis, c.quote,
+                 c.source) for c in (wet_dry.parameters if wet_dry else [])]
+    for name, value, label, confidence, basis, quote, source in per_set:
+        if basis != "assumed" and confidence_below(confidence, flag_below):
+            flags.append(Flag(
+                "low_confidence",
+                f"{name} = {value:g} for set '{label}' has confidence '{confidence}'"
+                + (" (derived from stated values)" if basis == "derived" else "")
+                + f"{_drop_suffix(confidence, drop_below)}.", quote=quote or None, source=source or None))
 
     for s in chemistry.solutes:
         if s.role == "initial" and confidence_below(s.confidence, flag_below):

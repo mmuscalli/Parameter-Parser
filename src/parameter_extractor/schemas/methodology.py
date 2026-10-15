@@ -12,7 +12,7 @@ differs slightly per condition) -- see `per_set_overrides`.
 from __future__ import annotations
 from typing import Dict, List, Literal, Optional
 from pydantic import BaseModel, Field, field_validator
-from .common import Extracted
+from .common import Basis, Extracted
 
 ExperimentType = Literal["Batch", "Flowthrough"]  # POLO's ExperimentType enum
 OverridableField = Literal[
@@ -27,6 +27,11 @@ class SetOverride(BaseModel):
     set_label: str = Field(description="Exact set_label string from the structure plan.")
     field_name: OverridableField
     value: float
+    basis: Basis = Field(default="stated", description="'stated' in the paper; 'derived' by arithmetic "
+                                                       "from stated values; 'assumed' if not stated.")
+    confidence: Literal["high", "medium", "low"] = "high"
+    quote: str = Field(default="", description="Supporting snippet from the paper.")
+    source: str = ""
 
 
 class OtherParameter(BaseModel):
@@ -88,4 +93,10 @@ class Methodology(BaseModel):
         return v
 
     def overrides_for(self, set_label: str) -> Dict[str, float]:
-        return {o.field_name: o.value for o in self.per_set_overrides if o.set_label == set_label}
+        """Per-set values to write -- never assumed ones (those go to the review)."""
+        return {o.field_name: o.value for o in self.per_set_overrides
+                if o.set_label == set_label and o.basis != "assumed"}
+
+    def override_details(self, set_label: str) -> Dict[str, "SetOverride"]:
+        return {o.field_name: o for o in self.per_set_overrides
+                if o.set_label == set_label and o.basis != "assumed"}

@@ -26,7 +26,14 @@ If a field's value differs by experiment set (e.g. several sets at slightly
 different temperatures) rather than being constant across the whole paper,
 set it "ambiguous" at the top level with a note pointing to
 `per_set_overrides`, and add one `per_set_overrides` entry per (set, field),
-using the exact `set_label` strings from the structure plan below.
+using the exact `set_label` strings from the structure plan below. Give each
+entry a `quote`, `source`, `confidence`, and `basis`:
+- "stated": the paper gives this value for this set;
+- "derived": calculated from stated values (say how in the quote);
+- "assumed": NOT stated. Do not fill in values the paper doesn't give --
+  in particular, when the paper itself hedges ("probably", "perhaps",
+  "likely", "not documented"), that is not a stated value. Prefer leaving
+  such a value out; if you include one, it MUST have basis "assumed".
 
 Also list, in `other_parameters`, any OTHER experimental condition or parameter
 that could affect the outcome but isn't one of the fields above -- for

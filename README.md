@@ -191,6 +191,11 @@ lists:
 - **New variables not added**: anything the paper reports that has no
   column and wasn't added in the review (see below).
 - **Searched-for terms not found** in the paper.
+- **Assumed values**: a value the paper doesn't actually state (including the
+  paper's own hedges like "perhaps 130 °C") is never written automatically.
+  Every per-set and wet-dry value is marked stated, derived or assumed. An
+  assumed one is flagged and offered in the review, where you can still
+  include it. That choice is never remembered for later papers.
 
 The thresholds are `CONFIDENCE_FLAG_BELOW` (default `"high"`, so medium and low
 values are flagged) and `CONFIDENCE_DROP_BELOW` (default off; set it to blank
@@ -269,6 +274,7 @@ eval/gold_standard/  empty until a curated answer set exists
 .venv/bin/python tests/test_gui_offline.py      # needs the [gui] extra; runs off-screen
 .venv/bin/python tests/test_diagnostics.py
 .venv/bin/python tests/test_figures.py
+.venv/bin/python tests/test_truman2024_replay.py   # and test_new_variables, test_observations, ...
 ```
 
 `test_pipeline_offline.py` replays the saved model responses from
@@ -287,6 +293,11 @@ the committed CSV exactly. Run it after any change.
   demo on all 42 rows and is used by the offline test.
 - `eder1994_check/`: a later run where the model mislabelled one NaCl value as
   paper-wide; kept as the example that motivated the paper-wide species check.
+- `truman2024_auto/`: second reference paper, the first outside the hand-curated
+  set. It's a review reproducing wet-dry cycling data from Rodriguez-Garcia et
+  al. 2015 and Campbell et al. 2019, so it covers cited-data detection, cycle
+  numbers, wet/dry phase conditions and per-sample starting concentrations.
+  Replayed offline by `tests/test_truman2024_replay.py`.
 
 ## Gold-standard validation (off)
 

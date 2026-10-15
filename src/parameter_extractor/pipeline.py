@@ -270,7 +270,7 @@ def finish(
                       drop_below=config.confidence_drop_below, registry=registry, wet_dry=ex.wet_dry)
     thresholds = dict(flag_below=config.confidence_flag_below,
                       drop_below=config.confidence_drop_below)
-    paper_flags = check_extraction(ex.methodology, ex.chemistry, **thresholds)
+    paper_flags = check_extraction(ex.methodology, ex.chemistry, wet_dry=ex.wet_dry, **thresholds)
     paper_flags += _cited_data_flags(ex.structure)
     n_text_rows = len(rows)
 
@@ -308,7 +308,8 @@ def finish(
 
     # ---- variables without a column: registry first, then the user's review ----
     index = row_index(ex.structure, rows, config.paper_prefix)
-    new_vars = collect_new_variables(ex.methodology, ex.chemistry, registry, index, ex.term_search)
+    new_vars = collect_new_variables(ex.methodology, ex.chemistry, registry, index, ex.term_search,
+                                     wet_dry=ex.wet_dry, structure=ex.structure)
     new_vars += fig_new_vars
     known, pending = split_known(new_vars, registry)
     accepted = []
@@ -326,6 +327,13 @@ def finish(
         if g not in left_out and d:
             accepted.append({"name": g.name, "kind": g.kind, "column": d.column.strip(),
                              "values": len(g.values), "how": f"accepted in review ({d.action})"})
+            if g.kind == "assumed_value":
+                v = g.values[0]
+                paper_flags.append(Flag(
+                    "assumed_value",
+                    f"{g.name} = {v.value:g} for set '{v.set_label}' is NOT stated in the paper (assumed); "
+                    f"included because you chose to in the review.", quote=v.quote or None,
+                    source=v.source or None))
     if decisions:
         registry.save()
     held_out = [v for g in left_out for v in g.values]
@@ -396,6 +404,14 @@ def _new_variable_flags(groups: List[VariableGroup]) -> List[Flag]:
     """One flag per variable left out of the CSV, with an example quote."""
     flags = []
     for g in groups:
+        if g.kind == "assumed_value":
+            v = g.values[0]
+            flags.append(Flag(
+                "assumed_value",
+                f"{g.name} = {v.value:g} for set '{v.set_label}' is not stated in the paper (the model "
+                f"marked it assumed), so it was NOT written. Enter it by hand if you agree.",
+                quote=v.quote or None, source=v.source or v.origin))
+            continue
         what = {"species": "species", "parameter": "experimental parameter",
                 "figure_axis": "figure axis column"}[g.kind]
         first = g.values[0]
