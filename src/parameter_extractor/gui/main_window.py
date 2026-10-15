@@ -487,8 +487,11 @@ class MainWindow(QMainWindow):
             tree.addTopLevelItem(group)
             group.setExpanded(True)
 
+        cited_flags = [f for f in result.paper_flags if f.kind == "cited_data"]
         new_var_flags = [f for f in result.paper_flags if f.kind == "new_variable"]
-        other_paper_flags = [f for f in result.paper_flags if f.kind != "new_variable"]
+        other_paper_flags = [f for f in result.paper_flags if f.kind not in ("new_variable", "cited_data")]
+        if cited_flags:
+            add_group("Data reproduced from other publications", cited_flags)
         if new_var_flags:
             add_group("New variables not added to the CSV", new_var_flags)
         if other_paper_flags:
@@ -539,6 +542,12 @@ class MainWindow(QMainWindow):
     @staticmethod
     def _new_variables_html(result) -> str:
         parts = []
+        cited = [f for f in result.paper_flags if f.kind == "cited_data"]
+        if cited:
+            n_rows = sum(1 for r in result.rows if r.original_data_reference)
+            parts.append(f"<p><b>Note:</b> {n_rows} row(s) in {len(cited)} set(s)/figure(s) are data "
+                         f"reproduced from other publications (see <code>original_data_reference</code> "
+                         f"and the Flags tab).</p>")
         if result.accepted_variables:
             items = "".join(f"<li>{html.escape(a['name'])} &rarr; <code>{html.escape(a['column'])}</code> "
                             f"({html.escape(a['how'])})</li>" for a in result.accepted_variables)

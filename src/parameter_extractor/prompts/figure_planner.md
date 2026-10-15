@@ -34,6 +34,10 @@ Return a FigurePlan:
   - Points that represent different conditions within one series (e.g. a
     plot of rate vs pH where each point is a separate experiment) are still
     one series; describe that in `notes`.
+- `data_source`: '' if the plotted data was measured in this paper. If the
+  figure reproduces another publication's data ("redrawn from", "data from",
+  a reference number in the caption), give that original reference as the
+  reference list states it.
 - `duplicates_tabulated_data`: true if the plotted values appear to be the
   same numbers already given in one of the paper's tables (then the user may
   prefer to skip the figure). Explain in `duplicate_note`.

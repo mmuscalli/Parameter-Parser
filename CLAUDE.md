@@ -232,6 +232,28 @@ Step 1 as built:
   flat and avoid Optional where "" works; check
   `json.dumps(transform_schema(Model)).count("anyOf")` (Methodology: 21->6).
 
+## Wet-dry cycling + cited data (2026-10-14, from the truman2024 test)
+
+truman2024 (Journal of Creation review) reproduces wet-dry data from
+Rodriguez-Garcia 2015 and Campbell 2019 -- the first non-curated test paper.
+- Cited data: `PlannedSet.data_source` ('' = this paper's data) and
+  `FigurePlan/DigitizedFigure.data_source` -> `ExtractedRow.original_data_reference`
+  (optional provenance column, written only when filled) + `cited_data`
+  flags (own group in the GUI Flags tab). Live: all 5 truman sets
+  detected with full references incl. supplementary table numbers.
+- Wet-dry: `PlannedSample.cycle_number` (-> template cycle_number); optional
+  `wet_dry` stage (stages/wet_dry.py, flat schema) runs only if
+  `has_cycling(structure)`; values -> cycle_duration_hr + app STANDARD
+  columns (schemas/standard_columns.json, part of the bundled registry
+  base, after the template block, only when filled). Mickey: original
+  dataset only had initial temperature for wet-dry; extract phases if given.
+- Bugs found: per-sample initial concentrations (fixed in build_rows AND
+  the chemistry prompt -- it had said "sample_label null for initial";
+  unlabelled differing values are now left out + `conflicting_values` flag
+  rather than last-one-wins); per-set pH override dropped; caption case.
+- Open: SetOverride has no confidence (truman Table 2's "perhaps 130 C"
+  guess was written as fact).
+
 ## Non-obvious decisions — don't redo this research
 
 - **Schema shape is grounded in `../POLO_variable_mapping.csv`** (one level

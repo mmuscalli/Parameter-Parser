@@ -65,6 +65,17 @@ class ChemistryExtraction(BaseModel):
                     "-- surfaced for human review / ontology extension, never silently dropped.",
     )
 
+    def conflicting_set_species(self) -> set:
+        """(set_label, name) pairs with several DIFFERENT initial values for the same
+        set and no sample_label to tell them apart (seen in truman2024's Table 2
+        before the prompt asked for sample labels). Writing any one of them would
+        put wrong values on most rows, so they're left out and flagged."""
+        values: dict = {}
+        for s in self.solutes:
+            if s.role == "initial" and s.set_label is not None and not s.sample_label:
+                values.setdefault((s.set_label, s.name), set()).add(s.concentration_mM)
+        return {k for k, v in values.items() if len(v) > 1}
+
     def ambiguous_paper_wide_species(self) -> set:
         """Initial species given BOTH as paper-wide (set_label null) and for a
         specific set somewhere else. A genuinely paper-wide background reagent

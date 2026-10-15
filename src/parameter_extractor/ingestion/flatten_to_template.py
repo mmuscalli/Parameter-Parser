@@ -152,6 +152,7 @@ def build_rows(
     paper_prefix: str,
     drop_below: Optional[str] = settings.CONFIDENCE_DROP_BELOW,
     registry=None,
+    wet_dry=None,
 ) -> List[ExtractedRow]:
     """`drop_below`: values whose confidence ranks below this are left blank
     (None = keep everything). They're still reported by the plausibility checks."""
@@ -174,16 +175,27 @@ def build_rows(
         and _kept(s.confidence)
     }
 
+    # wet-dry cycle conditions per set ('' = every cycling set; set-specific wins)
+    cycling_sets = {s.set_label for s in structure.experiment_sets
+                    if s.set_type == "Evaporation Cycle" or any(x.cycle_number is not None for x in s.samples)}
+    cycle_values: dict = {}
+    for cp in (wet_dry.parameters if wet_dry else []):
+        targets = [cp.set_label] if cp.set_label else sorted(cycling_sets)
+        for label in targets:
+            if cp.set_label or (label, cp.parameter) not in cycle_values:
+                cycle_values[(label, cp.parameter)] = cp
+
     entry_number = 0
     for set_idx, pset in enumerate(structure.experiment_sets, start=1):
         set_id = f"{paper_prefix}{set_idx:03d}"
         # initial species for the whole set; ones with a sample_label (a starting
         # concentration that differs per sample, e.g. truman2024's Table 2) are applied
         # per sample below -- keying them by name here would let the last one win
+        conflicting = {name for (label, name) in chemistry.conflicting_set_species() if label == pset.set_label}
         set_species = {
             s.name: s for s in chemistry.solutes
             if s.set_label == pset.set_label and s.role == "initial" and _kept(s.confidence)
-            and not s.sample_label
+            and not s.sample_label and s.name not in conflicting
         }
         per_sample_initial = [
             s for s in chemistry.solutes
@@ -253,6 +265,18 @@ def build_rows(
             structure_src = CellSource(origin="structure", source=sample.source)
             prov["set_type"] = CellSource(origin="structure", source=pset.source_table_or_section)
             prov["duration_hr"] = structure_src
+            if sample.cycle_number is not None:
+                extra["cycle_number"] = sample.cycle_number
+                prov["cycle_number"] = structure_src
+            for (label, param), cp in cycle_values.items():
+                if label == pset.set_label and _kept(cp.confidence):
+                    extra[param] = cp.value
+                    prov[param] = CellSource(origin="wet-dry cycling", quote=cp.quote, source=cp.source,
+                                             confidence=cp.confidence)
+            if pset.data_source:
+                prov["original_data_reference"] = CellSource(
+                    origin="structure", source=pset.source_table_or_section,
+                    quote="data reproduced from another publication")
 
             rows.append(ExtractedRow(
                 provenance=prov,
@@ -281,6 +305,7 @@ def build_rows(
                 # dropped by drop_below, so check_row still flags them
                 extraction_confidence=_lowest_confidence(sampled_here),
                 source_notes=f"set: {pset.varying_condition_summary}; sample source: {sample.source}",
+                original_data_reference=pset.data_source or None,
             ))
 
     return rows
@@ -310,17 +335,24 @@ def row_to_template_dict(row: ExtractedRow) -> dict:
     return out
 
 
-# Not template columns: our provenance, always last.
+# Not template columns: our provenance, always last (the optional one only when filled).
 PROVENANCE_COLUMNS = ["yield_below_threshold_note", "source_notes", "extraction_confidence"]
+OPTIONAL_PROVENANCE_COLUMNS = ["original_data_reference"]
 
 
 def ordered_columns(present: set) -> List[str]:
     """ALL of PaperDataTemplate's columns, in its exact order (empty ones too),
-    so the rows can be pasted straight into the template. Columns the template
-    doesn't have (e.g. a species with no template column yet) come after that
-    block, then our provenance columns."""
-    extras = sorted(c for c in present if c not in _TEMPLATE_COLUMNS and c not in PROVENANCE_COLUMNS)
-    return list(_TEMPLATE_COLUMNS_ORDERED) + extras + PROVENANCE_COLUMNS
+    so the rows can be pasted straight into the template. After that block:
+    the app's standard columns that are filled (schemas/standard_columns.json,
+    in their order), then any other columns (accepted in review), then our
+    provenance columns."""
+    from parameter_extractor.registry import standard_columns
+    provenance = set(PROVENANCE_COLUMNS) | set(OPTIONAL_PROVENANCE_COLUMNS)
+    standard = [c for c in standard_columns() if c in present]
+    extras = sorted(c for c in present
+                    if c not in _TEMPLATE_COLUMNS and c not in provenance and c not in standard)
+    optional = [c for c in OPTIONAL_PROVENANCE_COLUMNS if c in present]
+    return list(_TEMPLATE_COLUMNS_ORDERED) + standard + extras + PROVENANCE_COLUMNS + optional
 
 
 def write_template_csv(records: List[dict], out_path: Path) -> None:

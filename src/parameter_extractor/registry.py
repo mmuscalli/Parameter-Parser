@@ -3,7 +3,9 @@ The variable registry: which columns exist, and which extracted names map to
 them.
 
   - Base list (bundled, read-only): PaperDataTemplate's 280 columns, from
-    schemas/template_vocab.json. The app never edits the template.
+    schemas/template_vocab.json (the app never edits the template), plus the
+    app's own standard columns from schemas/standard_columns.json (e.g. the
+    wet/dry phase conditions).
   - Local additions (per user, a JSON file in the user's app-data folder):
     columns the user accepted in the "Review new variables" screen, and
     aliases -- "this extracted name means that column" -- so the same
@@ -23,6 +25,12 @@ from typing import Dict, Optional, Set
 
 APP_NAME = "Parameter Extractor"
 _TEMPLATE_VOCAB = Path(__file__).resolve().parent / "schemas" / "template_vocab.json"
+_STANDARD_COLUMNS = Path(__file__).resolve().parent / "schemas" / "standard_columns.json"
+
+
+def standard_columns() -> list:
+    """App-defined standard columns (beyond the template), in their defined order."""
+    return [c["column"] for c in json.loads(_STANDARD_COLUMNS.read_text())["columns"]]
 
 
 def default_registry_path() -> Path:
@@ -55,7 +63,9 @@ class VariableRegistry:
         self.path = Path(path) if path else None
         vocab = json.loads(_TEMPLATE_VOCAB.read_text())
         self.template_columns = list(vocab["all_columns"])
+        self.standard_columns = standard_columns()
         self._template_set: Set[str] = set(self.template_columns)
+        self._base_set: Set[str] = self._template_set | set(self.standard_columns)
         self.added_columns: Dict[str, dict] = {}     # column -> {kind, added, note}
         self.aliases: Dict[str, str] = {}            # "kind:name" -> column
         if self.path and self.path.is_file():
@@ -66,13 +76,13 @@ class VariableRegistry:
     # ---- lookups -------------------------------------------------------------
 
     def is_known_column(self, column: Optional[str]) -> bool:
-        return bool(column) and (column in self._template_set or column in self.added_columns)
+        return bool(column) and (column in self._base_set or column in self.added_columns)
 
     def is_template_column(self, column: str) -> bool:
         return column in self._template_set
 
     def known_columns(self) -> list:
-        return self.template_columns + sorted(self.added_columns)
+        return self.template_columns + self.standard_columns + sorted(self.added_columns)
 
     def alias_for(self, kind: str, name: str) -> Optional[str]:
         """The column the user mapped this (kind, name) to, if it still exists."""
@@ -91,7 +101,7 @@ class VariableRegistry:
     # ---- additions (from the review screen) -----------------------------------
 
     def add_column(self, column: str, kind: str, note: str = "") -> None:
-        if not self.is_template_column(column) and column not in self.added_columns:
+        if column not in self._base_set and column not in self.added_columns:
             self.added_columns[column] = {"kind": kind, "added": date.today().isoformat(), "note": note}
 
     def add_alias(self, kind: str, name: str, column: str) -> None:

@@ -21,7 +21,7 @@ from parameter_extractor.schemas.row_schema import ExtractedRow
 
 FlagKind = Literal["out_of_range", "low_confidence", "ambiguous_paper_wide_species",
                    "possible_duplicate", "figure_problem", "new_variable",
-                   "term_not_found"]
+                   "term_not_found", "cited_data", "conflicting_values"]
 
 
 @dataclass
@@ -111,6 +111,16 @@ def check_extraction(
                     f"-- most likely a set-specific value missing its set_label. NOT applied to "
                     f"any row; assign it to the right set by hand.",
                     quote=s.quote, source=s.source))
+
+    for label, name in sorted(chemistry.conflicting_set_species()):
+        values = sorted({s.concentration_value for s in chemistry.solutes
+                         if s.role == "initial" and s.set_label == label and s.name == name and not s.sample_label},
+                        key=lambda v: (v is None, v))
+        flags.append(Flag(
+            "conflicting_values",
+            f"{name} in set '{label}' was extracted with several different starting values "
+            f"({', '.join(str(v) for v in values)}) and nothing saying which sample each belongs to. "
+            f"NOT written to any row; enter them by hand."))
 
     for field in _METHOD_FIELDS:
         f = getattr(methodology, field)

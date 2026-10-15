@@ -163,7 +163,11 @@ def build_figure_rows(
                                  f"'{series.label}', point {sample_idx}"
                                  + (f"; {series.notes}" if series.notes else ""),
                     extraction_confidence=DIGITIZED,
+                    original_data_reference=fig.data_source or None,
                 )
+                if fig.data_source:
+                    prov["original_data_reference"] = CellSource(
+                        origin=f"{fig.figure_id}", source=where, quote="figure reproduces another publication's data")
                 row.update(fields)   # axis/series values win over paper-wide defaults
                 rows.append(ExtractedRow(**row))
                 entry += 1

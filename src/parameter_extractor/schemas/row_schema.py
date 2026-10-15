@@ -57,10 +57,12 @@ class ExtractedRow(BaseModel):
 
     # any other column -> value (e.g. {"initial_pH": 2.6}, {"stirring": "none"}): template
     # columns without a dedicated field above, and columns the user accepted in review
-    extra: Dict[str, Union[float, str]] = {}
+    extra: Dict[str, Union[int, float, str]] = {}   # int kept whole (e.g. cycle_number)
 
     source_notes: Optional[str] = None
     extraction_confidence: Optional[str] = None
+    # set when the row's data is reproduced from another publication (not measured in this paper)
+    original_data_reference: Optional[str] = None
 
     # template column -> where its value came from (not written to the wide CSV)
     provenance: Dict[str, CellSource] = {}

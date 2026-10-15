@@ -65,6 +65,8 @@ from parameter_extractor.stages.metadata_extractor import run_metadata_extractio
 from parameter_extractor.stages.methodology_extractor import run_methodology_extraction
 from parameter_extractor.stages.structure_planner import run_structure_planner
 from parameter_extractor.stages.term_search import run_term_search
+from parameter_extractor.stages.wet_dry import has_cycling, run_wet_dry
+from parameter_extractor.schemas.wet_dry import WetDryConditions
 from parameter_extractor.stages.triage import run_triage
 from parameter_extractor.validation.plausibility_checks import Flag, check_extraction, check_row, flags_to_json
 
@@ -166,6 +168,7 @@ class Extraction:
     methodology: Optional[Methodology] = None
     chemistry: Optional[ChemistryExtraction] = None
     term_search: Optional[TermSearch] = None
+    wet_dry: Optional[WetDryConditions] = None
     structure_ready: threading.Event = field(default_factory=threading.Event)
     failure: Optional[str] = None
 
@@ -219,6 +222,11 @@ def extract(
             columns = VariableRegistry(config.registry_path).known_columns()
             ex.term_search = run_term_search(ctx, terms, parsed.text, ex.structure, columns)
 
+        if has_cycling(ex.structure):
+            ctx.total_steps += 1        # only papers with wet-dry cycling get this step
+            ctx.step("wet_dry", "Extracting wet-dry cycling conditions")
+            ex.wet_dry = run_wet_dry(ctx, parsed.text, ex.structure)
+
         ctx.step("chemistry", "Extracting solution chemistry")
         ex.chemistry = run_chemistry_extraction(ctx, parsed.text, ex.structure, vocab["species_names"],
                                                 table_images=table_images)
@@ -259,10 +267,11 @@ def finish(
     ctx.step("assemble", "Assembling rows and running checks")
     registry = VariableRegistry(config.registry_path)
     rows = build_rows(ex.metadata, ex.structure, ex.methodology, ex.chemistry, config.paper_prefix,
-                      drop_below=config.confidence_drop_below, registry=registry)
+                      drop_below=config.confidence_drop_below, registry=registry, wet_dry=ex.wet_dry)
     thresholds = dict(flag_below=config.confidence_flag_below,
                       drop_below=config.confidence_drop_below)
     paper_flags = check_extraction(ex.methodology, ex.chemistry, **thresholds)
+    paper_flags += _cited_data_flags(ex.structure)
     n_text_rows = len(rows)
 
     figure_summary, fig_new_vars = [], []
@@ -275,6 +284,12 @@ def finish(
         paper_flags += [Flag("figure_problem", p) for p in problems]
         for fig in digitized:
             save_digitized(fig, ctx.run_dir / "figures")
+            if fig.data_source:
+                paper_flags.append(Flag(
+                    "cited_data",
+                    f"{fig.figure_id} was digitized, but it reproduces another publication's data: "
+                    f"{fig.data_source}. Its rows say so in original_data_reference; consider "
+                    f"digitizing the original instead."))
             if fig.plan and fig.plan.duplicates_tabulated_data:
                 paper_flags.append(Flag(
                     "possible_duplicate",
@@ -355,6 +370,15 @@ def finish(
                      observations_path=observations_path,
                      figures=sorted(figure_summary, key=lambda f: f["figure_id"]),
                      new_variables=held_out, accepted_variables=accepted, unfound_terms=unfound)
+
+
+def _cited_data_flags(structure: StructurePlan) -> List[Flag]:
+    return [Flag("cited_data",
+                 f"Set '{s.set_label}' ({len(s.samples)} rows) is reproduced from another publication, not "
+                 f"measured in this paper: {s.data_source}. Its rows say so in original_data_reference; "
+                 f"consider extracting this data from the original paper instead.",
+                 source=s.source_table_or_section)
+            for s in structure.experiment_sets if s.data_source]
 
 
 def _unfound_terms(term_search: Optional[TermSearch]) -> List[str]:

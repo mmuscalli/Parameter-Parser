@@ -16,6 +16,9 @@ SetType = Literal["Independent", "Time Series", "Evaporation Cycle"]
 class PlannedSample(BaseModel):
     sample_label: str = Field(description="Short human-readable label, e.g. 't = 97.3 h'")
     duration_hr: Optional[float] = None
+    cycle_number: Optional[int] = Field(
+        default=None, description="Wet-dry cycling only: number of completed cycles at this sample. "
+                                  "null for anything that isn't cycling.")
     source: str = Field(description="e.g. 'Table 1, Na+ 3.33 mol dm-3 row, 1st time point'")
 
 
@@ -27,6 +30,12 @@ class PlannedSet(BaseModel):
                     "salt conc = 3.33 mol/dm3, T = 81 C'"
     )
     source_table_or_section: str
+    data_source: str = Field(
+        default="",
+        description="'' if this set's data was measured in THIS paper. If the paper reproduces it from "
+                    "another publication (cited table, redrawn figure, quoted results), the original "
+                    "reference as the paper gives it, e.g. 'Rodriguez-Garcia et al. 2015, Nat. Commun. 6:8385 "
+                    "(ref. 12)'.")
     samples: List[PlannedSample]
 
 

@@ -288,6 +288,13 @@ class DigitizerWidget(QWidget):
             h.addStretch(1)
             form.addRow(f"{axis.upper()} axis:", row)
 
+        self.source_edit = QLineEdit(placeholderText="leave empty if this paper measured it")
+        self.source_edit.setText(self.fig.data_source)
+        self.source_edit.setToolTip("If the figure reproduces another publication's data, its original "
+                                    "reference. The rows will say so, and a warning is added.")
+        self.source_edit.editingFinished.connect(
+            lambda: setattr(self.fig, "data_source", self.source_edit.text().strip()))
+
         self.var_widgets = {}
         for axis in ("x", "y"):
             combo = QComboBox(editable=True)
@@ -309,6 +316,7 @@ class DigitizerWidget(QWidget):
             h.addWidget(mult)
             self.var_widgets[axis] = (combo, mult)
             form.addRow(f"{axis.upper()} column:", row)
+        form.addRow("Data reproduced from:", self.source_edit)
         return box
 
     def _build_series_box(self) -> QWidget:
@@ -728,6 +736,11 @@ class DigitizerWidget(QWidget):
             notes.append("The model doesn't think this is a numeric data plot -- you may want to skip it.")
         if plan.duplicates_tabulated_data:
             notes.append(f"Possibly the same data as a table: {plan.duplicate_note or ''}")
+        if plan.data_source:
+            notes.append(f"This figure reproduces another publication's data: {plan.data_source}")
+            if not self.fig.data_source:
+                self.fig.data_source = plan.data_source
+                self.source_edit.setText(plan.data_source)
         if plan.notes:
             notes.append(plan.notes)
         if self._untouched():

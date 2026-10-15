@@ -83,6 +83,10 @@ class FigurePlan(BaseModel):
     panels: List[PlannedPanel] = Field(default_factory=list)
     duplicates_tabulated_data: bool = Field(
         description="True if the plotted points appear to be the same values already given in a table.")
+    data_source: str = Field(
+        default="", description="'' if the plotted data was measured in this paper; otherwise the original "
+                                "reference (e.g. a figure 'redrawn from ref. 12' -> that reference as the "
+                                "reference list gives it).")
     duplicate_note: Optional[str] = None
     notes: Optional[str] = None
 
@@ -137,6 +141,7 @@ class DigitizedFigure(BaseModel):
     render_scale: float
     page_image: str
     figure_bbox: Optional[BBox] = None              # the detected area, PDF points (for the audit image)
+    data_source: str = ""                           # original reference if the plotted data is cited
     panels: List[DigitizedPanel] = Field(default_factory=lambda: [DigitizedPanel()])
     series: List[DigitizedSeries] = Field(default_factory=list)
     plan: Optional[FigurePlan] = None               # the suggestions it started from, for the audit trail

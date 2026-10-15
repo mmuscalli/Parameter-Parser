@@ -23,7 +23,11 @@ For each species:
   reagent concentration present in every condition).
 - `sample_label`: for every "sampled" value, match exactly to the
   `sample_label` (within that set) from the structure plan, so each measured
-  value can be placed on the right row. Leave null for "initial" values.
+  value can be placed on the right row. For "initial" values, leave it null
+  when the value applies to the whole set -- but if a starting
+  concentration DIFFERS between the samples of one set (e.g. a sweep of
+  initial concentrations, one per row), give each its sample's
+  `sample_label`; otherwise the values can't be told apart.
 - Reported percent yields (e.g. "% (Gly)2") go in `concentration_value` with
   the unit as stated in `concentration_unit_raw`; leave `concentration_mM`
   null for them.

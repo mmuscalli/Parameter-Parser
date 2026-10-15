@@ -47,6 +47,24 @@ def test_per_sample_initial_concentrations_and_ph_override():
     assert rows[0].provenance["initial_pH"].origin == "methodology (per set)"
 
 
+def test_unlabelled_differing_initial_values_are_left_out_and_flagged():
+    """truman2024: four different starting Gly values for one set, no sample labels.
+    Picking any one would put wrong values on most rows."""
+    from parameter_extractor.validation.plausibility_checks import check_extraction
+    meta, structure = L(PaperMetadata, "metadata"), L(StructurePlan, "structure_planner")
+    meth, chem = L(Methodology, "methodology"), L(ChemistryExtraction, "chemistry")
+    s1 = structure.experiment_sets[0]
+    for v in (0.1, 1.0, 10.0):
+        chem.solutes.append(SoluteEntry(
+            name="Ala", in_controlled_vocab=True, phase="aq", role="initial", set_label=s1.set_label,
+            concentration_value=v / 1000, concentration_unit_raw="mol dm-3", concentration_mM=v,
+            quote="q", source="Table 2", confidence="high"))
+    rows = build_rows(meta, structure, meth, chem, "001")
+    assert all("initial_Ala_mM" not in row_to_template_dict(r) for r in rows)
+    flags = [f for f in check_extraction(meth, chem) if f.kind == "conflicting_values"]
+    assert len(flags) == 1 and "Ala" in flags[0].message
+
+
 if __name__ == "__main__":
     for name, fn in list(globals().items()):
         if name.startswith("test_") and callable(fn):

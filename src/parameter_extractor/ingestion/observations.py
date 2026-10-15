@@ -41,7 +41,7 @@ class Observation(BaseModel):
 # Unit from the column name, following the template's naming conventions.
 # Compound units first: "_mL_min" must win over "_min".
 _SUFFIX_UNITS = [
-    (r"_mL_min$", "mL/min"), (r"_%yield$", "%"), (r"_mM$", "mM"), (r"_C$", "°C"), (r"_hr$", "h"),
+    (r"_mL_min$", "mL/min"), (r"_%yield$", "%"), (r"_pct$", "%"), (r"_mM$", "mM"), (r"_C$", "°C"), (r"_hr$", "h"),
     (r"_h$", "h"), (r"_sec$", "s"), (r"_min$", "min"), (r"_bar$", "bar"), (r"_mL$", "mL"),
     (r"_uL$", "µL"), (r"_g$", "g"), (r"_nm$", "nm"), (r"_rpm$", "rpm"), (r"_K$", "K"),
 ]
@@ -75,7 +75,8 @@ def rows_to_observations(rows: List[ExtractedRow]) -> List[Observation]:
     return out
 
 
-_PIPELINE_COLUMNS = {"source_notes", "extraction_confidence", "yield_below_threshold_note"}
+_PIPELINE_COLUMNS = {"source_notes", "extraction_confidence", "yield_below_threshold_note",
+                     "original_data_reference"}
 
 
 def observations_to_records(observations: List[Observation]) -> List[dict]:

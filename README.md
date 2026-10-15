@@ -59,6 +59,21 @@ Cancel stops after the current step. When the run finishes:
 - **Summary**: token usage per step, plus buttons to open the results folder
   or the CSV.
 
+### Wet-dry cycling and cited data
+
+- **Wet-dry cycling** papers get an extra step (only when cycling sets are
+  found): each row's `cycle_number`, the set's `cycle_duration_hr`, and the
+  wet- and dry-phase conditions in the app's standard columns
+  `wet_phase_temperature_C`, `wet_phase_duration_hr`,
+  `wet_phase_relative_humidity_pct`, `dry_phase_temperature_C`,
+  `dry_phase_duration_hr` (written after the template's 280 columns, only
+  when filled; defined in `schemas/standard_columns.json`).
+- **Data reproduced from other publications** (reviews, comparison tables,
+  redrawn figures, quoted results) is detected per set and per digitized
+  figure. Those rows carry the original reference in
+  `original_data_reference`, and a warning suggests extracting from the
+  original paper instead.
+
 ### Parameters to look for
 
 Optionally list parameters you especially want found, one per line (e.g.
