@@ -11,7 +11,8 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
-from parameter_extractor.ingestion.flatten_to_template import build_rows, row_to_template_dict
+from parameter_extractor.ingestion.flatten_to_template import (build_rows, column_safe_name,
+                                                                proposed_column_for_solute, row_to_template_dict)
 from parameter_extractor.schemas.chemistry import ChemistryExtraction, SoluteEntry
 from parameter_extractor.schemas.methodology import Methodology, SetOverride
 from parameter_extractor.schemas.paper_metadata import PaperMetadata
@@ -63,6 +64,17 @@ def test_unlabelled_differing_initial_values_are_left_out_and_flagged():
     assert all("initial_Ala_mM" not in row_to_template_dict(r) for r in rows)
     flags = [f for f in check_extraction(meth, chem) if f.kind == "conflicting_values"]
     assert len(flags) == 1 and "Ala" in flags[0].message
+
+
+def test_proposed_column_names_are_csv_safe():
+    """kim2019's species have spaces and commas ("ribose 1,2-cyclic phosphate")."""
+    assert column_safe_name(" ribose 1,2-cyclic phosphate ") == "ribose_1_2-cyclic_phosphate"
+    e = SoluteEntry(name="cytidine 2'-phosphate", in_controlled_vocab=False, phase="aq", role="sampled",
+                    concentration_value=1.7, concentration_unit_raw="%", quote="q", source="Table 1",
+                    confidence="high")
+    assert proposed_column_for_solute(e) == "sampled_cytidine_2'-phosphate_%yield"
+    e.name, e.role, e.concentration_unit_raw = "ribose 1,2-cyclic phosphate", "initial", "mM"
+    assert proposed_column_for_solute(e) == "initial_ribose_1_2-cyclic_phosphate_aq_mM"
 
 
 if __name__ == "__main__":

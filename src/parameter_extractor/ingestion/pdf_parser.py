@@ -33,7 +33,17 @@ from typing import Dict, List, Optional
 
 from parameter_extractor.errors import PdfNotReadableError
 
-TABLE_CAPTION_RE = re.compile(r"(?m)^\s*Table\s+\d+\b")
+# A caption starting a line ("Table 1", "TABLE 1"), or mid-line in two-column layouts where
+# the left column's text comes first (kim2019: "...incubated at 85-125C in the Table 1.
+# Formation of Cytidine..."): "Table N." followed by a capitalised title. In-text
+# references like "(Table 1, Fig. 2)" match neither.
+TABLE_CAPTION_RE = re.compile(r"(?m)^\s*(?:Table|TABLE)\s+\d+\b|\b(?:Table|TABLE)\s+\d+\.\s+[A-Z][a-z]")
+# Word-gap threshold (points) for text extraction. pdfplumber's default (3) runs words
+# together in tightly set papers (kim2019: letter gaps ~0.1 pt, word gaps ~2-3 pt), so a
+# page that comes out with many implausibly long "words" is re-extracted with this.
+TIGHT_X_TOLERANCE = 1.5
+MERGED_WORD_LENGTH = 18
+MERGED_WORDS_THRESHOLD = 0.02
 
 
 @dataclass
@@ -58,6 +68,47 @@ def _clean(page_text: str) -> str:
     return "\n".join(line.rstrip() for line in page_text.splitlines()).rstrip() + "\n"
 
 
+# Symbol / "Pi" fonts draw Greek letters at Latin code points, so their text comes out as
+# Latin: kim2019's "5 µL" (AdvPi1 font) extracts as "5 mL" -- a 1000x unit error. Standard
+# Symbol fonts get the full Adobe Symbol mapping; vendor "Pi" fonts vary, so only the
+# near-universal m -> µ (micro) is applied to them.
+_SYMBOL_GREEK = dict(zip("abcdefghiklmnopqrstuwxyzDFGLPQSWY", "αβχδεφγηικλμνοπθρστυωξψζΔΦΓΛΠΘΣΩΨ"))
+_SYMBOL_GREEK["m"] = "µ"
+
+
+def _fix_symbol_font_chars(page) -> int:
+    """Map Latin letters drawn in Symbol/Pi fonts to what they display. Returns the count."""
+    n = 0
+    for c in page.chars:
+        font = (c.get("fontname") or "").lower()
+        if "symbol" in font:
+            mapped = _SYMBOL_GREEK.get(c["text"])
+        elif "pi" in font.split("+")[-1][:8] and c["text"] == "m":     # e.g. MKMFED+AdvPi1, MathematicalPi
+            mapped = "µ"
+        else:
+            mapped = None
+        if mapped:
+            c["text"] = mapped
+            n += 1
+    return n
+
+
+def _merged_word_ratio(text: str) -> float:
+    words = re.findall(r"[A-Za-z]{3,}", text)
+    return sum(len(w) > MERGED_WORD_LENGTH for w in words) / max(len(words), 1)
+
+
+def _page_text(page) -> tuple:
+    """(layout text, True if the tighter word-gap setting was needed)."""
+    _fix_symbol_font_chars(page)
+    text = page.extract_text(layout=True) or ""
+    if _merged_word_ratio(text) > MERGED_WORDS_THRESHOLD:
+        tight = page.extract_text(layout=True, x_tolerance=TIGHT_X_TOLERANCE) or ""
+        if _merged_word_ratio(tight) < _merged_word_ratio(text):
+            return tight, True
+    return text, False
+
+
 def find_table_pages(page_texts: List[str]) -> Dict[int, List[str]]:
     """Cheap heuristic: a page whose text contains a line starting 'Table N'
     almost certainly has a table on it worth rasterizing. Catches the common
@@ -69,7 +120,7 @@ def find_table_pages(page_texts: List[str]) -> Dict[int, List[str]]:
         captions = TABLE_CAPTION_RE.findall(text)
         if captions:
             # capture a bit more context than just "Table 1" for the audit trail
-            lines = [l.strip() for l in text.splitlines() if TABLE_CAPTION_RE.match(l)]
+            lines = [l.strip() for l in text.splitlines() if TABLE_CAPTION_RE.search(l)]
             found[i] = lines
     return found
 
@@ -115,8 +166,9 @@ def parse_pdf(pdf_path: str, paper_id: Optional[str] = None) -> ParsedPaper:
             page_count = len(doc.pages)
             char_count = sum(len(p.chars) for p in doc.pages)
             img_count = sum(len(p.images) for p in doc.pages)
-            page_texts = ([_clean(p.extract_text(layout=True) or "") for p in doc.pages]
-                          if char_count else [])
+            extracted = [_page_text(p) for p in doc.pages] if char_count else []
+            page_texts = [_clean(t) for t, _ in extracted]
+            tightened = [i for i, (_, tight) in enumerate(extracted, start=1) if tight]
     except Exception as e:  # pdfminer raises a zoo of types for corrupt/encrypted files
         raise PdfNotReadableError(f"Couldn't read '{path.name}' as a PDF ({type(e).__name__}: {e}).") from None
 
@@ -132,6 +184,9 @@ def parse_pdf(pdf_path: str, paper_id: Optional[str] = None) -> ParsedPaper:
         )
 
     table_pages = find_table_pages(page_texts)
+    if tightened:
+        warnings.append(f"Words ran together on page(s) {tightened} with the default spacing setting; "
+                        f"re-extracted with a tighter word-gap threshold.")
 
     if img_count > 0:
         warnings.append(

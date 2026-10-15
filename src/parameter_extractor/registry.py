@@ -52,7 +52,7 @@ def _alias_key(kind: str, name: str) -> str:
 
 def suggest_column_name(kind: str, name: str, role: Optional[str] = None) -> str:
     """A column name for a new variable in the template's style."""
-    slug = re.sub(r"[^A-Za-z0-9+\-]+", "_", name.strip()).strip("_")
+    slug = re.sub(r"[^A-Za-z0-9+\-']+", "_", name.strip()).strip("_")
     if kind == "species":
         return f"{role or 'initial'}_{slug}_aq_mM"
     return slug.lower()

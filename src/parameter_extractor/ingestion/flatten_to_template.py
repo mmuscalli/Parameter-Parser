@@ -11,6 +11,7 @@ names -- every stage upstream of this deliberately stays schema-narrow.
 from __future__ import annotations
 import csv
 import json
+import re
 from pathlib import Path
 from typing import List, Optional
 
@@ -108,11 +109,19 @@ _NOT_VALUE_FIELDS = {"full_id", "set_id", "sample_id", "set_type", "entry_number
                      "species_mM", "extra", "source_notes", "extraction_confidence"}
 
 
+def column_safe_name(name: str) -> str:
+    """A species name usable inside a column name: whitespace/commas/quotes -> '_'
+    ("cytidine 2'-phosphate" -> "cytidine_2'-phosphate"); primes etc. are kept,
+    since they matter chemically (2'- vs 5'-phosphate)."""
+    return re.sub(r'[\s,;"]+', "_", name.strip()).strip("_")
+
+
 def proposed_column_for_solute(entry) -> str:
     """What the column would be called if this new variable were accepted."""
+    name = column_safe_name(entry.name)
     if entry.role == "sampled" and is_percent(entry):
-        return f"sampled_{entry.name}_%yield"
-    return resolve_template_column(entry.name, entry.role).removesuffix(UNRECOGNIZED_SUFFIX)
+        return f"sampled_{name}_%yield"
+    return resolve_template_column(name, entry.role).removesuffix(UNRECOGNIZED_SUFFIX)
 
 
 def _solute_value(entry) -> Optional[float]:
