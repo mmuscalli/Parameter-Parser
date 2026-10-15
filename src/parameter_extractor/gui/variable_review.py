@@ -22,13 +22,15 @@ from PySide6.QtWidgets import (QAbstractItemView, QCheckBox, QComboBox, QComplet
                                QHeaderView, QLabel, QMessageBox, QPushButton, QSplitter, QTableWidget,
                                QTableWidgetItem, QVBoxLayout, QWidget)
 
-from parameter_extractor.ingestion.new_variables import VariableDecision, VariableGroup
+from parameter_extractor.ingestion.new_variables import VariableDecision, VariableGroup, stored_value
+from parameter_extractor.names import closest_names, vocabulary
 from parameter_extractor.registry import VariableRegistry
 
 ACTIONS = [("ignore", "Don't add"), ("new_column", "New column"), ("existing_column", "Existing column")]
 KIND_LABELS = {"species": "Species", "parameter": "Experimental parameter", "figure_axis": "Figure axis",
                "assumed_value": "ASSUMED value (not stated in the paper)"}
-COLS = ["Variable", "Type", "Values", "Example", "Add as", "Column", "Remember"]
+COLS = ["Variable", "Type", "Values", "Example", "Similar existing", "Add as", "Column", "Remember"]
+ACTION_COL, COLUMN_COL, REMEMBER_COL = 5, 6, 7
 
 
 def _value_text(v) -> str:
@@ -74,7 +76,8 @@ class VariableReviewDialog(QDialog):
         self.action_boxes, self.column_boxes, self.remember_boxes = [], [], []
         for r, g in enumerate(groups):
             example = next((_value_text(v) for v in g.values if _value_text(v)), "")
-            for c, text in enumerate([g.name, KIND_LABELS[g.kind], str(len(g.values)), example]):
+            similar = self._similar(g)
+            for c, text in enumerate([g.name, KIND_LABELS[g.kind], str(len(g.values)), example, similar]):
                 item = QTableWidgetItem(text)
                 item.setToolTip(text)
                 self.table.setItem(r, c, item)
@@ -97,19 +100,20 @@ class VariableReviewDialog(QDialog):
                 for c in range(4):
                     self.table.item(r, c).setForeground(Qt.GlobalColor.darkRed)
             action.currentIndexChanged.connect(lambda i, row=r: self._on_action(row, i))
-            self.table.setCellWidget(r, 4, action)
-            self.table.setCellWidget(r, 5, column)
-            self.table.setCellWidget(r, 6, self._centered(remember))
+            column.currentTextChanged.connect(lambda _t, row=r: self._refresh_preview(row))
+            self.table.setCellWidget(r, ACTION_COL, action)
+            self.table.setCellWidget(r, COLUMN_COL, column)
+            self.table.setCellWidget(r, REMEMBER_COL, self._centered(remember))
             self.action_boxes.append(action)
             self.column_boxes.append(column)
             self.remember_boxes.append(remember)
         self.table.resizeColumnsToContents()
-        self.table.setColumnWidth(5, 260)
+        self.table.setColumnWidth(COLUMN_COL, 260)
 
         self._shown = -1
-        self.values_table = QTableWidget(0, 4)
-        self.values_table.setHorizontalHeaderLabels(["Applies to", "Value (editable)", "Quote", "From"])
-        self.values_table.horizontalHeader().setSectionResizeMode(2, QHeaderView.ResizeMode.Stretch)
+        self.values_table = QTableWidget(0, 5)
+        self.values_table.setHorizontalHeaderLabels(["Applies to", "Value (editable)", "Stored as", "Quote", "From"])
+        self.values_table.horizontalHeader().setSectionResizeMode(3, QHeaderView.ResizeMode.Stretch)
         self.values_table.itemChanged.connect(self._on_value_edited)
         self.table.currentCellChanged.connect(lambda row, *_: self._show_values(row))
 
@@ -146,10 +150,22 @@ class VariableReviewDialog(QDialog):
         if column is not None:
             self.column_boxes[row].setCurrentText(column)
 
+    def _similar(self, g: VariableGroup) -> str:
+        """A hint only -- never applied automatically."""
+        if self.registry.is_known_column(g.proposed_column):
+            return ""
+        pool = vocabulary() if g.kind == "species" else self._columns
+        return ", ".join(closest_names(g.name, pool, n=2))
+
     def _on_action(self, row: int, index: int) -> None:
         action = ACTIONS[index][0]
         self.column_boxes[row].setEnabled(action != "ignore")
         self.remember_boxes[row].setEnabled(action != "ignore" and self.groups[row].kind != "assumed_value")
+        self._refresh_preview(row)
+
+    def _refresh_preview(self, row: int) -> None:
+        if row == self._shown:
+            self._show_values(row)
 
     def _accept_suggestions(self) -> None:
         """Suggested columns for new variables -- but assumed values stay "Don't add":
@@ -171,8 +187,15 @@ class VariableReviewDialog(QDialog):
         t.blockSignals(True)
         values = self.groups[row].values if 0 <= row < len(self.groups) else []
         t.setRowCount(len(values))
+        action = ACTIONS[self.action_boxes[row].currentIndex()][0] if values else "ignore"
+        column = self.column_boxes[row].currentText().strip() if values else ""
         for i, v in enumerate(values):
-            for c, text in enumerate([_where(v), _value_text(v), v.quote or "", v.origin]):
+            if action == "ignore" or not column:
+                stored = "(not added)"
+            else:
+                value, note = stored_value(v, column)
+                stored = (f"{value:g}" if isinstance(value, (int, float)) else str(value)) + (f"  ({note})" if note else "")
+            for c, text in enumerate([_where(v), _value_text(v), stored, v.quote or "", v.origin]):
                 item = QTableWidgetItem(text)
                 item.setToolTip(text)
                 if c != 1:
@@ -218,6 +241,12 @@ class VariableReviewDialog(QDialog):
             elif d.action == "existing_column" and not self.registry.is_known_column(d.column):
                 issues.append(f"'{g.name}': '{d.column}' isn't an existing column -- choose one from the "
                               f"list, or pick 'New column'.")
+            else:
+                bad = [str(v.value if v.value is not None else v.value_text) for v in g.values
+                       if stored_value(v, d.column)[1].startswith("not converted")]
+                if bad:
+                    issues.append(f"'{g.name}': {', '.join(repr(b) for b in bad[:3])} can't be converted to the "
+                                  f"unit of {d.column}. Edit the value(s) below, or choose another column.")
         return issues
 
     def _finish(self) -> None:

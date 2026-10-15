@@ -113,7 +113,7 @@ def test_review_decisions_and_registry_memory():
         set1 = [r for r in rows if r["set_id"] == "001001"]
         assert all(r["initial_RbCl_aq_mM"] == "200.0" for r in set1)
         assert all(r["initial_RbCl_aq_mM"] == "" for r in rows if r["set_id"] != "001001")
-        assert all(r["stirring_rate_rpm"] == "300" for r in rows)           # paper-wide: every row
+        assert all(r["stirring_rate_rpm"] == "300.0" for r in rows)         # paper-wide: every row; numeric
         assert rows[0]["sampled_DKP_Gly_%yield"] == "1.5"                    # merged into an existing column
         assert result.new_variables == [] and len(result.accepted_variables) == 3
 
@@ -127,7 +127,7 @@ def test_review_decisions_and_registry_memory():
         assert "called" not in seen
         header2, rows2 = _csv(result2)
         assert rows2[0]["initial_RbCl_aq_mM"] == "200.0" and rows2[0]["sampled_DKP_Gly_%yield"] == "1.5"
-        assert rows2[0]["stirring_rate_rpm"] == "300 rpm"                    # the paper's value (the edit was per run)
+        assert rows2[0]["stirring_rate_rpm"] == "300.0"                      # the paper's "300 rpm", read into the rpm column
         assert all("earlier review" in a["how"] for a in result2.accepted_variables)
 
 
@@ -147,7 +147,7 @@ def test_term_search_findings_and_not_found_terms():
         seen["unfound"] = unfound
         vol = next(g for g in groups if g.name == "reaction volume")
         seen["proposed"] = vol.proposed_column
-        vol.values[0].value_text = "1"
+        # no manual edit: "1 cm3" is converted into the mL column automatically
         return [VariableDecision("reaction volume", "parameter", "existing_column", "solvent_volume_mL")]
 
     with tempfile.TemporaryDirectory() as tmp:
@@ -156,7 +156,9 @@ def test_term_search_findings_and_not_found_terms():
         assert seen["unfound"] == ["flowthrough recirculation time"]
         assert seen["proposed"] == "solvent_volume_mL"                       # model's column suggestion kept
         header, rows = _csv(result)
-        assert all(r["solvent_volume_mL"] == "1" for r in rows)
+        assert all(r["solvent_volume_mL"] == "1.0" for r in rows)          # "1 cm3" -> 1 mL automatically
+        obs = [o for o in csv.DictReader(open(result.observations_path)) if o["column"] == "solvent_volume_mL"]
+        assert "read from '1 cm3'" in obs[0]["source"]
         assert result.unfound_terms == ["flowthrough recirculation time"]
         assert any(f.kind == "term_not_found" for f in result.paper_flags)
         summary = json.loads((result.run_dir / "run_summary.json").read_text())

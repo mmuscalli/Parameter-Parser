@@ -43,6 +43,7 @@ from parameter_extractor.digitizing.annotate import save_digitized
 from parameter_extractor.ingestion.figure_finder import find_figures
 from parameter_extractor.ingestion.figure_rows import build_figure_rows
 from parameter_extractor.ingestion.flatten_to_template import build_rows, write_template_csv
+from parameter_extractor.ingestion.normalize import normalize_chemistry
 from parameter_extractor.ingestion.observations import (
     observations_to_records, rows_to_observations, write_observations_csv)
 from parameter_extractor.ingestion.new_variables import (
@@ -266,12 +267,15 @@ def finish(
     ex, ctx, config = extraction, extraction.ctx, extraction.ctx.config
     ctx.step("assemble", "Assembling rows and running checks")
     registry = VariableRegistry(config.registry_path)
+    normalization = normalize_chemistry(ex.chemistry)     # names -> vocabulary; mM re-checked
     rows = build_rows(ex.metadata, ex.structure, ex.methodology, ex.chemistry, config.paper_prefix,
                       drop_below=config.confidence_drop_below, registry=registry, wet_dry=ex.wet_dry)
     thresholds = dict(flag_below=config.confidence_flag_below,
                       drop_below=config.confidence_drop_below)
     paper_flags = check_extraction(ex.methodology, ex.chemistry, wet_dry=ex.wet_dry, **thresholds)
     paper_flags += _cited_data_flags(ex.structure)
+    paper_flags += [Flag("unit_conversion", n.message, quote=n.quote or None, source=n.source or None)
+                    for n in normalization if n.kind == "unit_corrected"]
     n_text_rows = len(rows)
 
     figure_summary, fig_new_vars = [], []
@@ -313,14 +317,17 @@ def finish(
     new_vars += fig_new_vars
     known, pending = split_known(new_vars, registry)
     accepted = []
+    conversion_problems = []
     for column, v in known:
-        write_values(rows, column, [v])
+        conversion_problems += write_values(rows, column, [v])[1]
         accepted.append({"name": v.name, "kind": v.kind, "column": column, "values": 1,
                          "how": "recognised from an earlier review"})
     groups = group_new_variables(pending)
     unfound = _unfound_terms(ex.term_search)
     decisions = review(groups, unfound, registry) if (review and (groups or unfound)) else []
     left_out = apply_decisions(rows, groups, decisions, registry)
+    conversion_problems += apply_decisions.problems
+    paper_flags += [Flag("unit_conversion", p) for p in conversion_problems]
     by_key = {(d.kind, d.alias_name): d for d in decisions}
     for g in groups:
         d = by_key.get((g.kind, g.alias_name))
@@ -370,6 +377,7 @@ def finish(
                    new_variables_left_out=len(left_out),
                    new_variables_accepted=[a["name"] for a in accepted],
                    searched_terms=list(config.focus_terms), unfound_terms=unfound,
+                   normalization=[{"kind": n.kind, "change": n.message} for n in normalization],
                    figures=sorted(figure_summary, key=lambda f: f["figure_id"]))
 
     return RunResult(paper_id=ex.paper_id, run_dir=ctx.run_dir, csv_path=csv_path, rows=rows,

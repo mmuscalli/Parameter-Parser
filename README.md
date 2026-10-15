@@ -74,6 +74,22 @@ Cancel stops after the current step. When the run finishes:
   `original_data_reference`, and a warning suggests extracting from the
   original paper instead.
 
+### Units and names
+
+- **Names**: species are matched onto the template's names before anything
+  is treated as new. For example "sodium chloride" / "NaCl(aq)" -> NaCl,
+  "glycine" -> Gly, "diglycine" / "Gly-Gly" / "(Gly)2" -> 2peptide_Gly,
+  "Ca2+" -> Ca+2, "CuCl2·2H2O" -> CuCl2. Only exact rules and a synonym table
+  are used, never fuzzy guessing; matches are noted in the value's
+  provenance.
+- **Concentrations** are recomputed from the value and unit as printed. A
+  missing mM value is filled in; if the extraction's own arithmetic
+  disagrees, the recomputed value is used and flagged.
+- **Units when adding a variable**: values are converted to the chosen
+  column's unit ("1 cm3" -> 1 for a `_mL` column, "45 min" -> 0.75 for
+  `_hr`). The review window shows each value's "Stored as" preview and
+  won't build the dataset with a value that can't be converted.
+
 ### Parameters to look for
 
 Optionally list parameters you especially want found, one per line (e.g.

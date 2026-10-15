@@ -132,7 +132,10 @@ def _from_extracted(field, origin: str = "methodology") -> CellSource:
 
 
 def _from_solute(s) -> CellSource:
-    return CellSource(origin="chemistry", quote=s.quote or "", source=s.source or "", confidence=s.confidence)
+    source = s.source or ""
+    if s.conversion_note:
+        source = f"{source} [{s.conversion_note}]" if source else s.conversion_note
+    return CellSource(origin="chemistry", quote=s.quote or "", source=source, confidence=s.confidence)
 
 
 _METHOD_COLUMNS = {   # template column -> Methodology field

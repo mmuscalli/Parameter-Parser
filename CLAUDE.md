@@ -265,6 +265,24 @@ Rodriguez-Garcia 2015 and Campbell 2019 -- the first non-curated test paper.
   `tests/test_truman2024_replay.py` replays it byte for byte;
   `test_pipeline_offline.make_replay(dir)` replays any reference run.
 
+## Units + name matching (2026-10-15)
+
+- `units.py`: explicit unit table (no pint): parse_quantity("1 × 10-3 M"),
+  convert(), to_column_unit(raw, unit, column_unit). Refuses ranges, OCR-lost
+  exponents ("10–4 M"), unknown units, wrong dimensions -- never guesses.
+  Column units come from observations.unit_for_column.
+- `names.py`: match_species() = exact rules + generated synonyms (amino
+  acids, oligomer names/notations -> "<n>peptide_<AA>" even beyond the vocab,
+  named salts, ion charges "Ca2+" -> "Ca+2", hydrates, state suffixes).
+  closest_names() is display-only ("Similar existing" in review).
+- `ingestion/normalize.py` normalize_chemistry() runs at the start of finish():
+  renames to canonical + recomputes mM (fills missing; corrects >1% model
+  arithmetic errors with a `unit_conversion` flag); notes go into
+  conversion_note -> provenance. Summary lists all changes.
+- `new_variables.stored_value()` converts review/registry values to the
+  column unit (provenance: "read from '1 cm3'"); unconvertible -> text +
+  `unit_conversion` flag; the review window blocks building with them.
+
 ## Non-obvious decisions — don't redo this research
 
 - **Schema shape is grounded in `../POLO_variable_mapping.csv`** (one level

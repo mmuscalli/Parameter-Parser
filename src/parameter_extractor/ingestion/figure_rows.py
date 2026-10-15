@@ -97,6 +97,10 @@ def build_figure_rows(
             for sp in series.initial_species:
                 if sp.concentration_mM is None or not sp.name:
                     continue
+                from parameter_extractor.names import match_species
+                matched = match_species(sp.name)
+                if matched and matched[0] != sp.name:
+                    sp = sp.model_copy(update={"name": matched[0]})
                 candidates = (f"initial_{sp.name}_aq_mM", f"initial_{sp.name}_mM")
                 col = (registry.alias_for("species", f"initial {sp.name}")
                        or next((c for c in candidates if registry.is_known_column(c)), None))

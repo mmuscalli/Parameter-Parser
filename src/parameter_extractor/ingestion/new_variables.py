@@ -158,21 +158,40 @@ def group_new_variables(new_vars: List[NewVariable]) -> List[VariableGroup]:
     return list(groups.values())
 
 
-def write_values(rows: List[ExtractedRow], column: str, values: List[NewVariable]) -> int:
-    """Write each value into `column` on the rows it applies to. Returns cells written."""
+def stored_value(v: NewVariable, column: str):
+    """(value as it will be written into `column`, note). Converted to the column's
+    unit when the column has one ("1 cm3" -> 1 for a _mL column, "45 min" -> 0.75 for
+    _hr); left as-is with note 'not converted' when that can't be done safely."""
+    from parameter_extractor.ingestion.observations import unit_for_column
+    from parameter_extractor.units import to_column_unit
+    raw = v.value if v.value is not None else v.value_text
+    column_unit = unit_for_column(column)
+    if raw in (None, "") or not column_unit or column_unit == "pH":
+        return raw, ""
+    conversion = to_column_unit(raw, v.unit, column_unit)
+    if conversion is None:
+        return raw, f"not converted to {column_unit}"
+    return conversion.value, conversion.note
+
+
+def write_values(rows: List[ExtractedRow], column: str, values: List[NewVariable]) -> Tuple[int, List[str]]:
+    """Write each value into `column` (converted to its unit) on the rows it applies
+    to. Returns (cells written, problems: values that couldn't be converted)."""
     by_id = {r.full_id: r for r in rows}
-    n = 0
+    n, problems = 0, []
     for v in values:
-        value = v.value if v.value is not None else v.value_text
+        value, note = stored_value(v, column)
         if value in (None, ""):
             continue
+        if note.startswith("not converted"):
+            problems.append(f"'{v.name}' value '{value}' was written to {column} as text: {note}.")
         source = CellSource(origin=f"{v.origin} (new variable '{v.name}')", quote=v.quote or "",
-                            source=v.source or "", confidence=v.confidence)
+                            source=(v.source or "") + (f" [{note}]" if note else ""), confidence=v.confidence)
         for rid in v.row_ids:
             if rid in by_id:
                 set_row_value(by_id[rid], column, value, source)
                 n += 1
-    return n
+    return n, problems
 
 
 def apply_decisions(rows: List[ExtractedRow], groups: List[VariableGroup],
@@ -181,13 +200,15 @@ def apply_decisions(rows: List[ExtractedRow], groups: List[VariableGroup],
     Returns the groups left out (not accepted)."""
     by_key = {(d.kind, d.alias_name): d for d in decisions}
     left_out = []
+    apply_decisions.problems = []
     for g in groups:
         d = by_key.get((g.kind, g.alias_name))
         if d is None or d.action == "ignore" or not d.column.strip():
             left_out.append(g)
             continue
         column = d.column.strip()
-        write_values(rows, column, g.values)
+        _, problems = write_values(rows, column, g.values)
+        apply_decisions.problems += problems
         if d.remember and g.kind != "assumed_value":     # a guess is decided per paper, never remembered
             if d.action == "new_column":
                 registry.add_column(column, g.kind, note=f"accepted for '{g.name}'")
