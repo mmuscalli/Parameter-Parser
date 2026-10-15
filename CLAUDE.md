@@ -343,8 +343,23 @@ keep it for now, refresh after the open issues are sorted).
   glycylalanine; `registry.is_peptide_column` makes these columns KNOWN (no
   review needed -- a defined standard, like stock_). Cyclic peptides stay
   unmatched (review). The template's `mixedPeptide_*` columns are not used.
+- **Cyclic peptides** (Mickey, 2026-10-15): `<role>_cyclo_<AA1>-<AA2>-..._<mM|%yield>`
+  for homo- and heteromeric rings (`names.cyclic_codes`: cyclo(...), c(...),
+  DKP_X, "X diketopiperazine/anhydride", 2,5-piperazinedione -> cyclo_Gly-Gly).
+  The template's DKP_* columns are rewritten to this naming in set_row_value
+  (`current_column_name`), and the PubChem template map follows it. Residue
+  order is kept as written (cyclo_Val-Gly and cyclo_Gly-Val stay distinct --
+  open question whether to canonicalise rotations). Cyclic yields count
+  toward total_sampled_peptides_yield.
+- **Figure review is two-pass** (Mickey): Skip/Digitize for every figure
+  first, then the chosen ones open in the digitizer in turn; suggestions are
+  requested (prefetched) when a figure is chosen.
+- **Value quotes are checked too**: `CellSource.quote_verified` ->
+  observations column `quote_in_paper` (yes/no/'') and the Rows-tab hover text
+  ("Model's wording ..."). Pipeline-generated text is no longer put in quote
+  fields (set summaries, the cited-data marker).
 - **total_sampled_peptides_yield** (`calculators/peptide_totals.py`, runs after
-  the review): sum of the row's linear-peptide %yields (DKP excluded),
+  the review): sum of the row's peptide %yields (linear and cyclic),
   origin "calculated" with the parts listed; a stated total ("Total Gly in
   peptides" -> mapped straight to the column) is kept and checked against the
   sum (`conflicting_values` beyond 0.05 points).

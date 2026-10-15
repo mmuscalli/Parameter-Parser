@@ -29,16 +29,21 @@ def test_peptide_names():
     cases = {"Gly-Ala-Ala": "Gly-Ala-Ala", "H-Gly-L-Ala-OH": "Gly-Ala", "glycylalanine": "Gly-Ala",
              "Ala-Gly": "Ala-Gly", "GlyAla": "Gly-Ala", "alanylglycylvaline": "Ala-Gly-Val",
              "glycylglycylglycine": "3peptide_Gly", "Gly-Gly": "2peptide_Gly", "L-alanyl-L-alanine": "2peptide_Ala",
-             "Gly14": "14peptide_Gly", "dialanine": "2peptide_Ala"}
+             "Gly14": "14peptide_Gly", "dialanine": "2peptide_Ala", "14peptide_Gly": "14peptide_Gly",
+             # cyclic, homo- or heteromeric: cyclo_<AA1>-<AA2>-..., the template's DKP_<AA> included
+             "DKP_Gly": "cyclo_Gly-Gly", "cyclo(Val-Gly)": "cyclo_Val-Gly", "c(L-Ala-L-Gly)": "cyclo_Ala-Gly",
+             "glycine anhydride": "cyclo_Gly-Gly", "alanine diketopiperazine": "cyclo_Ala-Ala",
+             "2,5-piperazinedione": "cyclo_Gly-Gly", "cyclo_Gly-Gly": "cyclo_Gly-Gly"}
     for name, expected in cases.items():
         assert match_species(name)[0] == expected, (name, match_species(name))
-    for left_alone in ("cyclo(Gly-Ala)", "Cl-", "MMP-Glycine", "Gly"):
+    for left_alone in ("cyclohexane", "Cl-", "MMP-Glycine", "Gly", "cyclo_Gly"):
         assert match_species(left_alone) in (None, (left_alone, "exact")), left_alone
 
 
 def test_peptide_columns_are_constructed_not_listed():
     reg = VariableRegistry(None)
     for col in ("sampled_14peptide_Gly_%yield", "sampled_Gly-Ala-Ala_%yield", "initial_Ala-Gly_mM",
+                "sampled_cyclo_Gly-Gly_%yield", "sampled_cyclo_Val-Gly_mM",
                 "sampled_2peptide_Gly_%yield", "stock_Gly-Ala_mM"):
         assert reg.is_known_column(col), col
     for col in ("sampled_1peptide_Gly_mM", "sampled_Gly-Gly_mM", "sampled_Gly-Foo_mM", "sampled_Gly-Ala_aq_mM"):
@@ -73,12 +78,27 @@ def test_total_peptide_yield_is_summed_or_checked():
     filled, differing = fill_total_peptide_yield([calc, stated_ok, stated_partial, none])
     assert filled == ["001001001"]
     d = row_to_template_dict(calc)
-    assert d["total_sampled_peptides_yield"] == 3.334                    # DKP (cyclic) not added
+    assert d["total_sampled_peptides_yield"] == 12.334                   # cyclic (DKP) counts too
+    assert d["sampled_cyclo_Gly-Gly_%yield"] == 9.0 and "sampled_DKP_Gly_%yield" not in d   # old name moved
     prov = calc.provenance["total_sampled_peptides_yield"]
-    assert prov.origin == "calculated" and "2peptide_Gly 2.77 + 3peptide_Gly 0.064 + Gly-Ala-Ala 0.5" in prov.source
+    assert prov.origin == "calculated" and "2peptide_Gly 2.77 + 3peptide_Gly 0.064" in prov.source
+    assert "Gly-Ala-Ala 0.5" in prov.source and "cyclo_Gly-Gly 9" in prov.source
     assert row_to_template_dict(stated_ok)["total_sampled_peptides_yield"] == 3.01      # stated: kept
     assert [x[0] for x in differing] == ["001003001"]                    # 0.05 listed vs 2.56 stated
     assert "total_sampled_peptides_yield" not in row_to_template_dict(none)
+
+
+def test_value_quotes_are_marked_in_provenance_and_observations():
+    from parameter_extractor.ingestion.observations import rows_to_observations
+    from parameter_extractor.validation.quotes import check_row_quotes
+    text = json.loads((ROOT / "runs" / "eder1994_auto" / "parsed_paper.json").read_text())["text"]
+    row = _row({})
+    set_row_value(row, "vessel_material", "glass", CellSource(origin="methodology", quote="heated in a glass flask"))
+    set_row_value(row, "initial_temperature_C", 81.0,
+                  CellSource(origin="methodology", quote="Table 1 conditions list the reaction temperature, 81 C"))
+    assert check_row_quotes([row], text) == 1
+    obs = {o.column: o for o in rows_to_observations([row])}
+    assert obs["vessel_material"].quote_in_paper == "yes" and obs["initial_temperature_C"].quote_in_paper == "no"
 
 
 def test_flag_quotes_must_be_the_papers_words():

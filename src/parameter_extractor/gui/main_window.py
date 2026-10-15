@@ -492,7 +492,10 @@ class MainWindow(QMainWindow):
                                           if src.confidence in ("high", "medium", "low") else "")]
         if src.source:
             lines.append(f"Where: {src.source}")
-        if src.quote:
+        if src.quote and src.quote_verified is False:
+            lines.append(f"Model's wording (not found word for word in the paper's text -- its own "
+                         f"description, or read from a table image): {src.quote}")
+        elif src.quote:
             lines.append(f"\u201c{src.quote}\u201d")
         return "\n".join(lines)
 

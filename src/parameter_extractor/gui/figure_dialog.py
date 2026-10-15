@@ -1,12 +1,16 @@
 """
-Figure review: after the automatic extraction, step through each figure the
-PDF contains and choose Skip or Digitize. Digitized figures come back as
-DigitizedFigure objects for pipeline.finish(); skipped ones never reach the
-dataset.
+Figure review, in two passes (Mickey, 2026-10-15):
 
-Suggestions (pipeline.plan_figure, one API call) are requested only when the
-user chooses Digitize, on a background thread, and fill in the editor when
-they arrive -- the user can start calibrating meanwhile.
+  1. choose: each figure the PDF contains is shown in turn -- Skip or Digitize;
+  2. digitize: then the chosen figures open in the digitizer, one after another.
+
+Digitized figures come back as DigitizedFigure objects for pipeline.finish();
+skipped ones never reach the dataset.
+
+Suggestions (pipeline.plan_figure, one API call) are requested only for
+figures the user chooses to digitize -- as soon as they're chosen, on a
+background thread, so they're usually ready by the time that figure's editor
+opens. Until they arrive the user can start calibrating.
 """
 from __future__ import annotations
 import threading
@@ -72,9 +76,12 @@ class FigureReviewDialog(QDialog):
         self.bridge = plan_bridge
         self.digitized: List[DigitizedFigure] = []
         self.skipped: List[str] = []
-        self.index = -1
+        self.chosen: List[FigureCandidate] = []      # to digitize, in the order chosen
+        self.index = -1                              # pass 1: figure being decided
+        self.digitize_index = -1                     # pass 2: position in `chosen`
         self.editor: Optional[DigitizerWidget] = None
-        self._plan_request: Optional[int] = None
+        self._plans: Dict[str, tuple] = {}           # figure_id -> ("plan", plan) / ("error", message)
+        self._plan_requests: Dict[str, int] = {}
 
         self.header = QLabel()
         self.header.setStyleSheet("font-size: 15px; font-weight: 600;")
@@ -82,7 +89,7 @@ class FigureReviewDialog(QDialog):
         self.bg_status.setStyleSheet("color: palette(placeholder-text);")
         self.stack = QStackedWidget()
 
-        # page 0: decide
+        # page 0: choose
         decide = QWidget()
         dv = QVBoxLayout(decide)
         self.preview = QLabel(alignment=Qt.AlignmentFlag.AlignCenter)
@@ -93,7 +100,7 @@ class FigureReviewDialog(QDialog):
         self.caption.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
         dv.addWidget(self.caption)
         drow = QHBoxLayout()
-        self.digitize_btn = QPushButton("Digitize this figure", clicked=self._start_digitizing, default=True)
+        self.digitize_btn = QPushButton("Digitize this figure", clicked=self._choose, default=True)
         self.skip_btn = QPushButton("Skip", clicked=self._skip)
         self.skip_rest_btn = QPushButton("Skip all remaining figures", clicked=self._skip_rest)
         drow.addWidget(self.digitize_btn)
@@ -101,10 +108,9 @@ class FigureReviewDialog(QDialog):
         drow.addStretch(1)
         drow.addWidget(self.skip_rest_btn)
         dv.addLayout(drow)
-        hint = QLabel("Skipped figures are left out of the dataset. Digitized points are added as "
-                      "extra rows, marked 'digitized'.")
-        hint.setStyleSheet("color: palette(placeholder-text);")
-        dv.addWidget(hint)
+        self.choose_hint = QLabel()
+        self.choose_hint.setStyleSheet("color: palette(placeholder-text);")
+        dv.addWidget(self.choose_hint)
         self.stack.addWidget(decide)
 
         # page 1: digitize (editor inserted per figure)
@@ -112,7 +118,7 @@ class FigureReviewDialog(QDialog):
         self.digitize_layout = QVBoxLayout(self.digitize_page)
         self.digitize_layout.setContentsMargins(0, 0, 0, 0)
         brow = QHBoxLayout()
-        self.cancel_digitizing_btn = QPushButton("Skip this figure", clicked=self._skip)
+        self.cancel_digitizing_btn = QPushButton("Skip this figure", clicked=self._skip_digitizing)
         self.save_btn = QPushButton("Save figure data and continue", clicked=self._save)
         brow.addWidget(self.cancel_digitizing_btn)
         brow.addStretch(1)
@@ -132,27 +138,42 @@ class FigureReviewDialog(QDialog):
         """Shows how the text extraction running alongside this review is doing."""
         self.bg_status.setText(text)
 
-    # ---- navigation ------------------------------------------------------------
+    # ---- pass 1: choose ----------------------------------------------------------
 
     @property
     def figure(self) -> FigureCandidate:
+        """The figure on screen: being decided (pass 1) or digitized (pass 2)."""
+        if self.digitize_index >= 0:
+            return self.chosen[self.digitize_index]
         return self.figures[self.index]
 
     def _next(self) -> None:
-        self._drop_editor()
         self.index += 1
         if self.index >= len(self.figures):
-            self.accept()
+            self._next_to_digitize()
             return
         f = self.figure
-        self.header.setText(f"{f.figure_id} (page {f.page}) -- figure {self.index + 1} of {len(self.figures)}")
+        self.header.setText(f"{f.figure_id} (page {f.page}) -- figure {self.index + 1} of {len(self.figures)}: "
+                            f"digitize or skip?")
         pix = QPixmap(f.crop_image)
         if pix.width() > 1100:
             pix = pix.scaledToWidth(1100, Qt.TransformationMode.SmoothTransformation)
         self.preview.setPixmap(pix)
         self.caption.setText(f"Caption (as read from the PDF): {f.caption}")
+        chosen = ", ".join(c.figure_id for c in self.chosen)
+        self.choose_hint.setText(
+            "Choose for every figure first; the ones you pick to digitize then open one after another"
+            + (f" (so far: {chosen})." if chosen else ".")
+            + " Skipped figures are left out of the dataset; digitized points are added as extra rows, "
+              "marked 'digitized'.")
         self.stack.setCurrentIndex(0)
         self.digitize_btn.setFocus()
+
+    def _choose(self) -> None:
+        f = self.figure
+        self.chosen.append(f)
+        self._request_plan(f)              # prefetch: usually ready by the time the editor opens
+        self._next()
 
     def _skip(self) -> None:
         self.skipped.append(self.figure.figure_id)
@@ -160,19 +181,55 @@ class FigureReviewDialog(QDialog):
 
     def _skip_rest(self) -> None:
         self.skipped += [f.figure_id for f in self.figures[self.index:]]
+        self.index = len(self.figures) - 1
+        self._next()
+
+    # ---- pass 2: digitize the chosen figures ---------------------------------------
+
+    def _next_to_digitize(self) -> None:
         self._drop_editor()
-        self.index = len(self.figures)
-        self.accept()
+        self.digitize_index += 1
+        if self.digitize_index >= len(self.chosen):
+            self.accept()
+            return
+        f = self.figure
+        self.header.setText(f"Digitizing {f.figure_id} (page {f.page}) -- {self.digitize_index + 1} of "
+                            f"{len(self.chosen)} chosen")
+        self._start_digitizing()
+
+    def _skip_digitizing(self) -> None:
+        self.skipped.append(self.figure.figure_id)
+        self._next_to_digitize()
 
     def reject(self) -> None:
-        """Closing the window = skip whatever hasn't been decided yet (work already
-        saved is kept)."""
-        if 0 <= self.index < len(self.figures):
-            self.skipped += [f.figure_id for f in self.figures[self.index:]]
+        """Closing the window = skip whatever hasn't been decided or digitized yet
+        (figures already saved are kept)."""
+        if self.digitize_index < 0:
+            self.skipped += [f.figure_id for f in self.figures[max(self.index, 0):]]
+            self.skipped += [c.figure_id for c in self.chosen]
+        else:
+            self.skipped += [c.figure_id for c in self.chosen[self.digitize_index:]]
         self._drop_editor()
+        for rid in self._plan_requests.values():
+            if self.bridge is not None:
+                self.bridge.cancel(rid)
         super().reject()
 
-    # ---- digitizing --------------------------------------------------------------
+    def _request_plan(self, f: FigureCandidate) -> None:
+        if self.bridge is None or f.figure_id in self._plan_requests:
+            return
+
+        def done(kind, value, fid=f.figure_id):
+            self._plans[fid] = (kind, value)
+            self._plan_requests.pop(fid, None)
+            if self.editor is not None and self.editor.fig.figure_id == fid:
+                self._apply_plan(fid)
+        self._plan_requests[f.figure_id] = self.bridge.request(
+            f, lambda plan: done("plan", plan), lambda msg: done("error", msg))
+
+    def _apply_plan(self, figure_id: str) -> None:
+        kind, value = self._plans[figure_id]
+        (self.editor.offer_plan(value) if kind == "plan" else self.editor.show_plan_error(value))
 
     def _start_digitizing(self) -> None:
         f = self.figure
@@ -182,20 +239,16 @@ class FigureReviewDialog(QDialog):
         self.editor = DigitizerWidget(model, self.columns)
         self.digitize_layout.insertWidget(0, self.editor, 1)
         self.stack.setCurrentIndex(1)
-        if self.bridge is not None:
+        if f.figure_id in self._plans:
+            self._apply_plan(f.figure_id)
+        elif self.bridge is not None:
+            self._request_plan(f)
             self.editor.suggestion_label.setText(
                 "Getting suggestions for the axes and series from the figure and caption... You can "
                 "start calibrating. (If the text extraction is still in its first steps, this waits "
                 "for the experiment structure, up to about a minute.)")
-            editor = self.editor
-            self._plan_request = self.bridge.request(
-                f, lambda plan: editor.offer_plan(plan) if editor is self.editor else None,
-                lambda msg: editor.show_plan_error(msg) if editor is self.editor else None)
 
     def _drop_editor(self) -> None:
-        if self._plan_request is not None and self.bridge is not None:
-            self.bridge.cancel(self._plan_request)
-        self._plan_request = None
         if self.editor is not None:
             self.digitize_layout.removeWidget(self.editor)
             self.editor.deleteLater()
@@ -227,4 +280,4 @@ class FigureReviewDialog(QDialog):
             if answer != QMessageBox.StandardButton.Yes:
                 return
         self.digitized.append(self.editor.fig)
-        self._next()
+        self._next_to_digitize()

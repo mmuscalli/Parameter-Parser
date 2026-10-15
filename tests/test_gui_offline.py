@@ -371,6 +371,32 @@ def test_digitize_a_figure_by_clicking():
         assert r.species_mM == {"initial_KCl_aq_mM": 3000} and "K+" in r.source_notes
 
 
+def test_choose_every_figure_first_then_digitize():
+    """Skip/Digitize is decided for every figure before any digitizer opens; the
+    chosen ones then open in order, their suggestions requested when chosen."""
+    if not PDF.is_file():
+        print(f"SKIP: needs {PDF}"); return
+    plan = FigurePlan(figure_id="x", is_data_plot=True, plot_kind="scatter", duplicates_tabulated_data=False,
+                      panels=[])
+    with tempfile.TemporaryDirectory() as tmp:
+        figures = [f for f in find_figures(str(PDF), Path(tmp)) if f.number in (1, 3, 5)]
+        bridge = InstantPlans(plan)
+        dlg = FigureReviewDialog(figures, ["duration_hr"], plan_bridge=bridge)
+        dlg.show(); _pump()
+        dlg.digitize_btn.click()                              # Fig. 1: digitize
+        assert dlg.editor is None and "Fig. 3" in dlg.header.text() and dlg.stack.currentIndex() == 0
+        assert "so far: Fig. 1" in dlg.choose_hint.text()
+        dlg.skip_btn.click()                                  # Fig. 3: skip
+        dlg.digitize_btn.click()                              # Fig. 5: digitize -> now the digitizer opens
+        assert bridge.requests == ["Fig. 1", "Fig. 5"]       # prefetched when chosen
+        assert dlg.stack.currentIndex() == 1 and dlg.editor.fig.figure_id == "Fig. 1"
+        assert "1 of 2 chosen" in dlg.header.text()
+        dlg.cancel_digitizing_btn.click()                     # changed my mind about Fig. 1
+        assert dlg.editor.fig.figure_id == "Fig. 5" and "2 of 2 chosen" in dlg.header.text()
+        dlg.reject()                                          # closing: Fig. 5 not done -> skipped
+        assert sorted(dlg.skipped) == ["Fig. 1", "Fig. 3", "Fig. 5"] and dlg.digitized == []
+
+
 def test_trackpad_zoom_and_overlapping_points():
     if not PDF.is_file():
         print(f"SKIP: needs {PDF}"); return

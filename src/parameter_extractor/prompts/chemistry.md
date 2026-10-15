@@ -16,6 +16,9 @@ For each species:
   triglycine) and a peptide of different amino acids by its sequence in
   three-letter codes, N- to C-terminus, joined by "-" ("Gly-Ala-Ala") --
   order matters there, so keep it exactly as the paper gives it.
+  A cyclic peptide (including diketopiperazines) is "cyclo_" plus its
+  residues the same way: "cyclo_Gly-Gly" for the glycine DKP,
+  "cyclo_Val-Gly".
 - Record the concentration in BOTH its original reported unit
   (`concentration_value` + `concentration_unit_raw`) and converted to mM
   (`concentration_mM`). Only fill `concentration_mM` when the conversion is

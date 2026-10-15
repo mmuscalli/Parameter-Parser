@@ -48,7 +48,8 @@ def default_registry_path() -> Path:
 def _peptide_column_re():
     from parameter_extractor.names import AMINO_ACIDS
     aa = "(?:" + "|".join(AMINO_ACIDS) + ")"
-    return re.compile(rf"(?:initial|sampled)_(?:(?P<n>\d+)peptide_{aa}|(?P<seq>{aa}(?:-{aa})+))_(?:mM|%yield)")
+    return re.compile(rf"(?:initial|sampled)_(?:(?P<n>\d+)peptide_{aa}|(?P<cyclo>cyclo_{aa}(?:-{aa})+)|"
+                      rf"(?P<seq>{aa}(?:-{aa})+))_(?:mM|%yield)")
 
 
 _PEPTIDE_COLUMN = None
@@ -58,7 +59,8 @@ def is_peptide_column(column: str) -> bool:
     """Columns built by the peptide naming convention (names.peptide_name) are standard,
     for any length and sequence -- not only the lengths PaperDataTemplate happened to
     need: '<role>_<n>peptide_<AA>_<mM|%yield>' (homopolymer, n >= 2) and
-    '<role>_<AA1>-<AA2>-..._<mM|%yield>' (heteropolymer: in order, not all the same)."""
+    '<role>_<AA1>-<AA2>-..._<mM|%yield>' (heteropolymer: in order, not all the same),
+    '<role>_cyclo_<AA1>-<AA2>-..._<mM|%yield>' (cyclic, homo- or heteromeric)."""
     global _PEPTIDE_COLUMN
     _PEPTIDE_COLUMN = _PEPTIDE_COLUMN or _peptide_column_re()
     m = _PEPTIDE_COLUMN.fullmatch(column)
@@ -66,6 +68,8 @@ def is_peptide_column(column: str) -> bool:
         return False
     if m.group("n"):
         return int(m.group("n")) >= 2
+    if m.group("cyclo"):
+        return True                     # cyclic: homo- or heteromeric
     return len(set(m.group("seq").split("-"))) > 1
 
 

@@ -44,7 +44,7 @@ _COMMON = {"urea": "urea", "imidazole": "imidazole", "cyanamide": "cyanamide", "
            "edta": "EDTA", "atp": "ATP", "amp": "AMP", "ump": "UMP", "trimetaphosphate": "sodium_triMP",
            "sodium trimetaphosphate": "sodium_triMP", "stmp": "sodium_triMP", "carbonyl sulfide": "COS",
            "hydrogen sulfide": "H2S", "sulfur dioxide": "SO2", "carbon monoxide": "CO",
-           "carbon disulfide": "CS2", "diketopiperazine": "DKP_Gly", "cyclo(gly-gly)": "DKP_Gly"}
+           "carbon disulfide": "CS2"}
 _SUBSCRIPTS = str.maketrans("₀₁₂₃₄₅₆₇₈₉⁰¹²³⁴⁵⁶⁷⁸⁹⁺⁻−–", "01234567890123456789+---")
 
 
@@ -62,6 +62,42 @@ def peptide_name(codes: List[str]) -> str:
     doesn't matter -> '<n>peptide_<AA>' ('3peptide_Gly'); a heteropolymer's does ->
     residues N- to C-terminus joined by '-' ('Gly-Ala-Ala')."""
     return _oligomer(len(codes), codes[0]) if len(set(codes)) == 1 else "-".join(codes)
+
+
+def cyclic_name(codes: List[str]) -> str:
+    """Cyclic peptides, homo- or heteromeric (Mickey, 2026-10-15): 'cyclo_<AA1>-<AA2>-...',
+    residues as given ('cyclo_Gly-Gly' = the glycine diketopiperazine, 'cyclo_Val-Gly')."""
+    return "cyclo_" + "-".join(codes)
+
+
+def _aa_code(text: str) -> Optional[str]:
+    t = re.sub(r"^(?:dl|l|d)-", "", text.strip().lower())
+    return next((c for c, full in AMINO_ACIDS.items() if t in (c.lower(), full)), None)
+
+
+def cyclic_codes(name: str) -> Optional[List[str]]:
+    """Residues of a cyclic peptide: 'cyclo(Gly-Ala)', 'c(Gly-Gly)', 'cyclo-Gly-Ala',
+    'DKP_Gly', 'glycine diketopiperazine', 'Ala-DKP', 'alanine anhydride',
+    '2,5-diketopiperazine' / '2,5-piperazinedione' (the glycine one)."""
+    t = name.strip()
+    if t.startswith("cyclo_"):                   # already in the app's naming
+        codes = peptide_codes(t[6:])
+        return codes if codes and len(codes) >= 2 else None
+    m = re.fullmatch(r"(?:cyclo|c)\s*-?\s*[(\[]\s*(.+?)\s*[)\]]", t, re.IGNORECASE) or \
+        re.fullmatch(r"cyclo[-\s]+(.+)", t, re.IGNORECASE)
+    if m:
+        return peptide_codes(m.group(1))
+    m = re.fullmatch(r"DKP_([A-Z][a-z]{2})", t)
+    if m and m.group(1) in AMINO_ACIDS:
+        return [m.group(1)] * 2
+    low = t.lower()
+    if re.fullmatch(r"(?:2,5-)?(?:diketopiperazine|piperazine-?2,5-dione|piperazinedione)", low):
+        return ["Gly", "Gly"]                    # the unsubstituted DKP is cyclo(Gly-Gly)
+    m = re.fullmatch(r"(.+?)[\s_-]+(?:diketopiperazine|dkp|anhydride)", low) or \
+        re.fullmatch(r"(?:dkp|diketopiperazine)[\s_-]+(.+)", low)
+    if m and (code := _aa_code(m.group(1))):
+        return [code, code]
+    return None
 
 
 def peptide_codes(name: str) -> Optional[List[str]]:
@@ -111,6 +147,12 @@ def match_species(name: str, vocab: Optional[Tuple[str, ...]] = None) -> Optiona
     if not name:
         return None
     raw = name.strip()
+    cyclic = cyclic_codes(raw)                    # before the exact match: the template's DKP_Gly too
+    if cyclic:
+        return cyclic_name(cyclic), "cyclic peptide"
+    m = re.fullmatch(r"(\d+)peptide_([A-Z][a-z]{2})", raw)   # the convention's own names, any length
+    if m and int(m.group(1)) >= 2 and m.group(2) in AMINO_ACIDS:
+        return raw, "exact" if raw in vocab_set else "peptide name"
     if raw in vocab_set:
         return raw, "exact"
 

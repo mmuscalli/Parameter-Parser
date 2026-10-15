@@ -107,9 +107,20 @@ def column_for_solute(entry, registry=None) -> Optional[str]:
     return next((c for c in candidates if registry.is_known_column(c)), None)
 
 
+_OLD_DKP = re.compile(r"(initial|sampled)_DKP_([A-Z][a-z]{2})_(mM|%yield)")
+
+
+def current_column_name(column: str) -> str:
+    """The template's DKP_<AA> columns follow the cyclic naming now:
+    sampled_DKP_Gly_%yield -> sampled_cyclo_Gly-Gly_%yield (e.g. chosen as a figure axis)."""
+    m = _OLD_DKP.fullmatch(column)
+    return f"{m.group(1)}_cyclo_{m.group(2)}-{m.group(2)}_{m.group(3)}" if m else column
+
+
 def set_row_value(row: ExtractedRow, column: str, value, source: Optional[CellSource] = None) -> None:
     """Write a value into any column of a row: a dedicated field if the row has
     one, a concentration column, or `extra` (other template / accepted columns)."""
+    column = current_column_name(column)
     if source is not None:
         row.provenance[column] = source
     field = _FIELD_FOR_TEMPLATE.get(column, column)
@@ -303,7 +314,8 @@ def build_rows(
                 prov[fname] = CellSource(
                     origin="methodology (per set)" + (", derived" if o.basis == "derived" else ""),
                     source=o.source or pset.source_table_or_section,
-                    quote=o.quote or pset.varying_condition_summary, confidence=o.confidence)
+                    quote=o.quote,       # never the set summary: that's the model's wording, not the paper's
+                    confidence=o.confidence)
             structure_src = CellSource(origin="structure", source=sample.source)
             prov["set_type"] = CellSource(origin="structure", source=pset.source_table_or_section)
             prov["duration_hr"] = structure_src
@@ -317,8 +329,8 @@ def build_rows(
                                              quote=cp.quote, source=cp.source, confidence=cp.confidence)
             if pset.data_source:
                 prov["original_data_reference"] = CellSource(
-                    origin="structure", source=pset.source_table_or_section,
-                    quote="data reproduced from another publication")
+                    origin="structure (data reproduced from another publication)",
+                    source=pset.source_table_or_section)
 
             rows.append(ExtractedRow(
                 provenance=prov,

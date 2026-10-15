@@ -7,7 +7,8 @@ its stated value; otherwise, for any row with at least one sampled peptide
 %-yield, the sum is filled in and marked as calculated, listing what was
 added. Peptides are the columns of the peptide naming convention
 (registry.is_peptide_column): homopolymers of length >= 2 and sequences.
-Cyclic forms (DKP_*) are not linear peptides and are not added.
+Cyclic peptides (cyclo_*, e.g. the DKPs) count too: they draw on the same pool
+of amino-acid monomers (Mickey, 2026-10-15).
 
 Where the paper states the total, the sum is a check: a difference beyond
 rounding is reported (rounding in the paper, or lengths it doesn't list).

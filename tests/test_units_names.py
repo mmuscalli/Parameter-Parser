@@ -51,7 +51,7 @@ def test_name_matching():
     for name, expected in cases.items():
         got = match_species(name)
         assert got and got[0] == expected, (name, got)
-    for unmatched in ("RbCl", "cyclo(Gly-Ala)", "Foo", "montmorillonite"):
+    for unmatched in ("RbCl", "Foo-Bar", "Foo", "montmorillonite"):
         assert match_species(unmatched) is None, unmatched
     assert closest_names("glycineamide", ["glycinamide", "Gly"]) == ["glycinamide"]
 

@@ -114,7 +114,8 @@ def test_review_decisions_and_registry_memory():
         assert all(r["initial_RbCl_aq_mM"] == "200.0" for r in set1)
         assert all(r["initial_RbCl_aq_mM"] == "" for r in rows if r["set_id"] != "001001")
         assert all(r["stirring_rate_rpm"] == "300.0" for r in rows)         # paper-wide: every row; numeric
-        assert rows[0]["sampled_DKP_Gly_%yield"] == "1.5"                    # merged into an existing column
+        # merged into an existing column -- the template's DKP_Gly column, written in the cyclic naming
+        assert rows[0]["sampled_cyclo_Gly-Gly_%yield"] == "1.5" and rows[0]["sampled_DKP_Gly_%yield"] == ""
         assert result.new_variables == [] and len(result.accepted_variables) == 3
 
         saved = json.loads(reg_path.read_text())

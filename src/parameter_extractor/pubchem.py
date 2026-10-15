@@ -62,8 +62,10 @@ def template_species_cids() -> Dict[int, str]:
     was confirmed (schemas/species_cids.json, built by scripts/build_species_cids.py)."""
     if not SPECIES_CIDS.is_file():
         return {}
+    from parameter_extractor.names import match_species
     data = json.loads(SPECIES_CIDS.read_text())
-    return {int(v["cid"]): name for name, v in data["species"].items()}
+    # in the app's naming (the template's DKP_Gly is cyclo_Gly-Gly)
+    return {int(v["cid"]): (match_species(name) or (name,))[0] for name, v in data["species"].items()}
 
 
 class PubChem:

@@ -97,3 +97,20 @@ def check_flag_quotes(flags: Iterable, paper_text: str) -> None:
         f.quote = QUOTE_SEPARATOR.join(found) or None
         if missing:
             f.unverified_quote = QUOTE_SEPARATOR.join(missing)
+
+
+def check_row_quotes(rows, paper_text: str) -> int:
+    """Marks every value's provenance quote as found in the paper or not
+    (CellSource.quote_verified). Returns how many were NOT found."""
+    paper = PaperText(paper_text)
+    seen: dict = {}
+    missing = 0
+    for row in rows:
+        for src in row.provenance.values():
+            if not src.quote:
+                continue
+            if src.quote not in seen:
+                seen[src.quote] = paper.contains(src.quote)
+            src.quote_verified = seen[src.quote]
+            missing += not src.quote_verified
+    return missing
