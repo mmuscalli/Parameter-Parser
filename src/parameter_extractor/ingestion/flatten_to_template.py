@@ -71,7 +71,14 @@ def base_registry():
 def species_alias_name(entry) -> str:
     """How the registry remembers a species value: role and % vs concentration
     matter ("initial RbCl" and "sampled RbCl %" are different variables)."""
-    return f"{entry.role} {entry.name}" + (" %" if entry.role == "sampled" and is_percent(entry) else "")
+    return f"{_column_role(entry)} {entry.name}" + (" %" if entry.role == "sampled" and is_percent(entry) else "")
+
+
+def _column_role(entry) -> str:
+    """Column prefix: initial / sampled, or stock for a stock-solution concentration
+    (stock_<name>_aq_mM -- not a template column; known wherever the species'
+    initial column is, see VariableRegistry.is_known_column)."""
+    return "stock" if getattr(entry, "concentration_basis", "mixture") == "stock" else entry.role
 
 
 def column_for_solute(entry, registry=None) -> Optional[str]:
@@ -83,10 +90,15 @@ def column_for_solute(entry, registry=None) -> Optional[str]:
     alias = registry.column_for("species", species_alias_name(entry))
     if alias:
         return alias
+    if _column_role(entry) == "stock":         # follows wherever the starting concentration was mapped
+        initial = registry.column_for("species", f"initial {entry.name}")
+        if initial and initial.startswith("initial_") and registry.is_known_column("stock_" + initial[8:]):
+            return "stock_" + initial[8:]
     if entry.role == "sampled" and is_percent(entry):
         candidates = (f"sampled_{entry.name}_%yield", f"sampled_{entry.name}_aq_%yield")
     else:
-        candidates = (f"{entry.role}_{entry.name}_aq_mM", f"{entry.role}_{entry.name}_mM")
+        role = _column_role(entry)
+        candidates = (f"{role}_{entry.name}_aq_mM", f"{role}_{entry.name}_mM")
     return next((c for c in candidates if registry.is_known_column(c)), None)
 
 
@@ -121,6 +133,9 @@ def proposed_column_for_solute(entry) -> str:
     name = column_safe_name(entry.name)
     if entry.role == "sampled" and is_percent(entry):
         return f"sampled_{name}_%yield"
+    if _column_role(entry) == "stock":
+        initial = resolve_template_column(name, "initial").removesuffix(UNRECOGNIZED_SUFFIX)
+        return "stock_" + initial.removeprefix("initial_")
     return resolve_template_column(name, entry.role).removesuffix(UNRECOGNIZED_SUFFIX)
 
 
@@ -144,7 +159,8 @@ def _from_solute(s) -> CellSource:
     source = s.source or ""
     if s.conversion_note:
         source = f"{source} [{s.conversion_note}]" if source else s.conversion_note
-    return CellSource(origin="chemistry", quote=s.quote or "", source=source, confidence=s.confidence)
+    return CellSource(origin="calculated" if s.derived else "chemistry", quote=s.quote or "", source=source,
+                      confidence=s.confidence)
 
 
 _METHOD_COLUMNS = {   # template column -> Methodology field
@@ -182,8 +198,8 @@ def build_rows(
     # ChemistryExtraction.ambiguous_paper_wide_species)
     ambiguous = chemistry.ambiguous_paper_wide_species()
     constant_species = {
-        s.name: s for s in chemistry.solutes
-        if s.set_label is None and s.role == "initial" and s.name not in ambiguous
+        s.variable: s for s in chemistry.solutes
+        if s.set_label is None and s.role == "initial" and s.variable not in ambiguous
         and _kept(s.confidence)
     }
 
@@ -207,9 +223,9 @@ def build_rows(
         # per sample below -- keying them by name here would let the last one win
         conflicting = {name for (label, name) in chemistry.conflicting_set_species() if label == pset.set_label}
         set_species = {
-            s.name: s for s in chemistry.solutes
+            s.variable: s for s in chemistry.solutes
             if s.set_label == pset.set_label and s.role == "initial" and _kept(s.confidence)
-            and not s.sample_label and s.name not in conflicting
+            and not s.sample_label and s.variable not in conflicting
         }
         per_sample_initial = [
             s for s in chemistry.solutes

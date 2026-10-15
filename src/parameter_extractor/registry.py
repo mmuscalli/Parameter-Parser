@@ -45,6 +45,11 @@ def default_registry_path() -> Path:
     return base / "variable_registry.json"
 
 
+def default_pubchem_cache_path() -> Path:
+    """Next to the registry: names already looked up on PubChem."""
+    return default_registry_path().parent / "pubchem_cache.json"
+
+
 def _alias_key(kind: str, name: str) -> str:
     normalized = re.sub(r"\s+", " ", name.strip().lower())
     return f"{kind}:{normalized}"
@@ -69,17 +74,25 @@ class VariableRegistry:
         self.added_columns: Dict[str, dict] = {}     # column -> {kind, added, note}
         self.aliases: Dict[str, str] = {}            # "kind:name" -> column (name lowercased for matching)
         self.alias_labels: Dict[str, str] = {}       # same key -> the name as first written, for display
+        self.species_ids: Dict[str, str] = {}        # PubChem CID -> species name accepted in a review
         self._changed = False
         if self.path and self.path.is_file():
             data = json.loads(self.path.read_text())
             self.added_columns = data.get("columns", {})
             self.aliases = data.get("aliases", {})
             self.alias_labels = data.get("alias_labels", {})
+            self.species_ids = data.get("species_ids", {})
 
     # ---- lookups -------------------------------------------------------------
 
     def is_known_column(self, column: Optional[str]) -> bool:
-        return bool(column) and (column in self._base_set or column in self.added_columns)
+        if not column:
+            return False
+        if column in self._base_set or column in self.added_columns:
+            return True
+        # a species' stock-solution concentration goes with its starting concentration:
+        # stock_X_aq_mM is known wherever initial_X_aq_mM is
+        return column.startswith("stock_") and self.is_known_column("initial_" + column.removeprefix("stock_"))
 
     def is_template_column(self, column: str) -> bool:
         return column in self._template_set
@@ -114,6 +127,21 @@ class VariableRegistry:
         self.alias_labels.setdefault(key, name.strip())
         self._changed = True
 
+    def species_for_cid(self, cid: int) -> Optional[str]:
+        """The name a species with this PubChem CID was accepted under, if its
+        aliases still exist -- so a different name for the same compound in a
+        later paper lands in the same column."""
+        name = self.species_ids.get(str(cid))
+        if name and any(self.split_alias(k)[1].split(" ", 1)[-1].removesuffix(" %") == name.lower()
+                        for k in self.aliases if k.startswith("species:")):
+            return name
+        return None
+
+    def remember_species_id(self, cid: int, name: str) -> None:
+        if cid and self.species_ids.get(str(cid)) is None:
+            self.species_ids[str(cid)] = name
+            self._changed = True
+
     # ---- managing local additions (the "Remembered variables" window) ------------
 
     @staticmethod
@@ -128,11 +156,12 @@ class VariableRegistry:
         label = self.alias_labels.get(key, name)
         if kind == "species":
             parts = label.split(" ", 1)
-            if len(parts) == 2 and parts[0] in ("initial", "sampled"):
+            if len(parts) == 2 and parts[0] in ("initial", "sampled", "stock"):
                 role, species = parts
                 pct = species.endswith(" %")
                 species = species.removesuffix(" %")
-                what = "starting concentration" if role == "initial" else ("measured, % yield" if pct else "measured")
+                what = {"initial": "starting concentration", "stock": "stock solution, before mixing"}.get(
+                    role, "measured, % yield" if pct else "measured")
                 return f"{species} ({what})"
         return label
 
@@ -160,6 +189,8 @@ class VariableRegistry:
         for k in removed:
             del self.aliases[k]
             self.alias_labels.pop(k, None)
+        # identities whose names no longer point anywhere are forgotten too
+        self.species_ids = {cid: n for cid, n in self.species_ids.items() if self.species_for_cid(int(cid))}
         self._changed = True
         return removed
 
@@ -181,5 +212,5 @@ class VariableRegistry:
             return
         self.path.parent.mkdir(parents=True, exist_ok=True)
         self.path.write_text(json.dumps({"columns": self.added_columns, "aliases": self.aliases,
-                                         "alias_labels": self.alias_labels},
+                                         "alias_labels": self.alias_labels, "species_ids": self.species_ids},
                                         indent=2, ensure_ascii=False, sort_keys=True))

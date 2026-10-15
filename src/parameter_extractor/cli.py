@@ -27,6 +27,7 @@ from pathlib import Path
 from parameter_extractor.config.run_config import RunConfig
 from parameter_extractor.errors import PipelineError
 from parameter_extractor.pipeline import run_pipeline, run_triage_only
+from parameter_extractor.pricing import format_usd
 from parameter_extractor.run_context import ProgressEvent
 
 
@@ -49,11 +50,15 @@ def main() -> int:
     parser.add_argument("--triage-only", action="store_true",
                         help="Only screen the paper against prompts/triage.md's inclusion "
                              "criteria; skip extraction")
+    parser.add_argument("--no-pubchem", action="store_true",
+                        help="Don't look up species names on PubChem (used to recognise synonyms; "
+                             "only the names are sent)")
     args = parser.parse_args()
 
-    from parameter_extractor.registry import default_registry_path
+    from parameter_extractor.registry import default_pubchem_cache_path, default_registry_path
     overrides = {"paper_prefix": args.prefix, "registry_path": default_registry_path(),
-                 "focus_terms": args.look_for}
+                 "focus_terms": args.look_for, "use_pubchem": not args.no_pubchem,
+                 "pubchem_cache_path": default_pubchem_cache_path()}
     if args.out:
         overrides["output_dir"] = args.out
     config = RunConfig.from_settings(**overrides)
@@ -84,7 +89,8 @@ def main() -> int:
               f"review screen): {', '.join(names)}")
     if result.unfound_terms:
         print(f"Not stated in the paper: {'; '.join(result.unfound_terms)}")
-    print(f"Tokens: {result.input_tokens:,} in / {result.output_tokens:,} out")
+    print(f"Tokens: {result.input_tokens:,} in / {result.output_tokens:,} out "
+          f"(estimated cost {format_usd(result.cost_usd)})")
     return 0
 
 

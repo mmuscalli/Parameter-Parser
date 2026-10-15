@@ -19,7 +19,7 @@ from dataclasses import dataclass, field
 from typing import Dict, List, Literal, Optional, Tuple
 
 from parameter_extractor.ingestion.flatten_to_template import (
-    _solute_value, column_for_solute, proposed_column_for_solute, set_row_value, species_alias_name)
+    _from_solute, _solute_value, column_for_solute, proposed_column_for_solute, set_row_value, species_alias_name)
 from parameter_extractor.registry import VariableRegistry, suggest_column_name
 from parameter_extractor.schemas.chemistry import ChemistryExtraction
 from parameter_extractor.schemas.methodology import Methodology
@@ -90,8 +90,10 @@ def collect_new_variables(
             kind="species", name=s.name, alias_name=species_alias_name(s),
             proposed_column=proposed_column_for_solute(s), role=s.role, value=_solute_value(s),
             unit="%" if pct else ("mM" if s.concentration_mM is not None else s.concentration_unit_raw),
-            set_label=s.set_label, sample_label=s.sample_label, quote=s.quote, source=s.source,
-            confidence=s.confidence, origin="chemistry", row_ids=rows_for(s.set_label, s.sample_label)))
+            set_label=s.set_label, sample_label=s.sample_label, quote=s.quote, source=_from_solute(s).source,
+            confidence=s.confidence, origin="calculated" if s.derived else "chemistry",
+            row_ids=rows_for(s.set_label, s.sample_label), pubchem_cid=s.pubchem_cid,
+            pubchem_title=s.pubchem_title))
     for p in methodology.other_parameters:
         found.append(NewVariable(
             kind="parameter", name=p.name, alias_name=p.name,
@@ -213,4 +215,7 @@ def apply_decisions(rows: List[ExtractedRow], groups: List[VariableGroup],
             if d.action == "new_column":
                 registry.add_column(column, g.kind, note=f"accepted for '{g.name}'")
             registry.add_alias(g.kind, g.alias_name, column)
+            cid = next((v.pubchem_cid for v in g.values if v.pubchem_cid), 0)
+            if g.kind == "species" and cid:
+                registry.remember_species_id(cid, g.name)
     return left_out

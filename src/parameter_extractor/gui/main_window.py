@@ -33,7 +33,8 @@ from parameter_extractor.errors import PipelineError
 from parameter_extractor.gui.figure_dialog import FigureReviewDialog, PlanBridge
 from parameter_extractor.gui.variable_review import VariableReviewDialog
 from parameter_extractor.gui.worker import PipelineWorker
-from parameter_extractor.registry import default_registry_path
+from parameter_extractor.pricing import PRICES_CHECKED, format_usd
+from parameter_extractor.registry import default_pubchem_cache_path, default_registry_path
 from parameter_extractor.pipeline import Extraction, finish, plan_figure
 
 DEFAULT_OUTPUT_DIR = Path.home() / "Documents" / "Parameter Extractor"
@@ -50,6 +51,12 @@ TRAILING_COLUMNS = ["set_id", "sample_id", "entry_number", "experiment_type", "s
                     "journal_published", "source_notes"]
 PRIVACY_NOTE = ("The paper's text, and images of its table pages, are sent to Anthropic's API "
                 "to extract the data. API usage is billed to the key you enter.")
+
+
+STEP_LABELS = {"structure_planner": "Experiment structure", "metadata": "Bibliographic metadata",
+               "methodology": "Methodology", "term_search": "Parameters to look for",
+               "wet_dry": "Wet-dry cycling", "chemistry": "Solution chemistry",
+               "figure_planner": "Figure suggestions", "triage": "Screening"}
 
 
 class MainWindow(QMainWindow):
@@ -121,6 +128,12 @@ class MainWindow(QMainWindow):
         self.terms_edit.setToolTip("Each term gets an explicit answer from a targeted search -- its value, "
                                    "or 'not stated in the paper'. One extra API call when used.")
         form.addRow("Parameters to look for:", self.terms_edit)
+        self.pubchem_box = QCheckBox("Look up chemical names on PubChem")
+        self.pubchem_box.setToolTip("Recognises different names for the same compound (e.g. 2'-CMP and "
+                                    "cytidine 2'-monophosphate), so it goes in the same column. Only the "
+                                    "species names are sent to PubChem (NIH); results are kept on this "
+                                    "computer.")
+        form.addRow("", self.pubchem_box)
 
         note = QLabel(PRIVACY_NOTE, wordWrap=True)
         note.setStyleSheet("color: palette(placeholder-text);")
@@ -194,6 +207,7 @@ class MainWindow(QMainWindow):
     def _load_preferences(self) -> None:
         self.out_edit.setText(self._settings.value("output_dir", str(DEFAULT_OUTPUT_DIR)))
         self.terms_edit.setPlainText(self._settings.value("focus_terms", ""))
+        self.pubchem_box.setChecked(self._settings.value("use_pubchem", True, type=bool))
         stored_key = key_store.load_key()
         self._key_was_stored = bool(stored_key)
         if stored_key:
@@ -207,6 +221,7 @@ class MainWindow(QMainWindow):
     def _save_preferences(self) -> None:
         self._settings.setValue("output_dir", self.out_edit.text().strip())
         self._settings.setValue("focus_terms", self.terms_edit.toPlainText())
+        self._settings.setValue("use_pubchem", self.pubchem_box.isChecked())
         key = self.key_edit.text().strip()
         if self.remember_key_box.isChecked():
             if not key_store.save_key(key):
@@ -280,7 +295,9 @@ class MainWindow(QMainWindow):
         self._save_preferences()
 
         config = RunConfig(api_key=self.key_edit.text().strip(), output_dir=out_dir,
-                           registry_path=self.registry_path, focus_terms=self.focus_terms())
+                           registry_path=self.registry_path, focus_terms=self.focus_terms(),
+                           use_pubchem=self.pubchem_box.isChecked(),
+                           pubchem_cache_path=default_pubchem_cache_path())
         self._extraction, self._extraction_ok, self._review = None, False, None
         self._worker = PipelineWorker(pdf, config)
         self._thread = QThread(self)
@@ -497,11 +514,15 @@ class MainWindow(QMainWindow):
 
         cited_flags = [f for f in result.paper_flags if f.kind == "cited_data"]
         new_var_flags = [f for f in result.paper_flags if f.kind == "new_variable"]
-        other_paper_flags = [f for f in result.paper_flags if f.kind not in ("new_variable", "cited_data")]
+        derived_flags = [f for f in result.paper_flags if f.kind == "derived_value"]
+        other_paper_flags = [f for f in result.paper_flags
+                             if f.kind not in ("new_variable", "cited_data", "derived_value")]
         if cited_flags:
             add_group("Data reproduced from other publications", cited_flags)
         if new_var_flags:
             add_group("New variables not added to the CSV", new_var_flags)
+        if derived_flags:
+            add_group("Calculated by the app (not stated in the paper)", derived_flags)
         if other_paper_flags:
             add_group("Whole paper", other_paper_flags)
         for row_id, flags in result.row_flags.items():
@@ -523,14 +544,16 @@ class MainWindow(QMainWindow):
 
     def _fill_summary(self, result) -> None:
         usage_rows = "".join(
-            f"<tr><td>{u.stage}</td><td>{u.model}</td><td align=right>{u.input_tokens:,}</td>"
-            f"<td align=right>{u.output_tokens:,}</td><td align=right>{u.elapsed_sec:.0f} s</td></tr>"
+            f"<tr><td>{STEP_LABELS.get(u.stage, u.stage)}</td><td>{u.model}</td>"
+            f"<td align=right>{u.input_tokens:,}</td><td align=right>{u.output_tokens:,}</td>"
+            f"<td align=right>{format_usd(u.cost_usd)}</td><td align=right>{u.elapsed_sec:.0f} s</td></tr>"
             for u in result.usage)
         self.summary_text.setHtml(f"""
             <h3>{result.paper_id}</h3>
             <p><b>{len(result.rows)}</b> rows extracted &middot;
                <b>{len(result.paper_flags)}</b> paper-level flag(s) &middot;
-               <b>{len(result.row_flags)}</b> row(s) flagged</p>
+               <b>{len(result.row_flags)}</b> row(s) flagged &middot;
+               estimated cost <b>{format_usd(result.cost_usd)}</b></p>
             {self._new_variables_html(result)}
             <p>Results folder: <code>{result.run_dir}</code><br>
                CSV: <code>{result.csv_path.name}</code> (template layout) &middot;
@@ -539,11 +562,15 @@ class MainWindow(QMainWindow):
             {self._figures_html(result)}
             <h4>API usage</h4>
             <table cellspacing=0 cellpadding=4 border=1>
-              <tr><th>Step</th><th>Model</th><th>Input tokens</th><th>Output tokens</th><th>Time</th></tr>
+              <tr><th>Step</th><th>Model</th><th>Input tokens</th><th>Output tokens</th>
+                  <th>Est. cost (USD)</th><th>Time</th></tr>
               {usage_rows}
               <tr><td colspan=2><b>Total</b></td><td align=right><b>{result.input_tokens:,}</b></td>
-                  <td align=right><b>{result.output_tokens:,}</b></td><td></td></tr>
+                  <td align=right><b>{result.output_tokens:,}</b></td>
+                  <td align=right><b>{format_usd(result.cost_usd)}</b></td><td></td></tr>
             </table>
+            <p style="color:gray">Costs are estimates from Anthropic's list prices as of {PRICES_CHECKED}
+            (the API reports tokens, not charges); your invoice is the authority.</p>
             <p style="color:gray">Parameter Extractor {__version__}. Every value should be
             checked against the paper; flagged items first.</p>""")
 

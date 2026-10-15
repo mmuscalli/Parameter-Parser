@@ -36,6 +36,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Callable, Dict, List, Optional, Sequence
 
+from parameter_extractor.calculators.mixing import derive_mixture_concentrations
 from parameter_extractor.config import settings
 from parameter_extractor.config.run_config import RunConfig
 from parameter_extractor.errors import ApiKeyMissingError, PdfNotReadableError, PipelineError
@@ -51,7 +52,9 @@ from parameter_extractor.ingestion.new_variables import (
     split_known, write_values)
 from parameter_extractor.registry import VariableRegistry
 from parameter_extractor.ingestion.pdf_parser import ParsedPaper, parse_pdf, rasterize_table_pages
-from parameter_extractor.run_context import ProgressCallback, RunContext, StageUsage
+from parameter_extractor.run_context import ProgressCallback, RunContext, StageUsage, total_cost
+from parameter_extractor.pricing import PRICES_CHECKED
+from parameter_extractor.pubchem import PubChem
 from parameter_extractor.schemas.chemistry import ChemistryExtraction
 from parameter_extractor.schemas.figures import DigitizedFigure, FigureCandidate, FigurePlan
 from parameter_extractor.schemas.methodology import Methodology
@@ -96,6 +99,10 @@ class RunResult:
     @property
     def output_tokens(self) -> int:
         return sum(u.output_tokens for u in self.usage)
+
+    @property
+    def cost_usd(self) -> Optional[float]:
+        return total_cost(self.usage)
 
 
 def _new_run_dir(output_dir: Path, paper_id: str) -> Path:
@@ -145,6 +152,8 @@ def _write_summary(ctx: RunContext, pdf_path: Path, started: datetime, **extra) 
         "usage": [asdict(u) for u in ctx.usage],
         "input_tokens": sum(u.input_tokens for u in ctx.usage),
         "output_tokens": sum(u.output_tokens for u in ctx.usage),
+        "estimated_cost_usd": total_cost(ctx.usage),
+        "prices_checked": PRICES_CHECKED,
         **extra,
     }
     (ctx.run_dir / "run_summary.json").write_text(json.dumps(summary, indent=2))
@@ -267,7 +276,13 @@ def finish(
     ex, ctx, config = extraction, extraction.ctx, extraction.ctx.config
     ctx.step("assemble", "Assembling rows and running checks")
     registry = VariableRegistry(config.registry_path)
-    normalization = normalize_chemistry(ex.chemistry)     # names -> vocabulary; mM re-checked
+    pubchem = PubChem(config.pubchem_cache_path) if config.use_pubchem else None
+    # names -> vocabulary (rules, then PubChem identity); mM re-checked
+    normalization = normalize_chemistry(ex.chemistry, pubchem=pubchem, registry=registry)
+    if pubchem:
+        pubchem.save()
+    mixing = derive_mixture_concentrations(        # stock -> mixture concentrations, marked derived
+        ex.chemistry, [s.set_label for s in ex.structure.experiment_sets])
     rows = build_rows(ex.metadata, ex.structure, ex.methodology, ex.chemistry, config.paper_prefix,
                       drop_below=config.confidence_drop_below, registry=registry, wet_dry=ex.wet_dry)
     thresholds = dict(flag_below=config.confidence_flag_below,
@@ -276,6 +291,11 @@ def finish(
     paper_flags += _cited_data_flags(ex.structure)
     paper_flags += [Flag("unit_conversion", n.message, quote=n.quote or None, source=n.source or None)
                     for n in normalization if n.kind == "unit_corrected"]
+    if pubchem and pubchem.unavailable_reason:
+        paper_flags.append(Flag("lookup_unavailable", f"{pubchem.unavailable_reason}: species names were "
+                                f"matched by the built-in rules only, so synonyms may show up as new variables."))
+    paper_flags += [Flag("derived_value" if n.kind == "derived" else "unit_conversion", n.message,
+                         quote=n.quote or None, source=n.source or None) for n in mixing]
     n_text_rows = len(rows)
 
     figure_summary, fig_new_vars = [], []

@@ -22,7 +22,7 @@ from parameter_extractor.schemas.row_schema import ExtractedRow
 FlagKind = Literal["out_of_range", "low_confidence", "ambiguous_paper_wide_species",
                    "possible_duplicate", "figure_problem", "new_variable",
                    "term_not_found", "cited_data", "conflicting_values",
-                   "assumed_value", "unit_conversion"]
+                   "assumed_value", "unit_conversion", "derived_value", "lookup_unavailable"]
 
 
 @dataclass
@@ -105,7 +105,7 @@ def check_extraction(
 
     for name in sorted(chemistry.ambiguous_paper_wide_species()):
         for s in chemistry.solutes:
-            if s.name == name and s.role == "initial" and s.set_label is None:
+            if s.variable == name and s.role == "initial" and s.set_label is None:
                 flags.append(Flag(
                     "ambiguous_paper_wide_species",
                     f"{name} = {s.concentration_value} {s.concentration_unit_raw} was extracted "
@@ -116,7 +116,7 @@ def check_extraction(
 
     for label, name in sorted(chemistry.conflicting_set_species()):
         values = sorted({s.concentration_value for s in chemistry.solutes
-                         if s.role == "initial" and s.set_label == label and s.name == name and not s.sample_label},
+                         if s.role == "initial" and s.set_label == label and s.variable == name and not s.sample_label},
                         key=lambda v: (v is None, v))
         flags.append(Flag(
             "conflicting_values",

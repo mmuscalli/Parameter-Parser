@@ -9,6 +9,9 @@ For each species:
   list, still extract it, set `in_controlled_vocab: false`, and add its name
   to `unmapped_species` -- never silently drop it and never silently invent a
   new column name as if it were already standard.
+  For such a species, write its name the way the paper does, with ordinary
+  spaces and punctuation (e.g. "cytidine 2'-phosphate", "ribose
+  1,2-cyclic phosphate") -- not in the underscore style of column names.
 - Record the concentration in BOTH its original reported unit
   (`concentration_value` + `concentration_unit_raw`) and converted to mM
   (`concentration_mM`). Only fill `concentration_mM` when the conversion is
@@ -18,6 +21,19 @@ For each species:
   `conversion_note`).
 - `role`: "initial" for starting composition, "sampled" for a measured
   product concentration.
+- Stock solutions vs the reaction mixture: if the paper gives the
+  concentration of a solution BEFORE it was combined with others (e.g.
+  "5 µL of a 15 mM solution of X, 20 µL of Y ... were mixed"), record that
+  value as printed with `concentration_basis: "stock"` and `stock_solution`
+  set to the label of the solution it was in. Do NOT work out the
+  concentration in the mixture yourself -- instead list, in
+  `added_solutions`, EVERY solution and solvent that was combined (including
+  plain water or buffer), each with its volume exactly as printed and a quote;
+  the pipeline does the arithmetic. Use `set_label` on an added solution only
+  when that set's volumes differ from the others. If the paper states the
+  concentration in the mixture itself, record that with
+  `concentration_basis: "mixture"` (the default) -- and if it gives both,
+  record both.
 - `set_label`: match exactly to a `set_label` from the structure plan, or null
   if the value is constant across the whole paper (e.g. a fixed background
   reagent concentration present in every condition).

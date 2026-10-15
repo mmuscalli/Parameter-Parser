@@ -299,6 +299,37 @@ Works on a fresh VariableRegistry copy; writes only on Save. Registry JSON
 now also stores `alias_labels` (original spelling) for display;
 `display_name()` renders species aliases as "RbCl (starting concentration)".
 
+## kim2019 round (2026-10-15): stock solutions, PubChem, cost
+
+kim2019 (Astrobiology, ribonucleotides by dry-down; not peptides) is the third
+reference run, `runs/kim2019_auto/` + `tests/test_kim2019_replay.py` (Mickey:
+keep it for now, refresh after the open issues are sorted).
+- PDF fixes: adaptive x_tolerance when words run together, mid-line/uppercase
+  table captions, Symbol/Pi-font chars (µ drawn as "m" -> "5 mL" bug).
+- **Stock vs mixture** (Mickey: record both; calculated values marked derived):
+  `SoluteEntry.concentration_basis` ("mixture"/"stock") + `stock_solution`,
+  `ChemistryExtraction.added_solutions` (every solution combined, volume as
+  printed). `calculators/mixing.py` (local, NOT the model) adds the mixture
+  value as a `derived` entry (hidden from the model schema via SkipJsonSchema;
+  provenance origin "calculated"; `derived_value` flags, own GUI group). Only
+  when every volume parses; otherwise a note. Stock values go to
+  `stock_<name>_aq_mM`, known wherever `initial_<name>` is (registry pattern),
+  reviewed as "stock <name>" otherwise.
+- **PubChem** (`pubchem.py`, PUG REST, POST by name, cached in the app-data
+  folder incl. misses, fails soft -> `lookup_unavailable` flag): runs in
+  normalize_chemistry AFTER names.py rules, only for names the rules didn't
+  match. Exact-CID matching only: to a template species
+  (`schemas/species_cids.json`, built + hand-checked by
+  `scripts/build_species_cids.py` -- 118 of 163; first hits were wrong for CO,
+  CO3-2, NiS, Phe3, so check titles if you rebuild), to a species accepted in an
+  earlier review (registry `species_ids`), or to an earlier name in the same
+  paper. RunConfig.use_pubchem defaults False (tests/library offline); GUI
+  checkbox and CLI (`--no-pubchem`) turn it on. template_vocab stays the
+  template's column list -- not a chemical dictionary.
+- **Cost**: `pricing.py` list prices (checked 2026-10-15; Haiku 5.5 tiered by
+  prompt > 100K) -> `StageUsage.cost_usd`, Summary tab column, CLI,
+  run_summary.json. The API returns tokens only.
+
 ## Non-obvious decisions — don't redo this research
 
 - **Schema shape is grounded in `../POLO_variable_mapping.csv`** (one level

@@ -77,9 +77,12 @@ class VariableReviewDialog(QDialog):
         for r, g in enumerate(groups):
             example = next((_value_text(v) for v in g.values if _value_text(v)), "")
             similar = self._similar(g)
+            identity = next((v for v in g.values if v.pubchem_cid), None)
             for c, text in enumerate([g.name, KIND_LABELS[g.kind], str(len(g.values)), example, similar]):
                 item = QTableWidgetItem(text)
                 item.setToolTip(text)
+                if c == 0 and identity:
+                    item.setToolTip(f"{text}\nPubChem: {identity.pubchem_title} (CID {identity.pubchem_cid})")
                 self.table.setItem(r, c, item)
             action = QComboBox()
             for _, label in ACTIONS:

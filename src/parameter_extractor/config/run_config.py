@@ -32,6 +32,10 @@ class RunConfig:
     # Terms the user especially wants found ("extraction solvent volume", ...):
     # each gets an explicit found / not-found answer from a targeted search step.
     focus_terms: List[str] = field(default_factory=list)
+    # Look up species names on PubChem to recognise synonyms (pubchem.py). Off
+    # by default so library use and tests stay offline; the GUI and CLI turn it on.
+    use_pubchem: bool = False
+    pubchem_cache_path: Optional[Path] = None
 
     @classmethod
     def from_settings(cls, **overrides) -> "RunConfig":
@@ -50,4 +54,5 @@ class RunConfig:
         d.pop("api_key")
         d["output_dir"] = str(self.output_dir)
         d["registry_path"] = str(self.registry_path) if self.registry_path else None
+        d["pubchem_cache_path"] = str(self.pubchem_cache_path) if self.pubchem_cache_path else None
         return d

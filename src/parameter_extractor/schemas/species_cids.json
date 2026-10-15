@@ -1,0 +1,713 @@
+{
+ "built_by": "scripts/build_species_cids.py",
+ "species": {
+  "(NH4)2HPO4": {
+   "cid": 24540,
+   "title": "Diammonium hydrogen phosphate",
+   "formula": "H9N2O4P",
+   "query": "(NH4)2HPO4"
+  },
+  "10peptide_Gly": {
+   "cid": 173561,
+   "title": "Decaglycine",
+   "formula": "C20H32N10O11",
+   "query": "decaglycine"
+  },
+  "124_triazole": {
+   "cid": 9257,
+   "title": "1H-1,2,4-Triazole",
+   "formula": "C2H3N3",
+   "query": "1,2,4-triazole"
+  },
+  "2peptide_Ala": {
+   "cid": 5484352,
+   "title": "L-Alanyl-L-alanine",
+   "formula": "C6H12N2O3",
+   "query": "dialanine"
+  },
+  "2peptide_Asp": {
+   "cid": 471583,
+   "title": "Aspartyl-aspartic acid",
+   "formula": "C8H12N2O7",
+   "query": "diaspartic acid"
+  },
+  "2peptide_Gly": {
+   "cid": 11163,
+   "title": "Glycylglycine",
+   "formula": "C4H8N2O3",
+   "query": "diglycine"
+  },
+  "2peptide_His": {
+   "cid": 6993105,
+   "title": "His-His",
+   "formula": "C12H16N6O3",
+   "query": "His-His"
+  },
+  "2peptide_Met": {
+   "cid": 6993082,
+   "title": "H-Met-met-OH",
+   "formula": "C10H20N2O3S2",
+   "query": "dimethionine"
+  },
+  "2peptide_Phe": {
+   "cid": 6993090,
+   "title": "L-Phenylalanyl-L-phenylalanine",
+   "formula": "C18H20N2O3",
+   "query": "Phe-Phe"
+  },
+  "2peptide_Ser": {
+   "cid": 7019105,
+   "title": "L-seryl-L-serine",
+   "formula": "C6H12N2O5",
+   "query": "Ser-Ser"
+  },
+  "2peptide_Trp": {
+   "cid": 88656,
+   "title": "Tryptophyltryptophan",
+   "formula": "C22H22N4O3",
+   "query": "Trp-Trp"
+  },
+  "2peptide_Val": {
+   "cid": 107475,
+   "title": "L-Valyl-L-valine",
+   "formula": "C10H20N2O3",
+   "query": "Val-Val"
+  },
+  "3peptide_Ala": {
+   "cid": 5478845,
+   "title": "Ala-Ala-Ala",
+   "formula": "C9H17N3O4",
+   "query": "trialanine"
+  },
+  "3peptide_Asp": {
+   "cid": 44271674,
+   "title": "H-Asp-Asp-Asp-OH",
+   "formula": "C12H17N3O10",
+   "query": "Asp-Asp-Asp"
+  },
+  "3peptide_Gly": {
+   "cid": 11161,
+   "title": "Glycylglycylglycine",
+   "formula": "C6H11N3O4",
+   "query": "triglycine"
+  },
+  "3peptide_Phe": {
+   "cid": 75739,
+   "title": "Phenylalanyl-phenylalanyl-phenylalanine",
+   "formula": "C27H29N3O4",
+   "query": "Phe-Phe-Phe"
+  },
+  "4peptide_Ala": {
+   "cid": 5478846,
+   "title": "Alanyl-alanyl-alanyl-alanine",
+   "formula": "C12H22N4O5",
+   "query": "tetraalanine"
+  },
+  "4peptide_Asp": {
+   "cid": 4432006,
+   "title": "Asp-Asp-Asp-Asp",
+   "formula": "C16H22N4O13",
+   "query": "Asp-Asp-Asp-Asp"
+  },
+  "4peptide_Gly": {
+   "cid": 69481,
+   "title": "Glycyl-glycyl-glycyl-glycine",
+   "formula": "C8H14N4O5",
+   "query": "tetraglycine"
+  },
+  "5peptide_Asp": {
+   "cid": 10210640,
+   "title": "Asp-Asp-Asp-Asp-Asp",
+   "formula": "C20H27N5O16",
+   "query": "Asp-Asp-Asp-Asp-Asp"
+  },
+  "5peptide_Gly": {
+   "cid": 81537,
+   "title": "Pentaglycine",
+   "formula": "C10H17N5O6",
+   "query": "pentaglycine"
+  },
+  "6peptide_Asp": {
+   "cid": 10462481,
+   "title": "Asp-Asp-Asp-Asp-Asp-Asp",
+   "formula": "C24H32N6O19",
+   "query": "Asp-Asp-Asp-Asp-Asp-Asp"
+  },
+  "6peptide_Gly": {
+   "cid": 138069,
+   "title": "Hexaglycine",
+   "formula": "C12H20N6O7",
+   "query": "hexaglycine"
+  },
+  "AICA": {
+   "cid": 9679,
+   "title": "5-Aminoimidazole-4-carboxamide",
+   "formula": "C4H6N4O",
+   "query": "AICA"
+  },
+  "AMP": {
+   "cid": 6083,
+   "title": "Adenosine Monophosphate",
+   "formula": "C10H14N5O7P",
+   "query": "AMP"
+  },
+  "ATP": {
+   "cid": 5957,
+   "title": "5'-Atp",
+   "formula": "C10H16N5O13P3",
+   "query": "ATP"
+  },
+  "Ala": {
+   "cid": 5950,
+   "title": "L-Alanine",
+   "formula": "C3H7NO2",
+   "query": "alanine"
+  },
+  "Asp": {
+   "cid": 5960,
+   "title": "L-Aspartic Acid",
+   "formula": "C4H7NO4",
+   "query": "aspartic acid"
+  },
+  "Ba+2": {
+   "cid": 104810,
+   "title": "Barium ion",
+   "formula": "Ba+2",
+   "query": "barium(2+)"
+  },
+  "BaCl2": {
+   "cid": 25204,
+   "title": "Barium chloride",
+   "formula": "BaCl2",
+   "query": "BaCl2"
+  },
+  "Br-": {
+   "cid": 259,
+   "title": "Bromide ion",
+   "formula": "Br-",
+   "query": "Br-"
+  },
+  "C2N3Na": {
+   "cid": 4350929,
+   "title": "Sodium dicyanamide",
+   "formula": "C2N3Na",
+   "query": "C2N3Na"
+  },
+  "C8H5KO4": {
+   "cid": 23676735,
+   "title": "Potassium hydrogen phthalate",
+   "formula": "C8H5KO4",
+   "query": "C8H5KO4"
+  },
+  "CH3CO2K": {
+   "cid": 517044,
+   "title": "Potassium Acetate",
+   "formula": "C2H3KO2",
+   "query": "CH3CO2K"
+  },
+  "CH3COO-": {
+   "cid": 175,
+   "title": "Acetate",
+   "formula": "C2H3O2-",
+   "query": "acetate"
+  },
+  "CH3NH3+": {
+   "cid": 644041,
+   "title": "Methylammonium",
+   "formula": "CH6N+",
+   "query": "methylammonium"
+  },
+  "CH3SH": {
+   "cid": 878,
+   "title": "Methanethiol",
+   "formula": "CH4S",
+   "query": "CH3SH"
+  },
+  "CHES": {
+   "cid": 66898,
+   "title": "2-(Cyclohexylamino)ethanesulfonic acid",
+   "formula": "C8H17NO3S",
+   "query": "CHES"
+  },
+  "CN-": {
+   "cid": 5975,
+   "title": "Cyanide",
+   "formula": "CN-",
+   "query": "CN-"
+  },
+  "CO": {
+   "cid": 281,
+   "title": "Carbon Monoxide",
+   "formula": "CO",
+   "query": "carbon monoxide"
+  },
+  "CO3-2": {
+   "cid": 19660,
+   "title": "Carbonate Ion",
+   "formula": "CO3-2",
+   "query": "carbonate"
+  },
+  "COS": {
+   "cid": 10039,
+   "title": "Carbonyl Sulfide",
+   "formula": "COS",
+   "query": "COS"
+  },
+  "CS2": {
+   "cid": 6348,
+   "title": "Carbon Disulfide",
+   "formula": "CS2",
+   "query": "CS2"
+  },
+  "Ca(H2PO4)2.H2O": {
+   "cid": 10198893,
+   "title": "Monocalcium phosphate monohydrate",
+   "formula": "CaH6O9P2",
+   "query": "monocalcium phosphate monohydrate"
+  },
+  "Ca+2": {
+   "cid": 271,
+   "title": "Calcium Cation",
+   "formula": "Ca+2",
+   "query": "calcium(2+)"
+  },
+  "CaCl2": {
+   "cid": 5284359,
+   "title": "Calcium Chloride",
+   "formula": "CaCl2",
+   "query": "CaCl2"
+  },
+  "CaHPO4": {
+   "cid": 24441,
+   "title": "Calcium hydrogen phosphate",
+   "formula": "CaHO4P",
+   "query": "CaHPO4"
+  },
+  "Cd+2": {
+   "cid": 31193,
+   "title": "Cadmium cation",
+   "formula": "Cd+2",
+   "query": "cadmium(2+)"
+  },
+  "CdCl2": {
+   "cid": 24947,
+   "title": "Cadmium Chloride",
+   "formula": "CdCl2",
+   "query": "CdCl2"
+  },
+  "Cl-": {
+   "cid": 312,
+   "title": "Chloride",
+   "formula": "Cl-",
+   "query": "Cl-"
+  },
+  "Cs+": {
+   "cid": 104967,
+   "title": "Cesium cation",
+   "formula": "Cs+",
+   "query": "cesium(1+)"
+  },
+  "CsCl": {
+   "cid": 24293,
+   "title": "Cesium Chloride",
+   "formula": "ClCs",
+   "query": "CsCl"
+  },
+  "Cu+2": {
+   "cid": 27099,
+   "title": "Copper(2+)",
+   "formula": "Cu+2",
+   "query": "copper(2+)"
+  },
+  "CuCl2": {
+   "cid": 24014,
+   "title": "Cupric Chloride",
+   "formula": "Cl2Cu",
+   "query": "CuCl2"
+  },
+  "Cys": {
+   "cid": 5862,
+   "title": "L-(+)-Cysteine",
+   "formula": "C3H7NO2S",
+   "query": "cysteine"
+  },
+  "DKP_Ala": {
+   "cid": 165356,
+   "title": "Cyclo(alanylalanyl)",
+   "formula": "C6H10N2O2",
+   "query": "cyclo(Ala-Ala)"
+  },
+  "DKP_Gly": {
+   "cid": 7817,
+   "title": "2,5-Piperazinedione",
+   "formula": "C4H6N2O2",
+   "query": "cyclo(Gly-Gly)"
+  },
+  "EDC": {
+   "cid": 15908,
+   "title": "1-Ethyl-3-(3'-dimethylaminopropyl)carbodiimide",
+   "formula": "C8H17N3",
+   "query": "1-ethyl-3-(3-dimethylaminopropyl)carbodiimide"
+  },
+  "EDTA": {
+   "cid": 6049,
+   "title": "Ethylenediaminetetraacetic Acid",
+   "formula": "C10H16N2O8",
+   "query": "EDTA"
+  },
+  "Fe+2": {
+   "cid": 27284,
+   "title": "Ferrous cation",
+   "formula": "Fe+2",
+   "query": "iron(2+)"
+  },
+  "Fe+3": {
+   "cid": 29936,
+   "title": "Ferric cation",
+   "formula": "Fe+3",
+   "query": "iron(3+)"
+  },
+  "FeCl2": {
+   "cid": 24458,
+   "title": "Ferrous Chloride",
+   "formula": "Cl2Fe",
+   "query": "FeCl2"
+  },
+  "FeCl3": {
+   "cid": 24380,
+   "title": "Iron chloride (FeCl3)",
+   "formula": "Cl3Fe",
+   "query": "FeCl3"
+  },
+  "FeS": {
+   "cid": 14828,
+   "title": "Ferrous sulfide",
+   "formula": "FeS",
+   "query": "iron(II) sulfide"
+  },
+  "Gly": {
+   "cid": 750,
+   "title": "Glycine",
+   "formula": "C2H5NO2",
+   "query": "glycine"
+  },
+  "H2PO4-": {
+   "cid": 1003,
+   "title": "Dihydrogenphosphate",
+   "formula": "H2O4P-",
+   "query": "H2PO4-"
+  },
+  "H2S": {
+   "cid": 402,
+   "title": "Hydrogen Sulfide",
+   "formula": "H2S",
+   "query": "H2S"
+  },
+  "HPO4-2": {
+   "cid": 3681305,
+   "title": "Hydrogen phosphate",
+   "formula": "HO4P-2",
+   "query": "HPO4-2"
+  },
+  "His": {
+   "cid": 6274,
+   "title": "L-Histidine",
+   "formula": "C6H9N3O2",
+   "query": "histidine"
+  },
+  "K+": {
+   "cid": 813,
+   "title": "Potassium Cation",
+   "formula": "K+",
+   "query": "potassium(1+)"
+  },
+  "K2HPO4": {
+   "cid": 24450,
+   "title": "Potassium Phosphate, Dibasic",
+   "formula": "HK2O4P",
+   "query": "K2HPO4"
+  },
+  "K3PO4": {
+   "cid": 62657,
+   "title": "Potassium Phosphate, Tribasic",
+   "formula": "K3O4P",
+   "query": "K3PO4"
+  },
+  "K3[Fe(CN)6]": {
+   "cid": 26250,
+   "title": "Potassium ferricyanide",
+   "formula": "C6FeK3N6",
+   "query": "potassium ferricyanide"
+  },
+  "KCNO": {
+   "cid": 11378442,
+   "title": "Potassium cyanate",
+   "formula": "CKNO",
+   "query": "KCNO"
+  },
+  "KCl": {
+   "cid": 4873,
+   "title": "Potassium Chloride",
+   "formula": "ClK",
+   "query": "KCl"
+  },
+  "Met": {
+   "cid": 6137,
+   "title": "L-Methionine",
+   "formula": "C5H11NO2S",
+   "query": "methionine"
+  },
+  "Mg+2": {
+   "cid": 888,
+   "title": "Magnesium Cation",
+   "formula": "Mg+2",
+   "query": "magnesium(2+)"
+  },
+  "MgCl2": {
+   "cid": 5360315,
+   "title": "Magnesium Chloride",
+   "formula": "Cl2Mg",
+   "query": "MgCl2"
+  },
+  "MnCl2": {
+   "cid": 24480,
+   "title": "Manganese (II) chloride",
+   "formula": "Cl2Mn",
+   "query": "MnCl2"
+  },
+  "NH4+": {
+   "cid": 223,
+   "title": "Ammonium",
+   "formula": "H4N+",
+   "query": "NH4+"
+  },
+  "NH4Cl": {
+   "cid": 25517,
+   "title": "Ammonium Chloride",
+   "formula": "ClH4N",
+   "query": "NH4Cl"
+  },
+  "NH4H2PO4": {
+   "cid": 24402,
+   "title": "Ammonium dihydrogen phosphate",
+   "formula": "H6NO4P",
+   "query": "NH4H2PO4"
+  },
+  "Na+": {
+   "cid": 923,
+   "title": "Sodium Ion",
+   "formula": "Na+",
+   "query": "sodium(1+)"
+  },
+  "Na2CO3": {
+   "cid": 10340,
+   "title": "Sodium Carbonate",
+   "formula": "CNa2O3",
+   "query": "Na2CO3"
+  },
+  "Na2HPO4": {
+   "cid": 24203,
+   "title": "Sodium Phosphate, Dibasic",
+   "formula": "HNa2O4P",
+   "query": "Na2HPO4"
+  },
+  "Na3PO4.12H2O": {
+   "cid": 61473,
+   "title": "Trisodium phosphate dodecahydrate",
+   "formula": "H24Na3O16P",
+   "query": "Na3PO4.12H2O"
+  },
+  "NaCN": {
+   "cid": 8929,
+   "title": "Sodium Cyanide",
+   "formula": "CNNa",
+   "query": "NaCN"
+  },
+  "NaCl": {
+   "cid": 5234,
+   "title": "Sodium Chloride",
+   "formula": "ClNa",
+   "query": "NaCl"
+  },
+  "NaH2PO4.H2O": {
+   "cid": 516949,
+   "title": "Sodium Phosphate, Monobasic, Monohydrate",
+   "formula": "H4NaO5P",
+   "query": "NaH2PO4.H2O"
+  },
+  "NaHCO3": {
+   "cid": 516892,
+   "title": "Sodium Bicarbonate",
+   "formula": "CHNaO3",
+   "query": "NaHCO3"
+  },
+  "NaHSO3": {
+   "cid": 23665763,
+   "title": "Sodium Bisulfite",
+   "formula": "HNaO3S",
+   "query": "NaHSO3"
+  },
+  "NaOH": {
+   "cid": 14798,
+   "title": "Sodium Hydroxide",
+   "formula": "HNaO",
+   "query": "NaOH"
+  },
+  "Ni+2": {
+   "cid": 934,
+   "title": "Nickel cation",
+   "formula": "Ni+2",
+   "query": "nickel(2+)"
+  },
+  "NiCl2": {
+   "cid": 24385,
+   "title": "Nickel Dichloride",
+   "formula": "Cl2Ni",
+   "query": "NiCl2"
+  },
+  "NiS": {
+   "cid": 166709,
+   "title": "Nickel Sulfide",
+   "formula": "NiS",
+   "query": "nickel sulfide"
+  },
+  "P2O7-4": {
+   "cid": 644102,
+   "title": "Pyrophosphate",
+   "formula": "O7P2-4",
+   "query": "pyrophosphate"
+  },
+  "PO4-3": {
+   "cid": 1061,
+   "title": "Phosphate",
+   "formula": "O4P-3",
+   "query": "phosphate"
+  },
+  "Pb+2": {
+   "cid": 73212,
+   "title": "Lead, elemental",
+   "formula": "Pb+2",
+   "query": "lead(2+)"
+  },
+  "PbCl2": {
+   "cid": 24459,
+   "title": "Lead chloride",
+   "formula": "Cl2Pb",
+   "query": "PbCl2"
+  },
+  "Phe": {
+   "cid": 6140,
+   "title": "L-Phenylalanine",
+   "formula": "C9H11NO2",
+   "query": "phenylalanine"
+  },
+  "SO2": {
+   "cid": 1119,
+   "title": "Sulfur Dioxide",
+   "formula": "O2S",
+   "query": "SO2"
+  },
+  "SO4-2": {
+   "cid": 1117,
+   "title": "Sulfate Ion",
+   "formula": "O4S-2",
+   "query": "SO4-2"
+  },
+  "Ser": {
+   "cid": 5951,
+   "title": "L-Serine",
+   "formula": "C3H7NO3",
+   "query": "serine"
+  },
+  "Trp": {
+   "cid": 6305,
+   "title": "L-Tryptophan",
+   "formula": "C11H12N2O2",
+   "query": "tryptophan"
+  },
+  "UMP": {
+   "cid": 6030,
+   "title": "Uridine Monophosphate",
+   "formula": "C9H13N2O9P",
+   "query": "UMP"
+  },
+  "Val": {
+   "cid": 6287,
+   "title": "L-Valine",
+   "formula": "C5H11NO2",
+   "query": "valine"
+  },
+  "ZnCl2": {
+   "cid": 5727,
+   "title": "Zinc Chloride",
+   "formula": "Cl2Zn",
+   "query": "ZnCl2"
+  },
+  "benzylbromide": {
+   "cid": 7498,
+   "title": "Benzyl Bromide",
+   "formula": "C7H7Br",
+   "query": "benzylbromide"
+  },
+  "bromoacetate": {
+   "cid": 6226,
+   "title": "Bromoacetate",
+   "formula": "C2H2BrO2-",
+   "query": "bromoacetate"
+  },
+  "citrate-3": {
+   "cid": 31348,
+   "title": "Citrate",
+   "formula": "C6H5O7-3",
+   "query": "citrate"
+  },
+  "cyanamide": {
+   "cid": 9864,
+   "title": "Cyanamide",
+   "formula": "CH2N2",
+   "query": "cyanamide"
+  },
+  "diaminomaleonitrile": {
+   "cid": 2723951,
+   "title": "Diaminomaleonitrile",
+   "formula": "C4H4N4",
+   "query": "diaminomaleonitrile"
+  },
+  "dimethyl_pyrophosphate": {
+   "cid": 97004,
+   "title": "Dimethyl acid pyrophosphate",
+   "formula": "C2H8O7P2",
+   "query": "dimethyl pyrophosphate"
+  },
+  "glycinamide": {
+   "cid": 69020,
+   "title": "Glycinamide",
+   "formula": "C2H6N2O",
+   "query": "glycinamide"
+  },
+  "imidazole": {
+   "cid": 795,
+   "title": "Imidazole",
+   "formula": "C3H4N2",
+   "query": "imidazole"
+  },
+  "sodium_pyrophosphate": {
+   "cid": 24403,
+   "title": "Tetrasodium Pyrophosphate",
+   "formula": "Na4O7P2",
+   "query": "sodium pyrophosphate"
+  },
+  "sodium_triMP": {
+   "cid": 24579,
+   "title": "Sodium Trimetaphosphate",
+   "formula": "Na3O9P3",
+   "query": "sodium trimetaphosphate"
+  },
+  "urea": {
+   "cid": 1176,
+   "title": "Urea",
+   "formula": "CH4N2O",
+   "query": "urea"
+  }
+ }
+}

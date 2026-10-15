@@ -33,6 +33,13 @@ class StageUsage:
     input_tokens: int
     output_tokens: int
     elapsed_sec: float
+    cost_usd: Optional[float] = None      # estimate from pricing.py; None = model price unknown
+
+
+def total_cost(usage) -> Optional[float]:
+    """Sum of the estimated costs, or None if any request's price is unknown."""
+    costs = [u.cost_usd for u in usage]
+    return None if any(c is None for c in costs) else sum(costs)
 
 
 ProgressCallback = Callable[[ProgressEvent], None]

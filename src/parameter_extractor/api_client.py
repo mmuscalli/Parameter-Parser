@@ -26,6 +26,7 @@ from typing import List, Optional, Type, TypeVar
 from pydantic import BaseModel, ValidationError
 
 from parameter_extractor import errors
+from parameter_extractor.pricing import request_cost
 from parameter_extractor.run_context import RunContext, StageUsage
 
 T = TypeVar("T", bound=BaseModel)
@@ -124,7 +125,9 @@ def call_structured(
     ctx.usage.append(StageUsage(stage=stage, model=model,
                                 input_tokens=response.usage.input_tokens,
                                 output_tokens=response.usage.output_tokens,
-                                elapsed_sec=round(elapsed, 2)))
+                                elapsed_sec=round(elapsed, 2),
+                                cost_usd=request_cost(model, response.usage.input_tokens,
+                                                      response.usage.output_tokens)))
 
     run_dir = ctx.run_dir
     run_dir.mkdir(parents=True, exist_ok=True)
@@ -134,6 +137,7 @@ def call_structured(
         "elapsed_sec": round(elapsed, 2),
         "input_tokens": response.usage.input_tokens,
         "output_tokens": response.usage.output_tokens,
+        "estimated_cost_usd": ctx.usage[-1].cost_usd,
         "images_attached": [str(p) for p in (image_paths or [])],
         "system_prompt": system_prompt,
         "user_content": user_content,

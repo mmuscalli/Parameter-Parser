@@ -32,6 +32,8 @@ class NewVariable(BaseModel):
     confidence: Optional[Confidence] = None
     origin: str                                 # "chemistry", "methodology", "Fig. 3", "search: <term>"
     row_ids: List[str] = Field(default_factory=list)   # rows (full_id) the value applies to
+    pubchem_cid: int = 0                        # species identity, if PubChem knows the name
+    pubchem_title: str = ""
 
 
 # ---- targeted search for the user's "parameters to look for" ---------------
