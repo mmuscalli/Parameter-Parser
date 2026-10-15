@@ -55,6 +55,20 @@ def test_kim2019_replay_reproduces_reference():
         assert cyt[("initial cytosine", "3:Cytosine 1:1, 100 C")] == (2.27273, "calculated")
         assert cyt[("initial cytosine", "3:Cytosine 1:3, 100 C")] == (6.81818, "calculated")
         assert not any(f["kind"] == "conflicting_values" for f in flags)       # 1:1 stated values fit the ratio
+        # one grouped flag for the heating temperature copied into 10 sets; missing concentrations
+        # have their own flag; methodology's copies of the solution volumes are dropped, and each
+        # volume is offered once, from the chemistry record
+        assert sum("sampled_temperature_C has confidence 'medium' in 10 sets" in f["message"] for f in flags) == 1
+        assert sorted(f["message"].split()[0] for f in flags if f["kind"] == "concentration_not_stated") == [
+            "acetamide", "guanine", "uracil"]
+        assert sum(f["kind"] == "duplicate_removed" for f in flags) == 4
+        volumes = sorted(v.name for v in result.new_variables if v.name.startswith("volume added"))
+        assert volumes == ["volume added: calcium chloride solution", "volume added: nucleobase solution",
+                           "volume added: ribose 1,2-cyclic phosphate stock"]
+        names = {v.name for v in result.new_variables}
+        assert not names & {"nucleobase solution volume", "calcium chloride solution volume",
+                            "reaction volume (ribose 1,2-cyclic phosphate solution)", "guanine dissolution medium"}
+        assert "redissolution volume before analysis" in names                # not a repeat: kept
         yields = sorted(v.value for v in result.new_variables if v.alias_name == "sampled cytidine 2'-phosphate %")
         assert yields == sorted([1.7, 2.7, 0.4, 0.8, 2.8, 3.5, 5.3, 0.4, 1.0, 5.9, 3.8, 5.4, 7.7])
 

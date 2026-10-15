@@ -19,7 +19,7 @@ from dataclasses import dataclass, field
 from typing import Dict, List, Literal, Optional, Tuple
 
 from parameter_extractor.ingestion.flatten_to_template import (
-    _from_solute, _solute_value, column_for_solute, proposed_column_for_solute, set_row_value, species_alias_name)
+    _from_solute, _solute_value, column_for_solute, column_safe_name, proposed_column_for_solute, set_row_value, species_alias_name)
 from parameter_extractor.registry import VariableRegistry, suggest_column_name
 from parameter_extractor.schemas.chemistry import ChemistryExtraction
 from parameter_extractor.schemas.methodology import Methodology
@@ -94,6 +94,15 @@ def collect_new_variables(
             confidence=s.confidence, origin="calculated" if s.derived else "chemistry",
             row_ids=rows_for(s.set_label, s.sample_label), pubchem_cid=s.pubchem_cid,
             pubchem_title=s.pubchem_title))
+    for sol in chemistry.added_solutions:
+        # the one variable for each solution volume (methodology repeats are dropped,
+        # see ingestion/duplicates.py); the mixture calculations use the same records
+        name = f"volume added: {sol.solution}"
+        found.append(NewVariable(
+            kind="parameter", name=name, alias_name=name,
+            proposed_column=f"added_{column_safe_name(sol.solution)}_volume_uL", value_text=sol.volume,
+            set_label=sol.set_label or None, quote=sol.quote, source=sol.source, confidence="high",
+            origin="chemistry", row_ids=rows_for(sol.set_label or None, None)))
     for p in methodology.other_parameters:
         found.append(NewVariable(
             kind="parameter", name=p.name, alias_name=p.name,

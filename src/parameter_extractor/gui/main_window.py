@@ -515,14 +515,17 @@ class MainWindow(QMainWindow):
         cited_flags = [f for f in result.paper_flags if f.kind == "cited_data"]
         new_var_flags = [f for f in result.paper_flags if f.kind == "new_variable"]
         derived_flags = [f for f in result.paper_flags if f.kind == "derived_value"]
+        repeat_flags = [f for f in result.paper_flags if f.kind == "duplicate_removed"]
         other_paper_flags = [f for f in result.paper_flags
-                             if f.kind not in ("new_variable", "cited_data", "derived_value")]
+                             if f.kind not in ("new_variable", "cited_data", "derived_value", "duplicate_removed")]
         if cited_flags:
             add_group("Data reproduced from other publications", cited_flags)
         if new_var_flags:
             add_group("New variables not added to the CSV", new_var_flags)
         if derived_flags:
             add_group("Calculated by the app (not stated in the paper)", derived_flags)
+        if repeat_flags:
+            add_group("Left out as repeats of the solution chemistry", repeat_flags)
         if other_paper_flags:
             add_group("Whole paper", other_paper_flags)
         for row_id, flags in result.row_flags.items():

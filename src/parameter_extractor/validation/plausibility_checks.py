@@ -23,7 +23,7 @@ FlagKind = Literal["out_of_range", "low_confidence", "ambiguous_paper_wide_speci
                    "possible_duplicate", "figure_problem", "new_variable",
                    "term_not_found", "cited_data", "conflicting_values",
                    "assumed_value", "unit_conversion", "derived_value", "lookup_unavailable",
-                   "not_calculated"]
+                   "not_calculated", "concentration_not_stated", "duplicate_removed"]
 
 
 @dataclass
@@ -139,24 +139,56 @@ def check_extraction(
                for o in methodology.per_set_overrides]
     per_set += [(c.parameter, c.value, c.set_label or "every cycling set", c.confidence, c.basis, c.quote,
                  c.source) for c in (wet_dry.parameters if wet_dry else [])]
+    # one flag per field and confidence level, listing every set it applies to -- the same doubt
+    # repeated set by set (kim2019: sampled_temperature_C in 10 sets) is one thing to check
+    groups: Dict[tuple, list] = {}
     for name, value, label, confidence, basis, quote, source in per_set:
         if basis != "assumed" and confidence_below(confidence, flag_below):
-            flags.append(Flag(
-                "low_confidence",
-                f"{name} = {value:g} for set '{label}' has confidence '{confidence}'"
-                + (" (derived from stated values)" if basis == "derived" else "")
-                + f"{_drop_suffix(confidence, drop_below)}.", quote=quote or None, source=source or None))
+            groups.setdefault((name, confidence, basis == "derived"), []).append((label, f"{value:g}", quote, source))
+    for (name, confidence, derived), items in groups.items():
+        how = " (derived from stated values)" if derived else ""
+        if len(items) == 1:
+            label, value, quote, source = items[0]
+            message = f"{name} = {value} for set '{label}' has confidence '{confidence}'{how}"
+        else:
+            listed = "; ".join(f"'{label}' = {value}" for label, value, _, _ in items)
+            message = f"{name} has confidence '{confidence}' in {len(items)} sets{how}: {listed}"
+        flags.append(Flag("low_confidence", message + f"{_drop_suffix(confidence, drop_below)}.",
+                          **_joined(items)))
 
+    # starting species: no concentration in the paper is its own (always reported) problem;
+    # otherwise one flag per species and confidence level
+    chem_groups: Dict[tuple, list] = {}
     for s in chemistry.solutes:
-        if s.role == "initial" and confidence_below(s.confidence, flag_below):
-            where = f"set {s.set_label!r}" if s.set_label else "every set"
+        if s.role != "initial":
+            continue
+        where = f"set '{s.set_label}'" if s.set_label else "every set"
+        if s.concentration_value is None and s.concentration_mM is None:
             flags.append(Flag(
-                "low_confidence",
-                f"initial {s.name} = {s.concentration_value} {s.concentration_unit_raw} "
-                f"({where}) has confidence '{s.confidence}'{_drop_suffix(s.confidence, drop_below)}.",
-                quote=s.quote, source=s.source))
+                "concentration_not_stated",
+                f"{s.name} is part of the starting mixture ({where}), but no concentration was found in the "
+                f"paper -- nothing was written for it. Check the paper or its supplementary information.",
+                quote=s.quote or None, source=s.source or None))
+        elif confidence_below(s.confidence, flag_below):
+            value = (f"{s.concentration_value:g} {s.concentration_unit_raw or ''}".strip()
+                     if s.concentration_value is not None else f"{s.concentration_mM:g} mM")
+            if s.derived:
+                value += " (calculated)"
+            chem_groups.setdefault((s.variable, s.confidence), []).append((where, value, s.quote, s.source))
+    for (variable, confidence), items in chem_groups.items():
+        listed = "; ".join(f"{value} ({where})" for where, value, _, _ in items)
+        flags.append(Flag("low_confidence", f"initial {variable} = {listed} has confidence '{confidence}'"
+                          f"{_drop_suffix(confidence, drop_below)}.", **_joined(items)))
 
     return flags
+
+
+def _joined(items) -> dict:
+    """quote/source for a grouped flag: each distinct one once, in order."""
+    def distinct(values):
+        seen = list(dict.fromkeys(v for v in values if v))
+        return " | ".join(seen) or None
+    return {"quote": distinct(i[2] for i in items), "source": distinct(i[3] for i in items)}
 
 
 def flags_to_json(paper_flags: List[Flag], row_flags: Dict[str, List[Flag]]) -> dict:

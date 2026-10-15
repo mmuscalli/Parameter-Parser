@@ -324,6 +324,18 @@ keep it for now, refresh after the open issues are sorted).
   unrounded value (`exact_mM`, hidden) for chained steps; stored at 6 s.f.
   kim2019: cytosine 7.5 / 11.25 mM stock for 1:2 / 1:3, as in the paper's logic.
   Flag kinds: derived_value / not_calculated / conflicting_values.
+- **Flags** (Mickey: over-flag rather than under-flag; cut noise by grouping
+  or rewording, never dropping): low-confidence per-set/cycling values and
+  starting species are grouped into one flag per field (+confidence); an
+  initial species with no concentration gets `concentration_not_stated`.
+- **One quantity, one variable** (Mickey: a volume/concentration tracked twice
+  reads like twice the amount): `ingestion/duplicates.py` drops
+  methodology other_parameters whose every volume/concentration repeats the
+  chemistry record (concentrations only match a LINKED species -- named in
+  the text or in a solution whose volume matched; equal numbers alone don't
+  count). `duplicate_removed` flags + `repeats_left_out` in new_variables.json.
+  Each added solution volume is offered once in the review as
+  "volume added: <solution>" (`added_<solution>_volume_uL`).
 - **PubChem** (`pubchem.py`, PUG REST, POST by name, cached in the app-data
   folder incl. misses, fails soft -> `lookup_unavailable` flag): runs in
   normalize_chemistry AFTER names.py rules, only for names the rules didn't

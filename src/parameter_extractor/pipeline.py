@@ -41,6 +41,7 @@ from parameter_extractor.config import settings
 from parameter_extractor.config.run_config import RunConfig
 from parameter_extractor.errors import ApiKeyMissingError, PdfNotReadableError, PipelineError
 from parameter_extractor.digitizing.annotate import save_digitized
+from parameter_extractor.ingestion.duplicates import drop_repeated_amounts
 from parameter_extractor.ingestion.figure_finder import find_figures
 from parameter_extractor.ingestion.figure_rows import build_figure_rows
 from parameter_extractor.ingestion.flatten_to_template import build_rows, write_template_csv
@@ -337,6 +338,13 @@ def finish(
 
     # ---- variables without a column: registry first, then the user's review ----
     index = row_index(ex.structure, rows, config.paper_prefix)
+    # amounts the chemistry already records aren't offered a second time (one quantity, one variable)
+    repeats = drop_repeated_amounts(ex.methodology, ex.chemistry)
+    paper_flags += [Flag("duplicate_removed",
+                         f"'{d.parameter.name}' ({d.parameter.value}) was left out: it repeats {d.matches}, "
+                         f"already recorded with the solution chemistry. Keeping both could read as twice "
+                         f"the amount.", quote=d.parameter.quote or None, source=d.parameter.source or None)
+                    for d in repeats]
     new_vars = collect_new_variables(ex.methodology, ex.chemistry, registry, index, ex.term_search,
                                      wet_dry=ex.wet_dry, structure=ex.structure)
     new_vars += fig_new_vars
@@ -375,6 +383,7 @@ def finish(
     if new_vars:
         (ctx.run_dir / "new_variables.json").write_text(json.dumps(
             {"left_out": [v.model_dump(exclude_none=True) for v in held_out],
+             "repeats_left_out": [dict(d.parameter.model_dump(), repeats=d.matches) for d in repeats],
              "accepted": accepted,
              "decisions": [d.__dict__ for d in decisions]}, indent=2, ensure_ascii=False))
 
