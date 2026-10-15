@@ -59,7 +59,8 @@ class Extracted(BaseModel, Generic[T]):
     # Methodology schema (10 of these) hit the API's grammar size limit with them.
     quote: str = Field(
         default="",
-        description="Short verbatim snippet from the paper that supports this value; empty "
+        description="Short snippet copied word for word from the paper that supports this "
+                    "value (never a paraphrase or your reasoning -- that goes in `note`); empty "
                     "if none. Required whenever status == 'found'; absence of a quote is itself "
                     "a signal to distrust the value.",
     )

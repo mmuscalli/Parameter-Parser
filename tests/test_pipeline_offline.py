@@ -88,7 +88,9 @@ def test_replay_reproduces_committed_csv():
         assert "api_key" not in summary["config"] and "replay-not-a-real-key" not in json.dumps(summary)
         assert result.run_dir.name.startswith("eder1994_")
         assert (result.run_dir / "page_images").is_dir()
-        assert all(f.kind == "low_confidence" for f in result.paper_flags)
+        assert {f.kind for f in result.paper_flags} == {"low_confidence", "derived_value"}   # + calculated totals
+        total = next(f for f in result.paper_flags if f.kind == "derived_value")
+        assert "total_sampled_peptides_yield calculated for 42 row(s)" in total.message
 
 
 def test_runs_never_overwrite_each_other():

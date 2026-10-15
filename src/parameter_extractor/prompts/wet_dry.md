@@ -12,7 +12,8 @@ cycle conditions the paper states:
 Rules:
 - Only values the paper states (`basis` "stated"), or that follow
   arithmetically from stated values (`basis` "derived", e.g. a 24 h cycle
-  from 20 h + 4 h). Never assume a typical value, and treat the paper's own
+  from 20 h + 4 h; say how in `note`). Every `quote` is the paper's own
+  words, copied exactly -- never your explanation. Never assume a typical value, and treat the paper's own
   hedges ("probably", "perhaps", "not documented") as NOT stated. Leave out
   anything not given; if you include an interpretation the paper doesn't
   state outright (e.g. which phase a single stated temperature belongs to),

@@ -12,6 +12,10 @@ For each species:
   For such a species, write its name the way the paper does, with ordinary
   spaces and punctuation (e.g. "cytidine 2'-phosphate", "ribose
   1,2-cyclic phosphate") -- not in the underscore style of column names.
+- Peptides: name a homopolymer "<n>peptide_<AA>" ("3peptide_Gly" for
+  triglycine) and a peptide of different amino acids by its sequence in
+  three-letter codes, N- to C-terminus, joined by "-" ("Gly-Ala-Ala") --
+  order matters there, so keep it exactly as the paper gives it.
 - Record the concentration in BOTH its original reported unit
   (`concentration_value` + `concentration_unit_raw`) and converted to mM
   (`concentration_mM`). Only fill `concentration_mM` when the conversion is

@@ -52,7 +52,13 @@ def test_truman2024_replay_reproduces_reference():
 
         flags = json.loads(result.flags_path.read_text())["paper_level"]
         assert sum(f["kind"] == "cited_data" for f in flags) == 8
-        assert not any(f["kind"] in ("conflicting_values", "assumed_value") for f in flags)
+        assert not any(f["kind"] == "assumed_value" for f in flags)
+        # Table 1's stated totals are kept (and match the sums); the Campbell texts state a total but
+        # name only the largest peptide, so the sum can't match -- flagged, stated total kept
+        assert [r["total_sampled_peptides_yield"] for r in table1] == ["47.15", "39.42", "33.45", "28.9"]
+        conflicting = [f["message"] for f in flags if f["kind"] == "conflicting_values"]
+        assert len(conflicting) == 3 and all("total peptide yield" in m for m in conflicting)
+        assert rows[0]["sampled_13peptide_Gly_%yield"] == "0.11"            # constructed column, no review
 
 
 if __name__ == "__main__":

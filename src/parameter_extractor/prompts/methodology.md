@@ -29,7 +29,8 @@ set it "ambiguous" at the top level with a note pointing to
 using the exact `set_label` strings from the structure plan below. Give each
 entry a `quote`, `source`, `confidence`, and `basis`:
 - "stated": the paper gives this value for this set;
-- "derived": calculated from stated values (say how in the quote);
+- "derived": calculated from stated values (say how in `note`, not in the
+  quote -- a quote is always the paper's own words, copied exactly);
 - "assumed": NOT stated. Do not fill in values the paper doesn't give --
   in particular, when the paper itself hedges ("probably", "perhaps",
   "likely", "not documented"), that is not a stated value. Prefer leaving

@@ -336,6 +336,23 @@ keep it for now, refresh after the open issues are sorted).
   count). `duplicate_removed` flags + `repeats_left_out` in new_variables.json.
   Each added solution volume is offered once in the review as
   "volume added: <solution>" (`added_<solution>_volume_uL`).
+- **Peptide naming convention** (Mickey, 2026-10-15; replaces relying on the
+  template's fixed peptide columns): homopolymers `<role>_<n>peptide_<AA>_<mM|%yield>`
+  (any n >= 2), heteropolymers in order `<role>_<AA1>-<AA2>-..._<mM|%yield>`.
+  `names.peptide_codes/peptide_name` parse Gly-Ala-Ala, GlyAla, H-Gly-L-Ala-OH,
+  glycylalanine; `registry.is_peptide_column` makes these columns KNOWN (no
+  review needed -- a defined standard, like stock_). Cyclic peptides stay
+  unmatched (review). The template's `mixedPeptide_*` columns are not used.
+- **total_sampled_peptides_yield** (`calculators/peptide_totals.py`, runs after
+  the review): sum of the row's linear-peptide %yields (DKP excluded),
+  origin "calculated" with the parts listed; a stated total ("Total Gly in
+  peptides" -> mapped straight to the column) is kept and checked against the
+  sum (`conflicting_values` beyond 0.05 points).
+- **Quotes are checked** (`validation/quotes.py`): flag quotes not found in the
+  paper's text (in-order word match tolerant of interleaved columns and
+  sub/superscripts) move to `Flag.unverified_quote`, shown as "Model's wording".
+  Root cause was the methodology prompt telling the model to explain derived
+  values "in the quote"; SetOverride/CycleParameter now have a `note` field.
 - **PubChem** (`pubchem.py`, PUG REST, POST by name, cached in the app-data
   folder incl. misses, fails soft -> `lookup_unavailable` flag): runs in
   normalize_chemistry AFTER names.py rules, only for names the rules didn't

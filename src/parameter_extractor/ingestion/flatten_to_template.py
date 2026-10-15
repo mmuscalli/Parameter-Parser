@@ -81,6 +81,9 @@ def _column_role(entry) -> str:
     return "stock" if getattr(entry, "concentration_basis", "mixture") == "stock" else entry.role
 
 
+_TOTAL_PEPTIDES = re.compile(r"\btotal\b.*\bpeptides?\b", re.IGNORECASE)
+
+
 def column_for_solute(entry, registry=None) -> Optional[str]:
     """The column an extracted value belongs in -- a template column, or one the
     user accepted earlier (local registry: column or alias) -- or None, making
@@ -90,6 +93,8 @@ def column_for_solute(entry, registry=None) -> Optional[str]:
     alias = registry.column_for("species", species_alias_name(entry))
     if alias:
         return alias
+    if entry.role == "sampled" and is_percent(entry) and _TOTAL_PEPTIDES.search(entry.name):
+        return "total_sampled_peptides_yield"      # "Total Gly in peptides", "total peptide yield"
     if _column_role(entry) == "stock":         # follows wherever the starting concentration was mapped
         initial = registry.column_for("species", f"initial {entry.name}")
         if initial and initial.startswith("initial_") and registry.is_known_column("stock_" + initial[8:]):
@@ -128,11 +133,18 @@ def column_safe_name(name: str) -> str:
     return re.sub(r'[\s,;"]+', "_", name.strip()).strip("_")
 
 
+def is_peptide_column(column: str) -> bool:
+    from parameter_extractor.registry import is_peptide_column as check
+    return check(column)
+
+
 def proposed_column_for_solute(entry) -> str:
     """What the column would be called if this new variable were accepted."""
     name = column_safe_name(entry.name)
     if entry.role == "sampled" and is_percent(entry):
         return f"sampled_{name}_%yield"
+    if _column_role(entry) != "stock" and is_peptide_column(f"{entry.role}_{name}_mM"):
+        return f"{entry.role}_{name}_mM"           # peptides: no _aq_ infix, as in the template
     if _column_role(entry) == "stock":
         initial = resolve_template_column(name, "initial").removesuffix(UNRECOGNIZED_SUFFIX)
         return "stock_" + initial.removeprefix("initial_")

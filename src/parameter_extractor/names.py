@@ -48,6 +48,46 @@ _COMMON = {"urea": "urea", "imidazole": "imidazole", "cyanamide": "cyanamide", "
 _SUBSCRIPTS = str.maketrans("₀₁₂₃₄₅₆₇₈₉⁰¹²³⁴⁵⁶⁷⁸⁹⁺⁻−–", "01234567890123456789+---")
 
 
+# peptide residues as named inside a peptide: "glycyl", "alanyl", ... (N- to C-terminus)
+_ACYL = {"Gly": "glycyl", "Ala": "alanyl", "Val": "valyl", "Leu": "leucyl", "Ile": "isoleucyl", "Ser": "seryl",
+         "Thr": "threonyl", "Cys": "cysteinyl", "Met": "methionyl", "Phe": "phenylalanyl", "Tyr": "tyrosyl",
+         "Trp": "tryptophyl", "His": "histidyl", "Lys": "lysyl", "Arg": "arginyl", "Pro": "prolyl",
+         "Asp": "aspartyl", "Glu": "glutamyl", "Asn": "asparaginyl", "Gln": "glutaminyl"}
+_AA_CODE = "(?:" + "|".join(AMINO_ACIDS) + ")"
+_STEREO = re.compile(r"(?<![A-Za-z])(?:DL|L|D)-(?=[A-Z])")
+
+
+def peptide_name(codes: List[str]) -> str:
+    """The naming convention for peptides (Mickey, 2026-10-15): a homopolymer's order
+    doesn't matter -> '<n>peptide_<AA>' ('3peptide_Gly'); a heteropolymer's does ->
+    residues N- to C-terminus joined by '-' ('Gly-Ala-Ala')."""
+    return _oligomer(len(codes), codes[0]) if len(set(codes)) == 1 else "-".join(codes)
+
+
+def peptide_codes(name: str) -> Optional[List[str]]:
+    """Residue codes of a linear peptide written as a sequence: 'Gly-Ala-Ala',
+    'GlyAlaAla', 'H-Gly-L-Ala-OH', 'glycylalanylalanine', 'glycyl-alanine'.
+    None if it isn't one (or has a single residue)."""
+    t = _STEREO.sub("", name.strip())
+    t = re.sub(r"^H-|-OH$", "", t)
+    if re.fullmatch(rf"{_AA_CODE}(?:-?{_AA_CODE})+", t):
+        return re.findall(_AA_CODE, t)
+    low = re.sub(r"(?<![a-z])(?:dl|l|d)-", "", t.lower()).replace("-", "").replace(" ", "")
+    codes = []
+    while low:
+        for code, acyl in sorted(_ACYL.items(), key=lambda kv: -len(kv[1])):
+            if low.startswith(acyl):
+                codes.append(code)
+                low = low[len(acyl):]
+                break
+        else:
+            last = next((c for c, full in AMINO_ACIDS.items() if low == full.replace(" ", "")), None)
+            if last and codes:
+                return codes + [last]
+            return None
+    return None
+
+
 @lru_cache(maxsize=1)
 def vocabulary() -> Tuple[str, ...]:
     return tuple(json.loads(_VOCAB.read_text())["species_names"])
@@ -127,6 +167,9 @@ def match_species(name: str, vocab: Optional[Tuple[str, ...]] = None) -> Optiona
         return _oligomer(len(parts), parts[0]), "oligomer notation"
     if re.fullmatch(r"([A-Z])\1+", compact) and compact[0] in _ONE_LETTER:
         return _oligomer(len(compact), _ONE_LETTER[compact[0]]), "oligomer notation"
+    codes = peptide_codes(hydrate)
+    if codes:                                     # Gly-Ala-Ala, glycylalanine, H-Ala-Gly-OH
+        return peptide_name(codes), "peptide sequence"
 
     # named salts: "sodium chloride" -> NaCl, "calcium chloride" -> CaCl2
     for cname, c in _CATIONS.items():

@@ -149,10 +149,12 @@ def test_full_run_fills_results():
         assert headers[0] == "full_id" and headers.index("sampled_2peptide_Gly_%yield") < headers.index("paper_title")
         tip = w.rows_table.item(0, headers.index("sampled_2peptide_Gly_%yield")).toolTip()
         assert tip.startswith("From: chemistry (high confidence)") and "Table 1" in tip, tip
-        first_flag = w.flags_tree.topLevelItem(0).child(0)
-        w.flags_tree.setCurrentItem(first_flag)
+        groups = [w.flags_tree.topLevelItem(i) for i in range(w.flags_tree.topLevelItemCount())]
+        whole_paper = next(g for g in groups if g.text(0).startswith("Whole paper"))
+        w.flags_tree.setCurrentItem(whole_paper.child(0))
         assert "confidence" in w.flag_details.toPlainText()
-        assert "Quote from the paper" in w.flag_details.toPlainText()
+        details = w.flag_details.toPlainText()
+        assert "Quote from the paper" in details or "not found word for word" in details, details
         assert w.tabs.isEnabled() and w.open_folder_btn.isEnabled()
         assert progress and max(progress) == w.progress.maximum()
         assert keys.saved == [] and keys.deleted == 0, "keychain touched without 'remember' ticked"

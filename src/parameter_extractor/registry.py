@@ -45,6 +45,30 @@ def default_registry_path() -> Path:
     return base / "variable_registry.json"
 
 
+def _peptide_column_re():
+    from parameter_extractor.names import AMINO_ACIDS
+    aa = "(?:" + "|".join(AMINO_ACIDS) + ")"
+    return re.compile(rf"(?:initial|sampled)_(?:(?P<n>\d+)peptide_{aa}|(?P<seq>{aa}(?:-{aa})+))_(?:mM|%yield)")
+
+
+_PEPTIDE_COLUMN = None
+
+
+def is_peptide_column(column: str) -> bool:
+    """Columns built by the peptide naming convention (names.peptide_name) are standard,
+    for any length and sequence -- not only the lengths PaperDataTemplate happened to
+    need: '<role>_<n>peptide_<AA>_<mM|%yield>' (homopolymer, n >= 2) and
+    '<role>_<AA1>-<AA2>-..._<mM|%yield>' (heteropolymer: in order, not all the same)."""
+    global _PEPTIDE_COLUMN
+    _PEPTIDE_COLUMN = _PEPTIDE_COLUMN or _peptide_column_re()
+    m = _PEPTIDE_COLUMN.fullmatch(column)
+    if not m:
+        return False
+    if m.group("n"):
+        return int(m.group("n")) >= 2
+    return len(set(m.group("seq").split("-"))) > 1
+
+
 def default_pubchem_cache_path() -> Path:
     """Next to the registry: names already looked up on PubChem."""
     return default_registry_path().parent / "pubchem_cache.json"
@@ -89,6 +113,8 @@ class VariableRegistry:
         if not column:
             return False
         if column in self._base_set or column in self.added_columns:
+            return True
+        if is_peptide_column(column):
             return True
         # a species' stock-solution concentration goes with its starting concentration:
         # stock_X_aq_mM is known wherever initial_X_aq_mM is

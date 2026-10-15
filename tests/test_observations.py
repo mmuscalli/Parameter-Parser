@@ -42,7 +42,9 @@ def test_every_value_has_provenance_and_csv_round_trips():
         result = run_pipeline(PDF, RunConfig.from_settings(api_key="x", output_dir=Path(tmp)))
         assert result.csv_path.read_text() == (REPLAY_DIR / "eder1994_auto_extracted.csv").read_text()
         obs = list(csv.DictReader(open(result.observations_path)))
-        assert len(obs) == 948 and all(o["origin"] for o in obs)
+        assert len(obs) == 948 + 42 and all(o["origin"] for o in obs)        # + a calculated total per row
+        totals = [o for o in obs if o["column"] == "total_sampled_peptides_yield"]
+        assert all(o["origin"] == "calculated" for o in totals) and totals[0]["value"] == "2.834"
 
         by = {(o["full_id"], o["column"]): o for o in obs}
         y = by[("001001001", "sampled_2peptide_Gly_%yield")]

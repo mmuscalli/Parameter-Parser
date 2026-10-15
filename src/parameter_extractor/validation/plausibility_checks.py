@@ -32,6 +32,10 @@ class Flag:
     message: str
     quote: Optional[str] = None
     source: Optional[str] = None
+    # set by validation/quotes.py: quote text NOT found word for word in the paper (the
+    # model's own wording, or read from a table image), kept apart from real quotes
+    unverified_quote: Optional[str] = None
+    model_note: Optional[str] = None          # the model's explanation (e.g. how a value was derived)
 
     def to_dict(self) -> dict:
         return {k: v for k, v in asdict(self).items() if v is not None}
@@ -135,23 +139,24 @@ def check_extraction(
                 quote=f.quote or None, source=f.source or None))
 
     # per-set and cycling values (assumed ones are reported separately: never written)
-    per_set = [(o.field_name, o.value, o.set_label, o.confidence, o.basis, o.quote, o.source)
+    per_set = [(o.field_name, o.value, o.set_label, o.confidence, o.basis, o.quote, o.source, o.note)
                for o in methodology.per_set_overrides]
     per_set += [(c.parameter, c.value, c.set_label or "every cycling set", c.confidence, c.basis, c.quote,
-                 c.source) for c in (wet_dry.parameters if wet_dry else [])]
+                 c.source, c.note) for c in (wet_dry.parameters if wet_dry else [])]
     # one flag per field and confidence level, listing every set it applies to -- the same doubt
     # repeated set by set (kim2019: sampled_temperature_C in 10 sets) is one thing to check
     groups: Dict[tuple, list] = {}
-    for name, value, label, confidence, basis, quote, source in per_set:
+    for name, value, label, confidence, basis, quote, source, note in per_set:
         if basis != "assumed" and confidence_below(confidence, flag_below):
-            groups.setdefault((name, confidence, basis == "derived"), []).append((label, f"{value:g}", quote, source))
+            groups.setdefault((name, confidence, basis == "derived"), []).append(
+                (label, f"{value:g}", quote, source, note))
     for (name, confidence, derived), items in groups.items():
         how = " (derived from stated values)" if derived else ""
         if len(items) == 1:
-            label, value, quote, source = items[0]
+            label, value = items[0][:2]
             message = f"{name} = {value} for set '{label}' has confidence '{confidence}'{how}"
         else:
-            listed = "; ".join(f"'{label}' = {value}" for label, value, _, _ in items)
+            listed = "; ".join(f"'{i[0]}' = {i[1]}" for i in items)
             message = f"{name} has confidence '{confidence}' in {len(items)} sets{how}: {listed}"
         flags.append(Flag("low_confidence", message + f"{_drop_suffix(confidence, drop_below)}.",
                           **_joined(items)))
@@ -176,7 +181,7 @@ def check_extraction(
                 value += " (calculated)"
             chem_groups.setdefault((s.variable, s.confidence), []).append((where, value, s.quote, s.source))
     for (variable, confidence), items in chem_groups.items():
-        listed = "; ".join(f"{value} ({where})" for where, value, _, _ in items)
+        listed = "; ".join(f"{i[1]} ({i[0]})" for i in items)
         flags.append(Flag("low_confidence", f"initial {variable} = {listed} has confidence '{confidence}'"
                           f"{_drop_suffix(confidence, drop_below)}.", **_joined(items)))
 
@@ -184,11 +189,14 @@ def check_extraction(
 
 
 def _joined(items) -> dict:
-    """quote/source for a grouped flag: each distinct one once, in order."""
+    """quote/source (and the model's notes) for a grouped flag: each distinct one once, in order."""
     def distinct(values):
         seen = list(dict.fromkeys(v for v in values if v))
         return " | ".join(seen) or None
-    return {"quote": distinct(i[2] for i in items), "source": distinct(i[3] for i in items)}
+    out = {"quote": distinct(i[2] for i in items), "source": distinct(i[3] for i in items)}
+    if any(len(i) > 4 and i[4] for i in items):
+        out["model_note"] = distinct(i[4] for i in items if len(i) > 4)
+    return out
 
 
 def flags_to_json(paper_flags: List[Flag], row_flags: Dict[str, List[Flag]]) -> dict:

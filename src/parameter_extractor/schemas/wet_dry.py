@@ -26,9 +26,11 @@ class CycleParameter(BaseModel):
     value: float = Field(description="In the parameter's unit: hours, degrees C, or % relative humidity.")
     basis: Basis = Field(default="stated", description="'stated' in the paper; 'derived' by arithmetic "
                                                        "from stated values; 'assumed' if not stated.")
-    quote: str
+    quote: str = Field(description="Copied word for word from the paper (for a table value: its row/column labels and the value exactly as printed). Never your own words -- explanations go in `note`.")
     source: str
     confidence: Literal["high", "medium", "low"]
+    note: str = Field(default="", description="Your explanation, e.g. how a 'derived' value was calculated; "
+                                              "'' if none.")
 
 
 class WetDryConditions(BaseModel):

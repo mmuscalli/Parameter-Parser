@@ -36,6 +36,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Callable, Dict, List, Optional, Sequence
 
+from parameter_extractor.calculators.peptide_totals import fill_total_peptide_yield
 from parameter_extractor.calculators.mixing import derive_from_ratios, derive_mixture_concentrations
 from parameter_extractor.config import settings
 from parameter_extractor.config.run_config import RunConfig
@@ -56,6 +57,7 @@ from parameter_extractor.ingestion.pdf_parser import ParsedPaper, parse_pdf, ras
 from parameter_extractor.run_context import ProgressCallback, RunContext, StageUsage, total_cost
 from parameter_extractor.pricing import PRICES_CHECKED
 from parameter_extractor.pubchem import PubChem
+from parameter_extractor.validation.quotes import check_flag_quotes
 from parameter_extractor.schemas.chemistry import ChemistryExtraction
 from parameter_extractor.schemas.figures import DigitizedFigure, FigureCandidate, FigurePlan
 from parameter_extractor.schemas.methodology import Methodology
@@ -387,7 +389,20 @@ def finish(
              "accepted": accepted,
              "decisions": [d.__dict__ for d in decisions]}, indent=2, ensure_ascii=False))
 
+    # after the review, so accepted peptide columns count too
+    totals, differing = fill_total_peptide_yield(rows)
+    for full_id, stated, total, listed in differing:
+        paper_flags.append(Flag(
+            "conflicting_values", f"Row {full_id}: the paper's total peptide yield is {stated:g}%, but the peptide "
+            f"yields extracted for that row add up to {total:g}% ({listed}). Rounding in the paper, or lengths "
+            f"it doesn't list individually? The stated total was kept."))
+    if totals:
+        paper_flags.append(Flag(
+            "derived_value", f"total_sampled_peptides_yield calculated for {len(totals)} row(s) as the sum of the "
+            f"peptide % yields reported for each (cyclic forms such as DKP not included); rows where the paper "
+            f"states the total keep the stated value. Hover a value to see what was added."))
     row_flags = {r.full_id: f for r in rows if (f := check_row(r, **thresholds))}
+    check_flag_quotes([*paper_flags, *(f for fs in row_flags.values() for f in fs)], ex.parsed.text)
     flags_path = None
     if paper_flags or row_flags:
         flags_path = ctx.run_dir / "plausibility_flags.json"

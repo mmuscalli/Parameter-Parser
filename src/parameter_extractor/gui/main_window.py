@@ -504,10 +504,14 @@ class MainWindow(QMainWindow):
         def add_group(title, flags):
             group = QTreeWidgetItem([f"{title} ({len(flags)})"])
             for f in flags:
-                child = QTreeWidgetItem([f.message, f.quote or "", f.source or ""])
+                shown = f.quote or (f"(model's wording, not in the paper) {f.unverified_quote}"
+                                    if f.unverified_quote else "")
+                child = QTreeWidgetItem([f.message, shown, f.source or ""])
                 child.setData(0, Qt.ItemDataRole.UserRole, f)
                 child.setToolTip(0, f.message)
-                child.setToolTip(1, f.quote or "")
+                child.setToolTip(1, shown)
+                if not f.quote and f.unverified_quote:
+                    child.setForeground(1, QBrush(QColor("gray")))
                 group.addChild(child)
             tree.addTopLevelItem(group)
             group.setExpanded(True)
@@ -542,6 +546,13 @@ class MainWindow(QMainWindow):
             return
         quote = (f"<p><b>Quote from the paper</b><br><i>\u201c{html.escape(flag.quote)}\u201d</i></p>"
                  if flag.quote else "")
+        if flag.unverified_quote:
+            quote += (f"<p><b>Model's wording \u2014 not found word for word in the paper's text</b><br>"
+                      f"{html.escape(flag.unverified_quote)}<br><span style='color:gray'>Either the model's own "
+                      f"description, or read from a table image whose text layer differs. Check the paper."
+                      f"</span></p>")
+        if flag.model_note:
+            quote += f"<p><b>Model's note</b><br>{html.escape(flag.model_note)}</p>"
         source = f"<p><b>Where</b><br>{html.escape(flag.source)}</p>" if flag.source else ""
         self.flag_details.setHtml(f"<p>{html.escape(flag.message)}</p>{quote}{source}")
 

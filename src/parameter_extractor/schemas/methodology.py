@@ -30,8 +30,10 @@ class SetOverride(BaseModel):
     basis: Basis = Field(default="stated", description="'stated' in the paper; 'derived' by arithmetic "
                                                        "from stated values; 'assumed' if not stated.")
     confidence: Literal["high", "medium", "low"] = "high"
-    quote: str = Field(default="", description="Supporting snippet from the paper.")
+    quote: str = Field(default="", description="Copied word for word from the paper (for a table value: its row/column labels and the value exactly as printed). Never your own words -- explanations go in `note`.")
     source: str = ""
+    note: str = Field(default="", description="Your explanation, e.g. how a 'derived' value was calculated; "
+                                              "'' if none.")
 
 
 class OtherParameter(BaseModel):
