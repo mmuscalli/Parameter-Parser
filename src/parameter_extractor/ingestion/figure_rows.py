@@ -25,7 +25,7 @@ from parameter_extractor.ingestion.flatten_to_template import (
 from parameter_extractor.schemas.figures import DigitizedFigure
 from parameter_extractor.schemas.methodology import Methodology
 from parameter_extractor.schemas.paper_metadata import PaperMetadata
-from parameter_extractor.schemas.row_schema import ExtractedRow
+from parameter_extractor.schemas.row_schema import CellSource, ExtractedRow
 from parameter_extractor.schemas.variables import NewVariable
 
 DIGITIZED = "digitized"
@@ -37,7 +37,7 @@ _ID_FIELDS = {"full_id", "set_id", "sample_id", "set_type", "entry_number", "pap
 
 
 def _assign(fields: dict, species: dict, extra: dict, column: Optional[str], value: float,
-            registry) -> bool:
+            registry, prov: Optional[dict] = None, source: Optional[CellSource] = None) -> bool:
     """Puts the value in its column; False (nothing written) if the column isn't known
     (neither a template column, one accepted earlier, nor mapped by an alias)."""
     if not column:
@@ -45,6 +45,8 @@ def _assign(fields: dict, species: dict, extra: dict, column: Optional[str], val
     column = registry.alias_for("figure_axis", column) or column
     if not registry.is_known_column(column):
         return False
+    if prov is not None and source is not None:
+        prov[column] = source
     field = _FIELD_FOR_COLUMN.get(column, column)
     if field in ExtractedRow.model_fields and field not in _ID_FIELDS:
         fields[field] = value
@@ -118,11 +120,21 @@ def build_figure_rows(
                     if series.initial_temperature_C is not None else methodology.sampled_temperature_C.value,
                 }
                 row_species, extra = dict(species), {}
+                conditions = CellSource(origin=f"{fig.figure_id} series conditions",
+                                        source=where, quote=series.notes or "")
+                prov = {col: conditions for col in species}
+                if series.initial_temperature_C is not None:
+                    prov["initial_temperature_C"] = prov["sampled_temperature_C"] = conditions
                 if series.initial_pH is not None:
                     extra["initial_pH"] = series.initial_pH
+                    prov["initial_pH"] = conditions
                 for axis, value in ((panel.x, x), (panel.y, y)):
                     value = round(value * axis.multiplier, 6)
-                    if not _assign(fields, row_species, extra, axis.column, value, registry):
+                    read = CellSource(origin=f"{fig.figure_id} (digitized)", confidence=DIGITIZED,
+                                      source=f"{where}, point {sample_idx} (page {fig.page})",
+                                      quote=f"read off axis '{axis.label}'"
+                                            + (f" x {axis.multiplier:g}" if axis.multiplier != 1 else ""))
+                    if not _assign(fields, row_species, extra, axis.column, value, registry, prov, read):
                         new_vars.append(NewVariable(
                             kind="figure_axis", name=axis.column, alias_name=axis.column,
                             proposed_column=axis.column, value=value,
@@ -133,6 +145,7 @@ def build_figure_rows(
                 sample_id = f"{sample_idx:03d}"
                 series_row_ids.append(f"{set_id}{sample_id}")
                 row = dict(
+                    provenance=prov,
                     full_id=f"{set_id}{sample_id}", set_id=set_id, sample_id=sample_id,
                     set_type=set_type, entry_number=entry,
                     paper_doi=metadata.paper_doi, paper_title=metadata.paper_title,

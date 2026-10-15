@@ -23,7 +23,7 @@ from parameter_extractor.ingestion.flatten_to_template import (
 from parameter_extractor.registry import VariableRegistry, suggest_column_name
 from parameter_extractor.schemas.chemistry import ChemistryExtraction
 from parameter_extractor.schemas.methodology import Methodology
-from parameter_extractor.schemas.row_schema import ExtractedRow
+from parameter_extractor.schemas.row_schema import CellSource, ExtractedRow
 from parameter_extractor.schemas.structure_plan import StructurePlan
 from parameter_extractor.schemas.variables import NewVariable, TermSearch
 
@@ -144,9 +144,11 @@ def write_values(rows: List[ExtractedRow], column: str, values: List[NewVariable
         value = v.value if v.value is not None else v.value_text
         if value in (None, ""):
             continue
+        source = CellSource(origin=f"{v.origin} (new variable '{v.name}')", quote=v.quote or "",
+                            source=v.source or "", confidence=v.confidence)
         for rid in v.row_ids:
             if rid in by_id:
-                set_row_value(by_id[rid], column, value)
+                set_row_value(by_id[rid], column, value, source)
                 n += 1
     return n
 

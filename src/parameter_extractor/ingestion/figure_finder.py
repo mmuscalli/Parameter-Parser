@@ -23,7 +23,10 @@ from typing import Dict, List, Optional, Tuple
 
 from parameter_extractor.schemas.figures import BBox, FigureCandidate
 
-CAPTION_RE = re.compile(r"^(?:fig(?:ure)?)\.?(\d{1,2})(?![\d(])", re.IGNORECASE)
+# Captions start with a capital ("Fig. 3", "Figure 3", "FIG. 3"); a lowercase "figure 13,
+# ref. 2)" at the start of a line is running text citing another paper (truman2024).
+CAPTION_RE = re.compile(r"^(?:Fig(?:ure)?|FIG(?:URE)?)\.?(\d{1,2})(?![\d(])")
+MIN_FIGURE_HEIGHT = 30.0    # points; a smaller area means the "caption" wasn't one
 RENDER_SCALE = 3.0          # 216 dpi: enough to click points accurately
 LINE_TOLERANCE = 3.0        # points; words closer than this vertically share a line
 SIDE_MARGIN = 6.0
@@ -104,6 +107,8 @@ def _find_on_page(page, page_no: int) -> List[dict]:
 
     results = []
     for cap in found:
+        if cap.get("skip"):
+            continue
         col = cap["col"]
         cx0, cx1 = columns[col]
         cap_top = cap["block"][0]["top"]
@@ -119,6 +124,8 @@ def _find_on_page(page, page_no: int) -> List[dict]:
                 break
         cap["figure_bbox"] = (max(cx0 + (SIDE_MARGIN if col == "right" else 20), 0.0), top,
                               min(cx1 - (SIDE_MARGIN if col == "left" else 20), page.width), cap_top - 1)
+        if cap["figure_bbox"][3] - cap["figure_bbox"][1] < MIN_FIGURE_HEIGHT:
+            continue        # no room for a figure above it: running text, not a caption
         cap["caption_bbox"] = (min(l["x0"] for l in cap["block"]), cap_top,
                                max(l["x1"] for l in cap["block"]), cap_bottom)
         cap["caption"] = _caption_text(cap["block"])

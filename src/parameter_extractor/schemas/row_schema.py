@@ -13,6 +13,15 @@ from typing import Dict, List, Optional, Union
 from pydantic import BaseModel
 
 
+class CellSource(BaseModel):
+    """Where one value in a row came from -- carried into observations.csv and
+    shown when hovering a cell in the app."""
+    origin: str                      # "chemistry", "methodology", "structure", "metadata", "Fig. 5", ...
+    quote: str = ""
+    source: str = ""                 # e.g. "Table 1", "Experimental section, para 2"
+    confidence: Optional[str] = None
+
+
 class ExtractedRow(BaseModel):
     full_id: str
     set_id: str
@@ -52,3 +61,6 @@ class ExtractedRow(BaseModel):
 
     source_notes: Optional[str] = None
     extraction_confidence: Optional[str] = None
+
+    # template column -> where its value came from (not written to the wide CSV)
+    provenance: Dict[str, CellSource] = {}

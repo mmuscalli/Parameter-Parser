@@ -147,6 +147,8 @@ def test_full_run_fills_results():
         assert "sampled_2peptide_Gly_%yield" in headers and "full_id" in headers
         assert w.flags_tree.topLevelItemCount() >= 1
         assert headers[0] == "full_id" and headers.index("sampled_2peptide_Gly_%yield") < headers.index("paper_title")
+        tip = w.rows_table.item(0, headers.index("sampled_2peptide_Gly_%yield")).toolTip()
+        assert tip.startswith("From: chemistry (high confidence)") and "Table 1" in tip, tip
         first_flag = w.flags_tree.topLevelItem(0).child(0)
         w.flags_tree.setCurrentItem(first_flag)
         assert "confidence" in w.flag_details.toPlainText()

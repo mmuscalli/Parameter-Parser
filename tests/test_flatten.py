@@ -1,0 +1,55 @@
+"""
+Offline regression tests for row building, from issues found on truman2024:
+starting concentrations that differ per SAMPLE (not per set), and per-set
+overrides other than temperature (e.g. pH). No API calls.
+
+Run with: python tests/test_flatten.py
+"""
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
+
+from parameter_extractor.ingestion.flatten_to_template import build_rows, row_to_template_dict
+from parameter_extractor.schemas.chemistry import ChemistryExtraction, SoluteEntry
+from parameter_extractor.schemas.methodology import Methodology, SetOverride
+from parameter_extractor.schemas.paper_metadata import PaperMetadata
+from parameter_extractor.schemas.structure_plan import StructurePlan
+from test_pipeline_offline import REPLAY_DIR
+
+L = lambda cls, n: cls.model_validate_json((REPLAY_DIR / f"{n}.output.json").read_text())
+
+
+def test_per_sample_initial_concentrations_and_ph_override():
+    meta, structure = L(PaperMetadata, "metadata"), L(StructurePlan, "structure_planner")
+    meth, chem = L(Methodology, "methodology"), L(ChemistryExtraction, "chemistry")
+    s1 = structure.experiment_sets[0]
+    # a starting concentration that differs per sample in set 1 (as Gly did in truman2024's
+    # Table 2); Ala, because eder1994 gives Gly paper-wide, which would (rightly) trigger the
+    # "paper-wide AND per-set" ambiguity rule instead
+    for i, sample in enumerate(s1.samples):
+        chem.solutes.append(SoluteEntry(
+            name="Ala", in_controlled_vocab=True, phase="aq", role="initial", set_label=s1.set_label,
+            sample_label=sample.sample_label, concentration_value=10.0 ** (i - 4),
+            concentration_unit_raw="mol dm-3", concentration_mM=1000 * 10.0 ** (i - 4),
+            quote="q", source="Table 2", confidence="high"))
+    meth.per_set_overrides.append(SetOverride(set_label=s1.set_label, field_name="initial_pH", value=9.8))
+
+    rows = build_rows(meta, structure, meth, chem, "001")
+    set1 = [row_to_template_dict(r) for r in rows if r.set_id == "001001"]
+    assert [round(d["initial_Ala_mM"], 6) for d in set1] == [0.1, 1.0, 10.0][:len(set1)]
+    assert all(d["initial_pH"] == 9.8 for d in set1)
+    others = [row_to_template_dict(r) for r in rows if r.set_id == "001002"]
+    assert all("initial_Ala_mM" not in d and "initial_pH" not in d for d in others)   # untouched
+    assert all(d["initial_Gly_mM"] == 1000.0 for d in set1 + others)
+    assert rows[0].provenance["initial_Ala_mM"].source == "Table 2"
+    assert rows[0].provenance["initial_pH"].origin == "methodology (per set)"
+
+
+if __name__ == "__main__":
+    for name, fn in list(globals().items()):
+        if name.startswith("test_") and callable(fn):
+            fn()
+            print(f"PASS: {name}")
+    print("All flatten tests passed.")

@@ -42,7 +42,9 @@ from parameter_extractor.errors import ApiKeyMissingError, PdfNotReadableError, 
 from parameter_extractor.digitizing.annotate import save_digitized
 from parameter_extractor.ingestion.figure_finder import find_figures
 from parameter_extractor.ingestion.figure_rows import build_figure_rows
-from parameter_extractor.ingestion.flatten_to_template import build_rows, write_csv
+from parameter_extractor.ingestion.flatten_to_template import build_rows, write_template_csv
+from parameter_extractor.ingestion.observations import (
+    observations_to_records, rows_to_observations, write_observations_csv)
 from parameter_extractor.ingestion.new_variables import (
     VariableDecision, VariableGroup, apply_decisions, collect_new_variables, group_new_variables, row_index,
     split_known, write_values)
@@ -77,6 +79,7 @@ class RunResult:
     row_flags: Dict[str, List[Flag]]
     usage: List[StageUsage]
     flags_path: Optional[Path] = None   # None when nothing was flagged
+    observations_path: Optional[Path] = None   # long format: one value per line, with provenance
     gold_standard_score: Optional[dict] = None
     figures: List[dict] = field(default_factory=list)   # [{figure_id, status, series, points}]
     new_variables: List[NewVariable] = field(default_factory=list)   # left out of the CSV (not accepted)
@@ -327,8 +330,12 @@ def finish(
         flags_path.write_text(json.dumps(flags_to_json(paper_flags, row_flags),
                                          indent=2, ensure_ascii=False))
 
+    # the long-format record is canonical; the wide template CSV is generated from it
+    observations = rows_to_observations(rows)
+    observations_path = ctx.run_dir / f"{ex.paper_id}_observations.csv"
+    write_observations_csv(observations, observations_path)
     csv_path = ctx.run_dir / f"{ex.paper_id}_extracted.csv"
-    write_csv(rows, csv_path)
+    write_template_csv(observations_to_records(observations), csv_path)
 
     gold_score = None
     if settings.USE_GOLD_STANDARD:  # OFF until the curated subset exists
@@ -345,6 +352,7 @@ def finish(
     return RunResult(paper_id=ex.paper_id, run_dir=ctx.run_dir, csv_path=csv_path, rows=rows,
                      paper_flags=paper_flags, row_flags=row_flags, usage=list(ctx.usage),
                      flags_path=flags_path, gold_standard_score=gold_score,
+                     observations_path=observations_path,
                      figures=sorted(figure_summary, key=lambda f: f["figure_id"]),
                      new_variables=held_out, accepted_variables=accepted, unfound_terms=unfound)
 

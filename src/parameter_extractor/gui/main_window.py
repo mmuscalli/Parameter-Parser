@@ -440,18 +440,36 @@ class MainWindow(QMainWindow):
         t.setRowCount(len(body))
         t.setHorizontalHeaderLabels([header[i] for i in keep])
         id_col = header.index("full_id")
+        provenance = {r.full_id: r.provenance for r in result.rows}
         for r, row in enumerate(body):
             flags = result.row_flags.get(row[id_col], [])
+            prov = provenance.get(row[id_col], {})
             for c, i in enumerate(keep):
                 item = QTableWidgetItem(row[i])
+                tip = self._provenance_tip(prov.get(header[i])) if row[i] else ""
                 if flags:
                     item.setBackground(QBrush(FLAGGED_ROW_COLOR))
                     item.setForeground(QBrush(Qt.GlobalColor.black))
-                    item.setToolTip("\n".join(f.message for f in flags))
+                    tip = "\n".join(f.message for f in flags) + ("\n\n" + tip if tip else "")
+                if tip:
+                    item.setToolTip(tip)
                 t.setItem(r, c, item)
         t.resizeColumnsToContents()
         for c in range(t.columnCount()):
             t.setColumnWidth(c, min(t.columnWidth(c), MAX_COLUMN_WIDTH))
+
+    @staticmethod
+    def _provenance_tip(src) -> str:
+        """Hover text for a cell: where its value came from."""
+        if src is None:
+            return ""
+        lines = [f"From: {src.origin}" + (f" ({src.confidence} confidence)"
+                                          if src.confidence in ("high", "medium", "low") else "")]
+        if src.source:
+            lines.append(f"Where: {src.source}")
+        if src.quote:
+            lines.append(f"\u201c{src.quote}\u201d")
+        return "\n".join(lines)
 
     def _fill_flags(self, result) -> None:
         tree = self.flags_tree
@@ -504,7 +522,9 @@ class MainWindow(QMainWindow):
                <b>{len(result.row_flags)}</b> row(s) flagged</p>
             {self._new_variables_html(result)}
             <p>Results folder: <code>{result.run_dir}</code><br>
-               CSV: <code>{result.csv_path.name}</code></p>
+               CSV: <code>{result.csv_path.name}</code> (template layout) &middot;
+               <code>{result.observations_path.name if result.observations_path else ""}</code>
+               (one value per line, with where each came from)</p>
             {self._figures_html(result)}
             <h4>API usage</h4>
             <table cellspacing=0 cellpadding=4 border=1>

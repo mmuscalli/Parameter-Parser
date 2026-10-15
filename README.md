@@ -51,8 +51,9 @@ Choose a PDF (or drop it onto the window), paste your API key, pick where
 results go, and click **Extract data**. A progress bar follows the six steps.
 Cancel stops after the current step. When the run finishes:
 
-- **Rows**: the extracted CSV, measured values first. Flagged rows are
-  highlighted; hover for the reason.
+- **Rows**: the extracted CSV, measured values first. Hover any cell to see
+  where its value came from (step, location, quote, confidence). Flagged rows
+  are highlighted, and hovering shows why.
 - **Flags**: everything to check by hand. Select one to see the full issue,
   the supporting quote from the paper, and where it appears.
 - **Summary**: token usage per step, plus buttons to open the results folder
@@ -151,6 +152,7 @@ overwrites an earlier run:
 
 | File | Contents |
 |---|---|
+| `<pdf name>_observations.csv` | The same data in long format, one value per line: row, column, value, unit, and where it came from (extraction step, source location, supporting quote, confidence). This is the run's canonical record; the template-layout CSV is generated from it |
 | `<pdf name>_extracted.csv` | One row per sample. The first 280 columns are exactly PaperDataTemplate's, in its order (empty ones included), so rows paste straight into the template. After them: any columns the template doesn't have (e.g. a new species), then our provenance columns (`yield_below_threshold_note`, `source_notes`, `extraction_confidence`) |
 | `plausibility_flags.json` | Anything to check by hand (see below); absent if nothing was flagged |
 | `run_summary.json` | Settings used (never the key), models, token usage, timings |

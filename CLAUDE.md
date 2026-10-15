@@ -187,8 +187,16 @@ CSV export in its exact layout stays); a new variable must be ACCEPTED before
 its values go in the CSV.
 Plan: (1) open-ended capture + surfacing -- DONE; (3) registry + review
 screen -- DONE early at Mickey's request (see below); (2) long-format
-canonical record, CSV generated from it -- not yet; (4) name normalization
-(PubChem/ChEBI) + units -- not yet.
+canonical record, CSV generated from it -- DONE (below); (4) name
+normalization (PubChem/ChEBI) + units -- not yet.
+Long format (2026-10-14): `ExtractedRow.provenance` (template column ->
+`CellSource` origin/quote/source/confidence) is filled in build_rows,
+figure_rows and write_values. `ingestion/observations.py`:
+rows_to_observations (one per non-empty value; unit from column name via
+`unit_for_column`, compound suffixes first) -> `<pdf>_observations.csv`;
+the wide CSV is written from `observations_to_records` (pivot) -- still
+byte-identical (replay test). GUI Rows tab tooltips show provenance.
+eder1994: 948 observations, all with an origin.
 Registry + review (2026-10-14): `registry.py` VariableRegistry = bundled
 template columns + local JSON (`default_registry_path()`, app-data dir):
 added columns + aliases ("kind:name" -> column; species alias names are
