@@ -35,10 +35,14 @@ class Observation(BaseModel):
     origin: str = ""
     source: str = ""
     quote: str = ""
-    # "yes": found word for word in the paper's text; "no": the model's own wording (or
-    # read from a table image) -- check it; "": no quote
+    # "yes": found word for word in the paper's text; "table image": transcribed by the model
+    # from a table sent as an image (its text layer differs); "no": the model's own wording --
+    # check it; "": no quote
     quote_in_paper: str = ""
     confidence: Optional[str] = None
+
+
+QUOTE_IN_PAPER = {"in text": "yes", "table image": "table image", "not found": "no"}
 
 
 # Unit from the column name, following the template's naming conventions.
@@ -74,7 +78,7 @@ def rows_to_observations(rows: List[ExtractedRow]) -> List[Observation]:
                 entry_number=row.entry_number, column=column, value=value, unit=unit_for_column(column),
                 origin=src.origin if src else ("pipeline" if column in _PIPELINE_COLUMNS else ""),
                 source=src.source if src else "", quote=src.quote if src else "",
-                quote_in_paper={True: "yes", False: "no"}.get(src.quote_verified, "") if src else "",
+                quote_in_paper=QUOTE_IN_PAPER.get(src.quote_check, "") if src else "",
                 confidence=src.confidence if src else None))
     return out
 

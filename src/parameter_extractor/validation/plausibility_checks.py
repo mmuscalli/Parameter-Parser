@@ -35,6 +35,7 @@ class Flag:
     # set by validation/quotes.py: quote text NOT found word for word in the paper (the
     # model's own wording, or read from a table image), kept apart from real quotes
     unverified_quote: Optional[str] = None
+    table_image_quote: Optional[str] = None   # transcribed by the model from a table sent as an image
     model_note: Optional[str] = None          # the model's explanation (e.g. how a value was derived)
 
     def to_dict(self) -> dict:

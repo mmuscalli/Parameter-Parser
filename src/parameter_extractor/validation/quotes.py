@@ -9,7 +9,11 @@ word for word are moved to `unverified_quote` and labelled as such.
 
 The comparison ignores case, spacing, punctuation and symbols (°, µ, the
 PDF's "(cid:N)" placeholders), so line breaks and hyphenation don't count as
-differences. Two-column pages come out of the PDF with the columns' lines
+differences. A quote that isn't in the text but whose source is a table that
+was sent to the model as an IMAGE (tables' text layers are often garbled) is
+reported as read from a table image rather than as the model's wording.
+
+Two-column pages come out of the PDF with the columns' lines
 interleaved (eder1994), so a quote's words are matched IN ORDER with gaps
 allowed for the other column's text in between, and a few words may be
 missing (OCR, a line split across columns). A value read from a table IMAGE can fail the check when the
@@ -84,24 +88,39 @@ def is_verbatim(quote: str, paper) -> bool:
     return paper.contains(quote)
 
 
-def check_flag_quotes(flags: Iterable, paper_text: str) -> None:
-    """Splits each flag's quote into verbatim parts (kept as `quote`) and the rest
-    (`unverified_quote`)."""
+_TABLE_REF = re.compile(r"\btables?\s*(\d+)", re.IGNORECASE)
+
+
+def image_table_numbers(table_pages: dict) -> set:
+    """Numbers of the tables on pages that were rasterized for the model
+    (ParsedPaper.table_pages: page -> caption lines)."""
+    return {m.group(1) for lines in table_pages.values() for line in lines for m in _TABLE_REF.finditer(line)}
+
+
+def from_table_image(source: str, image_tables: set) -> bool:
+    return any(m.group(1) in image_tables for m in _TABLE_REF.finditer(source or ""))
+
+
+def check_flag_quotes(flags: Iterable, paper_text: str, image_tables: set = frozenset()) -> None:
+    """Splits each flag's quote into verbatim parts (kept as `quote`), parts read from a
+    table image (`table_image_quote`) and the rest (`unverified_quote`)."""
     paper = PaperText(paper_text)
     for f in flags:
         if not f.quote:
             continue
         parts = list(dict.fromkeys(p.strip() for p in f.quote.split(QUOTE_SEPARATOR) if p.strip()))
-        found = [p for p in parts if is_verbatim(p, paper)]
+        found = [p for p in parts if paper.contains(p)]
         missing = [p for p in parts if p not in found]
         f.quote = QUOTE_SEPARATOR.join(found) or None
-        if missing:
+        if missing and from_table_image(f.source, image_tables):
+            f.table_image_quote = QUOTE_SEPARATOR.join(missing)
+        elif missing:
             f.unverified_quote = QUOTE_SEPARATOR.join(missing)
 
 
-def check_row_quotes(rows, paper_text: str) -> int:
-    """Marks every value's provenance quote as found in the paper or not
-    (CellSource.quote_verified). Returns how many were NOT found."""
+def check_row_quotes(rows, paper_text: str, image_tables: set = frozenset()) -> int:
+    """Marks every value's provenance quote: found in the paper's text, read from a
+    table image, or not found (CellSource.quote_check). Returns how many were not found."""
     paper = PaperText(paper_text)
     seen: dict = {}
     missing = 0
@@ -111,6 +130,11 @@ def check_row_quotes(rows, paper_text: str) -> int:
                 continue
             if src.quote not in seen:
                 seen[src.quote] = paper.contains(src.quote)
-            src.quote_verified = seen[src.quote]
-            missing += not src.quote_verified
+            if seen[src.quote]:
+                src.quote_check = "in text"
+            elif from_table_image(src.source, image_tables):
+                src.quote_check = "table image"
+            else:
+                src.quote_check = "not found"
+                missing += 1
     return missing

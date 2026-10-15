@@ -20,9 +20,10 @@ class CellSource(BaseModel):
     quote: str = ""
     source: str = ""                 # e.g. "Table 1", "Experimental section, para 2"
     confidence: Optional[str] = None
-    # validation/quotes.py: True = found word for word in the paper's text; False = the
-    # model's own wording (or read from a table image); None = not checked / no quote
-    quote_verified: Optional[bool] = None
+    # validation/quotes.py: "in text" = found word for word in the paper's text; "table image" =
+    # transcribed by the model from a table sent as an image; "not found" = the model's own
+    # wording; None = not checked / no quote
+    quote_check: Optional[str] = None
 
 
 class ExtractedRow(BaseModel):

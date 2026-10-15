@@ -57,7 +57,7 @@ from parameter_extractor.ingestion.pdf_parser import ParsedPaper, parse_pdf, ras
 from parameter_extractor.run_context import ProgressCallback, RunContext, StageUsage, total_cost
 from parameter_extractor.pricing import PRICES_CHECKED
 from parameter_extractor.pubchem import PubChem
-from parameter_extractor.validation.quotes import check_flag_quotes, check_row_quotes
+from parameter_extractor.validation.quotes import check_flag_quotes, check_row_quotes, image_table_numbers
 from parameter_extractor.schemas.chemistry import ChemistryExtraction
 from parameter_extractor.schemas.figures import DigitizedFigure, FigureCandidate, FigurePlan
 from parameter_extractor.schemas.methodology import Methodology
@@ -402,8 +402,9 @@ def finish(
             f"peptide % yields reported for each (linear and cyclic); rows where the paper "
             f"states the total keep the stated value. Hover a value to see what was added."))
     row_flags = {r.full_id: f for r in rows if (f := check_row(r, **thresholds))}
-    check_flag_quotes([*paper_flags, *(f for fs in row_flags.values() for f in fs)], ex.parsed.text)
-    check_row_quotes(rows, ex.parsed.text)
+    image_tables = image_table_numbers(ex.parsed.table_pages) if config.rasterize_table_pages else set()
+    check_flag_quotes([*paper_flags, *(f for fs in row_flags.values() for f in fs)], ex.parsed.text, image_tables)
+    check_row_quotes(rows, ex.parsed.text, image_tables)
     flags_path = None
     if paper_flags or row_flags:
         flags_path = ctx.run_dir / "plausibility_flags.json"

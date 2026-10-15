@@ -99,6 +99,16 @@ def test_value_quotes_are_marked_in_provenance_and_observations():
     assert check_row_quotes([row], text) == 1
     obs = {o.column: o for o in rows_to_observations([row])}
     assert obs["vessel_material"].quote_in_paper == "yes" and obs["initial_temperature_C"].quote_in_paper == "no"
+    # not in the text, but its source is a table the model saw as an image: said so, not "no"
+    from parameter_extractor.validation.quotes import image_table_numbers
+    tables = image_table_numbers({3: ["Table 1 Peptide formation"], 4: ["Table 2 Alkaline-earth"]})
+    assert tables == {"1", "2"}
+    set_row_value(row, "sampled_temperature_C", 81.0,
+                  CellSource(origin="methodology", quote="Temperature (C) 100", source="Table 1"))
+    check_row_quotes([row], text, tables)
+    obs = {o.column: o for o in rows_to_observations([row])}
+    assert obs["sampled_temperature_C"].quote_in_paper == "table image"
+    assert obs["initial_temperature_C"].quote_in_paper == "no"           # no table source: model's wording
 
 
 def test_flag_quotes_must_be_the_papers_words():
@@ -113,6 +123,9 @@ def test_flag_quotes_must_be_the_papers_words():
     check_flag_quotes([flag], text)
     assert flag.quote == "Solutions were prepared in distilled water"
     assert flag.unverified_quote == "Table 1 conditions list the reaction temperature, 81 C"
+    cell = Flag("low_confidence", "m", quote="Temperature (C) 100", source="Table 1")
+    check_flag_quotes([cell], text, {"1"})
+    assert cell.quote is None and cell.table_image_quote == "Temperature (C) 100" and cell.unverified_quote is None
 
 
 if __name__ == "__main__":

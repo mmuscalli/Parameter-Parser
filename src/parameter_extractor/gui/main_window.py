@@ -492,9 +492,11 @@ class MainWindow(QMainWindow):
                                           if src.confidence in ("high", "medium", "low") else "")]
         if src.source:
             lines.append(f"Where: {src.source}")
-        if src.quote and src.quote_verified is False:
-            lines.append(f"Model's wording (not found word for word in the paper's text -- its own "
-                         f"description, or read from a table image): {src.quote}")
+        if src.quote and src.quote_check == "table image":
+            lines.append(f"Read from the table's image (the model's transcription; the table's text layer "
+                         f"differs): {src.quote}")
+        elif src.quote and src.quote_check == "not found":
+            lines.append(f"Model's wording (not found word for word in the paper's text): {src.quote}")
         elif src.quote:
             lines.append(f"\u201c{src.quote}\u201d")
         return "\n".join(lines)
@@ -507,13 +509,14 @@ class MainWindow(QMainWindow):
         def add_group(title, flags):
             group = QTreeWidgetItem([f"{title} ({len(flags)})"])
             for f in flags:
-                shown = f.quote or (f"(model's wording, not in the paper) {f.unverified_quote}"
+                shown = f.quote or (f"(from the table image) {f.table_image_quote}" if f.table_image_quote else
+                                    f"(model's wording, not in the paper) {f.unverified_quote}"
                                     if f.unverified_quote else "")
                 child = QTreeWidgetItem([f.message, shown, f.source or ""])
                 child.setData(0, Qt.ItemDataRole.UserRole, f)
                 child.setToolTip(0, f.message)
                 child.setToolTip(1, shown)
-                if not f.quote and f.unverified_quote:
+                if not f.quote and (f.unverified_quote or f.table_image_quote):
                     child.setForeground(1, QBrush(QColor("gray")))
                 group.addChild(child)
             tree.addTopLevelItem(group)
@@ -549,11 +552,13 @@ class MainWindow(QMainWindow):
             return
         quote = (f"<p><b>Quote from the paper</b><br><i>\u201c{html.escape(flag.quote)}\u201d</i></p>"
                  if flag.quote else "")
+        if flag.table_image_quote:
+            quote += (f"<p><b>Read from the table's image</b> (the model's transcription; the table's text "
+                      f"layer differs)<br><i>{html.escape(flag.table_image_quote)}</i></p>")
         if flag.unverified_quote:
             quote += (f"<p><b>Model's wording \u2014 not found word for word in the paper's text</b><br>"
-                      f"{html.escape(flag.unverified_quote)}<br><span style='color:gray'>Either the model's own "
-                      f"description, or read from a table image whose text layer differs. Check the paper."
-                      f"</span></p>")
+                      f"{html.escape(flag.unverified_quote)}<br><span style='color:gray'>The model's own "
+                      f"description, not a quote. Check the paper.</span></p>")
         if flag.model_note:
             quote += f"<p><b>Model's note</b><br>{html.escape(flag.model_note)}</p>"
         source = f"<p><b>Where</b><br>{html.escape(flag.source)}</p>" if flag.source else ""

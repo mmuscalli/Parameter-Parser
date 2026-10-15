@@ -355,7 +355,8 @@ keep it for now, refresh after the open issues are sorted).
   first, then the chosen ones open in the digitizer in turn; suggestions are
   requested (prefetched) when a figure is chosen.
 - **Value quotes are checked too**: `CellSource.quote_verified` ->
-  observations column `quote_in_paper` (yes/no/'') and the Rows-tab hover text
+  observations column `quote_in_paper` (yes / table image / no / ''; "table image" = not
+  in the text but sourced from a table that was rasterized for the model) and the Rows-tab hover text
   ("Model's wording ..."). Pipeline-generated text is no longer put in quote
   fields (set summaries, the cited-data marker).
 - **total_sampled_peptides_yield** (`calculators/peptide_totals.py`, runs after
