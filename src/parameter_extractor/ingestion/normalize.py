@@ -74,10 +74,27 @@ def _identify(chemistry: ChemistryExtraction, pubchem, registry, notes: List[Nor
             _rename(s, seen_in_paper[found.cid], how, notes)
 
 
+def _rename_ratio_species(chemistry: ChemistryExtraction, original) -> None:
+    """Molar ratios name species as the model first wrote them: give them the
+    names their solute entries ended up with."""
+    final = {}
+    for entry, name in original:
+        final.setdefault(" ".join(name.lower().split()), entry.name)
+    for r in chemistry.molar_ratios:
+        for field in ("species", "reference_species"):
+            name = getattr(r, field)
+            renamed = final.get(" ".join(name.lower().split()))
+            if renamed is None:
+                matched = match_species(name)
+                renamed = matched[0] if matched else query_name(name)
+            setattr(r, field, renamed)
+
+
 def normalize_chemistry(chemistry: ChemistryExtraction, pubchem=None, registry=None) -> List[NormalizationNote]:
     """`pubchem`: a pubchem.PubChem (None = no lookups); `registry`: for species
     the user accepted earlier."""
     notes: List[NormalizationNote] = []
+    original = [(s, s.name) for s in chemistry.solutes]
     rule_matched = set()
     for s in chemistry.solutes:
         matched = match_species(s.name)
@@ -86,6 +103,7 @@ def normalize_chemistry(chemistry: ChemistryExtraction, pubchem=None, registry=N
             if matched[0] != s.name:
                 _rename(s, matched[0], matched[1], notes)
     _identify(chemistry, pubchem, registry, notes, rule_matched)
+    _rename_ratio_species(chemistry, original)
     for s in chemistry.solutes:
         unit = canonical_unit(s.concentration_unit_raw) if s.concentration_unit_raw else None
         if s.concentration_value is None or unit is None:

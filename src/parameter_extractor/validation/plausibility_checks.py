@@ -22,7 +22,8 @@ from parameter_extractor.schemas.row_schema import ExtractedRow
 FlagKind = Literal["out_of_range", "low_confidence", "ambiguous_paper_wide_species",
                    "possible_duplicate", "figure_problem", "new_variable",
                    "term_not_found", "cited_data", "conflicting_values",
-                   "assumed_value", "unit_conversion", "derived_value", "lookup_unavailable"]
+                   "assumed_value", "unit_conversion", "derived_value", "lookup_unavailable",
+                   "not_calculated"]
 
 
 @dataclass

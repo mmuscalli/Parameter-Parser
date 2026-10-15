@@ -36,7 +36,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Callable, Dict, List, Optional, Sequence
 
-from parameter_extractor.calculators.mixing import derive_mixture_concentrations
+from parameter_extractor.calculators.mixing import derive_from_ratios, derive_mixture_concentrations
 from parameter_extractor.config import settings
 from parameter_extractor.config.run_config import RunConfig
 from parameter_extractor.errors import ApiKeyMissingError, PdfNotReadableError, PipelineError
@@ -265,6 +265,9 @@ def plan_figure(extraction: Extraction, figure: FigureCandidate) -> FigurePlan:
 ReviewCallback = Callable[[List[VariableGroup], List[str], VariableRegistry], List[VariableDecision]]
 
 
+MIXING_FLAG_KINDS = {"derived": "derived_value", "not_derived": "not_calculated", "mismatch": "conflicting_values"}
+
+
 def finish(
     extraction: Extraction,
     digitized: Sequence[DigitizedFigure] = (),
@@ -281,8 +284,10 @@ def finish(
     normalization = normalize_chemistry(ex.chemistry, pubchem=pubchem, registry=registry)
     if pubchem:
         pubchem.save()
-    mixing = derive_mixture_concentrations(        # stock -> mixture concentrations, marked derived
-        ex.chemistry, [s.set_label for s in ex.structure.experiment_sets])
+    set_labels = [s.set_label for s in ex.structure.experiment_sets]
+    # stock -> mixture concentrations, then molar ratios -> missing concentrations; marked derived
+    mixing = derive_mixture_concentrations(ex.chemistry, set_labels)
+    mixing += derive_from_ratios(ex.chemistry, set_labels)
     rows = build_rows(ex.metadata, ex.structure, ex.methodology, ex.chemistry, config.paper_prefix,
                       drop_below=config.confidence_drop_below, registry=registry, wet_dry=ex.wet_dry)
     thresholds = dict(flag_below=config.confidence_flag_below,
@@ -294,7 +299,7 @@ def finish(
     if pubchem and pubchem.unavailable_reason:
         paper_flags.append(Flag("lookup_unavailable", f"{pubchem.unavailable_reason}: species names were "
                                 f"matched by the built-in rules only, so synonyms may show up as new variables."))
-    paper_flags += [Flag("derived_value" if n.kind == "derived" else "unit_conversion", n.message,
+    paper_flags += [Flag(MIXING_FLAG_KINDS[n.kind], n.message,
                          quote=n.quote or None, source=n.source or None) for n in mixing]
     n_text_rows = len(rows)
 

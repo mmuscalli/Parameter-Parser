@@ -315,6 +315,15 @@ keep it for now, refresh after the open issues are sorted).
   when every volume parses; otherwise a note. Stock values go to
   `stock_<name>_aq_mM`, known wherever `initial_<name>` is (registry pattern),
   reviewed as "stock <name>" otherwise.
+- **Molar ratios** (Mickey: calculate locally, mark derived): `ChemistryExtraction.molar_ratios`
+  (per set; the model may write either side as reference -- kim2019's live
+  run did "3 : cytosine" with cytosine as reference). `derive_from_ratios`
+  runs after the stock->mixture step: whichever side's mixture value is known
+  gives the other, then its stock value from the volumes; both known -> a
+  check (`conflicting_values` on >2% mismatch). Derived values keep the
+  unrounded value (`exact_mM`, hidden) for chained steps; stored at 6 s.f.
+  kim2019: cytosine 7.5 / 11.25 mM stock for 1:2 / 1:3, as in the paper's logic.
+  Flag kinds: derived_value / not_calculated / conflicting_values.
 - **PubChem** (`pubchem.py`, PUG REST, POST by name, cached in the app-data
   folder incl. misses, fails soft -> `lookup_unavailable` flag): runs in
   normalize_chemistry AFTER names.py rules, only for names the rules didn't

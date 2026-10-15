@@ -34,6 +34,22 @@ class AddedSolution(BaseModel):
     source: str = ""
 
 
+class MolarRatio(BaseModel):
+    """A molar ratio between two species that the paper gives instead of (some of)
+    their concentrations, e.g. kim2019's "3 : cytosine = 1:2". calculators/mixing.py
+    uses it to calculate the missing concentration. Flat, no Optional fields."""
+    set_label: str = Field(default="", description="The structure-plan set_label this ratio applies to, or '' "
+                                                   "if it's the same in every set.")
+    species: str = Field(description="The species whose amount is `species_parts`, named as in `solutes`.")
+    reference_species: str = Field(description="The other species (amount `reference_parts`), named as in "
+                                               "`solutes`.")
+    species_parts: float
+    reference_parts: float
+    ratio_text: str = Field(description="The ratio exactly as printed, e.g. '3 : cytosine = 1:2'.")
+    quote: str = ""
+    source: str = ""
+
+
 class SoluteEntry(BaseModel):
     name: str = Field(description="Chemical species/compound name as it should appear in the "
                                    "database -- match the controlled vocabulary in "
@@ -84,6 +100,11 @@ class SoluteEntry(BaseModel):
     confidence: Literal["high", "medium", "low"]
     # set by calculators/mixing.py, never by the model (hidden from its schema)
     derived: SkipJsonSchema[bool] = False
+    exact_mM: SkipJsonSchema[float] = 0.0      # a derived value before rounding, for chained calculations
+
+    @property
+    def mM_for_calculation(self) -> Optional[float]:
+        return self.exact_mM or self.concentration_mM
     # set by ingestion/normalize.py from PubChem (pubchem.py); 0 / "" = not looked up or not found
     pubchem_cid: SkipJsonSchema[int] = 0
     pubchem_title: SkipJsonSchema[str] = ""
@@ -109,6 +130,12 @@ class ChemistryExtraction(BaseModel):
         description="When the paper says how a reaction mixture was made by combining volumes of "
                     "solutions: EVERY solution and solvent combined, with its volume, so the mixture "
                     "concentrations can be calculated. Empty if the paper doesn't say.",
+    )
+
+    molar_ratios: List[MolarRatio] = Field(
+        default_factory=list,
+        description="Molar ratios between species, per set, when the paper states them (e.g. 'ribose "
+                    "phosphate : cytosine = 1:2'). Record them even when the concentrations are also given.",
     )
 
     def conflicting_set_species(self) -> set:

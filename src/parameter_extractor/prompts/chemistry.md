@@ -34,6 +34,13 @@ For each species:
   concentration in the mixture itself, record that with
   `concentration_basis: "mixture"` (the default) -- and if it gives both,
   record both.
+- Molar ratios: when the paper gives a ratio between species (e.g. "3 :
+  cytosine = 1:2", "a 1:3 molar ratio of A to B") list it in `molar_ratios`
+  for each set it applies to, with both species named as in `solutes`. Don't
+  calculate a concentration from a ratio yourself, and don't enter one the
+  paper doesn't state -- the pipeline calculates it from the ratio and marks
+  it as calculated. Record the ratio even when the concentrations are also
+  given (it's used as a check).
 - `set_label`: match exactly to a `set_label` from the structure plan, or null
   if the value is constant across the whole paper (e.g. a fixed background
   reagent concentration present in every condition).

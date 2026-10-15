@@ -14,7 +14,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
-from parameter_extractor.calculators.mixing import derive_mixture_concentrations
+from parameter_extractor.calculators.mixing import derive_from_ratios, derive_mixture_concentrations
 from parameter_extractor.ingestion.flatten_to_template import build_rows, row_to_template_dict
 from parameter_extractor.ingestion.new_variables import (
     VariableDecision, apply_decisions, collect_new_variables, group_new_variables)
@@ -22,7 +22,7 @@ from parameter_extractor.ingestion.normalize import normalize_chemistry
 from parameter_extractor.pricing import format_usd, request_cost
 from parameter_extractor.pubchem import Compound, PubChem
 from parameter_extractor.registry import VariableRegistry
-from parameter_extractor.schemas.chemistry import AddedSolution, ChemistryExtraction, SoluteEntry
+from parameter_extractor.schemas.chemistry import AddedSolution, ChemistryExtraction, MolarRatio, SoluteEntry
 from parameter_extractor.schemas.methodology import Methodology
 from parameter_extractor.schemas.paper_metadata import PaperMetadata
 from parameter_extractor.schemas.structure_plan import StructurePlan
@@ -60,9 +60,9 @@ def test_mixture_concentrations_are_calculated_and_marked():
     chem = _kim_like()
     notes = derive_mixture_concentrations(chem, ["s1"])
     derived = {s.name: s for s in chem.solutes if s.derived}
-    assert derived["ribose 1,2-cyclic phosphate"].concentration_mM == 2.273       # 15 x 5 / 33
-    assert derived["cytosine"].concentration_mM == 2.273                          # 3.75 x 20 / 33
-    assert derived["CaCl2"].concentration_mM == 3.636                             # 15 x 8 / 33
+    assert derived["ribose 1,2-cyclic phosphate"].concentration_mM == 2.27273       # 15 x 5 / 33
+    assert derived["cytosine"].concentration_mM == 2.27273                          # 3.75 x 20 / 33
+    assert derived["CaCl2"].concentration_mM == 3.63636                             # 15 x 8 / 33
     assert all(s.concentration_basis == "mixture" for s in derived.values())
     assert "15 mM x 8 µL / 33 µL total" in derived["CaCl2"].conversion_note
     assert [n.kind for n in notes] == ["derived"] * 3
@@ -97,6 +97,58 @@ def test_stock_and_mixture_both_reach_the_csv():
     assert rows[0].provenance["initial_KCl_aq_mM"].origin == "calculated"
     assert rows[0].provenance["stock_KCl_aq_mM"].origin == "chemistry"
     assert "stock_KCl_aq_mM" not in row_to_template_dict(rows[-1])                # other sets untouched
+
+
+def _with_ratios():
+    """kim2019: cytosine stock stated only for the 1:1 sets; 1:2 and 1:3 given as ratios."""
+    chem = _kim_like()
+    chem.solutes[1].set_label = "1:1"
+    chem.molar_ratios = [MolarRatio(set_label=label, species="Cytosine", reference_species="ribose_1,2-cyclic_phosphate",
+                                    species_parts=parts, reference_parts=1, ratio_text=f"3 : cytosine = 1:{parts}",
+                                    quote="q", source="Table 1")
+                         for label, parts in (("1:1", 1), ("1:2", 2), ("1:3", 3))]
+    return chem
+
+
+def test_ratio_gives_missing_concentrations():
+    chem = _with_ratios()
+    normalize_chemistry(chem)                                  # ratio names follow the solutes' names
+    assert chem.molar_ratios[0].reference_species == "ribose 1,2-cyclic phosphate"
+    notes = derive_mixture_concentrations(chem, ["1:1", "1:2", "1:3"])
+    notes += derive_from_ratios(chem, ["1:1", "1:2", "1:3"])
+    cyt = {(s.set_label, s.concentration_basis): s for s in chem.solutes if s.name == "cytosine"}
+    assert cyt[("1:1", "mixture")].concentration_mM == 2.27273           # from the stated stock
+    assert cyt[("1:2", "mixture")].concentration_mM == 4.54545           # 2.273 x 2
+    assert cyt[("1:3", "mixture")].concentration_mM == 6.81818
+    assert cyt[("1:2", "stock")].concentration_mM == 7.5                # 4.54545 x 33 / 20
+    assert cyt[("1:3", "stock")].derived and "molar ratio" in cyt[("1:3", "stock")].conversion_note
+    assert not any(n.kind == "mismatch" for n in notes)                # 1:1 stated value agrees
+    assert len(chem.solutes) == len({(s.name, s.set_label, s.concentration_basis) for s in chem.solutes})
+
+
+def test_ratio_written_the_other_way_round():
+    """kim2019's live run gave '3 : cytosine' with cytosine as the reference side."""
+    chem = _with_ratios()
+    chem.molar_ratios = [r.model_copy(update=dict(species=r.reference_species, reference_species=r.species,
+                                                  species_parts=r.reference_parts, reference_parts=r.species_parts))
+                         for r in chem.molar_ratios]
+    normalize_chemistry(chem)
+    derive_mixture_concentrations(chem, ["1:1", "1:2", "1:3"])
+    notes = derive_from_ratios(chem, ["1:1", "1:2", "1:3"])
+    cyt = {(s.set_label, s.concentration_basis): s.concentration_mM for s in chem.solutes if s.name == "cytosine"}
+    assert cyt[("1:3", "mixture")] == 6.81818 and cyt[("1:2", "stock")] == 7.5
+    assert not any(n.kind in ("mismatch", "not_derived") for n in notes)
+
+
+def test_ratio_disagreeing_with_a_stated_value_is_flagged():
+    chem = _with_ratios()
+    chem.molar_ratios[0].species_parts = 2                     # paper says 1:2 but the stock gives 1:1
+    normalize_chemistry(chem)
+    derive_mixture_concentrations(chem, ["1:1", "1:2", "1:3"])
+    notes = derive_from_ratios(chem, ["1:1", "1:2", "1:3"])
+    assert [n.kind for n in notes].count("mismatch") == 1
+    kept = [s for s in chem.solutes if s.name == "cytosine" and s.set_label == "1:1" and s.concentration_basis == "mixture"]
+    assert len(kept) == 1 and kept[0].concentration_mM == 2.27273
 
 
 def test_unknown_species_stock_goes_to_review_with_its_own_column():

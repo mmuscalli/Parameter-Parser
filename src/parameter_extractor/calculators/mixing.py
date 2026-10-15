@@ -10,6 +10,13 @@ arithmetic, and adds the mixture value as a separate entry marked `derived`
 (origin "calculated" in the provenance). The stock value is kept too, in its
 own stock_<name>_aq_mM column (Mickey, 2026-10-15: include both).
 
+Molar ratios (derive_from_ratios): when a paper gives "3 : cytosine = 1:2"
+instead of the cytosine concentration, the amounts in one mixture are in that
+ratio, so C_cytosine = C_3 x 2/1 (both in the mixture). If the species'
+solution volume is known, its stock concentration follows too (C_mix x
+V_total / V_added). Where the paper also states the value, the ratio is used
+as a check: a disagreement is flagged, the stated value kept.
+
 Never guesses: a mixture value is only calculated when the species' own
 solution and EVERY solution in that mixture have a volume that parses to a
 volume unit. Otherwise nothing is added and a note says why. If the paper
@@ -20,15 +27,18 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Dict, List, Optional, Tuple
 
-from parameter_extractor.schemas.chemistry import AddedSolution, ChemistryExtraction, SoluteEntry
+from parameter_extractor.names import vocabulary
+from parameter_extractor.schemas.chemistry import AddedSolution, ChemistryExtraction, MolarRatio, SoluteEntry
 from parameter_extractor.units import convert, parse_quantity
 
-SIGNIFICANT_FIGURES = 4
+SIGNIFICANT_FIGURES = 6        # enough that chained calculations land back on printed values
+RATIO_TOLERANCE = 0.02       # relative difference above which a stated value and a ratio disagree
 
 
 @dataclass
 class MixingNote:
-    kind: str           # "derived" (a mixture value was calculated) or "not_derived" (it couldn't be)
+    kind: str           # "derived" (a value was calculated), "not_derived" (it couldn't be),
+                        # "mismatch" (a stated value disagrees with the paper's ratio)
     message: str
     quote: str = ""
     source: str = ""
@@ -36,6 +46,10 @@ class MixingNote:
 
 def _key(text: str) -> str:
     return " ".join(text.lower().split())
+
+
+def _sig(value: float) -> float:
+    return float(f"{value:.{SIGNIFICANT_FIGURES}g}")
 
 
 def _volume_uL(text: str) -> Optional[float]:
@@ -71,9 +85,9 @@ def _mixture(entry: SoluteEntry, solutions: List[AddedSolution]) -> Tuple[Option
     own_volume = next(v for s, v in volumes if s is own)
     if total <= 0:
         return None, "total volume is zero"
-    value = float(f"{entry.concentration_mM * own_volume / total:.{SIGNIFICANT_FIGURES}g}")
+    value = entry.mM_for_calculation * own_volume / total
     parts = " + ".join(f"{s.solution} {v:g} µL" for s, v in volumes)
-    return value, (f"calculated by the pipeline from the stock concentration: {entry.concentration_mM:g} mM "
+    return value, (f"calculated by the pipeline from the stock concentration: {entry.mM_for_calculation:g} mM "
                    f"x {own_volume:g} µL / {total:g} µL total ({parts})")
 
 
@@ -103,10 +117,102 @@ def derive_mixture_concentrations(chemistry: ChemistryExtraction, set_labels: Li
                                         f"calculated -- {how}. Only the stock value is recorded.",
                                         entry.quote, entry.source))
                 continue
+            exact, value = value, _sig(value)
             derived = entry.model_copy(update=dict(
                 set_label=label, concentration_basis="mixture", stock_solution="", concentration_value=value,
-                concentration_unit_raw="mM", concentration_mM=value, conversion_note=how, derived=True))
+                concentration_unit_raw="mM", concentration_mM=value, conversion_note=how, derived=True,
+                exact_mM=exact))
             chemistry.solutes.append(derived)
             notes.append(MixingNote("derived", f"{entry.name}{where}: {value:g} mM in the mixture -- {how}.",
                                     entry.quote, entry.source))
     return notes
+
+
+def _initial(chemistry: ChemistryExtraction, name: str, set_label: str, basis: str) -> Optional[SoluteEntry]:
+    """The set-wide starting value of a species in a set (set-specific first, then paper-wide)."""
+    found = [s for s in chemistry.solutes if s.role == "initial" and s.concentration_basis == basis
+             and _key(s.name) == _key(name) and not s.sample_label and s.concentration_mM is not None
+             and s.set_label in (set_label, None)]
+    return min(found, key=lambda s: s.set_label is None) if found else None
+
+
+def _ratio_text(r: MolarRatio) -> str:
+    return f"{r.reference_species} : {r.species} = {r.reference_parts:g}:{r.species_parts:g}"
+
+
+def derive_from_ratios(chemistry: ChemistryExtraction, set_labels: List[str]) -> List[MixingNote]:
+    """Run after derive_mixture_concentrations (it needs the known side's mixture
+    value). For each ratio and set: if one side's mixture concentration is known and
+    the other isn't, the other is calculated (either way round), plus its stock
+    concentration where volumes allow; if both are known, the ratio checks them."""
+    vocab = set(vocabulary())
+    notes: List[MixingNote] = []
+    for r in chemistry.molar_ratios:
+        if r.species_parts <= 0 or r.reference_parts <= 0 or _key(r.species) == _key(r.reference_species):
+            continue
+        flipped = r.model_copy(update=dict(species=r.reference_species, reference_species=r.species,
+                                           species_parts=r.reference_parts, reference_parts=r.species_parts))
+        for label in ([r.set_label] if r.set_label else list(set_labels)):
+            where = f" (set '{label}')" if label else ""
+            ref = _initial(chemistry, r.reference_species, label, "mixture")
+            other = _initial(chemistry, r.species, label, "mixture")
+            if ref is not None and other is not None:
+                expected = ref.mM_for_calculation * r.species_parts / r.reference_parts
+                if abs(other.mM_for_calculation - expected) > RATIO_TOLERANCE * expected:
+                    notes.append(MixingNote(
+                        "mismatch", f"{r.species}{where}: {other.concentration_mM:g} mM in the mixture, but the "
+                        f"paper's ratio {_ratio_text(r)} with {ref.name} at {ref.concentration_mM:g} mM gives "
+                        f"{_sig(expected):g} mM. The values were kept as they are; please check.", r.quote, r.source))
+            elif ref is not None:
+                notes += _derive(chemistry, r, label, ref, where, vocab, r)
+            elif other is not None:
+                notes += _derive(chemistry, flipped, label, other, where, vocab, r)
+            else:
+                notes.append(MixingNote("not_derived", f"{_ratio_text(r)}{where}: no concentration of either "
+                                        f"species in the mixture, so neither was calculated from the ratio.",
+                                        r.quote, r.source))
+    return notes
+
+
+def _derive(chemistry, r: MolarRatio, label: str, ref: SoluteEntry, where: str, vocab, as_printed: MolarRatio):
+    """r.species from r.reference_species (known: `ref`) in one set."""
+    exact = ref.mM_for_calculation * r.species_parts / r.reference_parts
+    value = _sig(exact)
+    how = (f"calculated by the pipeline from the molar ratio {_ratio_text(as_printed)} and {ref.name} "
+           f"{ref.concentration_mM:g} mM in the mixture: {ref.concentration_mM:g} x "
+           f"{r.species_parts:g}/{r.reference_parts:g}")
+    chemistry.solutes.append(SoluteEntry(
+        name=r.species, in_controlled_vocab=r.species in vocab, phase=ref.phase, role="initial",
+        set_label=label, concentration_value=value, concentration_unit_raw="mM", concentration_mM=value,
+        conversion_note=how, quote=r.quote, source=r.source, confidence=ref.confidence, derived=True,
+        exact_mM=exact))
+    notes = [MixingNote("derived", f"{r.species}{where}: {value:g} mM in the mixture -- {how}.", r.quote, r.source)]
+    return notes + _stock_from_mixture(chemistry, r, label, exact, where, as_printed)
+
+
+def _stock_from_mixture(chemistry, r: MolarRatio, label: str, mixture_mM: float, where: str,
+                        as_printed: MolarRatio) -> List[MixingNote]:
+    """The stock concentration that gives `mixture_mM`, if the species' solution and
+    every volume in the mixture are known (the solution is the one its stated
+    stock values were in, in any set)."""
+    if _initial(chemistry, r.species, label, "stock") is not None:
+        return []
+    solution = next((s.stock_solution for s in chemistry.solutes if s.concentration_basis == "stock"
+                     and _key(s.name) == _key(r.species) and s.stock_solution), "")
+    if not solution:
+        return []
+    solutions = solutions_for(chemistry, label)
+    volumes = {_key(s.solution): _volume_uL(s.volume) for s in solutions}
+    own = volumes.get(_key(solution))
+    if own is None or not own or any(v is None for v in volumes.values()):
+        return []
+    total = sum(volumes.values())
+    exact = mixture_mM * total / own
+    value = _sig(exact)
+    template = next(s for s in chemistry.solutes if s.concentration_basis == "stock" and _key(s.name) == _key(r.species))
+    how = (f"calculated by the pipeline: {_sig(mixture_mM):g} mM in the mixture (from the molar ratio "
+           f"{_ratio_text(as_printed)}) x {total:g} µL total / {own:g} µL of {solution}")
+    chemistry.solutes.append(template.model_copy(update=dict(
+        set_label=label, sample_label=None, concentration_value=value, concentration_unit_raw="mM",
+        concentration_mM=value, conversion_note=how, quote=r.quote, source=r.source, derived=True, exact_mM=exact)))
+    return [MixingNote("derived", f"{r.species}{where}: {value:g} mM stock solution -- {how}.", r.quote, r.source)]
