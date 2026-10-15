@@ -241,6 +241,7 @@ def test_cost_estimates():
     assert request_cost("claude-opus-5-5", 1_000_000, 0) == 4.0                  # not priced as opus-5
     assert request_cost("some-other-model", 10, 10) is None
     assert format_usd(None) == "—" and format_usd(0.0123) == "$0.012" and format_usd(1.5) == "$1.50"
+    assert format_usd(0.000463) == "<$0.001" and format_usd(0.0) == "$0.000"
 
 
 if __name__ == "__main__":

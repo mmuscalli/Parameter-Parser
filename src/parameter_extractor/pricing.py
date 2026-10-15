@@ -46,4 +46,6 @@ def request_cost(model: str, input_tokens: int, output_tokens: int) -> Optional[
 def format_usd(cost: Optional[float]) -> str:
     if cost is None:
         return "—"
+    if 0 < cost < 0.001:
+        return "<$0.001"          # not "$0.000", which reads as free
     return f"${cost:.2f}" if cost >= 0.10 else f"${cost:.3f}"
