@@ -283,6 +283,15 @@ Rodriguez-Garcia 2015 and Campbell 2019 -- the first non-curated test paper.
   column unit (provenance: "read from '1 cm3'"); unconvertible -> text +
   `unit_conversion` flag; the review window blocks building with them.
 
+## Remembered-variables window (2026-10-15)
+
+`gui/registry_dialog.py` (menu Variables -> Remembered variables…, disabled
+during runs): tabs Added columns (rename/remove; remove also drops aliases
+-> reviewed again), Synonyms (change column/remove), Built-in (read-only).
+Works on a fresh VariableRegistry copy; writes only on Save. Registry JSON
+now also stores `alias_labels` (original spelling) for display;
+`display_name()` renders species aliases as "RbCl (starting concentration)".
+
 ## Non-obvious decisions — don't redo this research
 
 - **Schema shape is grounded in `../POLO_variable_mapping.csv`** (one level

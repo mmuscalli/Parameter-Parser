@@ -82,6 +82,9 @@ class MainWindow(QMainWindow):
         quit_action = QAction("Quit", self, shortcut=QKeySequence.StandardKey.Quit,
                               triggered=self.close)
         self.addAction(quit_action)
+        variables_menu = self.menuBar().addMenu("Variables")
+        self.registry_action = QAction("Remembered variables…", self, triggered=self.open_registry)
+        variables_menu.addAction(self.registry_action)
 
         self._load_preferences()
         self._update_run_enabled()
@@ -404,9 +407,14 @@ class MainWindow(QMainWindow):
                             + f", {n_flags} item(s) flagged for review. Saved to {result.run_dir}")
         self.show_result(result)
 
+    def open_registry(self) -> None:
+        """View / undo what the variable registry remembered from earlier reviews."""
+        from parameter_extractor.gui.registry_dialog import RegistryDialog
+        RegistryDialog(self.registry_path, parent=self).exec()
+
     def _set_inputs_enabled(self, enabled: bool) -> None:
         for w in (self.pdf_edit, self.key_edit, self.out_edit, self.remember_key_box,
-                  self.show_key_box, self.terms_edit):
+                  self.show_key_box, self.terms_edit, self.registry_action):
             w.setEnabled(enabled)
         self._update_run_enabled()
 

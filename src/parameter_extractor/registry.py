@@ -67,12 +67,14 @@ class VariableRegistry:
         self._template_set: Set[str] = set(self.template_columns)
         self._base_set: Set[str] = self._template_set | set(self.standard_columns)
         self.added_columns: Dict[str, dict] = {}     # column -> {kind, added, note}
-        self.aliases: Dict[str, str] = {}            # "kind:name" -> column
+        self.aliases: Dict[str, str] = {}            # "kind:name" -> column (name lowercased for matching)
+        self.alias_labels: Dict[str, str] = {}       # same key -> the name as first written, for display
         self._changed = False
         if self.path and self.path.is_file():
             data = json.loads(self.path.read_text())
             self.added_columns = data.get("columns", {})
             self.aliases = data.get("aliases", {})
+            self.alias_labels = data.get("alias_labels", {})
 
     # ---- lookups -------------------------------------------------------------
 
@@ -107,7 +109,70 @@ class VariableRegistry:
             self._changed = True
 
     def add_alias(self, kind: str, name: str, column: str) -> None:
-        self.aliases[_alias_key(kind, name)] = column
+        key = _alias_key(kind, name)
+        self.aliases[key] = column
+        self.alias_labels.setdefault(key, name.strip())
+        self._changed = True
+
+    # ---- managing local additions (the "Remembered variables" window) ------------
+
+    @staticmethod
+    def split_alias(key: str):
+        """'parameter:stirring rate' -> ('parameter', 'stirring rate')."""
+        kind, _, name = key.partition(":")
+        return kind, name
+
+    def display_name(self, key: str) -> str:
+        """Readable name for an alias: 'RbCl (starting concentration)', 'stirring rate'."""
+        kind, name = self.split_alias(key)
+        label = self.alias_labels.get(key, name)
+        if kind == "species":
+            parts = label.split(" ", 1)
+            if len(parts) == 2 and parts[0] in ("initial", "sampled"):
+                role, species = parts
+                pct = species.endswith(" %")
+                species = species.removesuffix(" %")
+                what = "starting concentration" if role == "initial" else ("measured, % yield" if pct else "measured")
+                return f"{species} ({what})"
+        return label
+
+    def aliases_to(self, column: str) -> list:
+        return sorted(k for k, c in self.aliases.items() if c == column)
+
+    def set_alias_column(self, key: str, column: str) -> None:
+        if self.aliases.get(key) != column:
+            self.aliases[key] = column
+            self._changed = True
+
+    def remove_alias(self, key: str) -> None:
+        if self.aliases.pop(key, None) is not None:
+            self.alias_labels.pop(key, None)
+            self._changed = True
+
+    def remove_column(self, column: str) -> list:
+        """Forget an added column and every alias pointing to it (those variables will
+        be reviewed again). Template and standard columns can't be removed. Returns
+        the aliases removed."""
+        if column not in self.added_columns:
+            return []
+        del self.added_columns[column]
+        removed = self.aliases_to(column)
+        for k in removed:
+            del self.aliases[k]
+            self.alias_labels.pop(k, None)
+        self._changed = True
+        return removed
+
+    def rename_column(self, old: str, new: str) -> None:
+        """Rename an added column; aliases follow. Fails if `new` already exists."""
+        if old not in self.added_columns:
+            raise ValueError(f"'{old}' isn't a column you added.")
+        if self.is_known_column(new):
+            raise ValueError(f"A column called '{new}' already exists.")
+        self.added_columns[new] = self.added_columns.pop(old)
+        for k, c in list(self.aliases.items()):
+            if c == old:
+                self.aliases[k] = new
         self._changed = True
 
     def save(self) -> None:
@@ -115,5 +180,6 @@ class VariableRegistry:
         if self.path is None or not self._changed:
             return
         self.path.parent.mkdir(parents=True, exist_ok=True)
-        self.path.write_text(json.dumps({"columns": self.added_columns, "aliases": self.aliases},
+        self.path.write_text(json.dumps({"columns": self.added_columns, "aliases": self.aliases,
+                                         "alias_labels": self.alias_labels},
                                         indent=2, ensure_ascii=False, sort_keys=True))

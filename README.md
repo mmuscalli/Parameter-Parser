@@ -113,7 +113,13 @@ With *Remember* ticked, choices are saved to your local variable registry
 (`~/Library/Application Support/Parameter Extractor/variable_registry.json`
 on macOS), so later papers fill those columns automatically without asking.
 The bundled template list is never modified. Values not added are kept in
-`new_variables.json`. The command line uses the same registry but never
+`new_variables.json`.
+
+**Variables → Remembered variables…** shows what the registry has learned:
+columns you added (rename or remove; removing also forgets the names mapped
+to it, so they're reviewed again) and synonyms (change the column or remove).
+The template's and the app's built-in columns are listed read-only. Changes
+are saved with **Save** and affect future runs only. The command line uses the same registry but never
 adds new variables itself.
 
 ### Figures (digitizing plots)
@@ -290,7 +296,8 @@ eval/gold_standard/  empty until a curated answer set exists
 .venv/bin/python tests/test_gui_offline.py      # needs the [gui] extra; runs off-screen
 .venv/bin/python tests/test_diagnostics.py
 .venv/bin/python tests/test_figures.py
-.venv/bin/python tests/test_truman2024_replay.py   # and test_new_variables, test_observations, ...
+.venv/bin/python tests/test_truman2024_replay.py   # and test_new_variables, test_observations,
+                                                    # test_units_names, test_registry, ...
 ```
 
 `test_pipeline_offline.py` replays the saved model responses from
