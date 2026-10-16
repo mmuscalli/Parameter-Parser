@@ -163,7 +163,7 @@ def test_full_run_fills_results():
         figures_tab = w.tabs.indexOf(w.figures_view)
         assert w.tabs.tabText(figures_tab) == "Figures (5)"
         assert "Fig. 3" in w.figures_view.toPlainText() and "skipped" in w.figures_view.toPlainText()
-        assert w.tabs.tabText(w.tabs.indexOf(w.equations_view)) == "Equations (0)"   # eder1994 numbers none
+        assert w.tabs.tabText(w.tabs.indexOf(w.equations_view)) == "Equations (1)"   # eder1994's rate law
         for i, name in enumerate(["1_rows", "2_flags", "3_figures", "4_equations", "5_summary"]):
             w.tabs.setCurrentIndex(i); _pump(); _screenshot(w, name)
         w.close()

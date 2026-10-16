@@ -363,9 +363,11 @@ keep it for now, refresh after the open issues are sorted).
   finds "(N)" set apart from a relation-bearing block (or "Equation N:") --
   column-aware (one/two-column pages), grows the block over stacked lines,
   fractions and sub/superscript fragments, stops at prose; rejects table rows.
-  Crops -> `<run>/equations/`, `equations.json`. Over all 76 dataset PDFs: 13
-  found in 5 papers, all real (truman2024, Zamaraev1996, lemke2009,
-  kawamura2011, otake2011), no false positives. Free, ~0.5 s/paper.
+  Second rule for OCR'd scans: "(N)" as the LAST WORD of an indented line
+  with a relation (eder1994's rate law, eq. 1 p.3 -- reported by Mickey).
+  Crops -> `<run>/equations/`, `equations.json`. Over all 76 dataset PDFs: 15
+  found in 6 papers, all real (+ eder1994, truman2024, Zamaraev1996,
+  lemke2009, kawamura2011, otake2011), no false positives. Free, ~0.5 s/paper.
   Optional LaTeX (`RunConfig.equations_to_latex`, GUI checkbox, CLI
   `--equations-latex`): `stages/equations.py`, ONE batched Sonnet call
   (~$0.02 for 13). Tested pix2tex (~half wrong) and pix2text (accurate except

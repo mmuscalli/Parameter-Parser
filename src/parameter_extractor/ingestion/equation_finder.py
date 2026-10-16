@@ -168,6 +168,40 @@ def _block(words: List[dict], label_seg: dict, x_lo: float, x_hi: float, column_
             "text": " / ".join(l["text"] for l in block), "centre_text": c["text"]}
 
 
+INDENT = 8.0                # points: a display equation starts at least this far in from the margin
+
+
+def _margins(lines: List[dict], mid: Optional[float]) -> dict:
+    """Left text margin of each column ('left'/'right'), or of the page ('page')."""
+    starts: Dict[str, List[float]] = {}
+    for ln in lines:
+        if len(ln["words"]) < 6:
+            continue                                  # body lines only
+        for s in _segments(ln):
+            key = "page" if mid is None else ("left" if s["x0"] < mid else "right")
+            starts.setdefault(key, []).append(s["x0"])
+    # the most common start, not the minimum: a stray mark in the margin shouldn't count
+    return {k: median(sorted(v)[: max(1, len(v) // 2)]) for k, v in starts.items()}
+
+
+def _attached_label(seg: dict, margins: dict, mid: Optional[float]):
+    """'(N)' as the last word of an indented line -- how OCR'd scans often come out, the
+    number close behind the equation rather than set apart. Returns (label word, x-range
+    of its equation, column width) or None."""
+    words = sorted(seg["words"], key=lambda w: w["x0"])
+    if len(words) < 3 or not LABEL.fullmatch(words[-1]["text"].strip()):
+        return None
+    key = "page" if mid is None else ("left" if seg["x0"] < mid else "right")
+    margin = margins.get(key)
+    if margin is None or seg["x0"] < margin + INDENT:
+        return None                                   # starts at the margin: a sentence, not a display
+    lo = 0 if key in ("page", "left") else mid
+    hi = (mid if key == "left" else None)
+    label = dict(words[-1], text=words[-1]["text"].strip())
+    col_width = (hi or label["x1"]) - lo
+    return label, (lo, label["x0"] - 0.5), max(col_width, 1.0)
+
+
 def _find_on_page(page) -> List[dict]:
     words = page.extract_words(x_tolerance=1.5, extra_attrs=["size"])
     if not words:
@@ -177,6 +211,7 @@ def _find_on_page(page) -> List[dict]:
     mid = page.width / 2
     body = median(w["size"] for w in words)
     found = []
+    margins = _margins(lines, mid if two else None)
     for line in lines:
         segs = _segments(line)
         for i, seg in enumerate(segs):
@@ -199,6 +234,16 @@ def _find_on_page(page) -> List[dict]:
                                       "bbox": [min(b["x0"], seg["x0"]), min(b["top"], seg["top"]),
                                                max(b["x1"], seg["x1"]), max(b["bottom"], seg["bottom"])]})
                         break
+                continue
+            attached = _attached_label(seg, margins, mid if two else None)
+            if attached:                               # OCR'd "... [H+]^b (1)" (eder1994 eq. 1)
+                label, (x_lo, x_hi), col_width = attached
+                b = _block(words, label, x_lo, x_hi, col_width, body)
+                if b is not None and RELATION.search(b["text"]) and not _prose(b["centre_text"]):
+                    found.append({"label": LABEL.fullmatch(label["text"]).group(1), "label_seg": label,
+                                  "text": b["text"],
+                                  "bbox": [b["x0"], min(b["top"], label["top"]), label["x1"],
+                                           max(b["bottom"], label["bottom"])]})
                 continue
             m = NAMED.match(seg["text"].strip())
             if m and m.group(2) and RELATION.search(m.group(2)) and not _prose(m.group(2)):   # "Equation 1: K = ..."

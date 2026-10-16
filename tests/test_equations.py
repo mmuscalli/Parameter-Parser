@@ -40,6 +40,9 @@ def test_labelled_equations_are_found():
         "Zamaraev1996.pdf": [("1", 4), ("2", 4)],               # single column, number at the far right
         "lemke2009.pdf": [("1", 1), ("2", 3), ("3", 3), ("4", 3)],   # math font without text ("(cid:5)")
         "kawamura2011.pdf": [("1", 6)],                         # a fraction
+        # OCR'd scan: the number right behind the equation, not set apart (found by Mickey)
+        "eder1994.pdf": [("1", 3)],
+        "otake2011.pdf": [("3", 4), ("4", 4), ("1", 4), ("6", 9)],   # (1) also has its number close behind
     }
     for name, labels in expected.items():
         got = _labels(name)
@@ -47,8 +50,8 @@ def test_labelled_equations_are_found():
 
 
 def test_unlabelled_or_table_lookalikes_are_not():
-    # kitadai2017: reactions in a table with reference numbers "(35)"; eder1994/kim2019: none labelled
-    for name in ("kitadai2017.pdf", "eder1994.pdf", "kim2019.pdf"):
+    # kitadai2017: reactions in a table with reference numbers "(35)"; kim2019: none labelled
+    for name in ("kitadai2017.pdf", "kim2019.pdf"):
         got = _labels(name)
         assert got is None or got == [], (name, got)
 
