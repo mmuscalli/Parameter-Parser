@@ -143,6 +143,32 @@ def test_multiplier_other_columns_and_unusable_series():
     assert len(problems) == 1 and "orphan" in problems[0]
 
 
+def test_series_conditions_and_own_y_column():
+    """alargov2002 Fig. 3: pressure given per panel in the caption ("a) 22.2 MPa"); Gly-Gly and
+    diketopiperazine plotted against one shared y axis."""
+    from parameter_extractor.ingestion.flatten_to_template import row_to_template_dict
+    from parameter_extractor.schemas.figures import SeriesCondition
+    meta, meth = _meta_and_method()
+    fig = _figure(y_col="sampled_2peptide_Gly_mM")
+    na = fig.series[0]
+    na.conditions = [SeriesCondition(column="initial_pressure_bar", value="22.2 MPa", source="caption"),
+                     SeriesCondition(column="flow_rate_mL_min", value="10 mL min-1"),
+                     SeriesCondition(column="experiment_type", value="hand-operated injection system"),
+                     SeriesCondition(column="injection_volume_mL", value="12 mL")]
+    dkp = na.model_copy(update=dict(label="DKP", y_column="sampled_DKP_Gly_mM", conditions=[]))
+    fig.series = [na, dkp]
+    rows, problems, new_vars = build_figure_rows([fig], meta, meth, "001", 1, 1)
+    gg, dk = row_to_template_dict(rows[0]), row_to_template_dict(rows[2])
+    assert gg["initial_pressure_bar"] == 222.0 and gg["flow_rate_mL_min"] == 10.0
+    assert rows[0].provenance["initial_pressure_bar"].source.endswith("caption, from '22.2 MPa'")
+    assert gg["experiment_type"] == meth.experiment_type.value                 # not overwritten by text
+    assert any("experiment_type takes only Batch or Flowthrough" in p for p in problems)
+    assert [v.name for v in new_vars] == ["injection_volume_mL"]              # unknown column: review
+    assert gg["sampled_2peptide_Gly_mM"] is not None and dk.get("sampled_2peptide_Gly_mM") is None
+    assert dk["sampled_cyclo_Gly-Gly_mM"] is not None                         # its own column (new name)
+    assert dk.get("initial_pressure_bar") == meth.initial_pressure_bar.value  # no condition: paper-wide
+
+
 def test_replayed_run_with_a_digitized_figure():
     if not PDF.is_file():
         print(f"SKIP: needs {PDF}"); return

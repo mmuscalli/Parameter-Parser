@@ -109,7 +109,7 @@ def test_cited_figure():
     fig.data_source = "Campbell et al. 2019, Nat. Commun. 10:4508 (ref. 15)"
     rows, _, _ = build_figure_rows([fig], meta, meth, "001", 14, 43)
     assert all(r.original_data_reference == fig.data_source for r in rows)
-    assert rows[0].provenance["original_data_reference"].origin == "Fig. 5"
+    assert rows[0].provenance["original_data_reference"].origin.startswith("Fig. 5")
 
 
 def test_assumed_values_are_never_written_automatically():

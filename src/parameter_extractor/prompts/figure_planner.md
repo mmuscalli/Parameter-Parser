@@ -28,7 +28,21 @@ Return a FigurePlan:
     each series its COMPLETE initial composition in `initial_species`
     (controlled-vocabulary names, concentrations converted to mM, including
     components shared by all series such as a fixed CuCl2 or glycine
-    background), plus temperature and pH when stated. If a series is the
+    background), plus temperature and pH when stated, and EVERY other
+    experimental condition the caption, legend, axis titles or passages
+    state for it in `conditions` -- pressure, flow rate, volumes, gas or
+    atmosphere, residence or reaction time when not on an axis, and so on.
+    A condition that applies to a whole panel or figure (e.g. "(a) at
+    22.2 MPa, (b) at 40.0 MPa") goes on every series it applies to. Give the
+    value exactly as printed with its unit ("22.2 MPa") -- don't convert it;
+    the app does that -- and the column it belongs in from the list below
+    (e.g. initial_pressure_bar for a reaction pressure). Conditions are
+    physical settings with values; don't put descriptions of the apparatus
+    or method into category columns such as experiment_type (only "Batch" or
+    "Flowthrough") -- mention those in `notes`.
+  - One y-axis can carry several quantities ("Concentration of Gly-Gly and
+    diketopiperazine"): give the axis the column of one of them and every
+    series that plots a DIFFERENT quantity its own `y_column`. If a series is the
     same experiment as a set in the structure plan below, give that
     `set_label` exactly.
   - Points that represent different conditions within one series (e.g. a
@@ -59,7 +73,7 @@ CONTROLLED VOCABULARY (species names):
 {{CONTROLLED_VOCAB_JSON}}
 
 ---
-TEMPLATE COLUMNS (choose axis columns from these):
+TEMPLATE COLUMNS (choose axis and condition columns from these):
 
 {{TEMPLATE_COLUMNS_JSON}}
 

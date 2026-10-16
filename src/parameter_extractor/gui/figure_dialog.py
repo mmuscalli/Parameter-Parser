@@ -264,10 +264,16 @@ class FigureReviewDialog(QDialog):
             panel = fig.panels[s.panel]
             if try_pixel_to_data(panel, s.points[0].px, s.points[0].py) is None:
                 issues.append(f"'{s.label}': its axes ('{panel.name}') aren't fully calibrated.")
-            elif not (panel.x.column or panel.y.column):
+            elif not (panel.x.column or panel.y.column or s.y_column):
                 issues.append(f"'{s.label}': neither axis of '{panel.name}' is assigned to a column.")
         if not any(s.points for s in fig.series):
             issues.append("No points have been clicked yet.")
+        from parameter_extractor.ingestion.figure_rows import convert_condition
+        for s in fig.series:
+            for c in s.conditions:
+                _, _, problem = convert_condition(c)
+                if problem and s.points:
+                    issues.append(f"'{s.label}': condition {c.column or '(no column)'} -- {problem}.")
         return issues
 
     def _save(self, confirm: bool = True) -> None:

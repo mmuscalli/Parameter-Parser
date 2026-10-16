@@ -54,6 +54,18 @@ class AxisVariable(BaseModel):
     note: Optional[str] = None
 
 
+class SeriesCondition(BaseModel):
+    """Any other experimental condition of a series (pressure, flow rate, volume,
+    atmosphere, residence time, ...): the column it belongs in and the value AS PRINTED,
+    with its unit -- converted to the column's unit by the app (units.py), not the model.
+    Flat, no Optional fields (structured-output grammar size)."""
+    column: str = Field(description="The column this condition belongs in, chosen from the column list, e.g. "
+                                    "'initial_pressure_bar', 'flow_rate_mL_min', 'headspace_gas_name'. If no "
+                                    "column fits, a short snake_case name for a new one.")
+    value: str = Field(description="As printed, with its unit, e.g. '22.2 MPa', '10 mL min-1', 'N2'.")
+    source: str = Field(default="", description="Where it's stated, e.g. 'caption', 'Methods', 'legend'.")
+
+
 class PlannedSeries(BaseModel):
     label: str = Field(description="How the series is identified, e.g. 'pH 1.93' or 'Na+'.")
     marker: Optional[str] = Field(default=None, description="Marker/line style, e.g. 'open diamond', 'dashed line'.")
@@ -65,6 +77,15 @@ class PlannedSeries(BaseModel):
                                           "components common to all series.")
     initial_temperature_C: Optional[float] = None
     initial_pH: Optional[float] = None
+    conditions: List[SeriesCondition] = Field(
+        default_factory=list,
+        description="Every OTHER stated condition of this series (pressure, flow rate, volumes, gas, "
+                    "residence time, ...), including ones shared by the whole panel or figure.")
+    y_column: str = Field(
+        default="",
+        description="Only when this series' y values belong in a DIFFERENT column than its panel's y-axis "
+                    "column -- an axis shared by several quantities (e.g. 'Concentration of Gly-Gly and "
+                    "diketopiperazine': the diketopiperazine series -> its own column). '' otherwise.")
     notes: Optional[str] = None
 
 
@@ -130,6 +151,8 @@ class DigitizedSeries(BaseModel):
     initial_species: List[SpeciesAmount] = Field(default_factory=list)
     initial_temperature_C: Optional[float] = None
     initial_pH: Optional[float] = None
+    conditions: List[SeriesCondition] = Field(default_factory=list)   # pressure, flow rate, ... (editable)
+    y_column: str = ""                              # overrides the panel's y column for this series ('' = use it)
     notes: Optional[str] = None
 
 
