@@ -377,6 +377,30 @@ keep it for now, refresh after the open issues are sorted).
   equation crops (and the digitizer's figure region) now use it.
 - **GUI tabs**: Figures (crop or annotated digitized image, status, caption)
   and Equations (crop + LaTeX) next to Rows/Flags/Summary.
+- **Digitizer conditions** (alargov2002 Fig. 3: pressure was missed because
+  PlannedSeries only had temperature/pH): `SeriesCondition` list (column +
+  value AS PRINTED + source) on planned and digitized series; converted in
+  `figure_rows.convert_condition` (refuses id/metadata columns; experiment_type
+  only Batch/Flowthrough); unknown columns -> review. Editable "Other
+  conditions" table in the digitizer. `series.y_column` overrides the panel's
+  y column (one axis carrying Gly-Gly AND diketopiperazine).
+- **Digitizer automation (optional)**: `digitizing/auto_axes.py` finds plot
+  frames (gap-tolerant, merges pieces of slightly rotated scanned lines),
+  finds the tick NUMBERS as ink blocks outside each axis (works without tick
+  marks; snaps to a tick if present), pairs them in order with
+  `AxisVariable.tick_labels` (from the figure planner) or with text-layer
+  numbers (`FigureCandidate.tick_numbers`, vector plots), only if evenly
+  spaced (linear/log) and counts match -- else says why. Auto-runs on
+  suggestions (checkbox, QSettings digitizer/auto_axes) + button per
+  coordinate system (frame chosen by view centre, else panel base name).
+  `digitizing/auto_points.py`: click an example marker -> centroid-refined,
+  FFT normalised cross-correlation, legend boxes excluded, existing points
+  skipped, one undo step; similarity spin (default 0.75). alargov2002 Fig. 3:
+  all 4 coordinate systems calibrated; 12/14 markers at 0.75, 0 false.
+  Text layer alone rarely works (truman figures are images, eder OCR garbled);
+  frames not found for truman Figs. 4-5 / eder Fig. 5 (faint/coloured axes).
+  numpy is now a declared dependency and NOT excluded in the PyInstaller spec
+  (it was); `--self-check` tests it.
 - **total_sampled_peptides_yield** (`calculators/peptide_totals.py`, runs after
   the review): sum of the row's peptide %yields (linear and cyclic),
   origin "calculated" with the parts listed; a stated total ("Total Gly in

@@ -28,16 +28,18 @@ The editor works on a schemas.figures.DigitizedFigure; nothing here knows
 about rows or files.
 """
 from __future__ import annotations
+import re
 from typing import Callable, List, Optional
 
-from PySide6.QtCore import QEvent, QPointF, QRectF, Qt, Signal
+from PySide6.QtCore import QEvent, QPointF, QRectF, QSettings, Qt, Signal
 from PySide6.QtGui import (QBrush, QColor, QIcon, QKeySequence, QPainter, QPainterPath, QPen,
                            QPixmap, QShortcut)
 from PySide6.QtWidgets import (
     QAbstractItemView, QButtonGroup, QCheckBox, QComboBox, QCompleter, QFormLayout, QGraphicsEllipseItem,
     QGraphicsItem, QGraphicsPathItem, QGraphicsPixmapItem, QGraphicsScene, QGraphicsSimpleTextItem,
     QGraphicsView, QGroupBox, QHBoxLayout, QHeaderView, QLabel, QLineEdit, QListWidget,
-    QListWidgetItem, QPushButton, QScrollArea, QSplitter, QStyledItemDelegate, QTableWidget, QTableWidgetItem,
+    QDoubleSpinBox, QListWidgetItem, QPushButton, QScrollArea, QSplitter, QStyledItemDelegate, QTableWidget,
+    QTableWidgetItem,
     QToolButton, QVBoxLayout, QWidget,
 )
 
@@ -337,6 +339,20 @@ class DigitizerWidget(QWidget):
             self.var_widgets[axis] = (combo, mult)
             form.addRow(f"{axis.upper()} column:", row)
         form.addRow("Data reproduced from:", self.source_edit)
+
+        # optional automation: place the calibration markers from the axis numbers
+        self.auto_axes_btn = QPushButton("Auto-calibrate this coordinate system", clicked=self.auto_calibrate)
+        self.auto_axes_btn.setToolTip("Finds the plot's frame and its tick numbers and places X1/X2 and Y1/Y2 on "
+                                      "the outermost numbered ticks. Zoom to the panel first if the figure has "
+                                      "several. Check the markers afterwards.")
+        self.auto_axes_box = QCheckBox("Calibrate automatically when suggestions arrive")
+        self.auto_axes_box.setChecked(QSettings().value("digitizer/auto_axes", True, type=bool))
+        self.auto_axes_box.toggled.connect(lambda on: QSettings().setValue("digitizer/auto_axes", on))
+        self.auto_status = QLabel(wordWrap=True)
+        self.auto_status.setStyleSheet("color: palette(placeholder-text);")
+        form.addRow(self.auto_axes_btn)
+        form.addRow(self.auto_axes_box)
+        form.addRow(self.auto_status)
         return box
 
     def _build_series_box(self) -> QWidget:
@@ -357,6 +373,22 @@ class DigitizerWidget(QWidget):
                                     "Only the selected series is ever editable.")
         self.isolate_box.toggled.connect(lambda _on: self.redraw())
         v.addWidget(self.isolate_box)
+        # optional automation: find the other markers that look like one example
+        frow = QHBoxLayout()
+        self.find_points_btn = QPushButton("Find similar points…", clicked=self._start_find_points)
+        self.find_points_btn.setToolTip("Then click one marker of this series: markers that look the same are "
+                                        "added to it (one undo step). Check them; right-click removes one.")
+        self.similarity_spin = QDoubleSpinBox(minimum=0.4, maximum=0.99, singleStep=0.05, decimals=2)
+        self.similarity_spin.setValue(QSettings().value("digitizer/similarity", 0.75, type=float))
+        self.similarity_spin.setToolTip("How closely a marker must match the example (1 = identical). Lower it "
+                                        "to catch markers partly covered by lines or other markers; raise it if "
+                                        "other series' markers are picked up.")
+        self.similarity_spin.valueChanged.connect(lambda v: QSettings().setValue("digitizer/similarity", v))
+        frow.addWidget(self.find_points_btn)
+        frow.addWidget(QLabel("similarity"))
+        frow.addWidget(self.similarity_spin)
+        frow.addStretch(1)
+        v.addLayout(frow)
 
         details = QFormLayout()
         self.series_panel_combo = QComboBox()
@@ -444,6 +476,11 @@ class DigitizerWidget(QWidget):
         return self.fig.series[self.series_idx] if 0 <= self.series_idx < len(self.fig.series) else None
 
     def _on_canvas_click(self, x: float, y: float, button) -> None:
+        if self.canvas.mode == "example":
+            self.set_mode("points")
+            if button == Qt.MouseButton.LeftButton:
+                self.find_points_like(x, y)
+            return
         if self.canvas.mode in ("x", "y") and button == Qt.MouseButton.LeftButton:
             self.place_calibration(self.canvas.mode, x, y)
         elif self.canvas.mode == "points":
@@ -506,6 +543,13 @@ class DigitizerWidget(QWidget):
     def undo(self) -> None:
         while self._undo:
             si, pi = self._undo.pop()
+            if isinstance(pi, list):            # a batch of found points: all go at once
+                pts = self.fig.series[si].points if si < len(self.fig.series) else []
+                for i in sorted(pi, reverse=True):
+                    if i < len(pts):
+                        del pts[i]
+                self.redraw()
+                return
             if si < len(self.fig.series) and pi < len(self.fig.series[si].points):
                 del self.fig.series[si].points[pi]
                 self.redraw()
@@ -812,6 +856,118 @@ class DigitizerWidget(QWidget):
             name=(name_item.text().strip() if name_item else ""),
             concentration_mM=_parse_float(conc_item.text()) if conc_item else None)
 
+    # ---- optional automation ------------------------------------------------------
+
+    def _gray(self):
+        if getattr(self, "_gray_cache", None) is None:
+            import numpy as np
+            from PIL import Image
+            self._gray_cache = np.asarray(Image.open(self.fig.page_image).convert("L"))
+        return self._gray_cache
+
+    def _figure_region(self):
+        g = self._gray()
+        if self.fig.figure_bbox:
+            s = self.fig.render_scale
+            x0, y0, x1, y1 = (v * s for v in self.fig.figure_bbox)
+            pad = 30
+            return (max(int(x0) - pad, 0), max(int(y0) - pad, 0), min(int(x1) + pad, g.shape[1]),
+                    min(int(y1) + pad, g.shape[0]))
+        return 0, 0, g.shape[1], g.shape[0]
+
+    def _frames(self):
+        if getattr(self, "_frames_cache", None) is None:
+            from parameter_extractor.digitizing.auto_axes import find_frames
+            self._frames_cache = find_frames(self._gray(), self._figure_region())
+        return self._frames_cache
+
+    @staticmethod
+    def _panel_sides(name: str):
+        """Which frame sides a coordinate system reads from, and its base name: '(a) right
+        y-axis' -> ('bottom', 'right', '(a)')."""
+        low = name.lower()
+        y_side = "right" if "right" in low else "left"
+        x_side = "top" if "top" in low else "bottom"
+        base = re.sub(r"\b(left|right|top|bottom|secondary|primary)\b|\b[xy][- ]?axis\b|\baxis\b", "", low)
+        return x_side, y_side, re.sub(r"[\s,;:-]+", " ", base).strip()
+
+    def _view_centre(self):
+        c = self.canvas.mapToScene(self.canvas.viewport().rect().center())
+        return c.x(), c.y()
+
+    def auto_calibrate(self, _checked=False, use_view: bool = True) -> str:
+        """Place the current coordinate system's calibration markers automatically."""
+        from parameter_extractor.digitizing.auto_axes import AutoAxisError, calibrate_axis, choose_frame
+        panel = self.panel
+        x_side, y_side, base = self._panel_sides(panel.name)
+        bases = list(dict.fromkeys(self._panel_sides(p.name)[2] for p in self.fig.panels))
+        notes = []
+        try:
+            frame = choose_frame(self._frames(), self._view_centre() if use_view else None, bases.index(base))
+        except AutoAxisError as e:
+            notes.append(str(e))
+        else:
+            for axis, side, var in (("x", x_side, panel.x), ("y", y_side, panel.y)):
+                try:
+                    (ax, ay, av), (bx, by, bv), is_log = calibrate_axis(
+                        self._gray(), frame, side, list(var.tick_labels), self.fig.tick_numbers)
+                except AutoAxisError as e:
+                    notes.append(f"{axis.upper()}: {e}")
+                    continue
+                cal: AxisCalibration = getattr(panel, f"{axis}_cal")
+                setattr(panel, f"{axis}_cal", AxisCalibration(
+                    p1=CalibrationPoint(px=float(ax), py=float(ay), value=float(av)),
+                    p2=CalibrationPoint(px=float(bx), py=float(by), value=float(bv)), log=cal.log or is_log))
+                notes.append(f"{axis.upper()}: {av:g} to {bv:g} placed")
+        message = f"{panel.name}: " + "; ".join(notes) + " -- check the markers."
+        self.auto_status.setText(message)
+        self._refresh_calibration()
+        self.redraw()
+        return message
+
+    def auto_calibrate_all(self) -> None:
+        """After suggestions arrive: every coordinate system that isn't calibrated yet."""
+        current = self.panel_idx
+        messages = []
+        for i, panel in enumerate(self.fig.panels):
+            if panel.x_cal.p1 or panel.x_cal.p2 or panel.y_cal.p1 or panel.y_cal.p2:
+                continue                       # the user has started on it: leave it alone
+            self.panel_idx = i
+            messages.append(self.auto_calibrate(use_view=False))
+        self.panel_idx = current
+        self._refresh_panels()
+        self.auto_status.setText("\n".join(messages))
+
+    def _start_find_points(self) -> None:
+        if self.series is None:
+            self.add_series()
+        self.canvas.set_mode("example")
+        self.mode_hint.setText(f"Click one marker of '{self.series.label}' -- markers that look the same "
+                               f"will be added to it.")
+
+    def find_points_like(self, x: float, y: float) -> int:
+        """Add the markers like the one at (x, y) to the selected series; returns how many."""
+        from parameter_extractor.digitizing.auto_axes import find_boxes_inside
+        from parameter_extractor.digitizing.auto_points import centre_marker, find_similar_points
+        gray = self._gray()
+        x, y = centre_marker(gray, x, y)
+        frame = next((f for f in self._frames() if f.contains(x, y)), None)
+        area = (frame.left, frame.top, frame.right, frame.bottom) if frame else self._figure_region()
+        legends = find_boxes_inside(gray, frame) if frame else []
+        existing = [(p.px, p.py) for s in self.fig.series for p in s.points]
+        found = find_similar_points(gray, (x, y), area, existing=existing,
+                                    threshold=self.similarity_spin.value(), exclude=legends)
+        series = self.series
+        start = len(series.points)
+        series.points += [DigitizedPoint(px=px, py=py) for px, py, _ in found]
+        if found:
+            self._undo.append((self.series_idx, list(range(start, len(series.points)))))
+        self.mode_hint.setText(f"Added {len(found)} point(s) like the example to '{series.label}'. Check them: "
+                               f"right-click removes one, Ctrl+Z removes them all. Lower 'similarity' to catch "
+                               f"markers partly covered by lines.")
+        self.redraw()
+        return len(found)
+
     def _refresh_points_table(self) -> None:
         s = self.series
         pts = s.points if s else []
@@ -892,4 +1048,6 @@ class DigitizerWidget(QWidget):
         self._undo.clear()
         self._refresh_panels()
         self._refresh_series_list()
+        if self.auto_axes_box.isChecked():
+            self.auto_calibrate_all()
         self.redraw()

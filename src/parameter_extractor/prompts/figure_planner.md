@@ -19,7 +19,10 @@ Return a FigurePlan:
   - `x`, `y`: the axis title as printed, and the template `column` from the
     list below that the value belongs in. Use null when no column fits
     (derived quantities like rates, enthalpies, species-distribution
-    percentages). `multiplier` converts axis values to the column's unit
+    percentages). `tick_labels`: the numbers printed at the axis's labelled
+    ticks, low end first, exactly as printed (read them carefully from the
+    image -- they place the calibration markers). `multiplier` converts axis
+    values to the column's unit
     (e.g. an axis in mol dm-3 feeding an `_mM` column -> 1000; an axis
     labelled "10^3 (% Gly-Gly) per h" -> 0.001 to get % per h). Note log
     axes as `scale: "log"`.
@@ -37,9 +40,11 @@ Return a FigurePlan:
     value exactly as printed with its unit ("22.2 MPa") -- don't convert it;
     the app does that -- and the column it belongs in from the list below
     (e.g. initial_pressure_bar for a reaction pressure). Conditions are
-    physical settings with values; don't put descriptions of the apparatus
-    or method into category columns such as experiment_type (only "Batch" or
-    "Flowthrough") -- mention those in `notes`.
+    physical settings with values: a number with its unit, or for a few
+    columns a name (a gas, a material). Never put a description of the
+    apparatus or method into a condition -- not into a numeric column, nor
+    into category columns such as experiment_type (only "Batch" or
+    "Flowthrough"); mention those in `notes`.
   - One y-axis can carry several quantities ("Concentration of Gly-Gly and
     diketopiperazine"): give the axis the column of one of them and every
     series that plots a DIFFERENT quantity its own `y_column`. If a series is the

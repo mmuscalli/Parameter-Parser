@@ -17,6 +17,7 @@ dependencies = [
     "pypdfium2>=4.0",       # page rendering (BSD/Apache)
     "Pillow>=10.0",
     "requests>=2.31",       # CrossRef DOI lookup
+    "numpy>=1.26",          # digitizer automation: axis and marker detection in the page image
 ]
 
 [project.optional-dependencies]

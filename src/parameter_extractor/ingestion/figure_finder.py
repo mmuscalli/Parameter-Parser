@@ -129,8 +129,27 @@ def _find_on_page(page, page_no: int) -> List[dict]:
         cap["caption_bbox"] = (min(l["x0"] for l in cap["block"]), cap_top,
                                max(l["x1"] for l in cap["block"]), cap_bottom)
         cap["caption"] = _caption_text(cap["block"])
+        cap["numbers"] = [w for w in words if _NUMBER.fullmatch(w["text"])]    # tick labels of vector plots
         results.append(cap)
     return results
+
+
+_NUMBER = re.compile(r"[-−–]?\d+(?:[.,]\d+)?")
+
+
+def _numbers_in(words, figure_bbox, offset):
+    """Numeric words (pdfplumber boxes) inside the figure, in rendered-page points."""
+    from parameter_extractor.ingestion.pdf_parser import to_render_box
+    _, ftop, _, fbottom = figure_bbox
+    out = []
+    for w in words:
+        if not _NUMBER.fullmatch(w["text"]):
+            continue
+        box = to_render_box([w["x0"], w["top"], w["x1"], w["bottom"]], offset)
+        # any x: y-axis numbers can sit outside the estimated plot area's sides
+        if ftop - 5 <= box[1] and box[3] <= fbottom + 5:
+            out.append((box, float(w["text"].replace(",", ".").replace("−", "-").replace("–", "-"))))
+    return out
 
 
 def find_figures(pdf_path: str, out_dir: Path, render_scale: float = RENDER_SCALE) -> List[FigureCandidate]:
@@ -176,6 +195,8 @@ def find_figures(pdf_path: str, out_dir: Path, render_scale: float = RENDER_SCAL
             candidates.append(FigureCandidate(
                 figure_id=f"Fig. {number}", number=number, page=page_no, caption=c["caption"],
                 figure_bbox=figure_bbox, caption_bbox=caption_bbox,
+                tick_numbers=[((x0 + x1) / 2 * render_scale, (t + b) / 2 * render_scale, v)
+                              for (x0, t, x1, b), v in _numbers_in(c.get("numbers", []), figure_bbox, offset)],
                 page_image=str(out_dir / f"page-{page_no}.png"), crop_image=str(crop_path),
                 render_scale=render_scale))
     finally:

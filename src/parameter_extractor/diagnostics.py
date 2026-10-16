@@ -53,6 +53,15 @@ def run_checks(pdf: Optional[Path] = None, api_key: Optional[str] = None) -> Lis
         return f"pdfplumber {pdfplumber.__version__}, pypdfium2 {pypdfium2.version.PYPDFIUM_INFO}"
     checks.append(_run("PDF libraries", pdf_libs))
 
+    def automation() -> str:
+        import numpy as np
+        from parameter_extractor.digitizing.auto_points import match_scores
+        scores = match_scores(np.eye(12) * 255, np.eye(5) * 255)     # a tiny diagonal finds itself
+        if abs(scores.max() - 1.0) > 1e-6:
+            raise RuntimeError("marker matching gave a wrong result")
+        return f"numpy {np.__version__}, marker matching OK"
+    checks.append(_run("Digitizer automation", automation))
+
     if pdf is not None:
         def parse_and_render() -> str:
             from parameter_extractor.ingestion.figure_finder import find_figures

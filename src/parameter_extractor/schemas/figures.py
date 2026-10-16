@@ -30,6 +30,9 @@ class FigureCandidate(BaseModel):
     page_image: str                # path to the rendered page (PNG)
     crop_image: str                # path to figure + caption crop, as shown to the model
     render_scale: float            # page image pixels per PDF point
+    # numbers in the PDF's text layer inside the figure (vector plots' tick labels):
+    # (centre x, centre y, value) in page-image pixels; empty for plots that are images
+    tick_numbers: List[Tuple[float, float, float]] = Field(default_factory=list)
 
 
 # ---- the model's suggestions (structured output of the figure_planner stage) ----
@@ -51,6 +54,11 @@ class AxisVariable(BaseModel):
                     "1000 for an axis in mol dm-3 going into an _mM column, 0.001 for an axis "
                     "labelled '10^3 x (% yield)'.")
     scale: Literal["linear", "log"] = "linear"
+    tick_labels: List[float] = Field(
+        default_factory=list,
+        description="The numbers printed at this axis's labelled ticks, in order from the low end of the "
+                    "axis (left / bottom) to the high end, exactly as printed, e.g. [200, 250, 300, 350, "
+                    "400, 450]. Used to place the calibration markers automatically.")
     note: Optional[str] = None
 
 
@@ -164,6 +172,7 @@ class DigitizedFigure(BaseModel):
     render_scale: float
     page_image: str
     figure_bbox: Optional[BBox] = None              # the detected area, PDF points (for the audit image)
+    tick_numbers: List[Tuple[float, float, float]] = Field(default_factory=list)   # see FigureCandidate
     data_source: str = ""                           # original reference if the plotted data is cited
     panels: List[DigitizedPanel] = Field(default_factory=lambda: [DigitizedPanel()])
     series: List[DigitizedSeries] = Field(default_factory=list)
