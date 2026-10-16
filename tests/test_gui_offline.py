@@ -30,6 +30,11 @@ except ImportError:
 
 from parameter_extractor import api_client
 from parameter_extractor.gui import key_store, main_window
+from parameter_extractor.gui import error_log
+
+# failures provoked by these tests must not land in the user's real errors.log
+_ERROR_LOG_DIR = tempfile.mkdtemp()
+error_log.error_log_path = lambda: Path(_ERROR_LOG_DIR) / "errors.log"
 from parameter_extractor.gui.figure_dialog import FigureReviewDialog
 from parameter_extractor.ingestion.figure_finder import find_figures
 from parameter_extractor.ingestion.figure_rows import build_figure_rows
