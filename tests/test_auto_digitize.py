@@ -117,6 +117,50 @@ def test_digitizer_calibrates_on_suggestions():
         w.close()
 
 
+def test_panel_names_are_read_by_whole_words():
+    """The planner named a panel '(a) left y-axis (Gly-Gly and diketopiperazine, 22.2 MPa)':
+    'diketopiperazine' contains 'top', which used to make it a top x-axis."""
+    try:
+        from parameter_extractor.gui.digitizer import DigitizerWidget
+    except ImportError:
+        print("SKIP: PySide6 not installed"); return
+    sides = DigitizerWidget._panel_sides
+    assert sides("(a) left y-axis (Gly-Gly and diketopiperazine, 22.2 MPa)")[:2] == ("bottom", "left")
+    assert sides("(a) right y-axis (Gly, 22.2 MPa)")[:2] == ("bottom", "right")
+    assert sides("top x-axis")[:2] == ("top", "left")
+    assert sides("(b) left y-axis")[2] == sides("(b) right y-axis")[2]
+
+
+def test_composition_passages_reach_the_methods():
+    """alargov2002's glycine concentrations are only in Methods, which never mentions Fig. 3."""
+    if not PDF.is_file():
+        print(f"SKIP: needs {PDF}"); return
+    from parameter_extractor.ingestion.pdf_parser import parse_pdf
+    from parameter_extractor.stages.figure_planner import composition_passages, figure_passages
+    pages = parse_pdf(str(PDF)).page_texts
+    figure = figure_passages(pages, 3)
+    assert "0.065 M" not in figure
+    extra = composition_passages(pages, exclude=figure)
+    assert "0.065 M" in extra and "0.22 M" in extra and "former case" in extra   # with its context
+    assert "Origins Life Evol" not in extra                               # not the reference list
+
+
+def test_errors_are_recorded():
+    import tempfile
+    from unittest.mock import patch
+    try:
+        from parameter_extractor.gui import error_log
+    except ImportError:
+        print("SKIP: PySide6 not installed"); return
+    with tempfile.TemporaryDirectory() as tmp, \
+            patch.object(error_log, "error_log_path", lambda: Path(tmp) / "errors.log"):
+        run = Path(tmp) / "alargov2002_20261016-022152"
+        run.mkdir()
+        assert error_log.latest_run_dir(Path(tmp), Path("x/alargov2002.pdf"), 0) == run
+        error_log.record("Traceback: boom", run)
+        assert "boom" in (Path(tmp) / "errors.log").read_text() and "boom" in (run / "error.txt").read_text()
+
+
 if __name__ == "__main__":
     for name, fn in list(globals().items()):
         if name.startswith("test_") and callable(fn):

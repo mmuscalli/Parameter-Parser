@@ -31,7 +31,19 @@ Return a FigurePlan:
     each series its COMPLETE initial composition in `initial_species`
     (controlled-vocabulary names, concentrations converted to mM, including
     components shared by all series such as a fixed CuCl2 or glycine
-    background), plus temperature and pH when stated, and EVERY other
+    background) -- look for it in the caption, the passages about the
+    figure, the structure plan AND the concentration passages from the
+    rest of the paper below (starting concentrations are usually stated
+    once, in the Methods, not next to the figure; match them to the series
+    by the conditions they're stated for, e.g. the injection system or
+    pressure a panel uses). A concentration the paper reports only
+    indirectly -- measured in a control run without reaction, or given for
+    the feed or injected solution -- still counts: put it in
+    `concentration_mM` (converted to mM) on EVERY series it applies to, and
+    say in `notes` exactly what it is and where it's stated (every
+    suggestion is shown to the user to check). A null concentration is only
+    for a species whose amount the paper doesn't give at all -- never for
+    one you've identified in the text -- plus temperature and pH when stated, and EVERY other
     experimental condition the caption, legend, axis titles or passages
     state for it in `conditions` -- pressure, flow rate, volumes, gas or
     atmosphere, residence or reaction time when not on an axis, and so on.
@@ -87,3 +99,9 @@ PASSAGES THAT MENTION THIS FIGURE (extracted text; two-column pages may run
 side by side on one line):
 
 {{FIGURE_PASSAGES}}
+
+---
+PASSAGES THAT STATE CONCENTRATIONS, from anywhere in the paper (for the
+starting compositions):
+
+{{COMPOSITION_PASSAGES}}

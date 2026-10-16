@@ -19,6 +19,8 @@ def main() -> int:
     app.setOrganizationName("Parameter Extractor")   # where QSettings stores preferences
     app.setApplicationVersion(__version__)
     app.setWindowIcon(QIcon(str(Path(__file__).parent / "resources" / "app.png")))
+    from parameter_extractor.gui.error_log import install_excepthook
+    install_excepthook()        # errors in the window itself are recorded and shown, not lost
 
     from parameter_extractor.gui.main_window import MainWindow  # after QApplication exists
     window = MainWindow()

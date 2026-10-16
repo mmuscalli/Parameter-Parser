@@ -346,7 +346,7 @@ class DigitizerWidget(QWidget):
                                       "the outermost numbered ticks. Zoom to the panel first if the figure has "
                                       "several. Check the markers afterwards.")
         self.auto_axes_box = QCheckBox("Calibrate automatically when suggestions arrive")
-        self.auto_axes_box.setChecked(QSettings().value("digitizer/auto_axes", True, type=bool))
+        self.auto_axes_box.setChecked(QSettings().value("digitizer/auto_axes", False, type=bool))   # off by default
         self.auto_axes_box.toggled.connect(lambda on: QSettings().setValue("digitizer/auto_axes", on))
         self.auto_status = QLabel(wordWrap=True)
         self.auto_status.setStyleSheet("color: palette(placeholder-text);")
@@ -886,8 +886,9 @@ class DigitizerWidget(QWidget):
         """Which frame sides a coordinate system reads from, and its base name: '(a) right
         y-axis' -> ('bottom', 'right', '(a)')."""
         low = name.lower()
-        y_side = "right" if "right" in low else "left"
-        x_side = "top" if "top" in low else "bottom"
+        # whole words: "diketopiperazine" contains "top" (a planner panel name, alargov2002)
+        y_side = "right" if re.search(r"\bright\b", low) else "left"
+        x_side = "top" if re.search(r"\btop\b", low) else "bottom"
         base = re.sub(r"\b(left|right|top|bottom|secondary|primary)\b|\b[xy][- ]?axis\b|\baxis\b", "", low)
         return x_side, y_side, re.sub(r"[\s,;:-]+", " ", base).strip()
 

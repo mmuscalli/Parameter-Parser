@@ -401,6 +401,17 @@ keep it for now, refresh after the open issues are sorted).
   frames not found for truman Figs. 4-5 / eder Fig. 5 (faint/coloured axes).
   numpy is now a declared dependency and NOT excluded in the PyInstaller spec
   (it was); `--self-check` tests it.
+  Auto-calibrate checkbox is OFF by default (Mickey, 2026-10-16). Panel-name
+  sides use whole words ("diketopiperazine" contains "top").
+- **Figure planner context**: besides passages mentioning the figure, it gets
+  `composition_passages` (lines stating a concentration anywhere, +-2 lines,
+  no reference list) -- starting compositions live in Methods. Indirectly
+  stated concentrations (control-run outlet, feed solution) ARE filled in the
+  digitizer suggestions, with a note (user checks every suggestion);
+  alargov2002 Fig. 3: Gly 65 mM (hand-operated, 22.2 MPa) / 220 mM (HPLC pump).
+- **Error log** (`gui/error_log.py`): the packaged app has no console --
+  failures and tracebacks go to `<app data>/errors.log` and the run folder's
+  error.txt; an excepthook shows and records exceptions in the window itself.
 - **total_sampled_peptides_yield** (`calculators/peptide_totals.py`, runs after
   the review): sum of the row's peptide %yields (linear and cyclic),
   origin "calculated" with the parts listed; a stated total ("Total Gly in

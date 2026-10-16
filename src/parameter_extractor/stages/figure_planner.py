@@ -45,6 +45,32 @@ def figure_passages(page_texts: List[str], number: int) -> str:
     return text[:MAX_PASSAGE_CHARS] if text else "(the text doesn't mention this figure)"
 
 
+MAX_COMPOSITION_CHARS = 5000
+_CONCENTRATION = re.compile(r"\d\s*(?:mol\s*(?:dm|L|l)|[mµμu]?M\b|mmol|µmol|mg\s*(?:/|per)?\s*m?L|g\s*(?:/|per)\s*L"
+                            r"|%\s*\(?(?:w|v|wt))", re.IGNORECASE)
+
+
+def composition_passages(page_texts: List[str], exclude: str = "") -> str:
+    """Lines stating a concentration anywhere in the paper (usually Methods), with two
+    lines before and after for context -- starting compositions are rarely next to the
+    figure that plots them (alargov2002: glycine 0.065 M / 0.22 M in Methods only, and
+    which injection system each was for two lines earlier).
+    Lines already in the figure passages and the reference list are left out."""
+    chunks, seen = [], set(exclude.splitlines())
+    for page_no, text in enumerate(page_texts, start=1):
+        if re.search(r"^\s*(References|REFERENCES|Bibliography)\s*$", text, re.MULTILINE):
+            text = re.split(r"^\s*(?:References|REFERENCES|Bibliography)\s*$", text, flags=re.MULTILINE)[0]
+        lines = text.splitlines()
+        for i, ln in enumerate(lines):
+            if _CONCENTRATION.search(ln) and ln.rstrip() not in seen:
+                block = [l.rstrip() for l in lines[max(0, i - 2):i + 3] if l.rstrip() not in seen]
+                seen.update(block)
+                if block:
+                    chunks.append(f"[page {page_no}] " + "\n".join(block))
+    text = "\n...\n".join(chunks)
+    return text[:MAX_COMPOSITION_CHARS] if text else "(no concentrations stated in the text)"
+
+
 def run_figure_planner(
     ctx: RunContext, figure: FigureCandidate, page_texts: List[str], structure_plan: StructurePlan,
     controlled_vocab: List[str], template_columns: List[str],
@@ -57,7 +83,8 @@ def run_figure_planner(
         STRUCTURE_PLAN_JSON=structure_plan.model_dump_json(indent=2),
         CONTROLLED_VOCAB_JSON=json.dumps(controlled_vocab),
         TEMPLATE_COLUMNS_JSON=json.dumps(template_columns),
-        FIGURE_PASSAGES=figure_passages(page_texts, figure.number),
+        FIGURE_PASSAGES=(passages := figure_passages(page_texts, figure.number)),
+        COMPOSITION_PASSAGES=composition_passages(page_texts, exclude=passages),
     )
     return call_structured(
         ctx,

@@ -38,6 +38,10 @@ class PipelineWorker(QObject):
 
     @Slot()
     def run(self) -> None:
+        import time
+        from parameter_extractor.gui.error_log import latest_run_dir, record
+        started = time.time()
+        run_dir = lambda: latest_run_dir(self.config.output_dir, self.pdf_path, started)
         try:
             result = extract(
                 self.pdf_path, self.config, cancel_event=self._cancel,
@@ -47,11 +51,12 @@ class PipelineWorker(QObject):
         except RunCancelledError:
             self.cancelled.emit()
         except PipelineError as e:
+            record(f"Run failed: {e}", run_dir())
             self.failed.emit(str(e))
         except Exception as e:  # a bug, not a user error -- keep the details for a report
-            traceback.print_exc()
+            path = record(traceback.format_exc(), run_dir())
             self.failed.emit(f"Unexpected error ({type(e).__name__}): {e}\n\nThis is a bug in "
-                             f"the app; the full details were printed to the console.")
+                             f"the app; the details were saved to:\n{path}")
         else:
             self.succeeded.emit(result)
         finally:
