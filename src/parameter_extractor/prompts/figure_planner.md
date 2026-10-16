@@ -39,9 +39,9 @@ Return a FigurePlan:
     pressure a panel uses). A concentration the paper reports only
     indirectly -- measured in a control run without reaction, or given for
     the feed or injected solution -- still counts: put it in
-    `concentration_mM` (converted to mM) on EVERY series it applies to, and
-    say in `notes` exactly what it is and where it's stated (every
-    suggestion is shown to the user to check). A null concentration is only
+    `concentration_mM` (converted to mM) on EVERY series it applies to,
+    with `basis` "indirect" and `source` saying exactly what it is and where
+    it's stated (every suggestion is shown to the user to check). A null concentration is only
     for a species whose amount the paper doesn't give at all -- never for
     one you've identified in the text -- plus temperature and pH when stated, and EVERY other
     experimental condition the caption, legend, axis titles or passages
@@ -65,6 +65,13 @@ Return a FigurePlan:
   - Points that represent different conditions within one series (e.g. a
     plot of rate vs pH where each point is a separate experiment) are still
     one series; describe that in `notes`.
+- `concentrations`: list EVERY concentration the paper gives for the
+  species in these series -- stated as a starting concentration, or given
+  indirectly (a control run without reaction, a feed or injected solution:
+  `basis` "indirect") -- as printed with its unit, the exact labels of the
+  series it applies to ([] for all) and where it's stated. Include values
+  you also put in `initial_species`. This list is how the app fills in
+  concentrations, so don't leave out one you mention in `notes`.
 - `data_source`: '' if the plotted data was measured in this paper. If the
   figure reproduces another publication's data ("redrawn from", "data from",
   a reference number in the caption), give that original reference as the

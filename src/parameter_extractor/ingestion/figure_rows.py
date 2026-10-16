@@ -135,7 +135,7 @@ def build_figure_rows(
             set_idx += 1
             set_type = "Time Series" if "duration_hr" in (panel.x.column, panel.y.column) else "Independent"
             where = f"{fig.figure_id}, series '{series.label}'"
-            species, held_species = {}, []
+            species, held_species, species_sources = {}, [], {}
             for sp in series.initial_species:
                 if sp.concentration_mM is None or not sp.name:
                     continue
@@ -154,6 +154,8 @@ def build_figure_rows(
                         source=where, origin=fig.figure_id))
                 else:
                     species[col] = sp.concentration_mM
+                    if sp.basis == "indirect" or sp.source:
+                        species_sources[col] = ("indirect: " if sp.basis == "indirect" else "") + sp.source
             series_row_ids = []
             known_conditions, held_conditions = [], []
             for cond in series.conditions:
@@ -180,7 +182,8 @@ def build_figure_rows(
                 }
                 row_species, extra = dict(species), {}
                 conditions = CellSource(origin=f"{fig.figure_id} series conditions", source=where)
-                prov = {col: conditions for col in species}
+                prov = {col: (conditions.model_copy(update={"source": f"{where}; {species_sources[col]}"})
+                              if col in species_sources else conditions) for col in species}
                 if series.initial_temperature_C is not None:
                     prov["initial_temperature_C"] = prov["sampled_temperature_C"] = conditions
                 if series.initial_pH is not None:

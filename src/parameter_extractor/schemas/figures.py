@@ -40,6 +40,13 @@ class FigureCandidate(BaseModel):
 class SpeciesAmount(BaseModel):
     name: str = Field(description="Species name from the controlled vocabulary, e.g. 'NaCl', 'Gly'.")
     concentration_mM: Optional[float] = Field(description="Initial concentration in mM (mol dm-3 x 1000).")
+    basis: Literal["stated", "indirect"] = Field(
+        default="stated",
+        description="'stated': the paper gives this as the starting concentration. 'indirect': the paper "
+                    "gives it another way -- e.g. measured in a control run without reaction, or for the feed "
+                    "or injected solution -- and it's the best available value (say what in `source`).")
+    source: str = Field(default="", description="Where and how the paper gives it, e.g. 'Methods: outlet "
+                                                "concentration in the 27 C control run, hand-operated system'.")
 
 
 class AxisVariable(BaseModel):
@@ -105,6 +112,21 @@ class PlannedPanel(BaseModel):
     series: List[PlannedSeries] = Field(default_factory=list)
 
 
+class ConcentrationFound(BaseModel):
+    """A concentration the paper gives for a species in this figure's experiments, as
+    printed; the app converts it and fills it into the series it applies to (only where
+    the series has no concentration for that species yet). Flat, no Optional fields."""
+    species: str = Field(description="Species name as in the series' initial_species, e.g. 'Gly'.")
+    value: str = Field(description="As printed, with its unit, e.g. '0.065 M', '1.0 mol dm-3', '50 mM'.")
+    series: List[str] = Field(default_factory=list,
+                              description="Exact labels of the series it applies to; [] = all series.")
+    basis: Literal["stated", "indirect"] = Field(
+        default="stated", description="'indirect' when the paper gives it another way than as the starting "
+                                      "concentration (control run without reaction, feed/injected solution).")
+    source: str = Field(default="", description="Where and how it's given, e.g. 'Methods: outlet concentration "
+                                                "in the control run, hand-operated injection system'.")
+
+
 class FigurePlan(BaseModel):
     figure_id: str
     is_data_plot: bool = Field(description="True if the figure plots numeric data on calibrated axes.")
@@ -117,6 +139,10 @@ class FigurePlan(BaseModel):
                                 "reference (e.g. a figure 'redrawn from ref. 12' -> that reference as the "
                                 "reference list gives it).")
     duplicate_note: Optional[str] = None
+    concentrations: List[ConcentrationFound] = Field(
+        default_factory=list,
+        description="EVERY concentration the paper gives (anywhere: caption, passages, concentration "
+                    "passages) for the species of these series, with the series each applies to.")
     notes: Optional[str] = None
 
 

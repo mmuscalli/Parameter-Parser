@@ -409,6 +409,22 @@ keep it for now, refresh after the open issues are sorted).
   stated concentrations (control-run outlet, feed solution) ARE filled in the
   digitizer suggestions, with a note (user checks every suggestion);
   alargov2002 Fig. 3: Gly 65 mM (hand-operated, 22.2 MPa) / 220 mM (HPLC pump).
+- **Concentrations for digitized series** (2026-10-16): the planner hesitated to
+  put indirect values into `initial_species` (left null 2 of 3 trials even
+  when told to). Now it lists them in `FigurePlan.concentrations`
+  (species, value AS PRINTED, series labels, basis stated/indirect, source)
+  -- filled reliably (3/3) -- and `digitizer.fill_concentrations` converts and
+  fills only EMPTY species slots (adds the species if missing).
+  `SpeciesAmount.basis/source` shown in the composition table's Source
+  column; provenance in figure_rows.
+- **Figure finder word gaps**: same adaptive x_tolerance as pdf_parser
+  (alargov2002 captions ran together and hid Figs. 1, 2, 4-6). Single-column
+  pages: a caption line that continues across the middle with an ordinary
+  word gap makes the figure full width (`_continues_across`; kim2019 Figs.
+  2-3 are now correctly full width too).
+- **Digitizer layout** (Mickey): T and pH are the first two (fixed) rows of the
+  "Conditions" table (T accepts units); "y values go in" lives under a
+  collapsible "Additional options" (closed).
 - **Error log** (`gui/error_log.py`): the packaged app has no console --
   failures and tracebacks go to `<app data>/errors.log` and the run folder's
   error.txt; an excepthook shows and records exceptions in the window itself.

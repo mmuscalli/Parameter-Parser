@@ -426,6 +426,38 @@ def test_equations_tab_shows_found_equations():
         w.close()
 
 
+def test_conditions_table_and_additional_options():
+    app = QApplication.instance() or QApplication([])
+    from parameter_extractor.gui.digitizer import DigitizerWidget
+    from parameter_extractor.schemas.figures import DigitizedFigure, DigitizedSeries, SeriesCondition
+    with tempfile.TemporaryDirectory() as tmp:
+        img = Path(tmp) / "p.png"
+        from PIL import Image
+        Image.new("RGB", (400, 300), "white").save(img)
+        fig = DigitizedFigure(figure_id="Fig. 1", number=1, page=1, caption="c", render_scale=3.0,
+                              page_image=str(img), series=[DigitizedSeries(
+                                  label="s", initial_temperature_C=80.0,
+                                  conditions=[SeriesCondition(column="initial_pressure_bar", value="22.2 MPa")])])
+        w = DigitizerWidget(fig, ["initial_pressure_bar"])
+        w._on_series_selected(0)
+        t = w.conditions_table
+        assert [t.item(r, 0).text() for r in range(t.rowCount())] == ["Temperature (°C)", "pH", "initial_pressure_bar"]
+        assert t.item(0, 1).text() == "80"
+        t.item(0, 1).setText("353.15 K")                       # units understood
+        assert abs(fig.series[0].initial_temperature_C - 80.0) < 1e-6
+        t.item(1, 1).setText("2.6")
+        assert fig.series[0].initial_pH == 2.6
+        t.setCurrentCell(0, 0); w._remove_condition_row()      # temperature/pH rows can't be removed
+        assert len(fig.series[0].conditions) == 1
+        t.setCurrentCell(2, 0); w._remove_condition_row()
+        assert fig.series[0].conditions == []
+        assert not w.more_btn.isChecked() and w.more_options.isHidden()       # closed by default
+        w.more_btn.click()
+        assert not w.more_options.isHidden()
+        assert not w.auto_axes_box.isChecked() or main_window.QSettings().contains("digitizer/auto_axes")
+        w.close()
+
+
 def test_trackpad_zoom_and_overlapping_points():
     if not PDF.is_file():
         print(f"SKIP: needs {PDF}"); return

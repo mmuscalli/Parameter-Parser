@@ -62,6 +62,34 @@ MODES = [("pan", "Pan / zoom", "Drag to move around; scroll to zoom."),
                                   "existing one; Ctrl+Z undoes."),
          ("delete", "Delete points", "Click a point of the selected series to remove it.")]
 NONE_COLUMN = "(none -- not stored)"
+FIXED_CONDITION_ROWS = 2     # temperature and pH head the Conditions table
+
+
+def fill_concentrations(series: List[DigitizedSeries], found) -> None:
+    """Fill each series' species that have no concentration from the plan's list of
+    concentrations found in the paper (converted to mM here, never by the model);
+    adds the species if the series doesn't list it yet."""
+    from parameter_extractor.units import to_column_unit
+    for c in found:
+        conv = to_column_unit(c.value, None, "mM")
+        if conv is None:
+            continue
+        labels = {l.strip().lower() for l in c.series}
+        for s in series:
+            base = re.sub(r"\s*\[[^\]]*\]$", "", s.label).strip().lower()   # label without " [marker]"
+            if labels and base not in labels and s.label.strip().lower() not in labels:
+                continue
+            source = f"{'indirect -- ' if c.basis == 'indirect' else ''}{c.source or 'stated in the paper'} " \
+                     f"('{c.value}')"
+            for i, sp in enumerate(s.initial_species):
+                if sp.name.strip().lower() == c.species.strip().lower():
+                    if sp.concentration_mM is None:
+                        s.initial_species[i] = sp.model_copy(update=dict(
+                            concentration_mM=conv.value, basis=c.basis, source=source))
+                    break
+            else:
+                s.initial_species.append(SpeciesAmount(name=c.species, concentration_mM=conv.value,
+                                                       basis=c.basis, source=source))
 
 
 class _ColumnDelegate(QStyledItemDelegate):
@@ -394,43 +422,23 @@ class DigitizerWidget(QWidget):
         self.series_panel_combo = QComboBox()
         self.series_panel_combo.currentIndexChanged.connect(self._on_series_panel)
         details.addRow("Read against:", self.series_panel_combo)
-        self.series_y_edit = QLineEdit(placeholderText="(the y axis's column)")
-        completer = QCompleter(self.columns, self.series_y_edit)
-        completer.setFilterMode(Qt.MatchFlag.MatchContains)
-        completer.setCaseSensitivity(Qt.CaseSensitivity.CaseInsensitive)
-        self.series_y_edit.setCompleter(completer)
-        self.series_y_edit.setToolTip("Only when this series' y values belong in a different column than the "
-                                      "axis's -- e.g. an axis 'Gly-Gly and diketopiperazine, mM' shared by two "
-                                      "series. Leave empty to use the axis column.")
-        self.series_y_edit.editingFinished.connect(self._on_conditions_edited)
-        details.addRow("y values go in:", self.series_y_edit)
-        self.temp_edit = QLineEdit(placeholderText="°C")
-        self.ph_edit = QLineEdit(placeholderText="pH")
         self.notes_edit = ExpandingLineEdit("Series notes", hint="Notes about this series; they end up in "
                                                                   "each row's source_notes.")
-        for w in (self.temp_edit, self.ph_edit, self.notes_edit):
-            w.editingFinished.connect(self._on_conditions_edited)
-        cond = QWidget()
-        ch = QHBoxLayout(cond)
-        ch.setContentsMargins(0, 0, 0, 0)
-        ch.addWidget(QLabel("T"))
-        ch.addWidget(self.temp_edit)
-        ch.addWidget(QLabel("pH"))
-        ch.addWidget(self.ph_edit)
-        details.addRow("Conditions:", cond)
+        self.notes_edit.editingFinished.connect(self._on_conditions_edited)
         details.addRow("Notes:", self.notes_edit)
         v.addLayout(details)
 
-        v.addWidget(QLabel("Other conditions (pressure, flow rate, volume, gas, ...):"))
+        v.addWidget(QLabel("Conditions:"))
         self.conditions_table = QTableWidget(0, 2)
         self.conditions_table.setHorizontalHeaderLabels(["Column", "Value as printed (with unit)"])
         self.conditions_table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
         self.conditions_table.setItemDelegateForColumn(0, _ColumnDelegate(self.columns, self))
-        self.conditions_table.setMaximumHeight(120)
-        self.conditions_table.setToolTip("Each condition goes into its column on every row of this series, "
-                                         "converted to the column's unit (e.g. '22.2 MPa' -> 222 in "
-                                         "initial_pressure_bar). A column name that doesn't exist yet "
-                                         "becomes a new variable for the review.")
+        self.conditions_table.setMaximumHeight(150)
+        self.conditions_table.setToolTip("Temperature and pH, then any other condition (pressure, flow rate, "
+                                         "volume, gas, ...). Each goes into its column on every row of this "
+                                         "series, converted to the column's unit (e.g. '22.2 MPa' -> 222 in "
+                                         "initial_pressure_bar). A column name that doesn't exist yet becomes a "
+                                         "new variable for the review.")
         self.conditions_table.itemChanged.connect(self._on_condition_edited)
         v.addWidget(self.conditions_table)
         crow = QHBoxLayout()
@@ -440,9 +448,10 @@ class DigitizerWidget(QWidget):
         v.addLayout(crow)
 
         v.addWidget(QLabel("Initial composition (mM):"))
-        self.species_table = QTableWidget(0, 2)
-        self.species_table.setHorizontalHeaderLabels(["Species", "mM"])
+        self.species_table = QTableWidget(0, 3)
+        self.species_table.setHorizontalHeaderLabels(["Species", "mM", "Source"])
         self.species_table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
+        self.species_table.horizontalHeader().setSectionResizeMode(2, QHeaderView.ResizeMode.Stretch)
         self.species_table.setMaximumHeight(140)
         self.species_table.itemChanged.connect(self._on_species_edited)
         v.addWidget(self.species_table)
@@ -458,6 +467,32 @@ class DigitizerWidget(QWidget):
         self.points_table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
         self.points_table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
         v.addWidget(self.points_table, 1)
+
+        # rarely needed settings, out of the way until opened
+        self.more_btn = QToolButton(text="Additional options", checkable=True, checked=False)
+        self.more_btn.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
+        self.more_btn.setArrowType(Qt.ArrowType.RightArrow)
+        self.more_btn.setStyleSheet("QToolButton { border: none; font-weight: 600; }")
+        self.more_options = QWidget(visible=False)
+        more = QFormLayout(self.more_options)
+        more.setContentsMargins(12, 0, 0, 0)
+        self.series_y_edit = QLineEdit(placeholderText="(the y axis's column)")
+        completer = QCompleter(self.columns, self.series_y_edit)
+        completer.setFilterMode(Qt.MatchFlag.MatchContains)
+        completer.setCaseSensitivity(Qt.CaseSensitivity.CaseInsensitive)
+        self.series_y_edit.setCompleter(completer)
+        self.series_y_edit.setToolTip("Only when this series' y values belong in a different column than the "
+                                      "axis's -- e.g. an axis 'Gly-Gly and diketopiperazine, mM' shared by two "
+                                      "series. Leave empty to use the axis column.")
+        self.series_y_edit.editingFinished.connect(self._on_conditions_edited)
+        more.addRow("y values go in:", self.series_y_edit)
+
+        def toggle(on: bool) -> None:
+            self.more_options.setVisible(on)
+            self.more_btn.setArrowType(Qt.ArrowType.DownArrow if on else Qt.ArrowType.RightArrow)
+        self.more_btn.toggled.connect(toggle)
+        v.addWidget(self.more_btn)
+        v.addWidget(self.more_options)
         return box
 
     # ---- modes & canvas interaction -----------------------------------------
@@ -775,11 +810,9 @@ class DigitizerWidget(QWidget):
     def _refresh_series_details(self) -> None:
         self._updating = True
         s = self.series
-        for w in (self.temp_edit, self.ph_edit, self.notes_edit, self.species_table, self.series_panel_combo,
+        for w in (self.notes_edit, self.species_table, self.series_panel_combo,
                   self.conditions_table, self.series_y_edit):
             w.setEnabled(s is not None)
-        self.temp_edit.setText(_fmt(s.initial_temperature_C) if s else "")
-        self.ph_edit.setText(_fmt(s.initial_pH) if s else "")
         self.notes_edit.setText((s.notes or "") if s else "")
         self.series_y_edit.setText(s.y_column if s else "")
         if s:
@@ -790,7 +823,22 @@ class DigitizerWidget(QWidget):
             self.species_table.insertRow(r)
             self.species_table.setItem(r, 0, QTableWidgetItem(sp.name))
             self.species_table.setItem(r, 1, QTableWidgetItem(_fmt(sp.concentration_mM)))
+            src = QTableWidgetItem(("indirect: " if sp.basis == "indirect" else "") + (sp.source or ""))
+            src.setFlags(src.flags() & ~Qt.ItemFlag.ItemIsEditable)
+            src.setToolTip(src.text())
+            if sp.basis == "indirect":
+                src.setForeground(QBrush(QColor("#a0522d")))
+            self.species_table.setItem(r, 2, src)
         self.conditions_table.setRowCount(0)
+        if s:
+            for label, value in (("Temperature (°C)", s.initial_temperature_C), ("pH", s.initial_pH)):
+                r = self.conditions_table.rowCount()
+                self.conditions_table.insertRow(r)
+                name = QTableWidgetItem(label)
+                name.setFlags(name.flags() & ~Qt.ItemFlag.ItemIsEditable)
+                name.setToolTip("initial_temperature_C (also sampled_temperature_C)" if r == 0 else "initial_pH")
+                self.conditions_table.setItem(r, 0, name)
+                self.conditions_table.setItem(r, 1, QTableWidgetItem(_fmt(value)))
         for c in (s.conditions if s else []):
             r = self.conditions_table.rowCount()
             self.conditions_table.insertRow(r)
@@ -805,8 +853,6 @@ class DigitizerWidget(QWidget):
     def _on_conditions_edited(self) -> None:
         if self._updating or self.series is None:
             return
-        self.series.initial_temperature_C = _parse_float(self.temp_edit.text())
-        self.series.initial_pH = _parse_float(self.ph_edit.text())
         self.series.notes = self.notes_edit.text().strip() or None
         self.series.y_column = self.series_y_edit.text().strip()
 
@@ -818,19 +864,45 @@ class DigitizerWidget(QWidget):
         self.conditions_table.editItem(self.conditions_table.item(self.conditions_table.rowCount() - 1, 0))
 
     def _remove_condition_row(self) -> None:
-        r = self.conditions_table.currentRow()
+        r = self.conditions_table.currentRow() - FIXED_CONDITION_ROWS
         if self.series is not None and 0 <= r < len(self.series.conditions):
             del self.series.conditions[r]
             self._refresh_series_details()
 
     def _on_condition_edited(self, item: QTableWidgetItem) -> None:
-        if self._updating or self.series is None or item.row() >= len(self.series.conditions):
+        if self._updating or self.series is None:
             return
-        r = item.row()
-        column, value = self.conditions_table.item(r, 0), self.conditions_table.item(r, 1)
+        if item.row() < FIXED_CONDITION_ROWS:              # temperature / pH rows
+            self._on_fixed_condition_edited(item)
+            return
+        r = item.row() - FIXED_CONDITION_ROWS
+        if r >= len(self.series.conditions):
+            return
+        column, value = self.conditions_table.item(item.row(), 0), self.conditions_table.item(item.row(), 1)
         old = self.series.conditions[r]
         self.series.conditions[r] = old.model_copy(update=dict(
             column=column.text().strip() if column else "", value=value.text().strip() if value else ""))
+
+    def _on_fixed_condition_edited(self, item: QTableWidgetItem) -> None:
+        """Temperature accepts a unit ('353 K', '80 °C'); pH a number. Unreadable -> red, not stored."""
+        from parameter_extractor.units import to_column_unit
+        text = item.text().strip()
+        value, ok = None, True
+        if text:
+            if item.row() == 0:
+                conv = to_column_unit(text, None, "°C")
+                value, ok = (conv.value, True) if conv else (None, False)
+            else:
+                value = _parse_float(text)
+                ok = value is not None
+        if item.row() == 0:
+            self.series.initial_temperature_C = value
+        else:
+            self.series.initial_pH = value
+        self._updating = True
+        item.setBackground(QBrush(QColor("#f8d7da")) if not ok else QBrush())
+        item.setToolTip("" if ok else "Not a readable value -- not stored.")
+        self._updating = False
 
     def _add_species_row(self) -> None:
         if self.series is None:
@@ -852,9 +924,14 @@ class DigitizerWidget(QWidget):
         if r >= len(self.series.initial_species):
             return
         name_item, conc_item = self.species_table.item(r, 0), self.species_table.item(r, 1)
-        self.series.initial_species[r] = SpeciesAmount(
-            name=(name_item.text().strip() if name_item else ""),
-            concentration_mM=_parse_float(conc_item.text()) if conc_item else None)
+        old = self.series.initial_species[r]
+        conc = _parse_float(conc_item.text()) if conc_item else None
+        changed = conc != old.concentration_mM
+        self.series.initial_species[r] = old.model_copy(update=dict(
+            name=(name_item.text().strip() if name_item else ""), concentration_mM=conc,
+            basis="stated" if changed else old.basis, source="entered by hand" if changed else old.source))
+        if changed:
+            self._refresh_series_details()
 
     # ---- optional automation ------------------------------------------------------
 
@@ -1036,6 +1113,7 @@ class DigitizerWidget(QWidget):
                     conditions=[c.model_copy() for c in ps.conditions], y_column=ps.y_column, notes=ps.notes))
         if not panels:
             return
+        fill_concentrations(series, plan.concentrations)
         # keep any points the user already clicked, by position in the list
         for i, s in enumerate(old_series):
             if s.points:

@@ -52,6 +52,14 @@ def _group_lines(words: List[dict]) -> List[dict]:
     return sorted(lines, key=lambda l: l["top"])
 
 
+def _continues_across(line: dict, words: List[dict], mid: float) -> bool:
+    """The line goes on past the middle with an ordinary word gap -- so the page (here)
+    is one column, not two."""
+    end = max(w["x1"] for w in line["words"])
+    return any(abs(w["top"] - line["top"]) <= 3 and w["x1"] > mid and -1 <= w["x0"] - end <= 12
+               for w in words)
+
+
 def _caption_text(lines: List[dict]) -> str:
     text = " ".join(l["text"] for l in lines)
     words = text.split()
@@ -70,6 +78,15 @@ def _find_on_page(page, page_no: int) -> List[dict]:
     columns: Dict[str, Tuple[float, float]] = {
         "left": (0.0, mid), "right": (mid, page.width), "full": (0.0, page.width)}
     words = page.extract_words(keep_blank_chars=False, use_text_flow=False, extra_attrs=["size"])
+    # tightly set text runs words together with the default gap ("Figure3.Plotsofthe...",
+    # alargov2002): re-read with a smaller one, as pdf_parser does for the main text
+    from parameter_extractor.ingestion.pdf_parser import (MERGED_WORDS_THRESHOLD, TIGHT_X_TOLERANCE,
+                                                          _merged_word_ratio)
+    if _merged_word_ratio(" ".join(w["text"] for w in words)) > MERGED_WORDS_THRESHOLD:
+        tight = page.extract_words(keep_blank_chars=False, use_text_flow=False, extra_attrs=["size"],
+                                   x_tolerance=TIGHT_X_TOLERANCE)
+        if _merged_word_ratio(" ".join(w["text"] for w in tight)) < _merged_word_ratio(" ".join(w["text"] for w in words)):
+            words = tight
     # drop sideways text (publisher watermarks down the margin, rotated axis titles): it
     # would otherwise join the start of whatever line it happens to sit beside
     words = [w for w in words if w.get("upright", True)]
@@ -101,7 +118,12 @@ def _find_on_page(page, page_no: int) -> List[dict]:
                     break
                 block.append(nxt)
             size = statistics.mean(w["size"] for l in block for w in l["words"])
-            wide = col == "left" and max(l["x1"] for l in block) > mid + 20
+            wide = col == "left" and (max(l["x1"] for l in block) > mid + 20 or _continues_across(ln, words, mid))
+            if wide and col == "left":
+                # a single-column page: the caption's lines were cut at the middle -- rebuild them
+                # from all the words in the caption's band (alargov2002 once its words split)
+                band = [w for w in words if block[0]["top"] - 2 <= w["top"] <= block[-1]["bottom"]]
+                block = _group_lines(band)
             found.append({"number": int(m.group(1)), "col": "full" if wide else col,
                           "block": block, "size": size, "page_no": page_no})
 

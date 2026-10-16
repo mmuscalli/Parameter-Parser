@@ -145,6 +145,38 @@ def test_composition_passages_reach_the_methods():
     assert "Origins Life Evol" not in extra                               # not the reference list
 
 
+def test_captions_keep_their_spaces_and_full_width():
+    """alargov2002 sets its captions tightly: words ran together ('Figure3.Plotsofthe...'),
+    which also hid Figs. 1, 2, 4-6 and made the figure areas half a page wide."""
+    if not PDF.is_file():
+        print(f"SKIP: needs {PDF}"); return
+    with tempfile.TemporaryDirectory() as tmp:
+        figs = find_figures(str(PDF), Path(tmp))
+        assert [f.number for f in figs] == [1, 2, 3, 4, 5, 6, 7]
+        f3 = figs[2]
+        assert f3.caption.startswith("Figure 3. Plots of the concentrations of diglycine, diketopiperazine")
+        assert all(f.figure_bbox[2] - f.figure_bbox[0] > 400 for f in figs)      # single-column page
+
+
+def test_concentrations_found_fill_empty_species():
+    from parameter_extractor.gui.digitizer import fill_concentrations
+    from parameter_extractor.schemas.figures import ConcentrationFound, DigitizedSeries, SpeciesAmount
+    series = [DigitizedSeries(label="Gly-Gly (22.2 MPa) [filled circle]",
+                              initial_species=[SpeciesAmount(name="Gly", concentration_mM=None)]),
+              DigitizedSeries(label="Gly-Gly (40.0 MPa) [filled circle]",
+                              initial_species=[SpeciesAmount(name="Gly", concentration_mM=500.0)]),
+              DigitizedSeries(label="Gly (40.0 MPa)")]
+    fill_concentrations(series, [
+        ConcentrationFound(species="Gly", value="0.065 M", series=["Gly-Gly (22.2 MPa)"], basis="indirect",
+                           source="Methods: control outlet, hand-operated"),
+        ConcentrationFound(species="Gly", value="0.22 M", series=["Gly-Gly (40.0 MPa)", "Gly (40.0 MPa)"],
+                           basis="indirect", source="Methods: control outlet, HPLC pump")])
+    a, b, c = (s.initial_species[0] for s in series)
+    assert (a.concentration_mM, a.basis) == (65.0, "indirect") and "hand-operated" in a.source
+    assert b.concentration_mM == 500.0                       # never overwrites a value already there
+    assert (c.name, c.concentration_mM) == ("Gly", 220.0)    # added where the series lacked the species
+
+
 def test_errors_are_recorded():
     import tempfile
     from unittest.mock import patch
