@@ -540,7 +540,7 @@ class MainWindow(QMainWindow):
                     child.setForeground(1, QBrush(QColor("gray")))
                 group.addChild(child)
             tree.addTopLevelItem(group)
-            group.setExpanded(True)
+            group.setExpanded(False)          # collapsed until the user opens a category
 
         cited_flags = [f for f in result.paper_flags if f.kind == "cited_data"]
         new_var_flags = [f for f in result.paper_flags if f.kind == "new_variable"]
