@@ -115,14 +115,18 @@ def collect_new_variables(
         if o.basis == "assumed":
             found.append(_assumed(o.field_name, o.value, o.set_label, o.quote, o.source, o.confidence,
                                   "methodology", rows_for))
-    from parameter_extractor.stages.optional import optional_results
+    from parameter_extractor.stages.optional import optional_results, stage_values
     for spec, result in optional_results(optional, wet_dry):
         targets = spec.target_sets(structure) if structure else []
         for v in result.parameters:
             if v.basis == "assumed":
+                # in the parameter's unit (or its text, for a text parameter), for its sample if it names one
+                converted, _ = stage_values(spec, v)
+                value = converted[v.parameter].value if v.parameter in converted else v.value
+                sample = getattr(v, "sample_label", "") or None
                 for label in ([v.set_label] if v.set_label else targets):
-                    found.append(_assumed(v.parameter, v.value, label, v.quote, v.source, v.confidence,
-                                          spec.origin_label, rows_for))
+                    found.append(_assumed(v.parameter, value, label, v.quote, v.source, v.confidence,
+                                          spec.origin_label, rows_for, sample))
     for f in (term_search.findings if term_search else []):
         if not f.found:
             continue
@@ -135,11 +139,14 @@ def collect_new_variables(
     return found
 
 
-def _assumed(column, value, set_label, quote, source, confidence, origin, rows_for) -> NewVariable:
+def _assumed(column, value, set_label, quote, source, confidence, origin, rows_for,
+             sample_label=None) -> NewVariable:
+    numeric = isinstance(value, (int, float)) and not isinstance(value, bool)
     return NewVariable(
-        kind="assumed_value", name=column, alias_name=f"{column} @ {set_label}", proposed_column=column,
-        value=value, set_label=set_label, quote=quote, source=source, confidence=confidence,
-        origin=f"{origin} (assumed)", row_ids=rows_for(set_label, None))
+        kind="assumed_value", name=column, alias_name=f"{column} @ {sample_label or set_label}",
+        proposed_column=column, value=value if numeric else None, value_text=None if numeric else str(value),
+        set_label=set_label, sample_label=sample_label, quote=quote, source=source, confidence=confidence,
+        origin=f"{origin} (assumed)", row_ids=rows_for(set_label, sample_label))
 
 
 def split_known(new_vars: List[NewVariable], registry: VariableRegistry):

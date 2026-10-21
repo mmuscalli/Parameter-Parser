@@ -428,6 +428,15 @@ def archive_flags(archive: dict) -> List[Flag]:
     return flags
 
 
+def _shown(v) -> str:
+    """A review value for a message: a number, or a text value (assumed 'Transit')."""
+    return f"{v.value:g}" if v.value is not None else f"'{v.value_text or ''}'"
+
+
+def _where(v) -> str:
+    return f"'{v.sample_label}'" if getattr(v, "sample_label", None) else f"set '{v.set_label}'"
+
+
 def compact_text(text: str) -> str:
     """Runs of 3+ spaces -> 3, of 3+ blank lines -> 2: ~20% fewer tokens for papers with wide
     tables (teng2023), columns still visibly apart."""
@@ -573,7 +582,7 @@ def finish(
                 v = g.values[0]
                 paper_flags.append(Flag(
                     "assumed_value",
-                    f"{g.name} = {v.value:g} for set '{v.set_label}' is NOT stated in the paper (assumed); "
+                    f"{g.name} = {_shown(v)} for {_where(v)} is NOT stated in the paper (assumed); "
                     f"included because you chose to in the review.", quote=v.quote or None,
                     source=v.source or None))
     if decisions:
@@ -673,7 +682,7 @@ def _new_variable_flags(groups: List[VariableGroup]) -> List[Flag]:
             v = g.values[0]
             flags.append(Flag(
                 "assumed_value",
-                f"{g.name} = {v.value:g} for set '{v.set_label}' is not stated in the paper (the model "
+                f"{g.name} = {_shown(v)} for {_where(v)} is not stated in the paper (the model "
                 f"marked it assumed), so it was NOT written. Enter it by hand if you agree.",
                 quote=v.quote or None, source=v.source or v.origin))
             continue

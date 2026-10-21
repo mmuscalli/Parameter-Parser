@@ -20,6 +20,7 @@ from __future__ import annotations
 import base64
 import json
 import re
+import threading
 import time
 from pathlib import Path
 from typing import List, Optional, Type, TypeVar
@@ -45,6 +46,15 @@ def _piece_label(path: Path) -> str:
             f"right; a piece that continues the table to the right repeats the row labels on its left):")
 
 
+def _record(ctx: RunContext, stage: str, model: str, response, elapsed: float) -> None:
+    ctx.record_usage(StageUsage(stage=stage, model=model,
+                                input_tokens=response.usage.input_tokens,
+                                output_tokens=response.usage.output_tokens,
+                                elapsed_sec=round(elapsed, 2),
+                                cost_usd=request_cost(model, response.usage.input_tokens,
+                                                      response.usage.output_tokens)))
+
+
 def _image_block(path: Path) -> dict:
     media_type = _MEDIA_TYPES.get(path.suffix.lower())
     if media_type is None:
@@ -58,14 +68,25 @@ def _send(ctx: RunContext, *, model: str, system_prompt: str, content, response_
     table-heavy paper can run to tens of thousands of tokens; the SDK requires
     streaming for max_tokens that large. (Tests replace this function to
     replay saved responses without calling the API.)"""
+    _streamed.text = ""
     with ctx.client.messages.stream(
         model=model,
-        max_tokens=ctx.config.max_tokens,
+        max_tokens=getattr(_streamed, "max_tokens", None) or ctx.config.max_tokens,
         system=system_prompt,
         messages=[{"role": "user", "content": content}],
         output_format=response_model,
     ) as stream:
+        chunks = []
+        try:
+            for text in stream.text_stream:          # kept so a broken answer can be saved
+                chunks.append(text)
+        finally:
+            _streamed.text = "".join(chunks)
         return stream.get_final_message()
+
+
+# the text streamed by the current thread's call (stages run in parallel threads)
+_streamed = threading.local()
 
 
 def _send_mapping_errors(ctx: RunContext, stage: str, model: str, **kwargs):
@@ -84,7 +105,11 @@ def _send_mapping_errors(ctx: RunContext, stage: str, model: str, **kwargs):
         raise errors.ApiRequestError(f"The Anthropic API returned an error during the "
                                      f"'{stage}' step: {e.message}") from None
     except ValidationError as e:
-        # raised while parsing the streamed JSON -- almost always a cut-off answer
+        # raised while parsing the streamed JSON -- almost always a cut-off answer; keep what
+        # arrived (<stage>.failed_output.txt) so the cause can be seen
+        raw = getattr(_streamed, "text", "")
+        if raw and getattr(ctx, "run_dir", None):
+            (Path(ctx.run_dir) / f"{stage}.failed_output.txt").write_text(raw)
         raise errors.MalformedOutputError(stage, e.errors()[0].get("msg", "invalid JSON")) from None
 
 
@@ -97,6 +122,7 @@ def call_structured(
     response_model: Type[T],
     image_paths: Optional[List[Path]] = None,
     audit_name: Optional[str] = None,
+    max_tokens: Optional[int] = None,
 ) -> T:
     """
     Calls the model, constrains its response to `response_model`'s schema via
@@ -123,28 +149,36 @@ def call_structured(
     else:
         content = user_content
 
-    started = time.time()
-    response = _send_mapping_errors(ctx, stage, model, system_prompt=system_prompt,
-                                    content=content, response_model=response_model)
+    # `max_tokens`: the stage's output budget (a runaway answer -- the model repeating itself
+    # inside a field, aa57186-25 -- then stops in seconds, not after 64K tokens / 7 minutes).
+    # A broken or cut-off answer is retried once with the full budget: these are rare and random.
+    budget = min(max_tokens, ctx.config.max_tokens) if max_tokens else ctx.config.max_tokens
+    for attempt in (1, 2):
+        _streamed.max_tokens = budget if attempt == 1 else ctx.config.max_tokens
+        started = time.time()
+        try:
+            response = _send_mapping_errors(ctx, stage, model, system_prompt=system_prompt,
+                                            content=content, response_model=response_model)
+            if response.stop_reason == "max_tokens":
+                _record(ctx, stage, model, response, time.time() - started)   # paid for, even if unusable
+                raise errors.OutputTruncatedError(stage)
+            if response.parsed_output is None and response.stop_reason != "refusal":
+                raise errors.MalformedOutputError(stage, f"no structured output; stop_reason="
+                                                         f"{response.stop_reason!r}")
+            break
+        except (errors.OutputTruncatedError, errors.MalformedOutputError) as e:
+            if attempt == 2:
+                raise
+            ctx.note(stage, f"{stage}: the answer broke off -- asking again")
     elapsed = time.time() - started
 
     if response.stop_reason == "refusal":
         details = getattr(response, "stop_details", None)
         raise errors.ModelRefusedError(stage, getattr(details, "explanation", "") or "")
-    if response.stop_reason == "max_tokens":
-        raise errors.OutputTruncatedError(stage)
-    if response.parsed_output is None:
-        raise errors.MalformedOutputError(stage, f"no structured output; stop_reason="
-                                                 f"{response.stop_reason!r}")
     parsed = response.parsed_output
     raw_text = next((b.text for b in response.content if b.type == "text"), None)
 
-    ctx.record_usage(StageUsage(stage=stage, model=model,
-                                input_tokens=response.usage.input_tokens,
-                                output_tokens=response.usage.output_tokens,
-                                elapsed_sec=round(elapsed, 2),
-                                cost_usd=request_cost(model, response.usage.input_tokens,
-                                                      response.usage.output_tokens)))
+    _record(ctx, stage, model, response, elapsed)
 
     run_dir = ctx.run_dir
     run_dir.mkdir(parents=True, exist_ok=True)

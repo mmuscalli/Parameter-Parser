@@ -704,6 +704,31 @@ low-confidence flags 9. Reference re-recorded. Prebiotic papers also get the
 sharper pieces on their next live runs (their reference runs replay
 unchanged; image tokens up somewhat per table page).
 
+## Broken-off answers (2026-10-21, aa57186-25 = Carleo et al. 2026, TOI-3862 b)
+
+Mickey's app run failed: system_and_discovery ran 7 min / >112K chars for one
+two-planet system (a runaway inside a field) until cut off ->
+MalformedOutputError, whose message told users to raise max tokens (they
+can't). Not reproducible (rerun: 1.3K output tokens). Now:
+- `StageSpec.output_budget(structure)` = 4000 + 250 x (sets [+ samples]) x
+  parameters (x2 with modes) -> call_structured(max_tokens=...), passed to
+  `_send` via the thread-local `api_client._streamed` (replay fakes keep their
+  signature). Real use is 5-10x below the budget; Teng's planet stage is capped
+  at the global 64K anyway.
+- call_structured retries ONCE (full budget) on OutputTruncatedError /
+  MalformedOutputError; a truncated try's usage is recorded (paid for).
+  `_send` keeps the streamed text; on a parse failure it's saved as
+  `<run>/<stage>.failed_output.txt`. Messages now say "running the paper
+  again usually works".
+- Bug found on the way: assumed TEXT values went to the review as 0.0 and on
+  every row of the set -- now value_text + the item's sample row
+  (`_assumed(..., sample_label)`); flag text via pipeline `_shown`/`_where`.
+- tests/test_api_retry.py (nielsen2019 replay with a flaky stage).
+- Full live run after the fix: 68 s, $0.88, 2 solution rows (GP / no GP),
+  106/108 match on the adopted one. Open: st_rotp -- the paper gives >13 d
+  (archive), 22 +- 3 d (taken), GP 33-49 d; "every value" currently only
+  covers posterior modes, not estimates from different methods.
+
 ## Non-obvious decisions — don't redo this research
 
 - **Schema shape is grounded in `../POLO_variable_mapping.csv`** (one level

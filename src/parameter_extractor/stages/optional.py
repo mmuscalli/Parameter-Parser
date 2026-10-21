@@ -170,6 +170,19 @@ class StageSpec(BaseModel):
         matching = [s.set_label for s in structure.experiment_sets if self._set_matches(s)]
         return matching or [s.set_label for s in structure.experiment_sets]
 
+    # ---- output budget ---------------------------------------------------------------
+
+    def output_budget(self, structure: StructurePlan) -> int:
+        """Output tokens this stage can plausibly need: a few hundred per value (with its quote
+        and note) for every parameter of every set (and sample), modes counted twice, plus
+        room for notes. A runaway answer then stops early instead of after the full maximum
+        (api_client retries once with the full maximum)."""
+        targets = len(structure.experiment_sets)
+        if self.per == "sample":
+            targets += sum(len(s.samples) for s in structure.experiment_sets)
+        values = targets * len(self.parameters) * (2 if self.modes else 1)
+        return 4000 + 250 * values
+
     # ---- schema and prompt ---------------------------------------------------------
 
     def models(self) -> Tuple[type, type]:
@@ -272,6 +285,7 @@ def run_optional_stage(ctx, spec: StageSpec, paper_text: str, structure: Structu
         user_content=spec.prompt(structure, paper_text),
         response_model=Result,
         image_paths=(table_images or None) if spec.table_images else None,
+        max_tokens=spec.output_budget(structure),
     )
 
 

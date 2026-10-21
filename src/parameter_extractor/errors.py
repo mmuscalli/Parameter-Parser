@@ -54,15 +54,16 @@ class ModelRefusedError(PipelineError):
 
 class OutputTruncatedError(PipelineError):
     def __init__(self, stage: str):
-        super().__init__(f"The '{stage}' step's answer was too long and got cut off. Raise "
-                         f"the maximum output tokens in the settings and try again.")
+        super().__init__(f"The '{stage}' step's answer was too long and got cut off, twice (the "
+                         f"model can occasionally run on without finishing). Running the paper again "
+                         f"usually works; if it keeps happening, the paper may need its output split up.")
 
 
 class MalformedOutputError(PipelineError):
     def __init__(self, stage: str, detail: str):
-        super().__init__(f"The '{stage}' step returned data that didn't match the expected "
-                         f"format ({detail}). Usually a cut-off answer -- try raising the "
-                         f"maximum output tokens.")
+        super().__init__(f"The '{stage}' step's answer broke off before it was complete, twice "
+                         f"({detail}). This happens now and then -- running the paper again usually "
+                         f"works.")
 
 
 class PdfNotReadableError(PipelineError):
