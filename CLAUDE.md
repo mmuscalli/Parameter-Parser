@@ -640,7 +640,21 @@ were obtained, with NEA-style names.
 - **Live structure test on teng2023** (all four stages skipped, $0.25): HD 14067 b,
   HD 120084 b, HD 175679 b each split into "[RV fit, Table 3]" + "[joint RV +
   astrometry fit, Table 4]" -> 41 rows; single-fit planets unbracketed; HD
-  5608 B stays a separate companion. runs/teng2023_auto not re-recorded.
+  5608 B stays a separate companion.
+- **teng2023 reference re-recorded** (Mickey, 2026-10-21; full live run, 5 min,
+  470K in / 80K out, $1.73 -- about the most expensive paper to expect): 41
+  rows; 38 compared, 1394 values match, 20 differ. Fitting models: RV-only
+  Keplerian fits (RadVel + emcee, 37 rows), joint RV + Hipparcos-Gaia
+  astrometry (orvara, 4 rows), isoclassify stellar parameters (23 stars);
+  stjoint 0 everywhere (correct: no stellar model in the fits). The archive
+  took the joint solution: `exoplanet_archive._mark_archive_solution` gives the
+  other solution rows `archive_solution` and the flag says their differences
+  are expected. Remaining differences on the joint rows: inclination --
+  Table 4 prints i (all), i < 90 and i > 90 (bimodal); the model took "all",
+  the archive the prograde value. Known gap: optional stages get NO table
+  images (only structure planner, chemistry, fit_models do), so Table 4's
+  vertically garbled text cost the inclination uncertainties -- candidate
+  fix: a spec option to send table images (~+20K tokens per stage).
 
 ## Non-obvious decisions — don't redo this research
 

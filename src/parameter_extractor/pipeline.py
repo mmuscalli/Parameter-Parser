@@ -399,10 +399,12 @@ def archive_flags(archive: dict) -> List[Flag]:
                 + (f" (the archive's {e['archive_name']}"
                    + (", matched by orbital period" if e.get("matched_by") else "") + ")"
                    if e.get("archive_name") else ""))
+        other = (f" -- the archive's parameter set is this planet's [{e['archive_solution']}] solution, so "
+                 f"differences here are expected" if e.get("archive_solution") else "")
         flags.append(Flag(
             "archive_check" if e["differs"] else "archive_match",
             f"{name}: {len(e['matches'])} of {len(e['matches']) + len(e['differs'])} values match the NASA "
-            f"Exoplanet Archive's '{archive['reference']}' parameter set"
+            f"Exoplanet Archive's '{archive['reference']}' parameter set{other}"
             + (f"; differ: {differs}" if differs else "")
             + (f"; the archive also has {len(e['not_extracted'])} value(s) not extracted "
                f"({', '.join(e['not_extracted'][:8])}{'...' if len(e['not_extracted']) > 8 else ''})"

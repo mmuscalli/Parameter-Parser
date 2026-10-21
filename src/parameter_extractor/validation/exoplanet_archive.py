@@ -162,7 +162,25 @@ def compare(records: List[dict], archive_rows: List[dict], reference: str) -> Li
         entry.update(matches=[m["column"] for m in matches], differs=differs, not_extracted=missing,
                      from_other_references=elsewhere)
         report.append(entry)
+    _mark_archive_solution(report)
     return report
+
+
+def _mark_archive_solution(report: List[dict]) -> None:
+    """A planet with several solution rows (RV-only fit, joint fit, ...) is compared row by row
+    with the archive's ONE parameter set for the paper: the row agreeing best is the solution the
+    archive took; the others get `archive_solution` naming it (their differences are expected)."""
+    by_planet: Dict[str, List[dict]] = {}
+    for e in report:
+        if e["status"] == "compared" and e.get("solution"):
+            by_planet.setdefault(e["pl_name"], []).append(e)
+    for entries in by_planet.values():
+        if len(entries) < 2:
+            continue
+        best = min(entries, key=lambda e: (len(e["differs"]), -len(e["matches"])))
+        for e in entries:
+            if e is not best:
+                e["archive_solution"] = best["solution"]
 
 
 def check(records: List[dict], reference: str, run_dir, fetch: Optional[Callable] = None) -> dict:

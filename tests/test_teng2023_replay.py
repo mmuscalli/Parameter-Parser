@@ -1,16 +1,16 @@
 """
 Offline replay of the exoplanet pack's reference paper, teng2023 (PASJ; 32
-systems, 38 planets/companions, sideways tables): the saved model responses in
-runs/teng2023_auto/ go through the real pipeline, which must reproduce the
-committed CSV exactly; the NASA Exoplanet Archive comparison runs against the
-saved archive rows (archive_rows.json) instead of the network. Covers units as
-printed (rad, JD-2450000, yr), the archive's derived columns, names the archive
-writes differently (eps Tau b, omi UMa b, 41 Lyn b = HD 81688 b), stellar-system
-values from another reference (sy_plx from TICv8) left out of the comparison,
-a parameter given by two fits (Table 3 orbit, Table 4 joint fit) and companions
-too heavy to be planets. Recorded before the fitting-model stage existed, so it
-runs with that stage turned off (RunConfig.optional_stages, as the GUI's
-toggle does). No API calls, no network. ~1 min (42 heavy pages).
+systems, sideways tables; re-recorded 2026-10-21 with one row per solution and
+the fitting-model stage, $1.73): the saved model responses in runs/teng2023_auto/
+go through the real pipeline, which must reproduce the committed CSV exactly;
+the NASA Exoplanet Archive comparison runs against the saved archive rows
+(archive_rows.json) instead of the network. Covers units as printed (rad,
+JD-2450000, yr), the archive's derived columns, names the archive writes
+differently (eps Tau b, omi UMa b, 41 Lyn b = HD 81688 b), stellar-system values
+from another reference (sy_plx from TICv8) left out of the comparison, planets
+fit two ways (RV-only, Table 3; joint RV + astrometry, Table 4) as two rows,
+the archive taking one of them, fitting models, and companions too heavy to be
+planets. No API calls, no network. ~1 min (42 heavy pages).
 
 Run with: python tests/test_teng2023_replay.py
 """
@@ -44,35 +44,49 @@ def test_teng2023_replay_reproduces_reference():
                 patch.object(api_client, "_send", make_replay(REF)), \
                 patch.object(exoplanet_archive, "fetch_parameter_sets", lambda names, ref: saved):
             result = run_pipeline(PDF, RunConfig.from_settings(api_key="replay", output_dir=Path(tmp),
-                                                               pack="exoplanets", online_checks=True,
-                                                               optional_stages={"fit_models": "off"}))
+                                                               pack="exoplanets", online_checks=True))
             assert result.csv_path.read_text() == (REF / "teng2023_extracted.csv").read_text()
             assert result.observations_path.read_text() == (REF / "teng2023_observations.csv").read_text()
             report = json.loads((result.run_dir / "archive_validation.json").read_text())
             assert report == json.loads((REF / "archive_validation.json").read_text())
 
-            rows = {r["pl_name"]: r for r in csv.DictReader(open(result.csv_path))}
-            assert len(rows) == 38
-            com = rows["11 Com b"]
+            rows = list(csv.DictReader(open(result.csv_path)))
+            assert len(rows) == 41
+            com = next(r for r in rows if r["pl_name"] == "11 Com b")
             assert (com["pl_orbper"], com["pl_orblper"], com["pl_orbtper"]) == ("323.21", "91.32947254", "2454519.4")
             assert com["pl_bmassprov"] == "Msini" and com["pl_refname"] == "Teng et al. 2023"
+            # one row per solution, each with its own values and how they were obtained
+            hd14067 = [r for r in rows if r["pl_name"] == "HD 14067 b"]
+            rv, joint = sorted(hd14067, key=lambda r: r["pl_fitlabel"].startswith("Joint"))
+            assert (rv["pl_orbper"], joint["pl_orbper"]) == ("2725.81", "2744.12325")
+            assert (rv["pl_bmassprov"], joint["pl_bmassprov"], joint["pl_massj"]) == ("Msini", "Mass", "15.3")
+            assert (rv["pl_fitast_flag"], joint["pl_fitast_flag"]) == ("0", "1")
+            assert joint["pl_fitsoftware"].startswith("orvara") and rv["pl_fitsoftware"].startswith("RadVel")
+            assert rv["pl_fitstjoint_flag"] == joint["pl_fitstjoint_flag"] == "0"     # no stellar model in the fit
+            assert com["st_fitsoftware"] == "isoclassify"
+            assert len([r for r in rows if r["pl_name"] == "HD 175679 b"]) == 2
 
-            by_name = {e["pl_name"]: e for e in report}
-            assert sum(e["status"] == "compared" for e in report) == 36
-            assert by_name["ε Tau b"]["archive_name"] == "eps Tau b"
-            assert by_name["41 Lyn b"]["archive_name"] == "HD 81688 b" and by_name["41 Lyn b"]["matched_by"]
-            assert by_name["HD 5608 B"]["status"] == "planet not in the archive"   # the stellar companion, not 'b'
-            assert "sy_plx" in by_name["11 Com b"]["from_other_references"]["TICv8"]
-            assert not by_name["11 Com b"]["differs"]
-            differing = {e["pl_name"] for e in report if e.get("differs")}
-            assert differing == {"HD 14067 b", "HD 120084 b"}       # the archive took Table 4's joint fit
+            by_row = {(e["pl_name"], e.get("solution", "")): e for e in report}
+            assert sum(e["status"] == "compared" for e in report) == 38
+            assert by_row[("ε Tau b", "RV-only Keplerian fits (Table 3)")]["archive_name"] == "eps Tau b"
+            lyn = by_row[("41 Lyn b", "RV-only Keplerian fits (Table 3)")]
+            assert lyn["archive_name"] == "HD 81688 b" and lyn["matched_by"]
+            assert next(e for e in report if e["pl_name"] == "HD 5608 B")["status"] == "planet not in the archive"
+            assert "sy_plx" in by_row[("11 Com b", "RV-only Keplerian fits (Table 3)")]["from_other_references"]["TICv8"]
+            # the archive took the joint fit: the RV-only rows say so; the joint rows only differ in inclination
+            # (Table 4 prints all / prograde / retrograde values; the archive took the prograde one)
+            rv_e = by_row[("HD 14067 b", rv["pl_fitlabel"])]
+            joint_e = by_row[("HD 14067 b", joint["pl_fitlabel"])]
+            assert rv_e["archive_solution"] == joint["pl_fitlabel"] and "archive_solution" not in joint_e
+            assert [d["column"] for d in joint_e["differs"]] == ["pl_orbincl"]
 
             flags = json.loads(result.flags_path.read_text())["paper_level"]
-            conflicts = [f["message"] for f in flags if f["kind"] == "conflicting_values"]
-            assert any("HD 14067 b has two values for pl_orbper" in m and "Table 4" in m for m in conflicts)
-            assert not any("HD 175679 b has two values for pl_orblper" in m for m in conflicts)   # -12.7 = 347.3 deg
+            assert any("so differences here are expected" in f["message"] and "HD 14067 b" in f["message"]
+                       for f in flags if f["kind"] == "archive_check")
             heavy = sorted(f["message"].split(":")[0] for f in flags if f["kind"] == "out_of_range")
-            assert heavy == ["HD 175679 b", "HD 5608 B"]
+            assert heavy == ["HD 175679 b", "HD 175679 b", "HD 5608 B"]
+            assert not [f for f in flags if f["kind"] == "conflicting_values"]       # solutions are separate rows
+            assert "fit_models" in [u.stage for u in result.usage]
     finally:
         packs.activate("prebiotic_chemistry")
 
