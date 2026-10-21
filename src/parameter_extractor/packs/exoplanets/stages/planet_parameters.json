@@ -9,6 +9,7 @@
  },
  "modes": true,
  "table_images": true,
+ "alternatives": true,
  "per": "sample",
  "set_word": "planetary system",
  "intro": "For every planet (or substellar companion) in the structure plan below, extract the planet's orbital and physical parameters the paper reports. The structure plan's sets are host stars (planetary systems) and its samples are planets: give each value the planet's set_label and sample_label.",

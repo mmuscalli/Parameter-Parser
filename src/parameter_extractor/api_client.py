@@ -151,10 +151,12 @@ def call_structured(
 
     # `max_tokens`: the stage's output budget (a runaway answer -- the model repeating itself
     # inside a field, aa57186-25 -- then stops in seconds, not after 64K tokens / 7 minutes).
-    # A broken or cut-off answer is retried once with the full budget: these are rare and random.
+    # A broken or cut-off answer is retried once with twice the budget: these are rare and random.
     budget = min(max_tokens, ctx.config.max_tokens) if max_tokens else ctx.config.max_tokens
     for attempt in (1, 2):
-        _streamed.max_tokens = budget if attempt == 1 else ctx.config.max_tokens
+        # retry: twice the stage's budget (never more than the maximum) -- room for an answer that
+        # really is longer, without letting a second runaway take minutes
+        _streamed.max_tokens = budget if attempt == 1 else min(2 * budget, ctx.config.max_tokens)
         started = time.time()
         try:
             response = _send_mapping_errors(ctx, stage, model, system_prompt=system_prompt,

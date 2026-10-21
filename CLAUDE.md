@@ -727,7 +727,32 @@ can't). Not reproducible (rerun: 1.3K output tokens). Now:
 - Full live run after the fix: 68 s, $0.88, 2 solution rows (GP / no GP),
   106/108 match on the adopted one. Open: st_rotp -- the paper gives >13 d
   (archive), 22 +- 3 d (taken), GP 33-49 d; "every value" currently only
-  covers posterior modes, not estimates from different methods.
+  covers posterior modes, not estimates from different methods. -> DONE below.
+
+## Estimates by other methods + the real cause of the runaways (2026-10-21)
+
+- Spec field `alternatives` (on for all 3 exoplanet stages): item field
+  `method` ('' = the value the paper adopts); others -> `<col>alt<N>`,
+  `<col>alt<N>err1/err2/lim`, `<col>alt<N>method` (N <= 3; repeats of the
+  adopted value dropped). `other_estimates` flag per parameter (adopted +
+  others, limits as "> 13"; GUI group "How the values were obtained").
+  Archive compare: alternatives are recorded values too; a value matched via
+  an estimate has its err/lim columns compared from THAT estimate.
+- **Root cause of aa57186-25's runaways** (seen in a kept failed_output.txt):
+  fields with defaults were OPTIONAL in the schema sent to the model; it
+  skipped `method`, put "Method: ..." in `note`, and looped "Done. Done. ..."
+  until cut off. Fix: every field REQUIRED in the sent schema
+  (`optional.ALL_REQUIRED` json_schema_extra; `schemas/fit_models._Strict`),
+  Python defaults kept (old recordings validate); `note` described and
+  prompted as one short sentence. Retry budget now 2x the stage budget (not
+  the 64K max). A valid answer whose notes report failure ("Extraction
+  failed") is asked again once (`optional.GAVE_UP`); twice -> low_confidence
+  flag. Before the fix 2 of 3 full runs broke off; after: 2 of 2 clean
+  ($0.91 each), all SPECIES+ARIADNE / SED / activity / GP / v sin i
+  estimates recorded by method.
+- Archive limit-flag convention confirmed from the archive's own data
+  (st_vsin "< 3.5" -> lim 1): 1 = upper, -1 = lower, as we map. The archive's
+  st_rotp 13 with lim 1 contradicts the paper's "> 13 days" -- left flagged.
 
 ## Non-obvious decisions — don't redo this research
 

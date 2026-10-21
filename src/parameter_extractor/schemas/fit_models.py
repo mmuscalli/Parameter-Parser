@@ -17,17 +17,28 @@ of priors are strings as printed ('' = not given), parsed locally.
 from __future__ import annotations
 from typing import List, Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 from parameter_extractor.schemas.common import Confidence
 
 DataKind = Literal["radial velocity", "transit photometry", "SED photometry", "spectroscopy", "astrometry",
                    "imaging", "secondary eclipse", "phase curve", "transit timing", "parallax",
                    "asteroseismology", "other"]
+def _require_all(schema: dict) -> None:
+    schema["required"] = list(schema.get("properties", {}))
+
+
+class _Strict(BaseModel):
+    """Every field required in the schema sent to the model (a skipped field invites the model
+    to say it in a free-text field instead, and ramble -- aa57186-25); defaults still apply
+    when validating older answers."""
+    model_config = ConfigDict(json_schema_extra=_require_all)
+
+
 PriorShape = Literal["gaussian", "uniform", "log-uniform", "truncated gaussian", "fixed", "other"]
 
 
-class FitDataset(BaseModel):
+class FitDataset(_Strict):
     kind: DataKind
     facility: str = Field(description="Observatory / telescope / mission as printed, e.g. 'OAO 1.88 m', 'TESS', "
                                       "'Gaia DR3'; '' if not stated.")
@@ -37,14 +48,14 @@ class FitDataset(BaseModel):
     note: str = Field(default="", description="Dates, number of points etc. if useful; '' otherwise.")
 
 
-class FitSoftware(BaseModel):
+class FitSoftware(_Strict):
     name: str = Field(description="As printed, e.g. 'EXOFASTv2', 'RadVel', 'juliet', 'emcee', 'MIST', 'isoclassify'.")
     version: str = Field(description="Version as printed ('v1.2', '2'); '' if not stated.")
     role: Literal["fitting code", "sampler", "stellar evolution models", "stellar atmosphere models",
                   "limb darkening", "other"]
 
 
-class FitPrior(BaseModel):
+class FitPrior(_Strict):
     parameter: str = Field(description="The archive column the prior is on if one matches (e.g. 'pl_orbeccen', "
                                        "'st_teff', 'pl_orbper'), else the paper's name for the parameter "
                                        "(e.g. 'RV jitter (HIDES)', 'limb darkening u1').")
@@ -61,7 +72,7 @@ class FitPrior(BaseModel):
     source: str = Field(description="Table/section where it's stated.")
 
 
-class FitAssumption(BaseModel):
+class FitAssumption(_Strict):
     text: str = Field(description="The assumption in a few words, e.g. 'circular orbit (e fixed to 0)', "
                                   "'transit is not grazing', 'no RV jitter between instruments'.")
     parameter: str = Field(default="", description="Archive column it concerns, e.g. 'pl_orbeccen'; '' if none.")
@@ -69,7 +80,7 @@ class FitAssumption(BaseModel):
     source: str
 
 
-class FitModel(BaseModel):
+class FitModel(_Strict):
     label: str = Field(description="Short name for the model as the paper calls it, e.g. 'RV-only Keplerian fit "
                                    "(Table 3)', 'joint RV + astrometry fit (Table 4)', 'SED fit'.")
     rows: List[str] = Field(description="Exact sample_labels (planet solutions) whose planet values come from "
@@ -92,6 +103,6 @@ class FitModel(BaseModel):
     confidence: Confidence
 
 
-class FitModels(BaseModel):
+class FitModels(_Strict):
     models: List[FitModel] = Field(default_factory=list)
     notes: str = Field(default="", description="Anything about the modelling that didn't fit above.")

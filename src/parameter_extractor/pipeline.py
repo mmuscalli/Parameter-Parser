@@ -356,6 +356,10 @@ def _pack_postprocess(pack, rows, ex: "Extraction", config: RunConfig) -> List[F
     conflicts = []
     modal = []
     for spec, result in ex.optional_list:
+        if (result.notes or "").startswith("[The model reported a failure twice"):
+            modal.append(Flag("low_confidence", f"{spec.label}: the model reported that its extraction failed, "
+                                                f"twice -- the values from this step may be incomplete. Running the "
+                                                f"paper again usually helps."))
         values = optional_values(spec, result, ex.structure, problems, conflicts)
         for (label, sample, column), v in values.items():
             if column.endswith("modal_flag"):
@@ -365,6 +369,16 @@ def _pack_postprocess(pack, rows, ex: "Extraction", config: RunConfig) -> List[F
                          for n in range(1, 10) if (label, sample, f"{param}mode{n}") in values]
                 modal.append(Flag("multimodal", f"{sample or label}: {param} has a bi-/multimodal posterior -- "
                                                 f"{'; '.join(modes)} (in {param}mode1..., {param}modal_flag = 1)",
+                                  quote=v.quote or None, source=v.source or None))
+            elif column.endswith("alt1method"):
+                param = column[:-len("alt1method")]
+                shown = lambda prefix: _estimate(values, label, sample, prefix)
+                others = [f"{shown(f'{param}alt{n}')} by {values[(label, sample, f'{param}alt{n}method')].value}"
+                          for n in range(1, 10) if (label, sample, f"{param}alt{n}") in values]
+                adopted = (f"adopted {shown(param)}; " if (label, sample, param) in values
+                           else "no adopted value; ")
+                modal.append(Flag("other_estimates", f"{sample or label}: {param} is estimated more than one way -- "
+                                                     f"{adopted}other estimates: {'; '.join(others)} (in {param}alt1...)",
                                   quote=v.quote or None, source=v.source or None))
     if pack.uses("row_labels"):
         exo.row_labels(rows, ex.structure, config.paper_prefix)
@@ -419,13 +433,23 @@ def archive_flags(archive: dict) -> List[Flag]:
             + (f"; minor differences, the paper's values kept: "
                + "; ".join(f"{m['column']} {m['extracted']} vs {m['archive']} ({m['why']})" for m in e["minor"])
                if e.get("minor") else "")
-            + (f"; matched a posterior mode: "
+            + (f"; matched another recorded value: "
                + "; ".join(f"{c} ({how})" for c, how in e["matched_mode"].items())
                if e.get("matched_mode") else "")
             + (f"; the archive also has {len(e['not_extracted'])} value(s) not extracted "
                f"({', '.join(e['not_extracted'][:8])}{'...' if len(e['not_extracted']) > 8 else ''})"
                if e["not_extracted"] else "") + "."))
     return flags
+
+
+def _estimate(values: dict, label: str, sample: str, column: str) -> str:
+    """'22 +3/-3', '> 13' -- a value with its uncertainties or limit, for flag text."""
+    get = lambda suffix: getattr(values.get((label, sample, column + suffix)), "value", None)
+    value, limit = get(""), get("lim")
+    if limit in (1, -1):
+        return f"{'<' if limit == 1 else '>'} {value:g}"
+    plus, minus = get("err1"), get("err2")
+    return f"{value:g}" + (f" +{plus:g}/{minus:g}" if plus is not None and minus is not None else "")
 
 
 def _shown(v) -> str:

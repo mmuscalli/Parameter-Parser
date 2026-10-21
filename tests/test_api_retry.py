@@ -60,8 +60,12 @@ def test_a_broken_answer_is_retried_once():
                 result = run_pipeline(PDF, RunConfig.from_settings(api_key="x", output_dir=Path(tmp),
                                                                    pack="exoplanets"))
                 assert result.csv_path.read_text() == (REF / "nielsen2019_extracted.csv").read_text()
-                # first try: the stage's budget (1 system + 1 planet, 9 parameters); retry: the full maximum
-                assert seen == [4000 + 250 * 2 * 9, RunConfig.from_settings(api_key="x").max_tokens], seen
+                # first try: the stage's own (small) budget; retry: twice that
+                from parameter_extractor.schemas.structure_plan import StructurePlan
+                from parameter_extractor.stages.optional import load_specs
+                structure = StructurePlan.model_validate_json((REF / "structure_planner.output.json").read_text())
+                budget = load_specs()["system_and_discovery"].output_budget(structure)
+                assert budget < 20000 and seen == [budget, min(2 * budget, RunConfig.from_settings(api_key="x").max_tokens)], seen
                 stages = [u.stage for u in result.usage]
                 if how == "cut off":            # the cut-off try was paid for: it's in the usage
                     assert stages.count("system_and_discovery") == 2
@@ -86,6 +90,30 @@ def test_twice_broken_says_run_again():
             else:
                 raise AssertionError("two broken answers must fail the run")
         assert len(seen) == 2
+    finally:
+        packs.activate("prebiotic_chemistry")
+
+
+def test_an_answer_that_reports_failure_is_asked_again():
+    """aa57186-25: a valid answer whose notes said "Extraction failed" (4 values instead of 21)."""
+    if not PDF.is_file():
+        print(f"SKIP: needs {PDF}"); return
+    replay, calls = make_replay(REF), []
+
+    def send(ctx, **kw):
+        out = replay(ctx, **kw)
+        if kw["response_model"].__name__ == "StellarParametersResult":
+            calls.append(1)
+            if len(calls) == 1:
+                broken = out.parsed_output.model_copy(update={"parameters": out.parsed_output.parameters[:2],
+                                                              "notes": "Extraction failed"})
+                return SimpleNamespace(**{**vars(out), "parsed_output": broken})
+        return out
+    try:
+        with tempfile.TemporaryDirectory() as tmp, patch.object(api_client, "_send", send):
+            result = run_pipeline(PDF, RunConfig.from_settings(api_key="x", output_dir=Path(tmp), pack="exoplanets"))
+            assert len(calls) == 2
+            assert result.csv_path.read_text() == (REF / "nielsen2019_extracted.csv").read_text()
     finally:
         packs.activate("prebiotic_chemistry")
 

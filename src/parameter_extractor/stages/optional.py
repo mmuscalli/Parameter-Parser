@@ -43,7 +43,7 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Dict, List, Literal, Optional, Tuple
 
-from pydantic import BaseModel, Field, create_model
+from pydantic import BaseModel, ConfigDict, Field, create_model
 
 from parameter_extractor.schemas.common import Basis
 from parameter_extractor.schemas.structure_plan import StructurePlan
@@ -87,6 +87,10 @@ class StageSpec(BaseModel):
     # more than one value per parameter for the posterior's modes (a bimodal inclination:
     # prograde / retrograde) -> <col>modal_flag, <col>mode<N>, <col>mode<N>err1/err2, <col>mode<N>desc
     modes: bool = False
+    # other estimates of a parameter by other methods (a rotation period from v sin i, from an
+    # activity relation, from a GP fit): the adopted value stays in <col>; the others go to
+    # <col>alt<N>, <col>alt<N>err1/err2/lim, <col>alt<N>method
+    alternatives: bool = False
     # send the rendered table pages along (tables whose text layer is garbled or sideways)
     table_images: bool = False
 
@@ -100,6 +104,14 @@ class StageSpec(BaseModel):
                          "i < 90 deg and retrograde i > 90 deg orbits), give the overall value (if printed) with "
                          "`mode` '' and each mode's value as its own entry with `mode` describing the mode as "
                          "printed, e.g. 'i < 90 deg (prograde)'. Otherwise `mode` is ''.")
+        if self.alternatives:
+            rules.append("If the paper gives SEVERAL estimates of one parameter for the same object from different "
+                         "methods (e.g. a rotation period from v sin i, from an activity-rotation relation and from "
+                         "a GP fit; a stellar mass from isochrones and from asteroseismology), give each: the one "
+                         "the paper adopts (its tables) with `method` '', every other one as its own entry with "
+                         "`method` naming the method as the paper does, e.g. 'activity-rotation relation "
+                         "(Mamajek & Hillenbrand 2008)'. Limits ('> 13 d') count as estimates. Different fits of "
+                         "a planet are separate rows, not methods.")
         if self.table_images:
             rules.append("Page images, if attached, are renders of the pages with tables (sideways ones shown "
                          "upright). Read table values and their uncertainties from the images; the text layer "
@@ -149,6 +161,10 @@ class StageSpec(BaseModel):
             for p in self.parameters:
                 if p.kind == "number":
                     out += mode_columns(p.column, p.uncertainties and self.suffixes_for(p)[:2] or [])
+        if self.alternatives:
+            for p in self.parameters:
+                if p.kind == "number":
+                    out += alternative_columns(p.column, p.uncertainties and self.suffixes_for(p) or [])
         return out
 
     # ---- when it runs, and which sets it concerns ---------------------------------
@@ -180,7 +196,7 @@ class StageSpec(BaseModel):
         targets = len(structure.experiment_sets)
         if self.per == "sample":
             targets += sum(len(s.samples) for s in structure.experiment_sets)
-        values = targets * len(self.parameters) * (2 if self.modes else 1)
+        values = targets * len(self.parameters) * (1 + self.modes + self.alternatives)
         return 4000 + 250 * values
 
     # ---- schema and prompt ---------------------------------------------------------
@@ -201,6 +217,16 @@ class StageSpec(BaseModel):
                            STRUCTURE_PLAN_JSON=structure.model_dump_json(indent=2), PAPER_TEXT=paper_text)
 
 
+def _require_all(schema: dict) -> None:
+    schema["required"] = list(schema.get("properties", {}))
+
+
+# Every field REQUIRED in the schema sent to the model (aa57186-25: with defaults, fields were
+# optional, the model skipped `method`, wrote the method into `note` and ran on -- "Done. Done.
+# ..." -- until cut off). The Python defaults stay, so older recorded answers still validate.
+ALL_REQUIRED = ConfigDict(json_schema_extra=_require_all)
+
+
 @lru_cache(maxsize=None)
 def _models(spec_json: str) -> Tuple[type, type]:
     """(item model, result model) for a spec -- the same classes for the same spec."""
@@ -211,6 +237,7 @@ def _models(spec_json: str) -> Tuple[type, type]:
                                 "sample only; '' if it applies to the whole set."))}
     Item = create_model(
         f"{name}Value",
+        __config__=ALL_REQUIRED,
         set_label=(str, Field(description="Exact structure-plan set_label; '' if it applies to every "
                                           f"{spec.set_word} set.")),
         **sample_field,
@@ -224,6 +251,10 @@ def _models(spec_json: str) -> Tuple[type, type]:
                                                         "bi-/multimodal posterior, the mode as printed, e.g. "
                                                         "'i < 90 deg (prograde)'."))}
            if spec.modes else {}),
+        **({"method": (str, Field(default="", description="'' for the value the paper adopts; for another "
+                                                          "estimate of the same parameter, the method as the paper "
+                                                          "names it, e.g. 'activity-rotation relation'."))}
+           if spec.alternatives else {}),
         **({"err_plus": (float, Field(default=0.0, description="Upper uncertainty, positive; 0 if none.")),
             "err_minus": (float, Field(default=0.0, description="Lower uncertainty, negative; 0 if none.")),
             "limit": (Literal["", "upper", "lower"], Field(default="", description="'upper' for '<x', 'lower' for "
@@ -236,11 +267,13 @@ def _models(spec_json: str) -> Tuple[type, type]:
                                       "explanations go in `note`.")),
         source=(str, ...),
         confidence=(Literal["high", "medium", "low"], ...),
-        note=(str, Field(default="", description="Your explanation, e.g. how a 'derived' value was calculated; "
-                                                 "'' if none.")),
+        note=(str, Field(default="", description="At most one short sentence of your own, e.g. how a 'derived' "
+                                                 "value was calculated; '' if none. Never the method or mode -- "
+                                                 "those have their own fields.")),
     )
     Result = create_model(
         name,
+        __config__=ALL_REQUIRED,
         parameters=(List[Item], Field(default_factory=list,
                                       description="Only values the paper states. Leave a parameter out if not given.")),
         notes=(str, Field(default="", description="Anything that didn't fit the parameters.")),
@@ -273,11 +306,17 @@ def spec_standard_columns() -> List[Tuple[str, str]]:
     return out
 
 
+# an answer that reports its own failure ("Extraction failed" in its notes, aa57186-25: 4 values
+# instead of 21) is valid JSON, so api_client's retry doesn't see it
+GAVE_UP = re.compile(r"\b(extraction failed|failed to extract|unable to (?:extract|complete)|could not "
+                     r"(?:extract|complete))\b", re.IGNORECASE)
+
+
 def run_optional_stage(ctx, spec: StageSpec, paper_text: str, structure: StructurePlan,
                        table_images: Optional[List[Path]] = None):
     from parameter_extractor.api_client import call_structured
     _, Result = spec.models()
-    return call_structured(
+    ask = lambda: call_structured(
         ctx,
         stage=spec.name,
         system_prompt=spec.system_prompt or f"Extract {spec.label.lower()} from a scientific paper. Report "
@@ -287,6 +326,14 @@ def run_optional_stage(ctx, spec: StageSpec, paper_text: str, structure: Structu
         image_paths=(table_images or None) if spec.table_images else None,
         max_tokens=spec.output_budget(structure),
     )
+    result = ask()
+    if GAVE_UP.search(result.notes or ""):
+        ctx.note(spec.name, f"{spec.label}: the answer reported a failure -- asking again")
+        result = ask()
+        if GAVE_UP.search(result.notes or ""):
+            result.notes = (f"[The model reported a failure twice -- its values may be incomplete.] "
+                            f"{result.notes}")
+    return result
 
 
 @dataclass
@@ -331,6 +378,14 @@ def stage_values(spec: StageSpec, item) -> Tuple[Dict[str, StageValue], List[str
 MAX_MODES = 3
 
 
+def alternative_columns(column: str, error_suffixes: List[str]) -> List[str]:
+    """Per other estimate N: <col>altN, its uncertainties and limit flag, <col>altNmethod."""
+    out = []
+    for n in range(1, MAX_MODES + 1):
+        out += [f"{column}alt{n}"] + [f"{column}alt{n}{s}" for s in error_suffixes] + [f"{column}alt{n}method"]
+    return out
+
+
 def mode_columns(column: str, error_suffixes: List[str]) -> List[str]:
     """<col>modal_flag, then per mode N: <col>modeN, its uncertainties, <col>modeNdesc."""
     out = [column + "modal_flag"]
@@ -369,6 +424,7 @@ def optional_values(spec: StageSpec, result, structure: StructurePlan,
     out: Dict[Tuple[str, str, str], StageValue] = {}
     owner: Dict[Tuple[str, str, str], Tuple[object, List[str]]] = {}   # (label, sample, parameter) -> (item, its columns)
     modes: Dict[Tuple[str, str, str], list] = {}                       # same key -> [(mode text, columns)]
+    alternatives: Dict[Tuple[str, str, str], list] = {}                # same key -> [(method, columns)]
     for v in (result.parameters if result is not None else []):
         if v.basis == "assumed":
             continue
@@ -379,6 +435,12 @@ def optional_values(spec: StageSpec, result, structure: StructurePlan,
             continue
         sample = getattr(v, "sample_label", "") or ""
         mode = (getattr(v, "mode", "") or "").strip()
+        method = (getattr(v, "method", "") or "").strip()
+        if method:                                      # another method's estimate: its own columns
+            label_text = f"{method} -- {mode}" if mode else method
+            for label in ([v.set_label] if v.set_label else targets):
+                alternatives.setdefault((label, sample, v.parameter), []).append((label_text, columns))
+            continue
         if mode:                                        # one mode of a multimodal posterior: its own columns
             for label in ([v.set_label] if v.set_label else targets):
                 modes.setdefault((label, sample, v.parameter), []).append((mode, columns))
@@ -435,6 +497,30 @@ def optional_values(spec: StageSpec, result, structure: StructurePlan,
                     out[(label, sample, f"{param}mode{n}{s}")] = columns[param + s]
             out[(label, sample, f"{param}mode{n}desc")] = StageValue(mode, main.basis, main.quote, main.source,
                                                                      main.confidence)
+    for (label, sample, param), found in alternatives.items():
+        param_spec = next(p for p in spec.parameters if p.column == param)
+        suffixes = spec.suffixes_for(param_spec) if param_spec.uncertainties else []
+        main_value = out.get((label, sample, param))
+        seen = []
+        for method, columns in found:
+            same = lambda a, b: (a is None) == (b is None) and (a is None or a.value == b.value)
+            repeat = main_value is not None and _same_value(main_value.value, columns[param].value,
+                                                            param_spec.unit) and \
+                all(same(out.get((label, sample, param + s)), columns.get(param + s)) for s in suffixes)
+            if repeat or any(m == method for m, _ in seen):
+                continue                                # a repeat of the adopted value isn't another estimate
+            seen.append((method, columns))
+        if len(seen) > MAX_MODES and problems is not None:
+            problems.append(f"{spec.label}: {sample or label} has {len(seen)} other estimates of {param}; the "
+                            f"first {MAX_MODES} are in the CSV ({', '.join(m for m, _ in seen[MAX_MODES:])} left out).")
+        for n, (method, columns) in enumerate(seen[:MAX_MODES], start=1):
+            value = columns[param]
+            out[(label, sample, f"{param}alt{n}")] = value
+            for s in suffixes:
+                if param + s in columns:
+                    out[(label, sample, f"{param}alt{n}{s}")] = columns[param + s]
+            out[(label, sample, f"{param}alt{n}method")] = StageValue(method, value.basis, value.quote,
+                                                                      value.source, value.confidence)
     return out
 
 

@@ -17,6 +17,9 @@ Rules:
   ('' if that's already the parameter's unit): the app converts it
   (minutes -> hours, rad -> deg, JD-2450000 -> JD, ...). Don't convert
   values yourself.
+- Fill every field. `note` is at most one short sentence of your own
+  ('' if nothing to add) -- never a place to repeat the value, its method or
+  its mode.
 - Give `set_label` exactly as in the structure plan; use '' only when a value
   applies to every {{SET_WORD}} set. If a value differs between sets, give one
   entry per set.

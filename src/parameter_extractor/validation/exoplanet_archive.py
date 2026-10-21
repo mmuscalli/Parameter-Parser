@@ -19,7 +19,7 @@ reference.
 
 Every value the row records counts: its own and each posterior mode's (a
 bimodal inclination's prograde / retrograde values) -- a match on any is a
-match (`matched_mode` says which). Differences where the paper's value is
+match (`matched_mode` says which -- a mode or another method's estimate). Differences where the paper's value is
 kept on purpose (Mickey, 2026-10-21) are `minor`, not `differs`: names worded
 differently (NAME_COLUMNS sharing a word) and uncertainties within 20%.
 A value matches when it agrees to within the paper's rounding: 0.5% relative,
@@ -158,6 +158,9 @@ def compare(records: List[dict], archive_rows: List[dict], reference: str) -> Li
                 elsewhere.setdefault(_strip_html(chosen[ref_col]), []).append(column)
                 continue
             values = recorded_values(rec, column)        # the value, then each posterior mode's
+            base = _base_column(column)
+            if base != column and base in via_mode:      # errors / limit of the estimate the value matched
+                values = [x for x in values if x[0] == via_mode[base]] or values
             if not values:
                 if column.startswith(("pl_", "st_")) and not column.endswith("lim"):
                     missing.append(column)
@@ -192,17 +195,27 @@ UNCERTAINTY_MINOR = 0.2           # uncertainties within 20% of each other: the 
 _STOP = {"the", "and", "of", "for", "telescope", "observatory", "spectrograph", "m"}
 
 
+def _base_column(column: str) -> str:
+    return column[:-4] if column.endswith(("err1", "err2")) else column[:-3] if column.endswith("lim") else column
+
+
 def recorded_values(rec: dict, column: str) -> List[tuple]:
-    """[(mode label, value)] for an archive column: the row's own value ('' label), then the
-    matching value of each posterior mode (<col>mode<N>, <col>mode<N>err1, ...)."""
+    """[(label, value)] for an archive column: the row's own value ('' label), then the
+    matching value of each posterior mode (<col>mode<N>, <col>mode<N>err1, ...) and of each
+    other method's estimate (<col>alt<N>, <col>alt<N>err1, <col>alt<N>lim, ...)."""
     out = []
     if rec.get(column) not in (None, ""):
         out.append(("", rec[column]))
-    base, suffix = (column[:-4], column[-4:]) if column.endswith(("err1", "err2")) else (column, "")
+    base, suffix = ((column[:-4], column[-4:]) if column.endswith(("err1", "err2")) else
+                    (column[:-3], "lim") if column.endswith("lim") else (column, ""))
     for n in range(1, 10):
         value = rec.get(f"{base}mode{n}{suffix}")
         if value not in (None, ""):
             out.append((f"mode {n}: {rec.get(f'{base}mode{n}desc') or ''}".strip(" :"), value))
+    for n in range(1, 10):                       # other methods' estimates
+        value = rec.get(f"{base}alt{n}{suffix}")
+        if value not in (None, ""):
+            out.append((f"other estimate {n}: {rec.get(f'{base}alt{n}method') or ''}".strip(" :"), value))
     return out
 
 

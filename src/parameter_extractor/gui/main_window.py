@@ -608,11 +608,11 @@ class MainWindow(QMainWindow):
         archive_flags = [f for f in result.paper_flags if f.kind in ("archive_check", "archive_match")]
         derived_flags = [f for f in result.paper_flags if f.kind == "derived_value"]
         repeat_flags = [f for f in result.paper_flags if f.kind == "duplicate_removed"]
-        fit_flags = [f for f in result.paper_flags if f.kind in ("fit_model", "multimodal")]
+        fit_flags = [f for f in result.paper_flags if f.kind in ("fit_model", "multimodal", "other_estimates")]
         other_paper_flags = [f for f in result.paper_flags
                              if f.kind not in ("new_variable", "cited_data", "derived_value", "duplicate_removed",
                                                "archive_check", "archive_match", "fit_model",
-                                               "multimodal")]
+                                               "multimodal", "other_estimates")]
         if cited_flags:
             add_group("Data reproduced from other publications", cited_flags)
         if new_var_flags:

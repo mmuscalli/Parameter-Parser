@@ -46,7 +46,7 @@ def test_pack_and_template():
         planet = specs["planet_parameters"]
         assert planet.per == "sample" and "pl_orbpererr1" in planet.output_columns()
         import re
-        is_mode = lambda c: re.search(r"(modal_flag|mode\d(err[12]|desc)?)$", c)
+        is_mode = lambda c: re.search(r"(modal_flag|mode\d(err[12]|desc)?|alt\d(err[12]|lim|method)?)$", c)
         assert all(c in pack.template_columns for s in specs.values() for c in s.output_columns() if not is_mode(c))
         from parameter_extractor.registry import standard_columns
         modes = [c for s in specs.values() for c in s.output_columns() if is_mode(c)]
@@ -169,6 +169,44 @@ def test_posterior_modes():
         far = archive.compare([dict(rec, st_masserr1=0.5, disc_telescope="Subaru", st_mass=2.16)], rows,
                               "Teng et al. 2023")[0]
         assert sorted(d["column"] for d in far["differs"]) == ["disc_telescope", "st_masserr1"]
+    finally:
+        packs.activate("prebiotic_chemistry")
+
+
+def test_estimates_by_other_methods():
+    """The paper's adopted value in <col>, other methods' estimates in <col>alt<N> (aa57186-25: a
+    rotation period > 13 d from v sin i, 22 +- 3 d from an activity relation, 49 d from a GP)."""
+    from types import SimpleNamespace
+    from parameter_extractor.stages.optional import load_specs, optional_values
+    from parameter_extractor.pipeline import _estimate
+    packs.activate("exoplanets")
+    try:
+        spec = load_specs()["stellar_parameters"]
+        assert spec.alternatives and "st_rotpalt3method" in spec.output_columns()
+        Item, Result = spec.models()
+        mk = lambda value, plus, minus, limit, method: Item.model_validate(dict(
+            set_label="TOI-3862", sample_label="", parameter="st_rotp", value=value, unit="d", err_plus=plus,
+            err_minus=minus, limit=limit, method=method, basis="stated", quote=str(value), source="Sect. 3",
+            confidence="high"))
+        conflicts = []
+        out = optional_values(spec, Result(parameters=[
+            mk(22, 3, -3, "", ""), mk(13, 0, 0, "lower", "v sin i limit"), mk(49, 38, -32, "", "GP fit"),
+            mk(22, 3, -3, "", "activity relation")]), SimpleNamespace(experiment_sets=[]), [], conflicts)
+        cols = {k[2]: v.value for k, v in out.items()}
+        assert not conflicts and (cols["st_rotp"], cols["st_rotperr1"]) == (22, 3)
+        assert (cols["st_rotpalt1"], cols["st_rotpalt1lim"], cols["st_rotpalt1method"]) == (13, -1, "v sin i limit")
+        assert (cols["st_rotpalt2"], cols["st_rotpalt2method"]) == (49, "GP fit") and "st_rotpalt3" not in cols
+        assert _estimate(out, "TOI-3862", "", "st_rotpalt1") == "> 13"
+        assert _estimate(out, "TOI-3862", "", "st_rotp") == "22 +3/-3"
+        # the archive lists the v sin i limit: matched through the other estimate
+        rows = [{"pl_name": "TOI-3862 b", "pl_refname": "Carleo et al. 2026", "st_refname": "Carleo et al. 2026",
+                 "st_rotp": "13.00000", "st_rotplim": "-1"}]
+        e = archive.compare([{"pl_name": "TOI-3862 b", **cols}], rows, "Carleo et al. 2026")[0]
+        assert "st_rotp" in e["matches"] and e["matched_mode"]["st_rotp"] == "other estimate 1: v sin i limit"
+        assert "st_rotplim" in e["matches"]          # the limit flag of the estimate that matched, not the adopted
+        rows[0]["st_rotplim"] = "1"
+        e = archive.compare([{"pl_name": "TOI-3862 b", **cols}], rows, "Carleo et al. 2026")[0]
+        assert e["differs"] == [{"column": "st_rotplim", "extracted": -1, "archive": 1.0}]
     finally:
         packs.activate("prebiotic_chemistry")
 
