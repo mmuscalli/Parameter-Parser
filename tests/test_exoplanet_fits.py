@@ -219,6 +219,23 @@ def test_stage_switched_off():
         packs.activate("prebiotic_chemistry")
 
 
+def test_joint_star_planet_claims_are_checked():
+    """Expert's definition: a stellar model and the planet models linked in one likelihood. A claim
+    the model's own listing doesn't support is flagged (and vice versa); its answer is kept."""
+    base = FIT_MODELS["models"][0]
+    claims_joint = FitModels.model_validate({"models": [dict(base, star_and_planets_joint=True)]})
+    msgs = [f.message for f in fits.model_flags([], claims_joint) if f.kind == "fit_model"]
+    assert any("marked as a joint star + planet fit" in m and "no stars" in m and "stellar model" in m for m in msgs)
+    sed = {"kind": "SED photometry", "facility": "", "instrument": "", "bands": "2MASS J, H, Ks", "note": ""}
+    exofast = dict(base, stars=["11 Com"], datasets=base["datasets"] + [sed],
+                   software=[{"name": "EXOFASTv2", "version": "", "role": "fitting code"},
+                             {"name": "MIST", "version": "", "role": "stellar evolution models"}])
+    ok = FitModels.model_validate({"models": [dict(exofast, star_and_planets_joint=True)]})
+    assert not [f for f in fits.model_flags([], ok) if "joint star + planet" in f.message]
+    unmarked = FitModels.model_validate({"models": [dict(exofast, star_and_planets_joint=False)]})
+    assert any("isn't marked as a joint star + planet" in f.message for f in fits.model_flags([], unmarked))
+
+
 def test_exofast_versions_and_labels():
     sw = lambda name, version="": FitSoftware(name=name, version=version, role="fitting code")
     assert fits.exofast_version([sw("EXOFASTv2")]) == (2, True)

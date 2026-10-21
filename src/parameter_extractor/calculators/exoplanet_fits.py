@@ -279,6 +279,26 @@ def model_flags(rows: List[ExtractedRow], fits: FitModels) -> list:
                   source=m.source or None)
              for m in fits.models if m.confidence != "high"]
     for m in fits.models:
+        # joint star + planet fit (expert, 2026-10-21): a stellar model and the planet models with their
+        # sampled parameters linked in ONE likelihood; earlier stellar results used as priors are not.
+        # The model's answer is kept; a claim its own listing doesn't support is flagged, both ways.
+        stellar_model = (any(d.kind == "SED photometry" for d in m.datasets)
+                         or any(s.role in STELLAR_MODEL_ROLES for s in m.software))
+        if m.star_and_planets_joint and not (m.rows and m.stars and stellar_model):
+            missing = [what for what, ok in (("planet rows", m.rows), ("stars", m.stars),
+                                             ("a stellar model (SED data or isochrones / atmosphere models)",
+                                              stellar_model)) if not ok]
+            flags.append(Flag("fit_model", f"Fitting model '{m.label}' is marked as a joint star + planet fit, but "
+                                           f"lists no {' / no '.join(missing)} -- a joint fit links a stellar "
+                                           f"model's and the planets' parameters in one likelihood; stellar values "
+                                           f"used only as priors don't count. Check pl_fitstjoint_flag.",
+                              quote=m.quote or None, source=m.source or None))
+        elif not m.star_and_planets_joint and m.rows and m.stars and stellar_model and m.joint:
+            flags.append(Flag("fit_model", f"Fitting model '{m.label}' produced both planet and stellar values and "
+                                           f"includes a stellar model, but isn't marked as a joint star + planet "
+                                           f"fit -- check whether their parameters were linked in one likelihood "
+                                           f"(pl_fitstjoint_flag = 0).", quote=m.quote or None,
+                              source=m.source or None))
         if not m.rows and not m.stars:                 # e.g. a spectroscopic analysis that only fed priors
             kinds = ", ".join(sorted({d.kind for d in m.datasets})) or "no data listed"
             flags.append(Flag("fit_model", f"Fitting model '{m.label}' ({kinds}) produced no row's reported values "

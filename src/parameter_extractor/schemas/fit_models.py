@@ -80,9 +80,10 @@ class FitModel(BaseModel):
     joint: bool = Field(description="True if the datasets were fit simultaneously in one model.")
     joint_description: str = Field(description="Which data were linked/fit jointly and how, in a few words, "
                                                 "e.g. 'RV + TESS transits + SED fit simultaneously'; '' if not joint.")
-    star_and_planets_joint: bool = Field(description="True only if a model that directly constrains the star "
-                                                     "(SED, isochrones, spectroscopic priors on the stellar fit) was "
-                                                     "fit SIMULTANEOUSLY with the planet models.")
+    star_and_planets_joint: bool = Field(description="True only if a stellar model (SED, isochrones / tracks, "
+                                                     "atmosphere models) and the planet models have their sampled "
+                                                     "parameters linked within ONE likelihood. Earlier stellar "
+                                                     "results used as priors or fixed inputs are NOT joint.")
     software: List[FitSoftware]
     priors: List[FitPrior] = Field(description="Every prior the paper states for this model.")
     assumptions: List[FitAssumption] = Field(description="Key, especially simplifying, assumptions.")

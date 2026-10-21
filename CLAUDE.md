@@ -628,6 +628,19 @@ were obtained, with NEA-style names.
   mid-run would change the active pack). CLI `--skip-stage NAME`;
   `--list-packs` lists stages. GUI test drives truman2024's wet-dry stage
   on/off through the real worker, no API.
+- **Expert answers (2026-10-21)**: (1) joint star + planet fit = a stellar model
+  and the planet models with their sampled parameters linked in ONE
+  likelihood (so e.g. transits constrain stellar density); earlier stellar
+  results used as priors/fixed inputs are NOT joint -- prompt + schema say so,
+  and `model_flags` flags a joint claim without rows + stars + a stellar model
+  (SED data or isochrone/atmosphere software), and the reverse (both sides +
+  stellar model + joint, but not marked); the model's answer is kept.
+  (2) prior-only analyses (SpecMatch etc.): flag + keep in
+  fit_models.output.json, no columns -- as built.
+- **Live structure test on teng2023** (all four stages skipped, $0.25): HD 14067 b,
+  HD 120084 b, HD 175679 b each split into "[RV fit, Table 3]" + "[joint RV +
+  astrometry fit, Table 4]" -> 41 rows; single-fit planets unbracketed; HD
+  5608 B stays a separate companion. runs/teng2023_auto not re-recorded.
 
 ## Non-obvious decisions — don't redo this research
 

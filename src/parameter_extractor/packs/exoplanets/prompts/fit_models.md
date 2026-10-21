@@ -24,12 +24,18 @@ For each model:
 - `joint` / `joint_description`: were the datasets fit SIMULTANEOUSLY in one
   model (linked parameters), or analysed separately and combined? Say which
   data were linked.
-- `star_and_planets_joint`: true ONLY if a model that directly constrains the
-  star (an SED fit, stellar evolution isochrones / tracks, stellar
-  atmosphere models) was fit simultaneously with the planet models -- the
-  classic case is a joint SED + RV + transit fit (e.g. with EXOFASTv2). Using
-  previously derived stellar parameters as fixed inputs or priors is NOT a
-  joint fit: say that in `assumptions` or `priors` instead.
+- `star_and_planets_joint`: true ONLY if a stellar model (an SED fit,
+  stellar evolution isochrones / tracks, stellar atmosphere models) and the
+  planet models have their sampled parameters LINKED WITHIN ONE LIKELIHOOD,
+  so that all of them influence one another self-consistently -- e.g. the
+  transit data help constrain the stellar density (mass and radius) while
+  the SED and isochrones constrain the star. The classic case is a joint
+  SED + isochrone + RV + transit fit (e.g. with EXOFASTv2). NOT joint: using
+  stellar parameters derived beforehand (from spectra, an earlier paper, a
+  separate SED or isochrone fit) as fixed inputs or as priors, even if the
+  planet fit then samples them -- record those under `priors` /
+  `assumptions` instead, and list that separate stellar analysis as its own
+  model (with `rows` []).
 - `software`: fitting codes, samplers and models with versions as printed
   (e.g. "EXOFASTv2", "RadVel 1.4", "emcee", "MIST" "v1.2" as stellar
   evolution models, "NextGen" as stellar atmosphere models). If EXOFAST is
