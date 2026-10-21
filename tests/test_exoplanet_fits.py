@@ -2,7 +2,7 @@
 Offline tests for the exoplanet pack's "one row per solution" rows and its
 fitting-model columns (how the values were obtained: data, instruments, joint
 fits, software, priors, assumptions -- NEA-style names). The model responses
-are teng2023's recorded ones (runs/teng2023_auto/), reshaped the way the new
+are teng2023's recorded ones (frozen in tests/fixtures/exoplanet_fits/), reshaped the way the new
 prompts ask for them: HD 14067 b as two solutions (RV fit, Table 3; joint RV +
 astrometry fit, Table 4), plus a hand-written FitModels answer. The PDF only
 has to be readable (eder1994, small); no API calls, no network.
@@ -29,7 +29,9 @@ from parameter_extractor.schemas.fit_models import FitModels, FitSoftware
 from parameter_extractor.validation import exoplanet_archive
 from test_pipeline_offline import PDF
 
-REF = ROOT / "runs" / "teng2023_auto"
+# teng2023's recorded responses for 11 Com and HD 14067 (and the archive's rows for their planets),
+# frozen here so re-recording runs/teng2023_auto doesn't change this test
+REF = ROOT / "tests" / "fixtures" / "exoplanet_fits"
 RV, JOINT = "HD 14067 b [RV fit, Table 3]", "HD 14067 b [joint RV + astrometry fit, Table 4]"
 SYSTEMS = ("11 Com", "HD 14067")
 

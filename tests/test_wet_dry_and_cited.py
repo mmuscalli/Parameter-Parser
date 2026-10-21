@@ -49,7 +49,7 @@ WET_DRY = WetDryConditions(parameters=[
 
 
 def _run(tmp: Path, structure: StructurePlan, wet_dry_calls: list):
-    def fake_wet_dry(ctx, spec, text, struct):
+    def fake_wet_dry(ctx, spec, text, struct, table_images=None):
         wet_dry_calls.append(struct.experiment_sets[0].set_label)
         return WET_DRY
     original_send = _replay_send

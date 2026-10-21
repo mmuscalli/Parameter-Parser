@@ -84,11 +84,26 @@ class StageSpec(BaseModel):
     intro: str
     parameters: List[StageParameter]
     rules: List[str] = Field(default_factory=list)
+    # more than one value per parameter for the posterior's modes (a bimodal inclination:
+    # prograde / retrograde) -> <col>modal_flag, <col>mode<N>, <col>mode<N>err1/err2, <col>mode<N>desc
+    modes: bool = False
+    # send the rendered table pages along (tables whose text layer is garbled or sideways)
+    table_images: bool = False
 
     def _field_rules(self) -> List[str]:
         rules = []
         if self.has_text:
             rules.append("Text parameters: put the text in `text` (exactly as printed) and 0 in `value`.")
+        if self.modes:
+            rules.append("Record EVERY value the paper reports for a parameter. If the posterior is bi- or "
+                         "multimodal and the paper gives a value per mode (e.g. an inclination for prograde "
+                         "i < 90 deg and retrograde i > 90 deg orbits), give the overall value (if printed) with "
+                         "`mode` '' and each mode's value as its own entry with `mode` describing the mode as "
+                         "printed, e.g. 'i < 90 deg (prograde)'. Otherwise `mode` is ''.")
+        if self.table_images:
+            rules.append("Page images, if attached, are renders of the pages with tables (sideways ones shown "
+                         "upright). Read table values and their uncertainties from the images; the text layer "
+                         "of a table can be scrambled.")
         if self.has_uncertainties:
             rules.append("Uncertainties: `err_plus` is the upper uncertainty (positive), `err_minus` the lower one "
                          "(negative, e.g. -0.05); for a symmetric '±x' give x and -x. Leave both 0 when none is "
@@ -130,6 +145,10 @@ class StageSpec(BaseModel):
             out.append(p.column)
             if p.uncertainties:
                 out += [p.column + s for s in self.suffixes_for(p)]
+        if self.modes:                               # after the archive-style block, per parameter
+            for p in self.parameters:
+                if p.kind == "number":
+                    out += mode_columns(p.column, p.uncertainties and self.suffixes_for(p)[:2] or [])
         return out
 
     # ---- when it runs, and which sets it concerns ---------------------------------
@@ -188,6 +207,10 @@ def _models(spec_json: str) -> Tuple[type, type]:
                                                  "'L_sun'; '' if it's already the parameter's unit. The app converts.")),
         **({"text": (str, Field(default="", description="For a text parameter: the text as printed; '' otherwise."))}
            if spec.has_text else {}),
+        **({"mode": (str, Field(default="", description="'' for the parameter's (overall) value; for one mode of a "
+                                                        "bi-/multimodal posterior, the mode as printed, e.g. "
+                                                        "'i < 90 deg (prograde)'."))}
+           if spec.modes else {}),
         **({"err_plus": (float, Field(default=0.0, description="Upper uncertainty, positive; 0 if none.")),
             "err_minus": (float, Field(default=0.0, description="Lower uncertainty, negative; 0 if none.")),
             "limit": (Literal["", "upper", "lower"], Field(default="", description="'upper' for '<x', 'lower' for "
@@ -237,7 +260,8 @@ def spec_standard_columns() -> List[Tuple[str, str]]:
     return out
 
 
-def run_optional_stage(ctx, spec: StageSpec, paper_text: str, structure: StructurePlan):
+def run_optional_stage(ctx, spec: StageSpec, paper_text: str, structure: StructurePlan,
+                       table_images: Optional[List[Path]] = None):
     from parameter_extractor.api_client import call_structured
     _, Result = spec.models()
     return call_structured(
@@ -247,6 +271,7 @@ def run_optional_stage(ctx, spec: StageSpec, paper_text: str, structure: Structu
                                             f"only what the paper states.",
         user_content=spec.prompt(structure, paper_text),
         response_model=Result,
+        image_paths=(table_images or None) if spec.table_images else None,
     )
 
 
@@ -289,6 +314,17 @@ def stage_values(spec: StageSpec, item) -> Tuple[Dict[str, StageValue], List[str
     return out, []
 
 
+MAX_MODES = 3
+
+
+def mode_columns(column: str, error_suffixes: List[str]) -> List[str]:
+    """<col>modal_flag, then per mode N: <col>modeN, its uncertainties, <col>modeNdesc."""
+    out = [column + "modal_flag"]
+    for n in range(1, MAX_MODES + 1):
+        out += [f"{column}mode{n}"] + [f"{column}mode{n}{s}" for s in error_suffixes] + [f"{column}mode{n}desc"]
+    return out
+
+
 @dataclass
 class StageConflict:
     """The same parameter given twice for one set/sample with different values (e.g. a
@@ -318,6 +354,7 @@ def optional_values(spec: StageSpec, result, structure: StructurePlan,
     targets = spec.target_sets(structure)
     out: Dict[Tuple[str, str, str], StageValue] = {}
     owner: Dict[Tuple[str, str, str], Tuple[object, List[str]]] = {}   # (label, sample, parameter) -> (item, its columns)
+    modes: Dict[Tuple[str, str, str], list] = {}                       # same key -> [(mode text, columns)]
     for v in (result.parameters if result is not None else []):
         if v.basis == "assumed":
             continue
@@ -327,6 +364,11 @@ def optional_values(spec: StageSpec, result, structure: StructurePlan,
         if not columns:
             continue
         sample = getattr(v, "sample_label", "") or ""
+        mode = (getattr(v, "mode", "") or "").strip()
+        if mode:                                        # one mode of a multimodal posterior: its own columns
+            for label in ([v.set_label] if v.set_label else targets):
+                modes.setdefault((label, sample, v.parameter), []).append((mode, columns))
+            continue
         for label in ([v.set_label] if v.set_label else targets):
             key = (label, sample, v.parameter)
             if key in owner:
@@ -357,6 +399,28 @@ def optional_values(spec: StageSpec, result, structure: StructurePlan,
             owner[key] = (v, list(columns))
             for column, value in columns.items():
                 out[(label, sample, column)] = value
+    for (label, sample, param), found in modes.items():
+        param_spec = next(p for p in spec.parameters if p.column == param)
+        suffixes = spec.suffixes_for(param_spec)[:2] if param_spec.uncertainties else []
+        seen = []
+        for mode, columns in found:
+            if any(m == mode for m, _ in seen):
+                continue
+            seen.append((mode, columns))
+        if len(seen) > MAX_MODES and problems is not None:
+            problems.append(f"{spec.label}: {sample or label} has {len(seen)} modes for {param}; the first "
+                            f"{MAX_MODES} are in the CSV ({', '.join(m for m, _ in seen[MAX_MODES:])} left out).")
+        first = seen[0][1][param]
+        out[(label, sample, param + "modal_flag")] = StageValue(1, first.basis, first.quote, first.source,
+                                                                first.confidence, "bi-/multimodal posterior")
+        for n, (mode, columns) in enumerate(seen[:MAX_MODES], start=1):
+            main = columns[param]
+            out[(label, sample, f"{param}mode{n}")] = main
+            for s in suffixes:
+                if param + s in columns:
+                    out[(label, sample, f"{param}mode{n}{s}")] = columns[param + s]
+            out[(label, sample, f"{param}mode{n}desc")] = StageValue(mode, main.basis, main.quote, main.source,
+                                                                     main.confidence)
     return out
 
 

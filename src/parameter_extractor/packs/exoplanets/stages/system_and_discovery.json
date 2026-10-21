@@ -7,6 +7,7 @@
  "trigger": {
   "always": true
  },
+ "table_images": true,
  "per": "sample",
  "set_word": "planetary system",
  "intro": "For the planetary systems in the structure plan below, extract system details (whole set: sample_label '') and, ONLY for planets this paper itself reports as newly discovered or confirmed, the discovery details (per planet).",

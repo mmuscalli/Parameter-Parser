@@ -17,6 +17,11 @@ compared: st_* when its st_refname is the paper, sy_* likewise (usually Gaia
 or TICv8, so not), disc_* likewise; the others are listed as from another
 reference.
 
+Every value the row records counts: its own and each posterior mode's (a
+bimodal inclination's prograde / retrograde values) -- a match on any is a
+match (`matched_mode` says which). Differences where the paper's value is
+kept on purpose (Mickey, 2026-10-21) are `minor`, not `differs`: names worded
+differently (NAME_COLUMNS sharing a word) and uncertainties within 20%.
 A value matches when it agrees to within the paper's rounding: 0.5% relative,
 or half the last printed digit (archive zero-padding ignored), whichever is
 larger. Text values match case-insensitively. Fails soft: no network -> a
@@ -144,7 +149,7 @@ def compare(records: List[dict], archive_rows: List[dict], reference: str) -> Li
             continue
         entry["status"] = "compared"
         entry["default_flag"] = chosen.get("default_flag")
-        matches, differs, missing, elsewhere = [], [], [], {}
+        matches, differs, missing, elsewhere, minor, via_mode = [], [], [], {}, [], {}
         for column, archived in chosen.items():
             if column in SKIP or column.endswith(("str", "reflink")) or archived in ("", None):
                 continue
@@ -152,18 +157,67 @@ def compare(records: List[dict], archive_rows: List[dict], reference: str) -> Li
             if ref_col and chosen.get(ref_col) and not _same_reference(chosen[ref_col], reference):
                 elsewhere.setdefault(_strip_html(chosen[ref_col]), []).append(column)
                 continue
-            extracted = rec.get(column)
-            if extracted in (None, ""):
+            values = recorded_values(rec, column)        # the value, then each posterior mode's
+            if not values:
                 if column.startswith(("pl_", "st_")) and not column.endswith("lim"):
                     missing.append(column)
                 continue
-            (matches if _matches(extracted, archived, column) else differs).append(
-                {"column": column, "extracted": extracted, "archive": _number(archived) or _strip_html(archived)})
-        entry.update(matches=[m["column"] for m in matches], differs=differs, not_extracted=missing,
-                     from_other_references=elsewhere)
+            hit = next((label for label, value in values if _matches(value, archived, column)), None)
+            if hit is not None:
+                matches.append(column)
+                if hit:
+                    via_mode[column] = hit
+                continue
+            extracted = values[0][1]
+            item = {"column": column, "extracted": extracted, "archive": _number(archived) or _strip_html(archived)}
+            why = _minor(column, extracted, archived)
+            if why:
+                minor.append(dict(item, why=why))
+            else:
+                differs.append(item)
+        entry.update(matches=matches, differs=differs, not_extracted=missing, from_other_references=elsewhere)
+        if minor:
+            entry["minor"] = minor
+        if via_mode:
+            entry["matched_mode"] = via_mode
         report.append(entry)
     _mark_archive_solution(report)
     return report
+
+
+# names of things, where the paper's and the archive's wording can differ for the same thing
+# ('1.88 m reflector' / '1.88 m Telescope'): the paper's is kept and it isn't a difference
+NAME_COLUMNS = ("disc_facility", "disc_telescope", "disc_instrument", "disc_locale", "pl_tsystemref")
+UNCERTAINTY_MINOR = 0.2           # uncertainties within 20% of each other: the paper's is kept
+_STOP = {"the", "and", "of", "for", "telescope", "observatory", "spectrograph", "m"}
+
+
+def recorded_values(rec: dict, column: str) -> List[tuple]:
+    """[(mode label, value)] for an archive column: the row's own value ('' label), then the
+    matching value of each posterior mode (<col>mode<N>, <col>mode<N>err1, ...)."""
+    out = []
+    if rec.get(column) not in (None, ""):
+        out.append(("", rec[column]))
+    base, suffix = (column[:-4], column[-4:]) if column.endswith(("err1", "err2")) else (column, "")
+    for n in range(1, 10):
+        value = rec.get(f"{base}mode{n}{suffix}")
+        if value not in (None, ""):
+            out.append((f"mode {n}: {rec.get(f'{base}mode{n}desc') or ''}".strip(" :"), value))
+    return out
+
+
+def _minor(column: str, extracted, archived) -> str:
+    """Why a difference is minor (the paper's value kept), or ''."""
+    a, b = _number(extracted), _number(archived)
+    if a is not None and b is not None:
+        if column.endswith(("err1", "err2")) and abs(a - b) <= UNCERTAINTY_MINOR * max(abs(a), abs(b)):
+            return "uncertainty within 20% of the archive's"
+        return ""
+    if column in NAME_COLUMNS:
+        words = lambda t: {w for w in re.findall(r"[a-z0-9.]+", _strip_html(t).lower()) if w not in _STOP}
+        if words(extracted) & words(archived):
+            return "same thing, worded differently"
+    return ""
 
 
 def _mark_archive_solution(report: List[dict]) -> None:

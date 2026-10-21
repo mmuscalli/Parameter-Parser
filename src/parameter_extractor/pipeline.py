@@ -282,7 +282,7 @@ def extract(
         specs = triggered_specs(ex.structure, parsed.text, config.optional_stages)
         for spec in specs:
             ctx.total_steps += 1
-            running[spec.name] = pool.submit(run_optional_stage, ctx, spec, text, ex.structure)
+            running[spec.name] = pool.submit(run_optional_stage, ctx, spec, text, ex.structure, table_images)
         results = _collect(ctx, running)
         # a domain pack without these stages gets empty stand-ins, so the rest works unchanged
         ex.metadata = results["metadata"]
@@ -354,8 +354,18 @@ def _pack_postprocess(pack, rows, ex: "Extraction", config: RunConfig) -> List[F
     from parameter_extractor.stages.optional import optional_values
     problems: List[str] = []
     conflicts = []
+    modal = []
     for spec, result in ex.optional_list:
-        optional_values(spec, result, ex.structure, problems, conflicts)
+        values = optional_values(spec, result, ex.structure, problems, conflicts)
+        for (label, sample, column), v in values.items():
+            if column.endswith("modal_flag"):
+                param = column[:-len("modal_flag")]
+                modes = [f"{values[(label, sample, f'{param}mode{n}desc')].value} = "
+                         f"{values[(label, sample, f'{param}mode{n}')].value:g}"
+                         for n in range(1, 10) if (label, sample, f"{param}mode{n}") in values]
+                modal.append(Flag("multimodal", f"{sample or label}: {param} has a bi-/multimodal posterior -- "
+                                                f"{'; '.join(modes)} (in {param}mode1..., {param}modal_flag = 1)",
+                                  quote=v.quote or None, source=v.source or None))
     if pack.uses("row_labels"):
         exo.row_labels(rows, ex.structure, config.paper_prefix)
     if pack.uses("exoplanet_masses"):
@@ -368,7 +378,7 @@ def _pack_postprocess(pack, rows, ex: "Extraction", config: RunConfig) -> List[F
         fit_flags = [Flag("fit_model", m) for m in
                      exoplanet_fits.apply_fit_models(rows, ex.fit_models, ex.structure, config.paper_prefix)]
         fit_flags += exoplanet_fits.model_flags(rows, ex.fit_models)
-    return [Flag("unit_conversion", p) for p in problems] + [Flag("out_of_range", m) for m in heavy] + fit_flags + \
+    return [Flag("unit_conversion", p) for p in problems] + [Flag("out_of_range", m) for m in heavy] + fit_flags + modal + \
            [Flag("conflicting_values", c.message, quote=c.quote or None, source=c.source or None) for c in conflicts]
 
 
@@ -406,6 +416,12 @@ def archive_flags(archive: dict) -> List[Flag]:
             f"{name}: {len(e['matches'])} of {len(e['matches']) + len(e['differs'])} values match the NASA "
             f"Exoplanet Archive's '{archive['reference']}' parameter set{other}"
             + (f"; differ: {differs}" if differs else "")
+            + (f"; minor differences, the paper's values kept: "
+               + "; ".join(f"{m['column']} {m['extracted']} vs {m['archive']} ({m['why']})" for m in e["minor"])
+               if e.get("minor") else "")
+            + (f"; matched a posterior mode: "
+               + "; ".join(f"{c} ({how})" for c, how in e["matched_mode"].items())
+               if e.get("matched_mode") else "")
             + (f"; the archive also has {len(e['not_extracted'])} value(s) not extracted "
                f"({', '.join(e['not_extracted'][:8])}{'...' if len(e['not_extracted']) > 8 else ''})"
                if e["not_extracted"] else "") + "."))

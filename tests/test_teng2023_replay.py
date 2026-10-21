@@ -1,7 +1,7 @@
 """
 Offline replay of the exoplanet pack's reference paper, teng2023 (PASJ; 32
-systems, sideways tables; re-recorded 2026-10-21 with one row per solution and
-the fitting-model stage, $1.73): the saved model responses in runs/teng2023_auto/
+systems, sideways tables; re-recorded 2026-10-21 with one row per solution, the
+fitting-model stage, posterior modes and table images for every stage, $1.85): the saved model responses in runs/teng2023_auto/
 go through the real pipeline, which must reproduce the committed CSV exactly;
 the NASA Exoplanet Archive comparison runs against the saved archive rows
 (archive_rows.json) instead of the network. Covers units as printed (rad,
@@ -73,16 +73,30 @@ def test_teng2023_replay_reproduces_reference():
             assert lyn["archive_name"] == "HD 81688 b" and lyn["matched_by"]
             assert next(e for e in report if e["pl_name"] == "HD 5608 B")["status"] == "planet not in the archive"
             assert "sy_plx" in by_row[("11 Com b", "RV-only Keplerian fits (Table 3)")]["from_other_references"]["TICv8"]
-            # the archive took the joint fit: the RV-only rows say so; the joint rows only differ in inclination
-            # (Table 4 prints all / prograde / retrograde values; the archive took the prograde one)
+            # the archive took the joint fit: the RV-only rows say so
             rv_e = by_row[("HD 14067 b", rv["pl_fitlabel"])]
             joint_e = by_row[("HD 14067 b", joint["pl_fitlabel"])]
             assert rv_e["archive_solution"] == joint["pl_fitlabel"] and "archive_solution" not in joint_e
-            assert [d["column"] for d in joint_e["differs"]] == ["pl_orbincl"]
+            # Table 4's bimodal inclination: overall, prograde and retrograde values all recorded (read from the
+            # page image, with uncertainties); the archive's prograde value matches mode 1
+            assert (joint["pl_orbincl"], joint["pl_orbinclerr1"], joint["pl_orbinclerr2"]) == ("118.0", "31.0", "-84.0")
+            assert (joint["pl_orbinclmode1"], joint["pl_orbinclmode2"], joint["pl_orbinclmodal_flag"]) == ("39.0", "141.0", "1")
+            assert joint["pl_orbinclmode1desc"].startswith("i < 90")
+            assert not joint_e["differs"] and joint_e["matched_mode"]["pl_orbincl"].startswith("mode 1")
+            # minor differences keep the paper's values (here: uncertainties within 20% -- wording is
+            # covered in test_exoplanets.py; this run read 75 Cet c's discovery names as the archive does)
+            hd120084 = [e for e in report if e["pl_name"] == "HD 120084 b"]
+            minor = {m["column"]: m for e in hd120084 for m in e.get("minor", [])}
+            assert minor["st_masserr1"]["extracted"] == 0.31 and minor["st_masserr1"]["archive"] == 0.28
+            assert not any(d["column"] == "st_masserr1" for e in hd120084 for d in e["differs"])
+            # a real misreading is still caught: HD 167042 b's e is +0.033 in the paper, read as +0.003
+            assert [d["column"] for d in by_row[("HD 167042 b", "RV-only Keplerian fits (Table 3)")]["differs"]] == [
+                "pl_orbeccenerr1"]
 
             flags = json.loads(result.flags_path.read_text())["paper_level"]
             assert any("so differences here are expected" in f["message"] and "HD 14067 b" in f["message"]
                        for f in flags if f["kind"] == "archive_check")
+            assert sum(f["kind"] == "multimodal" for f in flags) == 3
             heavy = sorted(f["message"].split(":")[0] for f in flags if f["kind"] == "out_of_range")
             assert heavy == ["HD 175679 b", "HD 175679 b", "HD 5608 B"]
             assert not [f for f in flags if f["kind"] == "conflicting_values"]       # solutions are separate rows

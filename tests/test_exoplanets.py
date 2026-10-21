@@ -45,7 +45,12 @@ def test_pack_and_template():
         assert list(specs) == ["planet_parameters", "stellar_parameters", "system_and_discovery"]
         planet = specs["planet_parameters"]
         assert planet.per == "sample" and "pl_orbpererr1" in planet.output_columns()
-        assert all(c in pack.template_columns for s in specs.values() for c in s.output_columns())
+        import re
+        is_mode = lambda c: re.search(r"(modal_flag|mode\d(err[12]|desc)?)$", c)
+        assert all(c in pack.template_columns for s in specs.values() for c in s.output_columns() if not is_mode(c))
+        from parameter_extractor.registry import standard_columns
+        modes = [c for s in specs.values() for c in s.output_columns() if is_mode(c)]
+        assert "pl_orbinclmode2err1" in modes and "pl_orbinclmodal_flag" in modes and set(modes) <= set(standard_columns())
         Item, _ = planet.models()
         assert {"err_plus", "err_minus", "limit", "text", "unit", "sample_label"} <= set(Item.model_fields)
     finally:
@@ -126,6 +131,46 @@ def test_archive_names_angles_and_padding():
     assert (e["archive_name"], e["matched_by"], e["status"]) == ("HD 81688 b", "orbital period", "compared")
     assert set(e["matches"]) == {"pl_orbper", "pl_rvamp", "st_teff"} and not e["differs"]
     assert e["from_other_references"] == {"TICv8": ["sy_plx"]}
+
+
+def test_posterior_modes():
+    """Every value the paper records: the overall one, and one per mode of a bimodal posterior."""
+    from types import SimpleNamespace
+    from parameter_extractor.stages.optional import optional_values
+    packs.activate("exoplanets")
+    try:
+        from parameter_extractor.stages.optional import load_specs
+        spec = load_specs()["planet_parameters"]
+        Item, Result = spec.models()
+        assert "mode" in Item.model_fields and spec.table_images
+        item = lambda value, plus, minus, mode: Item.model_validate(dict(
+            set_label="HD 14067", sample_label="HD 14067 b", parameter="pl_orbincl", value=value, unit="deg",
+            err_plus=plus, err_minus=minus, mode=mode, basis="stated", quote=str(value), source="Table 4",
+            confidence="high"))
+        conflicts = []
+        out = optional_values(spec, Result(parameters=[item(118, 31, -84, ""), item(39, 28, -13, "i < 90 deg"),
+                                                       item(141, 12, -23, "i > 90 deg")]),
+                              SimpleNamespace(experiment_sets=[]), [], conflicts)
+        cols = {k[2]: v.value for k, v in out.items()}
+        assert not conflicts and cols["pl_orbincl"] == 118 and cols["pl_orbinclerr2"] == -84
+        assert cols["pl_orbinclmodal_flag"] == 1
+        assert (cols["pl_orbinclmode1"], cols["pl_orbinclmode1err1"], cols["pl_orbinclmode1desc"]) == (39, 28, "i < 90 deg")
+        assert (cols["pl_orbinclmode2"], cols["pl_orbinclmode2desc"]) == (141, "i > 90 deg")
+        # the archive took the prograde mode: a match on any recorded value is a match
+        rec = {"pl_name": "HD 14067 b", **cols}
+        rows = [{"pl_name": "HD 14067 b", "pl_refname": "Teng et al. 2023", "pl_orbincl": "39.0",
+                 "pl_orbinclerr1": "28.0", "pl_orbinclerr2": "-13.0", "disc_telescope": "1.88 m Telescope",
+                 "disc_instrument": "HIDES Echelle Spectrograph", "st_masserr1": "0.28", "st_mass": "2.16"}]
+        e = archive.compare([dict(rec, disc_telescope="1.88 m reflector", disc_instrument="HIDES",
+                                  st_masserr1=0.31, st_mass=2.16)], rows, "Teng et al. 2023")[0]
+        assert {"pl_orbincl", "pl_orbinclerr1", "pl_orbinclerr2"} <= set(e["matches"]) and not e["differs"]
+        assert e["matched_mode"]["pl_orbincl"] == "mode 1: i < 90 deg"
+        assert sorted(m["column"] for m in e["minor"]) == ["disc_instrument", "disc_telescope", "st_masserr1"]
+        far = archive.compare([dict(rec, st_masserr1=0.5, disc_telescope="Subaru", st_mass=2.16)], rows,
+                              "Teng et al. 2023")[0]
+        assert sorted(d["column"] for d in far["differs"]) == ["disc_telescope", "st_masserr1"]
+    finally:
+        packs.activate("prebiotic_chemistry")
 
 
 def test_two_values_for_one_parameter():

@@ -1,0 +1,53 @@
+{
+ "paper_id": "Teng2023_PASJ75_OPSP_revisit",
+ "experiment_sets": [
+  {
+   "set_label": "HD 14067",
+   "set_type": "Independent",
+   "varying_condition_summary": "G9 III giant, one planet, RV-only fit (Table 3) and joint RV + astrometry fit (Table 4)",
+   "source_table_or_section": "Tables 3 and 4",
+   "data_source": "",
+   "samples": [
+    {
+     "sample_label": "HD 14067 b [RV fit, Table 3]",
+     "duration_hr": null,
+     "cycle_number": null,
+     "source": "Table 3, HD 14067 b row"
+    },
+    {
+     "sample_label": "HD 14067 b [joint RV + astrometry fit, Table 4]",
+     "duration_hr": null,
+     "cycle_number": null,
+     "source": "Table 4, HD 14067 b column"
+    }
+   ]
+  },
+  {
+   "set_label": "11 Com",
+   "set_type": "Independent",
+   "varying_condition_summary": "G8 III giant, one substellar companion, RV orbit (Table 3)",
+   "source_table_or_section": "Table 3",
+   "data_source": "",
+   "samples": [
+    {
+     "sample_label": "11 Com b",
+     "duration_hr": null,
+     "cycle_number": null,
+     "source": "Table 3, 11 Com b row"
+    }
+   ]
+  }
+ ],
+ "total_planned_rows": 41,
+ "excluded_data": [
+  "Candidate RV signals in ε Tau (872 d, 16 d, 15 d), 11 Com (434 d, 198 d), 24 Boo (65 d and 149 d) and ω Ser (40.54 d, 1852 d): not confirmed as planets, no Table 3/4 parameters, so no rows.",
+  "41 Lyn b and 14 And b are questioned in the text because of BIS correlation, but Table 3 still reports their parameters, so they keep rows.",
+  "Long-term RV trends (HD 5608, κ CrB, HD 167042, 18 Del, HD 208897) are not separate companions; only the implied outer-companion mass-separation constraints are given, so no extra rows. Trend terms are columns of Table 3.",
+  "HD 14067 b alternative orbit solution from Wang et al. (2014) is discussed but not fitted here as separate parameters.",
+  "Table 1 (stellar parameters) and Table 2 (data acquisition) contain host-star properties only, so no planet rows.",
+  "Stars not revisited (HD 119445, HD 100655, HD 40956, HD 111591) and the planet-population sample in Section 7 from Exoplanet.eu/NASA archive are not planned.",
+  "Single-instrument alternative Keplerian fits for HD 32518 and ω Ser (Fig. 31) are text-only comparisons, not tabulated solutions.",
+  "Dynamical-mass constraints for outer companions (Fig. 6) are not tabulated."
+ ],
+ "notes": "One row per planet solution; 32 host systems. Table 3 gives RV-only fits for 37 planets across 32 systems. Table 4 gives joint RV+astrometry fits for HD 5608 B (stellar companion, only solution), and for HD 14067 b, HD 120084 b, HD 175679 b, each also in Table 3, so those three get two bracket-labelled solutions. 75 Cet c is the new planet."
+}

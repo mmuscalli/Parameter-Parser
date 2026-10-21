@@ -1,0 +1,37 @@
+{
+ "parameters": [
+  {
+   "set_label": "HD 14067",
+   "sample_label": "",
+   "parameter": "sy_plx",
+   "value": 7.1092,
+   "unit": "",
+   "text": "",
+   "err_plus": 0.0,
+   "err_minus": 0.0,
+   "limit": "",
+   "basis": "stated",
+   "quote": "HD 14067 7 . 1092",
+   "source": "Table 1",
+   "confidence": "high",
+   "note": ""
+  },
+  {
+   "set_label": "11 Com",
+   "sample_label": "",
+   "parameter": "sy_plx",
+   "value": 10.1677,
+   "unit": "",
+   "text": "",
+   "err_plus": 0.0,
+   "err_minus": 0.0,
+   "limit": "",
+   "basis": "stated",
+   "quote": "11 Com 10.1677",
+   "source": "Table 1",
+   "confidence": "high",
+   "note": ""
+  }
+ ],
+ "notes": "Parallaxes taken from Table 1 (no uncertainties given). Discovery year for 75 Cet c is not explicitly stated, so omitted. Other planets were discovered in earlier papers, so no discovery details were given."
+}

@@ -654,7 +654,36 @@ were obtained, with NEA-style names.
   the archive the prograde value. Known gap: optional stages get NO table
   images (only structure planner, chemistry, fit_models do), so Table 4's
   vertically garbled text cost the inclination uncertainties -- candidate
-  fix: a spec option to send table images (~+20K tokens per stage).
+  fix: a spec option to send table images (~+20K tokens per stage). -> DONE below.
+
+## Posterior modes, paper-first archive differences, table images (2026-10-21)
+
+Mickey / expert: capture ALL recorded values (at least one should match the
+archive); note bi-/multimodal posteriors with each mode's values; minor naming
+differences and small uncertainty differences -> the paper's value, not a
+discrepancy. Plus table images for the planet/stellar/system stages.
+- Spec fields `modes` and `table_images` (stages/optional.py). `modes`: item
+  field `mode` ('' = the overall value); mode items -> `<col>modal_flag` (1),
+  `<col>mode<N>`, `<col>mode<N>err1/err2`, `<col>mode<N>desc` (N <= MAX_MODES
+  = 3; more -> unit_conversion-style problem), registered via output_columns;
+  not conflicts. `multimodal` flag per parameter (GUI group "How the values
+  were obtained"). `table_images`: run_optional_stage sends the rasterized
+  table pages + a prompt rule to read tables from the images. On for
+  planet/stellar (both) and system_and_discovery (images only).
+- Archive compare: `recorded_values()` = the row's value + each mode's; any
+  match counts (`matched_mode`). `_minor()`: NAME_COLUMNS (disc_facility/
+  telescope/instrument/locale, pl_tsystemref) sharing a significant word, or
+  err1/err2 within 20% (UNCERTAINTY_MINOR) -> `minor` (paper's value kept),
+  not `differs`; listed in the flag text.
+- teng2023 re-recorded again (5 min, 504K in / 85K out, $1.85): 2111 match
+  (was 1394 -- images recover uncertainties), 33 differ, 9 minor; joint rows
+  match via the prograde inclination mode (118 / 39 / 141 recorded); low-
+  confidence flags 26 -> 10. All remaining differences on the RV-only rows
+  the archive didn't take (marked) except HD 167042 b e err1: paper +0.033,
+  read +0.003 -- dense full-page Table 3 loses superscripts (the API scales
+  images to ~1568 px). Candidate fix: split dense table pages into halves.
+- tests/test_exoplanet_fits.py now uses frozen fixtures
+  (tests/fixtures/exoplanet_fits/) instead of runs/teng2023_auto.
 
 ## Non-obvious decisions — don't redo this research
 
