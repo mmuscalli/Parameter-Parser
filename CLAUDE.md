@@ -453,6 +453,24 @@ keep it for now, refresh after the open issues are sorted).
   prompt > 100K) -> `StageUsage.cost_usd`, Summary tab column, CLI,
   run_summary.json. The API returns tokens only.
 
+## Parallel stages (2026-10-20, step 1 of the domain-pack plan)
+
+`pipeline.extract`: metadata (page 1 only) runs alongside the structure
+planner; after it, methodology, chemistry, term_search, wet_dry (and the
+optional equations step, from the start) run at once in a ThreadPoolExecutor
+(`settings.MAX_PARALLEL_STAGES`). Progress: `ctx.note` for "running in
+parallel", `ctx.step` as each finishes; usage recorded under a lock and
+sorted by `STAGE_ORDER`. Client `max_retries=5` (parallel calls can hit a
+key's per-minute token limit; the SDK honours retry-after). kim2019 live:
+71 s vs ~90 s sequential; the floor is structure + chemistry. Plan agreed
+with Mickey: (1) parallel -- done; (2) declarative optional-stage specs,
+wet-dry converted first; (3) domain packs (template, vocab, prompts, stages,
+calculators); (4) second pack: exoplanets -- test paper Liu2008 (folder next
+to the other papers) with an Exoplanet Archive export
+`PS_2026.10.20_17.17.08.csv` (header row = archive column names, row 2 = 11 Com
+b values, then `# COLUMN name: description` lines; default_flag = 1). Rows
+there are per planet/star, not per sample.
+
 ## Non-obvious decisions — don't redo this research
 
 - **Schema shape is grounded in `../POLO_variable_mapping.csv`** (one level

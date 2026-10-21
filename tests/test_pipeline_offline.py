@@ -76,9 +76,14 @@ def test_replay_reproduces_committed_csv():
         assert result.csv_path.read_text() == committed, "replayed CSV differs from committed run"
         assert len(result.rows) == 42
 
-        assert [e.step for e in events] == [1, 2, 3, 4, 5, 6]
-        assert [e.stage for e in events] == ["parse", "structure_planner", "metadata",
-                                             "methodology", "chemistry", "assemble"]
+        # metadata runs alongside the structure step, then methodology and chemistry together;
+        # each is reported as it finishes, so their order varies -- the step count doesn't
+        steps = [e for e in events if e.stage != "parallel"]
+        assert [e.step for e in steps] == [1, 2, 3, 4, 5, 6] and all(e.total_steps == 6 for e in events)
+        assert [e.stage for e in steps][:2] == ["parse", "structure_planner"] and steps[-1].stage == "assemble"
+        assert sorted(e.stage for e in steps[2:5]) == ["chemistry", "metadata", "methodology"]
+        assert any(e.stage == "parallel" and "methodology" in e.message for e in events)
+        assert [u.stage for u in result.usage] == ["structure_planner", "metadata", "methodology", "chemistry"]
 
         audits = [json.loads((REPLAY_DIR / f"{s}.audit.json").read_text())
                   for s in STAGE_FOR_MODEL.values() if (REPLAY_DIR / f"{s}.audit.json").exists()]

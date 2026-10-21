@@ -31,6 +31,7 @@ run_triage_only() below for optional screening.
 from __future__ import annotations
 import json
 import threading
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import asdict, dataclass, field
 from datetime import datetime
 from pathlib import Path
@@ -226,45 +227,77 @@ def extract(
     if figures and on_figures:
         on_figures(ex)
 
+    convert_equations = bool(config.equations_to_latex and equations)
+    if convert_equations:
+        ctx.total_steps += 1            # optional (RunConfig.equations_to_latex), one small call
+    pool = ThreadPoolExecutor(max_workers=settings.MAX_PARALLEL_STAGES, thread_name_prefix="stage")
     try:
+        # metadata needs only page 1: it runs while the experiment structure is planned
+        running = {"metadata": pool.submit(run_metadata_extraction, ctx, parsed.page_texts[0])}
+        if convert_equations:
+            running["equations"] = pool.submit(_convert_equations, ctx, equations)
         ctx.step("structure_planner", "Planning the experiment structure")
         ex.structure = run_structure_planner(ctx, parsed.text, table_images=table_images)
         ex.structure_ready.set()
 
-        ctx.step("metadata", "Extracting bibliographic metadata")
-        ex.metadata = run_metadata_extraction(ctx, parsed.page_texts[0])
-
-        ctx.step("methodology", "Extracting experimental methodology")
-        ex.methodology = run_methodology_extraction(ctx, parsed.text, ex.structure)
-
+        # everything else depends only on the structure: run it all at once
+        running["methodology"] = pool.submit(run_methodology_extraction, ctx, parsed.text, ex.structure)
+        running["chemistry"] = pool.submit(run_chemistry_extraction, ctx, parsed.text, ex.structure,
+                                           vocab["species_names"], table_images=table_images)
         if terms:
-            ctx.step("term_search", f"Searching for the {len(terms)} parameter(s) you asked for")
             columns = VariableRegistry(config.registry_path).known_columns()
-            ex.term_search = run_term_search(ctx, terms, parsed.text, ex.structure, columns)
-
+            running["term_search"] = pool.submit(run_term_search, ctx, terms, parsed.text, ex.structure, columns)
         if has_cycling(ex.structure):
             ctx.total_steps += 1        # only papers with wet-dry cycling get this step
-            ctx.step("wet_dry", "Extracting wet-dry cycling conditions")
-            ex.wet_dry = run_wet_dry(ctx, parsed.text, ex.structure)
-
-        ctx.step("chemistry", "Extracting solution chemistry")
-        ex.chemistry = run_chemistry_extraction(ctx, parsed.text, ex.structure, vocab["species_names"],
-                                                table_images=table_images)
-
-        if config.equations_to_latex and equations:
-            ctx.total_steps += 1        # optional (RunConfig.equations_to_latex), one small call
-            ctx.step("equations", f"Converting {len(equations)} labelled equation(s) to LaTeX")
-            try:
-                transcribe_equations(ctx, equations)
-            except PipelineError as e:  # not worth failing the whole extraction over
-                for eq in equations:
-                    eq.latex_note = f"LaTeX conversion failed: {e}"
-            _write_equations(ctx, equations)
+            running["wet_dry"] = pool.submit(run_wet_dry, ctx, parsed.text, ex.structure)
+        results = _collect(ctx, running)
+        ex.metadata, ex.methodology, ex.chemistry = results["metadata"], results["methodology"], results["chemistry"]
+        ex.term_search, ex.wet_dry = results.get("term_search"), results.get("wet_dry")
+        ctx.sort_usage(STAGE_ORDER)
     except BaseException as e:
+        pool.shutdown(wait=False, cancel_futures=True)
         ex.failure = str(e) or type(e).__name__
         ex.structure_ready.set()     # release anyone waiting in plan_figure()
         raise
+    pool.shutdown(wait=False)
     return ex
+
+
+# the order stages are listed in (summary, usage table) whatever order they finish in
+STAGE_ORDER = ["structure_planner", "metadata", "methodology", "term_search", "wet_dry", "chemistry",
+               "equations", "figure_planner"]
+STAGE_LABELS = {"metadata": "Bibliographic metadata", "methodology": "Experimental methodology",
+                "chemistry": "Solution chemistry", "term_search": "Parameter search",
+                "wet_dry": "Wet-dry cycling conditions", "equations": "Equations to LaTeX"}
+
+
+def _collect(ctx: RunContext, running: dict) -> dict:
+    """Wait for the parallel stages, reporting each as it finishes. The first error (or a
+    cancellation) stops the run; calls already in flight finish in the background."""
+    by_future = {f: name for name, f in running.items()}
+    pending = set(running)
+    ctx.note("parallel", f"Extracting in parallel: {_names(pending)}")
+    results = {}
+    for future in as_completed(by_future):
+        name = by_future[future]
+        results[name] = future.result()          # re-raises the stage's error here
+        pending.discard(name)
+        ctx.step(name, f"{STAGE_LABELS.get(name, name)} done"
+                       + (f" -- still running: {_names(pending)}" if pending else ""))
+    return results
+
+
+def _names(stages) -> str:
+    return ", ".join(STAGE_LABELS.get(n, n).lower() for n in sorted(stages, key=STAGE_ORDER.index))
+
+
+def _convert_equations(ctx: RunContext, equations: List[EquationCandidate]) -> None:
+    try:
+        transcribe_equations(ctx, equations)
+    except PipelineError as e:  # not worth failing the whole extraction over
+        for eq in equations:
+            eq.latex_note = f"LaTeX conversion failed: {e}"
+    _write_equations(ctx, equations)
 
 
 def _write_equations(ctx: RunContext, equations: List[EquationCandidate]) -> None:

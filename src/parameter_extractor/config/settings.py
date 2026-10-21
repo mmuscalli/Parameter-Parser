@@ -47,6 +47,9 @@ MODELS = {
     "equations": "claude-sonnet-5-5",        # optional LaTeX conversion; ~2 cents for 13 equations
 }
 
+# Stages that depend only on the experiment structure run at the same time (pipeline.extract)
+MAX_PARALLEL_STAGES = 6
+
 MAX_TOKENS = 64000  # streamed (api_client.py); eder1994 chemistry alone overflowed 16000
 
 # --- Validation / gold-standard scoring -------------------------------------

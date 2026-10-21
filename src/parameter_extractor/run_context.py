@@ -55,13 +55,33 @@ class RunContext:
     usage: List[StageUsage] = field(default_factory=list)
     _step: int = 0
     _client: object = None
+    # stages run in parallel (pipeline.extract): progress, usage and the client are shared
+    _lock: threading.Lock = field(default_factory=threading.Lock, repr=False)
 
     def step(self, stage: str, message: str) -> None:
-        """Mark the start of the next step: check for cancellation, then report it."""
+        """Mark the start (or, for parallel stages, the end) of the next step: check for
+        cancellation, then report it."""
         self.check_cancelled()
-        self._step += 1
+        with self._lock:
+            self._step += 1
+            event = ProgressEvent(self._step, self.total_steps, stage, message)
+        if self.on_progress:
+            self.on_progress(event)
+
+    def note(self, stage: str, message: str) -> None:
+        """Report what's happening without advancing the step count."""
         if self.on_progress:
             self.on_progress(ProgressEvent(self._step, self.total_steps, stage, message))
+
+    def record_usage(self, usage: StageUsage) -> None:
+        with self._lock:
+            self.usage.append(usage)
+
+    def sort_usage(self, order: List[str]) -> None:
+        """Usage in a fixed stage order (parallel stages finish in any order)."""
+        rank = {s: i for i, s in enumerate(order)}
+        with self._lock:
+            self.usage.sort(key=lambda u: rank.get(u.stage, len(order)))
 
     def check_cancelled(self) -> None:
         if self.cancel_event is not None and self.cancel_event.is_set():
@@ -70,9 +90,12 @@ class RunContext:
     @property
     def client(self):
         """One Anthropic client per run, built from the run's own key."""
-        if self._client is None:
-            if not self.config.api_key:
-                raise ApiKeyMissingError()
-            import anthropic  # lazy: parsing/flattening work without the SDK installed
-            self._client = anthropic.Anthropic(api_key=self.config.api_key)
-        return self._client
+        with self._lock:
+            if self._client is None:
+                if not self.config.api_key:
+                    raise ApiKeyMissingError()
+                import anthropic  # lazy: parsing/flattening work without the SDK installed
+                # parallel stages can briefly exceed a key's per-minute token limit: the SDK
+                # waits and retries a rate-limited request (honouring retry-after)
+                self._client = anthropic.Anthropic(api_key=self.config.api_key, max_retries=5)
+            return self._client

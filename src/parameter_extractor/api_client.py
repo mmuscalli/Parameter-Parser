@@ -122,7 +122,7 @@ def call_structured(
     parsed = response.parsed_output
     raw_text = next((b.text for b in response.content if b.type == "text"), None)
 
-    ctx.usage.append(StageUsage(stage=stage, model=model,
+    ctx.record_usage(StageUsage(stage=stage, model=model,
                                 input_tokens=response.usage.input_tokens,
                                 output_tokens=response.usage.output_tokens,
                                 elapsed_sec=round(elapsed, 2),
