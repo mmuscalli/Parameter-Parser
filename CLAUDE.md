@@ -570,7 +570,64 @@ Fixes from that run:
   finder and equation finder (closed after extract's local steps) -- each page
   parsed once; teng2023 local time 2.6 min -> 1 min, outputs identical.
 Open question for Mickey: which fit to prefer when a paper gives two (the
-archive used the joint fit); currently first-listed + flag.
+archive used the joint fit); currently first-listed + flag. -> ANSWERED below.
+
+## Exoplanet solutions + fitting models + stage toggles (2026-10-21)
+
+Mickey (after consulting an exoplanet subject-matter expert): list every fit as
+its own row -- joint vs non-joint, and fits joint in different ways, are
+separate data points for the same planet -- and record HOW the NEA values
+were obtained, with NEA-style names.
+- **One row per solution**: the exoplanet structure prompt makes one sample per
+  (planet, solution), labelled "HD 14067 b [joint RV + astrometry fit, Table
+  4]"; single-solution planets keep the bare name. `row_labels` splits the
+  bracket off (`exoplanet_fits.split_solution`): pl_name = planet, pl_fitlabel =
+  solution. Planet/system stages: "never mix solutions on one row";
+  stellar_parameters is now `per: sample` (a joint fit's own stellar values
+  go on its row; star-wide values on all rows). Archive check: one entry per
+  row, `solution` in the report and flag text.
+- **Fitting models**: code stage `fit_models` (pack `builtin_stages`;
+  `schemas/fit_models.py`, `stages/fit_models.py`, pack prompt
+  `fit_models.md`, table images sent -- priors are often tabulated). Per model:
+  rows / stars it produced, datasets (kind, facility, instrument, bands),
+  joint + description, star_and_planets_joint, software (role: fitting code,
+  sampler, stellar evolution/atmosphere models...), priors (shape, centre,
+  width, lower, upper as printed + unit), assumptions (+quote). Flat schema,
+  0 anyOf. `calculators/exoplanet_fits.py` -> columns (standard columns of the
+  pack via registry when `pack.uses("fit_models")`, written only when filled):
+  pl_fitlabel/data/joint_flag/jointdesc/stjoint_flag/software/exofastver/
+  assump/priors, pl_fit<kind>_flag + pl_fit<kind>inst (kind words rv, tran,
+  ast, ima, ttv like the archive's flags; sed, spec, occ, phase, plx, astero,
+  other); st_fitlabel/data/bands/inst/software/models/exofastver/joint_flag/
+  assump/priors; per archive parameter <col>priortype/priorcen/priorwid/
+  priorlo/priorhi in the column's unit (convert_printed; widths as errors).
+  A stellar-only model applies to all rows of its star; a model that also
+  produced planet values only to its own rows. EXOFAST version parsed
+  locally (EXOFASTv2 -> 2; no version -> blank + `fit_model` flag). Flags
+  (`fit_model`, own GUI group): unknown row/star labels, unconvertible priors,
+  rows with no model, models linked to nothing (e.g. SpecMatch feeding
+  priors); medium/low-confidence models -> low_confidence.
+- **Live test** (not Teng -- Mickey: expensive): nielsen2019 (arXiv
+  1811.01882, HD 1397 b, EXOFASTv2 joint SED + RV + transit; PDF in
+  `Paper Lists/Nielsen2019/`), 31 s, $0.36. Reference run
+  `runs/nielsen2019_auto/` + `tests/test_nielsen2019_replay.py`: 117/117
+  compared values match the archive; exofastver 2, stjoint 1, MIST, all SED
+  bands, priors named without numbers kept as shape + text. Fixes from it:
+  BJD_TDB / HJD_UTC (+ offsets) are Julian dates; fraction/ppm/ppt -> %;
+  archive text match ignores case, _/-/spaces and a bracketed abbreviation;
+  confidence flags show text values as text and name the planet.
+  The splitting prompt was only tested offline (`tests/test_exoplanet_fits.py`
+  reshapes teng's recorded responses into two HD 14067 b solutions);
+  `runs/teng2023_auto` predates it and replays with fit_models off.
+- **Stage toggles**: `optional.toggleable_stages(pack)` = spec stages (+ new
+  spec field `description`) + optional code stages (fit_models). GUI
+  "Extraction stages:" checkboxes under Research area, rebuilt per area,
+  QSettings `stages/<pack>/<stage>`; unticked -> RunConfig.optional_stages
+  'off' (ticked = 'auto', i.e. triggers still apply). Research area, stages,
+  online lookups and LaTeX are locked during a run (switching the pack
+  mid-run would change the active pack). CLI `--skip-stage NAME`;
+  `--list-packs` lists stages. GUI test drives truman2024's wet-dry stage
+  on/off through the real worker, no API.
 
 ## Non-obvious decisions — don't redo this research
 

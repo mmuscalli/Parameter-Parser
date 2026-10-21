@@ -24,7 +24,7 @@ FlagKind = Literal["out_of_range", "low_confidence", "ambiguous_paper_wide_speci
                    "term_not_found", "cited_data", "conflicting_values",
                    "assumed_value", "unit_conversion", "derived_value", "lookup_unavailable",
                    "not_calculated", "concentration_not_stated", "duplicate_removed",
-                   "archive_check", "archive_match"]
+                   "archive_check", "archive_match", "fit_model"]
 
 
 @dataclass
@@ -142,11 +142,14 @@ def check_extraction(
                 quote=f.quote or None, source=f.source or None))
 
     # per-set and cycling values (assumed ones are reported separately: never written)
-    per_set = [(o.field_name, o.value, o.set_label, o.confidence, o.basis, o.quote, o.source, o.note)
+    # (name, value, where -- "set 'a'", "'HD 1397 b'" for one sample/planet, "every ... set", ...)
+    per_set = [(o.field_name, o.value, f"set '{o.set_label}'", o.confidence, o.basis, o.quote, o.source, o.note)
                for o in methodology.per_set_overrides]
     from parameter_extractor.stages.optional import optional_results
-    per_set += [(c.parameter, c.value, c.set_label or f"every {spec.set_word} set", c.confidence, c.basis,
-                 c.quote, c.source, c.note)
+    per_set += [(c.parameter, getattr(c, "text", "") or c.value,         # text parameters: their text
+                 f"'{c.sample_label}'" if getattr(c, "sample_label", "") else
+                 f"set '{c.set_label}'" if c.set_label else f"every {spec.set_word} set",
+                 c.confidence, c.basis, c.quote, c.source, c.note)
                 for spec, result in optional_results(optional, wet_dry) for c in result.parameters]
     # one flag per field and confidence level, listing every set it applies to -- the same doubt
     # repeated set by set (kim2019: sampled_temperature_C in 10 sets) is one thing to check
@@ -154,14 +157,14 @@ def check_extraction(
     for name, value, label, confidence, basis, quote, source, note in per_set:
         if basis != "assumed" and confidence_below(confidence, flag_below):
             groups.setdefault((name, confidence, basis == "derived"), []).append(
-                (label, f"{value:g}", quote, source, note))
+                (label, f"{value:g}" if isinstance(value, (int, float)) else f"'{value}'", quote, source, note))
     for (name, confidence, derived), items in groups.items():
         how = " (derived from stated values)" if derived else ""
         if len(items) == 1:
             label, value = items[0][:2]
-            message = f"{name} = {value} for set '{label}' has confidence '{confidence}'{how}"
+            message = f"{name} = {value} for {label} has confidence '{confidence}'{how}"
         else:
-            listed = "; ".join(f"'{i[0]}' = {i[1]}" for i in items)
+            listed = "; ".join(f"{i[0].removeprefix('set ')} = {i[1]}" for i in items)
             message = f"{name} has confidence '{confidence}' in {len(items)} sets{how}: {listed}"
         flags.append(Flag("low_confidence", message + f"{_drop_suffix(confidence, drop_below)}.",
                           **_joined(items)))

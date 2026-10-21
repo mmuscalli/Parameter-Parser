@@ -59,12 +59,24 @@ def main() -> int:
     parser.add_argument("--equations-latex", action="store_true",
                         help="Convert the paper's labelled equations to LaTeX (one small extra API call); "
                              "they're found and cropped either way")
+    parser.add_argument("--skip-stage", action="append", default=[], metavar="STAGE",
+                        help="Don't run this optional extraction stage (repeatable; --list-packs shows each "
+                             "pack's stages), e.g. --skip-stage fit_models")
     args = parser.parse_args()
+    from parameter_extractor import packs
+    from parameter_extractor.stages.optional import toggleable_stages
     if args.list_packs:
-        from parameter_extractor import packs
         for pack_id, pack in sorted(packs.available().items()):
             print(f"{pack_id:24} {pack.label} -- {pack.manifest.description}")
+            for t in toggleable_stages(pack):
+                print(f"    stage {t.name:22} {t.label}" + (" (when the paper calls for it)" if t.conditional else ""))
         return 0
+    if args.pack not in packs.available():
+        parser.error(f"unknown pack '{args.pack}' (see --list-packs)")
+    known = [t.name for t in toggleable_stages(packs.available()[args.pack])]
+    for name in args.skip_stage:
+        if name not in known:
+            parser.error(f"'{name}' isn't an optional stage of {args.pack}: {', '.join(known) or 'none'}")
     if not args.pdf:
         parser.error("--pdf is required")
 
@@ -73,6 +85,7 @@ def main() -> int:
                  "focus_terms": args.look_for, "use_pubchem": not args.no_pubchem,
                  "equations_to_latex": args.equations_latex, "pack": args.pack,
                  "online_checks": not args.no_pubchem,
+                 "optional_stages": {name: "off" for name in args.skip_stage},
                  "pubchem_cache_path": default_pubchem_cache_path()}
     if args.out:
         overrides["output_dir"] = args.out

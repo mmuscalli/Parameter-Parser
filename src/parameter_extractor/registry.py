@@ -34,7 +34,11 @@ def standard_columns() -> list:
     pack = current()
     listed = [c["column"] for c in pack.standard_column_entries]
     template = set(pack.template_columns)
-    for column, _ in spec_standard_columns():
+    extra = list(spec_standard_columns())
+    if pack.uses("fit_models"):                 # exoplanets: how the values were obtained
+        from parameter_extractor.calculators.exoplanet_fits import fit_columns
+        extra += fit_columns()
+    for column, _ in extra:
         if column not in template and column not in listed:
             listed.append(column)
     return listed

@@ -88,10 +88,18 @@ def _number(value) -> Optional[float]:
 ANGLES = {"pl_orblper", "pl_projobliq", "pl_trueobliq"}       # degrees, the same modulo 360
 
 
+def _same_text(a, b) -> bool:
+    """Case, '_' / '-' / spaces, and a bracketed abbreviation don't matter: 'BJD_TDB' = 'BJD-TDB',
+    'Transiting Exoplanet Survey Satellite' = 'Transiting Exoplanet Survey Satellite (TESS)'."""
+    norm = lambda t: re.sub(r"[\s_\-]+", " ", _strip_html(t).lower()).strip()
+    bare = lambda t: re.sub(r"\s*\([^)]*\)", "", norm(t)).strip()
+    return norm(a) == norm(b) or (bare(a) == bare(b) and bool(bare(a)))
+
+
 def _matches(extracted, archived, column: str = "") -> bool:
     a, b = _number(extracted), _number(archived)
     if a is None or b is None:
-        return _strip_html(extracted).lower() == _strip_html(archived).lower()
+        return _same_text(extracted, archived)
     if column in ANGLES:
         a = b + ((a - b + 180) % 360 - 180)
     printed = str(archived).strip()
@@ -116,6 +124,8 @@ def compare(records: List[dict], archive_rows: List[dict], reference: str) -> Li
             continue
         sets = [a for a in archive_rows if _key(a.get("pl_name")) == _key(name)]
         entry = {"pl_name": name, "reference": reference}
+        if rec.get("pl_fitlabel"):                      # one row per solution: each is compared
+            entry["solution"] = rec["pl_fitlabel"]
         period = _number(rec.get("pl_orbper"))
         if not sets and period:
             alias = [a for a in from_paper if _number(a.get("pl_orbper"))

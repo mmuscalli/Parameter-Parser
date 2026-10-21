@@ -8,7 +8,9 @@ printed (rad, JD-2450000, yr), the archive's derived columns, names the archive
 writes differently (eps Tau b, omi UMa b, 41 Lyn b = HD 81688 b), stellar-system
 values from another reference (sy_plx from TICv8) left out of the comparison,
 a parameter given by two fits (Table 3 orbit, Table 4 joint fit) and companions
-too heavy to be planets. No API calls, no network. ~1 min (42 heavy pages).
+too heavy to be planets. Recorded before the fitting-model stage existed, so it
+runs with that stage turned off (RunConfig.optional_stages, as the GUI's
+toggle does). No API calls, no network. ~1 min (42 heavy pages).
 
 Run with: python tests/test_teng2023_replay.py
 """
@@ -42,7 +44,8 @@ def test_teng2023_replay_reproduces_reference():
                 patch.object(api_client, "_send", make_replay(REF)), \
                 patch.object(exoplanet_archive, "fetch_parameter_sets", lambda names, ref: saved):
             result = run_pipeline(PDF, RunConfig.from_settings(api_key="replay", output_dir=Path(tmp),
-                                                               pack="exoplanets", online_checks=True))
+                                                               pack="exoplanets", online_checks=True,
+                                                               optional_stages={"fit_models": "off"}))
             assert result.csv_path.read_text() == (REF / "teng2023_extracted.csv").read_text()
             assert result.observations_path.read_text() == (REF / "teng2023_observations.csv").read_text()
             report = json.loads((result.run_dir / "archive_validation.json").read_text())

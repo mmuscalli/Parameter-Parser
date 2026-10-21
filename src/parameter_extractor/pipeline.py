@@ -81,6 +81,9 @@ from parameter_extractor.stages.methodology_extractor import run_methodology_ext
 from parameter_extractor.stages.structure_planner import run_structure_planner
 from parameter_extractor.stages.term_search import run_term_search
 from parameter_extractor.stages.optional import StageSpec, load_specs, run_optional_stage, triggered_specs
+from parameter_extractor.stages.fit_models import LABEL as FIT_MODELS_LABEL, run_fit_models
+from parameter_extractor.schemas.fit_models import FitModels
+from parameter_extractor.calculators import exoplanet_fits
 from parameter_extractor.stages.triage import run_triage
 from parameter_extractor.validation.plausibility_checks import Flag, check_extraction, check_row, flags_to_json
 
@@ -190,6 +193,7 @@ class Extraction:
     methodology: Optional[Methodology] = None
     chemistry: Optional[ChemistryExtraction] = None
     term_search: Optional[TermSearch] = None
+    fit_models: Optional[FitModels] = None          # exoplanet pack: how the values were obtained
     # optional stages (the domain pack's stages/*.json) that ran: name -> (spec, result)
     optional: Dict[str, tuple] = field(default_factory=dict)
     equations: List[EquationCandidate] = field(default_factory=list)
@@ -268,6 +272,9 @@ def extract(
         if pack.uses("chemistry"):
             running["chemistry"] = pool.submit(run_chemistry_extraction, ctx, text, ex.structure,
                                                vocab["species_names"], table_images=table_images)
+        if pack.uses("fit_models") and config.optional_stages.get("fit_models", "auto") != "off":
+            ctx.total_steps += 1
+            running["fit_models"] = pool.submit(run_fit_models, ctx, text, ex.structure, table_images)
         if terms:
             columns = VariableRegistry(config.registry_path).known_columns()
             running["term_search"] = pool.submit(run_term_search, ctx, terms, text, ex.structure, columns)
@@ -282,6 +289,7 @@ def extract(
         ex.methodology = results.get("methodology") or empty_methodology(ex.paper_id)
         ex.chemistry = results.get("chemistry") or ChemistryExtraction(paper_id=ex.paper_id, solutes=[])
         ex.term_search = results.get("term_search")
+        ex.fit_models = results.get("fit_models")
         ex.optional = {spec.name: (spec, results[spec.name]) for spec in specs}
         ctx.sort_usage(stage_order())
     except BaseException as e:
@@ -297,7 +305,7 @@ def extract(
 # optional stages (specs) go before chemistry
 def stage_order() -> List[str]:
     return (["structure_planner", "metadata", "methodology", "term_search"] + list(load_specs())
-            + ["chemistry", "equations", "figure_planner"])
+            + ["fit_models", "chemistry", "equations", "figure_planner"])
 
 
 def stage_label(name: str) -> str:
@@ -307,7 +315,7 @@ def stage_label(name: str) -> str:
 
 _STAGE_LABELS = {"metadata": "Bibliographic metadata", "methodology": "Experimental methodology",
                  "chemistry": "Solution chemistry", "term_search": "Parameter search",
-                 "equations": "Equations to LaTeX"}
+                 "equations": "Equations to LaTeX", "fit_models": FIT_MODELS_LABEL}
 
 
 def _collect(ctx: RunContext, running: dict) -> dict:
@@ -355,7 +363,12 @@ def _pack_postprocess(pack, rows, ex: "Extraction", config: RunConfig) -> List[F
     if pack.uses("reference_names"):
         exo.reference_names(rows, ex.metadata)
     heavy = exo.companion_masses(rows) if pack.uses("exoplanet_masses") else []
-    return [Flag("unit_conversion", p) for p in problems] + [Flag("out_of_range", m) for m in heavy] + \
+    fit_flags: List[Flag] = []
+    if pack.uses("fit_models") and ex.fit_models is not None:
+        fit_flags = [Flag("fit_model", m) for m in
+                     exoplanet_fits.apply_fit_models(rows, ex.fit_models, ex.structure, config.paper_prefix)]
+        fit_flags += exoplanet_fits.model_flags(rows, ex.fit_models)
+    return [Flag("unit_conversion", p) for p in problems] + [Flag("out_of_range", m) for m in heavy] + fit_flags + \
            [Flag("conflicting_values", c.message, quote=c.quote or None, source=c.source or None) for c in conflicts]
 
 
@@ -374,15 +387,18 @@ def archive_flags(archive: dict) -> List[Flag]:
     for e in archive["report"]:
         if e["status"] != "compared":
             refs = ", ".join(e.get("archive_references", [])) or "none"
-            flags.append(Flag("archive_check", f"{e['pl_name']}: {e['status']} ('{archive['reference']}'); the "
+            flags.append(Flag("archive_check", f"{e['pl_name']}"
+                                               + (f" [{e['solution']}]" if e.get("solution") else "")
+                                               + f": {e['status']} ('{archive['reference']}'); the "
                                                f"archive has: {refs}."))
             continue
         differs = "; ".join(f"{d['column']} {d['extracted']:.6g} vs {d['archive']:.6g}"
                             if isinstance(d["extracted"], (int, float)) and isinstance(d["archive"], (int, float))
                             else f"{d['column']} '{d['extracted']}' vs '{d['archive']}'" for d in e["differs"])
-        name = e["pl_name"] + (f" (the archive's {e['archive_name']}"
-                               + (", matched by orbital period" if e.get("matched_by") else "") + ")"
-                               if e.get("archive_name") else "")
+        name = (e["pl_name"] + (f" [{e['solution']}]" if e.get("solution") else "")
+                + (f" (the archive's {e['archive_name']}"
+                   + (", matched by orbital period" if e.get("matched_by") else "") + ")"
+                   if e.get("archive_name") else ""))
         flags.append(Flag(
             "archive_check" if e["differs"] else "archive_match",
             f"{name}: {len(e['matches'])} of {len(e['matches']) + len(e['differs'])} values match the NASA "

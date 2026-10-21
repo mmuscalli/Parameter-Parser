@@ -1,6 +1,7 @@
 {
   "name": "wet_dry",
   "label": "Wet-dry cycling conditions",
+  "description": "Wet and dry phase temperatures, durations and humidity of wet-dry cycling experiments.",
   "origin": "wet-dry cycling",
   "schema_name": "WetDryConditions",
   "system_prompt": "Extract wet-dry cycling conditions. Report only what the paper states.",

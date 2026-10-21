@@ -14,8 +14,18 @@ Guidance:
   of its own -- an orbital fit, a mass, a radius -- including ones discovered
   earlier and re-analysed here. A planet only mentioned in passing, or a
   candidate the paper rejects, gets no row (list it in `excluded_data`).
-- A planet listed in several tables (orbital fit, joint astrometric fit,
-  ...) is still ONE sample; mention the extra tables in its `source`.
+- ONE SAMPLE PER SOLUTION: if the paper reports more than one set of
+  parameters for the same planet from different models -- e.g. an RV-only
+  orbital fit (Table 3) AND a joint RV + astrometry fit (Table 4), a fit with
+  and without a transit, circular vs eccentric -- each solution is its own
+  sample (row). Then label every one of that planet's samples with the
+  planet name followed by the solution in square brackets, e.g.
+  "HD 14067 b [RV fit, Table 3]" and "HD 14067 b [joint RV + astrometry fit,
+  Table 4]". Models that are joint in different ways are different
+  solutions. A planet with a single solution gets just its name, no
+  brackets. A table that only repeats or derives quantities from one
+  solution (e.g. minimum masses computed from the same fit) is not a new
+  solution; mention it in `source`.
 - set_type is "Independent" for every set. Leave `duration_hr` and
   `cycle_number` empty.
 - `data_source`: '' when the paper derives the system's parameters itself;
@@ -27,8 +37,8 @@ Guidance:
   (some printed sideways, shown upright). Trust them for which rows belong
   to which planet.
 
-Return a StructurePlan. `total_planned_rows` must equal the number of planets
-(samples) across all sets.
+Return a StructurePlan. `total_planned_rows` must equal the number of
+samples (planet solutions) across all sets.
 
 ---
 PAPER TEXT:

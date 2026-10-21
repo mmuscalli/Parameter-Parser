@@ -69,6 +69,7 @@ class StageTrigger(BaseModel):
 class StageSpec(BaseModel):
     name: str
     label: str
+    description: str = ""           # what the user sees next to the stage's on/off switch
     origin: str = ""
     schema_name: str = ""
     system_prompt: str = ""
@@ -377,4 +378,39 @@ def triggered_specs(structure: StructurePlan, paper_text: str,
         choice = choices.get(name, "auto")
         if choice == "on" or (choice == "auto" and spec.triggered(structure, paper_text)):
             out.append(spec)
+    return out
+
+
+@dataclass
+class StageToggle:
+    """A stage the user can switch off (GUI checkboxes, CLI --skip-stage): the pack's
+    spec stages and its optional code stages. `conditional`: runs only when the paper
+    calls for it (its trigger), even when switched on."""
+    name: str
+    label: str
+    description: str
+    conditional: bool
+
+
+def _code_stage_toggles() -> Dict[str, Tuple[str, str]]:
+    from parameter_extractor.stages import fit_models
+    return {"fit_models": (fit_models.LABEL, fit_models.DESCRIPTION)}
+
+
+def toggleable_stages(pack=None) -> List[StageToggle]:
+    """The switchable stages of a domain pack (default: the active one), in run order."""
+    from parameter_extractor.packs import current
+    pack = pack or current()
+    out = []
+    for spec in _specs_in(pack.stages_dir).values():
+        t = spec.trigger
+        when = "" if t.always else " Runs only when the paper " + (
+            f"mentions {', '.join(t.keywords[:3])}" if t.keywords else f"has {spec.set_word} experiments") + "."
+        listed = ", ".join(p.column for p in spec.parameters[:6]) + (", ..." if len(spec.parameters) > 6 else "")
+        what = spec.description or spec.label
+        out.append(StageToggle(spec.name, spec.label, f"{what} Columns: {listed}. One API call.{when}",
+                               not t.always))
+    for name, (label, description) in _code_stage_toggles().items():
+        if pack.uses(name):
+            out.append(StageToggle(name, label, description, False))
     return out

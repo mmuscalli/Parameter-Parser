@@ -1,12 +1,13 @@
 {
  "name": "stellar_parameters",
  "label": "Stellar parameters",
+ "description": "The host stars' parameters with their uncertainties.",
  "origin": "stellar parameters",
  "system_prompt": "Extract host-star parameters from an astronomy paper, exactly as the paper reports them.",
  "trigger": {
   "always": true
  },
- "per": "set",
+ "per": "sample",
  "set_word": "planetary system",
  "intro": "For every host star (set) in the structure plan below, extract the stellar parameters the paper reports. Give each value the star's set_label.",
  "parameters": [
@@ -95,6 +96,7 @@
   "Asymmetric uncertainties are printed as superscript/subscript (e.g. 323.21 +0.06 -0.05): `err_plus` 0.06, `err_minus` -0.05.",
   "A value marked '(fixed)' was fixed in the fit, not measured: give it with no uncertainties and say so in `note`.",
   "If the paper gives two determinations of one parameter (e.g. a spectroscopic Teff and an adopted/evolutionary one), give the one the paper ADOPTS for the planet analysis and mention the other in `note`.",
-  "A luminosity given as a linear value with an uncertainty: give the value and say in `note` that its uncertainty is linear (the app can't take the log of an uncertainty exactly)."
+  "A luminosity given as a linear value with an uncertainty: give the value and say in `note` that its uncertainty is linear (the app can't take the log of an uncertainty exactly).",
+  "Stellar values for the star in general use sample_label ''. If a solution (a sample_label with [brackets], e.g. a joint star + planet fit) reports its OWN stellar values, give those with that sample_label."
  ]
 }

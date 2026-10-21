@@ -520,6 +520,74 @@ def test_trackpad_zoom_and_overlapping_points():
         ed.close()
 
 
+class NoClickReview(main_window.VariableReviewDialog):
+    """The new-variable review, closed at once with its defaults (nothing added)."""
+    def exec(self): return 0
+
+
+def test_stage_toggles():
+    """Research area -> its switchable stages; unticked stages are skipped (checked with a
+    cycling paper, truman2024, whose wet-dry stage would otherwise run); choices are kept
+    per area; area and stages are locked during a run. No API calls."""
+    from test_pipeline_offline import make_replay
+    root = Path(__file__).resolve().parents[1]
+    truman = root.parent / "Paper Files" / "Paper Lists" / "Initial Easy Papers" / "Truman2024" / "truman2024.pdf"
+    keys = FakeKeyStore()
+    with tempfile.TemporaryDirectory() as tmp, patch.object(main_window, "key_store", keys):
+        w = _window(keys, Path(tmp))
+        w.pack_combo.setCurrentIndex(w.pack_combo.findData("exoplanets"))
+        assert list(w.stage_boxes) == ["planet_parameters", "stellar_parameters", "system_and_discovery",
+                                       "fit_models"]
+        assert all(b.isChecked() for b in w.stage_boxes.values())
+        assert "EXOFAST" in w.stage_boxes["fit_models"].toolTip()
+        w.stage_boxes["fit_models"].setChecked(False)
+        assert w.optional_stage_choices()["fit_models"] == "off"
+        w.pack_combo.setCurrentIndex(w.pack_combo.findData("prebiotic_chemistry"))
+        assert list(w.stage_boxes) == ["wet_dry"]
+        from PySide6.QtWidgets import QCheckBox
+        assert len(w.stages_widget.findChildren(QCheckBox)) == 1          # the old area's boxes are gone
+        assert "when the paper calls for it" in w.stage_boxes["wet_dry"].text()
+        w.pack_combo.setCurrentIndex(w.pack_combo.findData("exoplanets"))
+        assert not w.stage_boxes["fit_models"].isChecked()                  # remembered for this area
+        w.pack_combo.setCurrentIndex(w.pack_combo.findData("prebiotic_chemistry"))
+        w.close()
+        w2 = main_window.MainWindow()                                       # and across restarts
+        w2.pack_combo.setCurrentIndex(w2.pack_combo.findData("exoplanets"))
+        assert not w2.stage_boxes["fit_models"].isChecked()
+        w2.pack_combo.setCurrentIndex(w2.pack_combo.findData("prebiotic_chemistry"))
+        w2.close()
+        if not truman.is_file():
+            print(f"SKIP (run part): needs {truman}"); return
+
+    replay = make_replay(root / "runs" / "truman2024_auto")
+    for ticked in (False, True):
+        calls = []
+        def send(ctx, **kw):
+            calls.append(kw["response_model"].__name__)
+            return replay(ctx, **kw)
+        with tempfile.TemporaryDirectory() as tmp, patch.object(api_client, "_send", send), \
+                patch.object(main_window, "key_store", keys), \
+                patch.object(main_window, "FigureReviewDialog", SkipAllFigures), \
+                patch.object(main_window, "VariableReviewDialog", NoClickReview):
+            w = _window(keys, Path(tmp))
+            w.registry_path = None                                           # template + standard columns only
+            w.pack_combo.setCurrentIndex(w.pack_combo.findData("prebiotic_chemistry"))
+            w.stage_boxes["wet_dry"].setChecked(ticked)
+            w.pdf_edit.setText(str(truman)); w.key_edit.setText("replay-not-a-real-key")
+            w.run_btn.click()
+            assert not w.pack_combo.isEnabled() and not w.stages_widget.isEnabled()   # locked while running
+            for _ in range(1200):
+                _pump()
+                if "Done:" in w.status.text() or "failed" in w.status.text().lower():
+                    break
+            assert "Done:" in w.status.text(), w.status.text()
+            assert ("WetDryConditions" in calls) == ticked, calls
+            assert w.pack_combo.isEnabled() and w.stages_widget.isEnabled()
+            summary = w.summary_text.toPlainText()
+            assert ("Wet-dry" in summary) == ticked, summary
+            w.close()
+
+
 if __name__ == "__main__":
     try:
         for name, fn in list(globals().items()):

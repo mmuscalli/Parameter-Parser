@@ -176,6 +176,7 @@ _ASTRO: Dict[str, Tuple[str, float]] = {
     "R_E": ("length", 1.0), "R_J": ("length", 11.2089), "R_sun": ("length", 109.076),
     "au": ("distance", 1.0), "pc": ("distance", 206264.806), "ly": ("distance", 63241.077),
     "K": ("temperature", 1.0), "L_sun": ("luminosity", 1.0),
+    "%": ("fraction", 0.01), "fraction": ("fraction", 1.0), "ppt": ("fraction", 1e-3), "ppm": ("fraction", 1e-6),
 }
 _ASTRO_ALIASES = {
     "deg": "deg", "degree": "deg", "degrees": "deg", "°": "deg", "rad": "rad", "radian": "rad", "radians": "rad",
@@ -191,8 +192,12 @@ _ASTRO_ALIASES = {
     "rsun": "R_sun", "r_sun": "R_sun", "r⊙": "R_sun", "rsol": "R_sun",
     "au": "au", "pc": "pc", "parsec": "pc", "ly": "ly", "k": "K", "kelvin": "K",
     "lsun": "L_sun", "l_sun": "L_sun", "l⊙": "L_sun", "lsol": "L_sun",
+    "%": "%", "percent": "%", "fraction": "fraction", "fractional": "fraction", "ppt": "ppt", "ppm": "ppm",
 }
-_JD_OFFSET = re.compile(r"^(?:B|H|M)?JD\s*[-−–]\s*([\d,]+)$", re.IGNORECASE)
+# Julian dates, with the time scale a paper may add (BJD_TDB, HJD_UTC: all days on the JD count)
+_JD = r"(?:B|H|M)?JD(?:[_\s-]?(?:TDB|UTC|TT))?"
+_JD_OFFSET = re.compile(rf"^{_JD}\s*[-−–]\s*([\d,]+)$", re.IGNORECASE)
+_JD_PLAIN = re.compile(rf"^{_JD}$", re.IGNORECASE)
 _LOG_OF = re.compile(r"^log\s*\(?\s*(.+?)\s*\)?$", re.IGNORECASE)
 
 
@@ -211,8 +216,10 @@ def convert_printed(value: float, printed: str, target: str, is_error: bool = Fa
     p, t = (printed or "").strip(), (target or "").strip()
     if not p or p == t or not t or p.lower() == t.lower():
         return value, ""
+    if _JD_PLAIN.match(p) and _JD_PLAIN.match(t):
+        return value, ""                                  # 'BJD_TDB' is already a full Julian date
     m = _JD_OFFSET.match(p)
-    if m and re.match(r"^(?:B|H|M)?JD$", t, re.IGNORECASE):
+    if m and _JD_PLAIN.match(t):
         if is_error:
             return value, ""
         return float(f"{value + float(m.group(1).replace(',', '')):.10g}"), f"{value:g} {p} -> {t}"

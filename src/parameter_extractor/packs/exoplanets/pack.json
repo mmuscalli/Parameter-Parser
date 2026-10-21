@@ -1,11 +1,11 @@
 {
   "id": "exoplanets",
   "label": "Exoplanets",
-  "description": "Exoplanet papers: one row per planet, with the planet's, its host star's and the system's parameters as this paper reports them (and their uncertainties), in the NASA Exoplanet Archive's Planetary Systems column layout. Checked against the archive's parameter set for the same reference.",
+  "description": "Exoplanet papers: one row per planet (per solution when the paper fits a planet more than one way), with the planet's, its host star's and the system's parameters as this paper reports them (and their uncertainties), in the NASA Exoplanet Archive's Planetary Systems column layout. Also records how the values were obtained: models, data, joint fits, software, priors, assumptions. Checked against the archive's parameter set for the same reference.",
   "version": 1,
   "template": "template.json",
   "standard_columns": "standard_columns.json",
-  "builtin_stages": [],
+  "builtin_stages": ["fit_models"],
   "postprocess": ["row_labels", "exoplanet_masses", "reference_names", "archive_validation"],
   "units": {"set": "planetary system", "sample": "planet"},
   "compact_text": true

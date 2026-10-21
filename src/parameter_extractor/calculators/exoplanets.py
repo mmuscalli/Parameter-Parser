@@ -2,7 +2,8 @@
 Post-processing for the exoplanet pack (packs/exoplanets): fills the columns the
 NASA Exoplanet Archive derives from the reported ones, the same way it does.
 
-  row_labels         hostname = the set (host star), pl_name = the sample (planet),
+  row_labels         hostname = the set (host star), pl_name = the sample (planet;
+                     a "[solution]" suffix -- one row per fit -- goes to pl_fitlabel),
                      pl_letter = the planet's letter
   exoplanet_masses   Earth-unit twins of Jupiter-unit masses and radii (and their
                      uncertainties), and the "best mass" columns pl_bmass*: the true
@@ -40,12 +41,16 @@ def row_labels(rows: List[ExtractedRow], structure, paper_prefix: str) -> None:
         for sample_idx, sample in enumerate(pset.samples, start=1):
             labels[f"{paper_prefix}{set_idx:03d}{sample_idx:03d}"] = (pset.set_label, sample.sample_label)
     src = CellSource(origin="structure", source="the paper's names for the system and planet")
+    from parameter_extractor.calculators.exoplanet_fits import split_solution
     for row in rows:
         if row.full_id not in labels:
             continue
-        host, planet = labels[row.full_id]
+        host, label = labels[row.full_id]
+        planet, solution = split_solution(label)       # "HD 14067 b [joint fit]": one row per solution
         set_row_value(row, "hostname", host, src)
         set_row_value(row, "pl_name", planet, src)
+        if solution:                                    # the fitting-model stage may name it more fully
+            set_row_value(row, "pl_fitlabel", solution, src)
         m = re.search(r"\s([a-z])$", planet.strip())
         if m:
             set_row_value(row, "pl_letter", m.group(1), src)

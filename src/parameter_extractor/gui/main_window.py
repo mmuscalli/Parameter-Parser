@@ -139,6 +139,14 @@ class MainWindow(QMainWindow):
                                    "extraction stages are used (domain packs).")
         self.pack_combo.currentIndexChanged.connect(self._on_pack_changed)
         form.addRow("Research area:", self.pack_combo)
+        # the area's switchable extraction stages (stages/optional.toggleable_stages), rebuilt on change
+        self.stages_widget = QWidget()
+        self.stages_layout = QVBoxLayout(self.stages_widget)
+        self.stages_layout.setContentsMargins(0, 0, 0, 0)
+        self.stages_layout.setSpacing(2)
+        self.stage_boxes: dict = {}
+        form.addRow("Extraction stages:", self.stages_widget)
+        self._inputs_form = form
         self.pubchem_box = QCheckBox("Use online lookups (PubChem names, NASA Exoplanet Archive check)")
         self.pubchem_box.setToolTip("PubChem: recognises different names for the same compound (e.g. 2'-CMP and "
                                     "cytidine 2'-monophosphate). Exoplanet Archive: compares exoplanet values with "
@@ -236,6 +244,7 @@ class MainWindow(QMainWindow):
         saved_pack = self._settings.value("pack", "prebiotic_chemistry")
         index = self.pack_combo.findData(saved_pack)
         self.pack_combo.setCurrentIndex(index if index >= 0 else self.pack_combo.findData("prebiotic_chemistry"))
+        self._rebuild_stage_boxes(self.pack_combo.currentData())     # no change signal if index 0 was kept
         self.equations_box.setChecked(self._settings.value("equations_to_latex", False, type=bool))
         stored_key = key_store.load_key()
         self._key_was_stored = bool(stored_key)
@@ -249,6 +258,33 @@ class MainWindow(QMainWindow):
         pack_id = self.pack_combo.currentData()
         if pack_id:
             packs.activate(pack_id)
+            self._rebuild_stage_boxes(pack_id)
+
+    def _rebuild_stage_boxes(self, pack_id: str) -> None:
+        """One checkbox per switchable stage of the chosen research area; each area remembers
+        its own choices (QSettings stages/<pack>/<stage>). Unticked = the stage is skipped."""
+        from parameter_extractor import packs
+        from parameter_extractor.stages.optional import toggleable_stages
+        for box in self.stage_boxes.values():
+            self.stages_layout.removeWidget(box)
+            box.hide()                     # deleteLater waits for the event loop; don't leave it drawn
+            box.setParent(None)
+            box.deleteLater()
+        self.stage_boxes = {}
+        pack = packs.available().get(pack_id)
+        toggles = toggleable_stages(pack) if pack else []
+        for t in toggles:
+            box = QCheckBox(t.label + (" (when the paper calls for it)" if t.conditional else ""))
+            box.setToolTip(t.description)
+            box.setChecked(self._settings.value(f"stages/{pack_id}/{t.name}", True, type=bool))
+            box.toggled.connect(lambda on, key=f"stages/{pack_id}/{t.name}": self._settings.setValue(key, on))
+            self.stages_layout.addWidget(box)
+            self.stage_boxes[t.name] = box
+        self._inputs_form.setRowVisible(self.stages_widget, bool(toggles))
+
+    def optional_stage_choices(self) -> dict:
+        """RunConfig.optional_stages: unticked stages are 'off'; ticked ones run as usual."""
+        return {name: "auto" if box.isChecked() else "off" for name, box in self.stage_boxes.items()}
 
     def focus_terms(self) -> list:
         text = self.terms_edit.toPlainText().replace(";", "\n")
@@ -338,6 +374,7 @@ class MainWindow(QMainWindow):
                            equations_to_latex=self.equations_box.isChecked(),
                            pack=self.pack_combo.currentData() or "prebiotic_chemistry",
                            online_checks=self.pubchem_box.isChecked(),
+                           optional_stages=self.optional_stage_choices(),
                            pubchem_cache_path=default_pubchem_cache_path())
         self._extraction, self._extraction_ok, self._review = None, False, None
         self._worker = PipelineWorker(pdf, config)
@@ -472,7 +509,8 @@ class MainWindow(QMainWindow):
 
     def _set_inputs_enabled(self, enabled: bool) -> None:
         for w in (self.pdf_edit, self.key_edit, self.out_edit, self.remember_key_box,
-                  self.show_key_box, self.terms_edit, self.registry_action):
+                  self.show_key_box, self.terms_edit, self.registry_action, self.pack_combo,
+                  self.stages_widget, self.pubchem_box, self.equations_box):   # the pack is active during a run
             w.setEnabled(enabled)
         self._update_run_enabled()
 
@@ -570,9 +608,10 @@ class MainWindow(QMainWindow):
         archive_flags = [f for f in result.paper_flags if f.kind in ("archive_check", "archive_match")]
         derived_flags = [f for f in result.paper_flags if f.kind == "derived_value"]
         repeat_flags = [f for f in result.paper_flags if f.kind == "duplicate_removed"]
+        fit_flags = [f for f in result.paper_flags if f.kind == "fit_model"]
         other_paper_flags = [f for f in result.paper_flags
                              if f.kind not in ("new_variable", "cited_data", "derived_value", "duplicate_removed",
-                                               "archive_check", "archive_match")]
+                                               "archive_check", "archive_match", "fit_model")]
         if cited_flags:
             add_group("Data reproduced from other publications", cited_flags)
         if new_var_flags:
@@ -581,6 +620,8 @@ class MainWindow(QMainWindow):
             add_group("Calculated by the app (not stated in the paper)", derived_flags)
         if archive_flags:
             add_group("Checked against the NASA Exoplanet Archive", archive_flags)
+        if fit_flags:
+            add_group("How the values were obtained (fitting models)", fit_flags)
         if repeat_flags:
             add_group("Left out as repeats of the solution chemistry", repeat_flags)
         if other_paper_flags:
