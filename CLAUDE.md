@@ -517,6 +517,61 @@ FIELD_TO_TEMPLATE (metadata column names, Gly peptide yields), the
 Methodology fields, names.py's peptide rules. A new pack needs at least its
 own structure_planner and figure_planner prompts.
 
+## Exoplanet pack (2026-10-20, step 4)
+
+`packs/exoplanets/`: template = the archive's Planetary Systems (`ps`) layout,
+288 columns in order, with descriptions (from Mickey's export
+PS_2026.10.20_17.17.08.csv, now in `Paper Lists/Teng2023/`). Rows: set = host
+star (hostname), sample = planet (pl_name). No methodology/chemistry; stages
+(all `always`): planet_parameters (per sample), stellar_parameters (per set),
+system_and_discovery (per sample; discovery only for planets this paper
+announces). Postprocess (calculators/exoplanets.py): row_labels,
+exoplanet_masses (Earth twins with the archive's factors, pl_bmass* +
+pl_bmassprov), reference_names ("Teng et al. 2023" style; st_/disc_refname only
+where this paper supplied those values), archive_validation
+(validation/exoplanet_archive.py: TAP `ps` by pl_name, compare with the set
+whose pl_refname is THIS paper; 0.5% or last-printed-digit tolerance; saves
+archive_rows.json + archive_validation.json; flags archive_match /
+archive_check; needs `RunConfig.online_checks`, which the GUI/CLI tie to the
+"online lookups" switch, i.e. --no-pubchem turns both off).
+Stage machinery grew for it: parameters can be `kind: text` (item `text`
+field) or `uncertainties: true` (item err_plus/err_minus/limit -> <col>err1,
+err2, lim; per-parameter `error_suffixes`, e.g. sy_dist has no lim); every
+item has `unit` AS PRINTED and the app converts (`units.convert_printed`:
+astronomy table kept apart from chemistry -- "m" is molar there; JD offsets,
+not applied to uncertainties; log targets like log(L_sun)). Shared prompt now
+says "give the value as printed with its unit".
+PDF: pages whose characters are mostly sideways (landscape tables; teng2023
+pp. 5, 9) are read turned (`_rotation`, `_turned_page_text`) and rendered
+upright (`ParsedPaper.page_rotations`); their captions are found again.
+`compact_text` pack option collapses layout spaces (teng2023: 102K -> 80K
+tokens). Generic `prompts/figure_planner.md` for packs without their own.
+Live run (2026-10-20): 38 rows (32 systems), ~8 min, 365K in / 96K out,
+~$1.68. Reference run `runs/teng2023_auto/` (figure crops left out, 36 MB;
+archive_rows.json = archive snapshot) + `tests/test_teng2023_replay.py` (~1 min).
+Against the archive: 36 planets compared, ~1960 values match, 20 differ -- all
+on HD 14067 b / HD 120084 b, where the paper gives an RV fit (Table 3) AND a
+joint RV+astrometry fit (Table 4) and the archive took Table 4.
+Fixes from that run:
+- `optional_values`: a value and its err/lim columns always come from ONE item;
+  a second, different value for the same parameter -> first kept +
+  `conflicting_values` flag (was column-by-column last-wins, mixing Table 4
+  errors onto Table 3 values). Angles (unit deg) compared modulo 360.
+- Archive matching: fetch by pl_name OR pl_refname like the paper; names in the
+  archive's style (`archive_name`: Greek -> eps/omi/..., Latin "o UMa" -> omi);
+  host case-insensitive but the letter not (HD 5608 B = stellar companion,
+  not planet b); alias fallback by orbital period within 1% among this paper's
+  archive planets (41 Lyn b = HD 81688 b). st_/sy_/disc_ columns compared only
+  when their *_refname is this paper (sy_plx is TICv8) -> `from_other_references`.
+  Archive zero-padding ("1.7000") ignored for the last-digit tolerance.
+- `exo.companion_masses`: > 30 M_J (archive's planet limit) -> `out_of_range`
+  flag (kept in CSV; HD 5608 B 121 M_J, HD 175679 b 62 M_J).
+- `pdf_parser.open_plumber`: one shared pdfplumber document for parser, figure
+  finder and equation finder (closed after extract's local steps) -- each page
+  parsed once; teng2023 local time 2.6 min -> 1 min, outputs identical.
+Open question for Mickey: which fit to prefer when a paper gives two (the
+archive used the joint fit); currently first-listed + flag.
+
 ## Non-obvious decisions — don't redo this research
 
 - **Schema shape is grounded in `../POLO_variable_mapping.csv`** (one level

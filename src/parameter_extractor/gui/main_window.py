@@ -139,11 +139,11 @@ class MainWindow(QMainWindow):
                                    "extraction stages are used (domain packs).")
         self.pack_combo.currentIndexChanged.connect(self._on_pack_changed)
         form.addRow("Research area:", self.pack_combo)
-        self.pubchem_box = QCheckBox("Look up chemical names on PubChem")
-        self.pubchem_box.setToolTip("Recognises different names for the same compound (e.g. 2'-CMP and "
-                                    "cytidine 2'-monophosphate), so it goes in the same column. Only the "
-                                    "species names are sent to PubChem (NIH); results are kept on this "
-                                    "computer.")
+        self.pubchem_box = QCheckBox("Use online lookups (PubChem names, NASA Exoplanet Archive check)")
+        self.pubchem_box.setToolTip("PubChem: recognises different names for the same compound (e.g. 2'-CMP and "
+                                    "cytidine 2'-monophosphate). Exoplanet Archive: compares exoplanet values with "
+                                    "the archive's parameter set for the same paper. Only species or planet names "
+                                    "are sent; results are kept on this computer.")
         form.addRow("", self.pubchem_box)
         self.equations_box = QCheckBox("Convert labelled equations to LaTeX")
         self.equations_box.setToolTip("Equations the authors number or name ('(1)', 'Eq. 2') are always found and "
@@ -337,6 +337,7 @@ class MainWindow(QMainWindow):
                            use_pubchem=self.pubchem_box.isChecked(),
                            equations_to_latex=self.equations_box.isChecked(),
                            pack=self.pack_combo.currentData() or "prebiotic_chemistry",
+                           online_checks=self.pubchem_box.isChecked(),
                            pubchem_cache_path=default_pubchem_cache_path())
         self._extraction, self._extraction_ok, self._review = None, False, None
         self._worker = PipelineWorker(pdf, config)
@@ -566,16 +567,20 @@ class MainWindow(QMainWindow):
 
         cited_flags = [f for f in result.paper_flags if f.kind == "cited_data"]
         new_var_flags = [f for f in result.paper_flags if f.kind == "new_variable"]
+        archive_flags = [f for f in result.paper_flags if f.kind in ("archive_check", "archive_match")]
         derived_flags = [f for f in result.paper_flags if f.kind == "derived_value"]
         repeat_flags = [f for f in result.paper_flags if f.kind == "duplicate_removed"]
         other_paper_flags = [f for f in result.paper_flags
-                             if f.kind not in ("new_variable", "cited_data", "derived_value", "duplicate_removed")]
+                             if f.kind not in ("new_variable", "cited_data", "derived_value", "duplicate_removed",
+                                               "archive_check", "archive_match")]
         if cited_flags:
             add_group("Data reproduced from other publications", cited_flags)
         if new_var_flags:
             add_group("New variables not added to the CSV", new_var_flags)
         if derived_flags:
             add_group("Calculated by the app (not stated in the paper)", derived_flags)
+        if archive_flags:
+            add_group("Checked against the NASA Exoplanet Archive", archive_flags)
         if repeat_flags:
             add_group("Left out as repeats of the solution chemistry", repeat_flags)
         if other_paper_flags:

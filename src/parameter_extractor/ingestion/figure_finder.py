@@ -179,11 +179,10 @@ def find_figures(pdf_path: str, out_dir: Path, render_scale: float = RENDER_SCAL
     into out_dir. One candidate per figure number: if a number matches more
     than one line (a caption, plus body text that happens to start a line
     with "Fig. N"), the line in the smaller font -- the caption -- wins."""
-    import pdfplumber
     import pypdfium2 as pdfium
-    from parameter_extractor.ingestion.pdf_parser import render_offset, to_render_box
+    from parameter_extractor.ingestion.pdf_parser import open_plumber, render_offset, to_render_box
 
-    with pdfplumber.open(pdf_path) as doc:
+    with open_plumber(pdf_path) as doc:
         caps = [c for i, page in enumerate(doc.pages, start=1) for c in _find_on_page(page, i)]
 
     best: Dict[int, dict] = {}

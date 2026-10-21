@@ -162,3 +162,75 @@ def to_column_unit(raw, unit: Optional[str], column_unit: str) -> Optional[Conve
 def _tidy(x: float) -> float:
     """Round away float noise (0.1 * 3 = 0.30000000000000004) without losing precision."""
     return float(f"{x:.10g}")
+
+
+# ---- astronomy (stage specs of the exoplanet pack) ------------------------------------
+# Kept apart from the chemistry table: "m" there is molar. Factors are the NASA Exoplanet
+# Archive's own (M_J = 317.82838 M_E, R_J = 11.2089 R_E), so converted values match it.
+_ASTRO: Dict[str, Tuple[str, float]] = {
+    "deg": ("angle", 1.0), "rad": ("angle", 57.29577951308232), "arcsec": ("angle", 1 / 3600),
+    "m/s": ("velocity", 1.0), "km/s": ("velocity", 1000.0), "cm/s": ("velocity", 0.01),
+    "d": ("time", 1.0), "h": ("time", 1 / 24), "min": ("time", 1 / 1440), "yr": ("time", 365.25),
+    "Myr": ("time", 365.25e6), "Gyr": ("time", 365.25e9),
+    "M_E": ("mass", 1.0), "M_J": ("mass", 317.82838), "M_sun": ("mass", 332946.0487),
+    "R_E": ("length", 1.0), "R_J": ("length", 11.2089), "R_sun": ("length", 109.076),
+    "au": ("distance", 1.0), "pc": ("distance", 206264.806), "ly": ("distance", 63241.077),
+    "K": ("temperature", 1.0), "L_sun": ("luminosity", 1.0),
+}
+_ASTRO_ALIASES = {
+    "deg": "deg", "degree": "deg", "degrees": "deg", "°": "deg", "rad": "rad", "radian": "rad", "radians": "rad",
+    "arcsec": "arcsec", '"': "arcsec",
+    "m/s": "m/s", "ms-1": "m/s", "m s-1": "m/s", "km/s": "km/s", "kms-1": "km/s", "cm/s": "cm/s",
+    "d": "d", "day": "d", "days": "d", "h": "h", "hr": "h", "hours": "h", "min": "min",
+    "yr": "yr", "year": "yr", "years": "yr", "myr": "Myr", "gyr": "Gyr",
+    "mj": "M_J", "m_j": "M_J", "mjup": "M_J", "m_jup": "M_J", "jupitermass": "M_J", "mjupiter": "M_J",
+    "me": "M_E", "m_e": "M_E", "mearth": "M_E", "m_earth": "M_E", "m⊕": "M_E", "earthmass": "M_E",
+    "msun": "M_sun", "m_sun": "M_sun", "m⊙": "M_sun", "msol": "M_sun", "m_sol": "M_sun", "solarmass": "M_sun",
+    "rj": "R_J", "r_j": "R_J", "rjup": "R_J", "r_jup": "R_J",
+    "re": "R_E", "r_e": "R_E", "rearth": "R_E", "r_earth": "R_E", "r⊕": "R_E",
+    "rsun": "R_sun", "r_sun": "R_sun", "r⊙": "R_sun", "rsol": "R_sun",
+    "au": "au", "pc": "pc", "parsec": "pc", "ly": "ly", "k": "K", "kelvin": "K",
+    "lsun": "L_sun", "l_sun": "L_sun", "l⊙": "L_sun", "lsol": "L_sun",
+}
+_JD_OFFSET = re.compile(r"^(?:B|H|M)?JD\s*[-−–]\s*([\d,]+)$", re.IGNORECASE)
+_LOG_OF = re.compile(r"^log\s*\(?\s*(.+?)\s*\)?$", re.IGNORECASE)
+
+
+def astro_unit(text: str) -> Optional[str]:
+    t = text.strip().replace("−", "-").replace("^", "").replace("(", "").replace(")", "")
+    if t in _ASTRO:
+        return t
+    return _ASTRO_ALIASES.get(re.sub(r"\s+", "", t).lower()) or _ASTRO_ALIASES.get(t.lower())
+
+
+def convert_printed(value: float, printed: str, target: str, is_error: bool = False) -> Tuple[Optional[float], str]:
+    """A value given in the unit as printed, in a stage parameter's unit: (value, note), or
+    (None, reason). Handles Julian-date offsets ('JD-2450000' -> 'JD'; uncertainties
+    aren't shifted), logarithmic targets ('L_sun' -> 'log(L_sun)'), the astronomy table
+    and the chemistry one. Same or empty unit: unchanged."""
+    p, t = (printed or "").strip(), (target or "").strip()
+    if not p or p == t or not t or p.lower() == t.lower():
+        return value, ""
+    m = _JD_OFFSET.match(p)
+    if m and re.match(r"^(?:B|H|M)?JD$", t, re.IGNORECASE):
+        if is_error:
+            return value, ""
+        return float(f"{value + float(m.group(1).replace(',', '')):.10g}"), f"{value:g} {p} -> {t}"
+    m = _LOG_OF.match(t)
+    if m and not _LOG_OF.match(p):
+        inner = m.group(1)
+        if astro_unit(p) and astro_unit(p) == astro_unit(inner) and value > 0:
+            if is_error:
+                return None, "an uncertainty in linear units can't be turned into a log one exactly"
+            import math
+            return float(f"{math.log10(value):.10g}"), f"log10 of {value:g} {p}"
+    a, b = astro_unit(p), astro_unit(t)
+    if a and b and _ASTRO[a][0] == _ASTRO[b][0]:
+        out = value * _ASTRO[a][1] / _ASTRO[b][1]
+        return float(f"{out:.10g}"), f"converted from {value:g} {p}"
+    ca, cb = canonical_unit(p), canonical_unit(t)
+    if ca and cb:
+        out = convert(value, ca, cb)
+        if out is not None and not (is_error and _UNITS[ca][0] == "temperature" and ca != cb):
+            return float(f"{out:.10g}"), f"converted from {value:g} {p}"
+    return None, f"'{p}' can't be converted to {t}"

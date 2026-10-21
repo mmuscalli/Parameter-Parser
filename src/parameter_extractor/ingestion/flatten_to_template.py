@@ -334,7 +334,8 @@ def build_rows(
                             and _kept(v.confidence)):
                         extra[param] = v.value
                         prov[param] = CellSource(origin=spec.origin_label + (", derived" if v.basis == "derived" else ""),
-                                                 quote=v.quote, source=v.source, confidence=v.confidence)
+                                                 quote=v.quote, confidence=v.confidence,
+                                                 source=v.source + (f" [{v.note}]" if v.note else ""))
             if pset.data_source:
                 prov["original_data_reference"] = CellSource(
                     origin="structure (data reproduced from another publication)",

@@ -27,6 +27,8 @@ disagree (see prompts/structure_planner.md, prompts/chemistry.md).
 from __future__ import annotations
 import json
 import re
+import threading
+from contextlib import contextmanager
 from dataclasses import dataclass, field, asdict
 from pathlib import Path
 from typing import Dict, List, Optional
@@ -57,6 +59,9 @@ class ParsedPaper:
     embedded_image_count: int = 0
     table_pages: Dict[int, List[str]] = field(default_factory=dict)  # 1-indexed page -> captions found
     warnings: List[str] = field(default_factory=list)
+    # pages printed sideways (landscape tables, teng2023): 1-indexed page -> degrees the page was
+    # turned to read it (90/270); their text and images are taken upright
+    page_rotations: Dict[int, int] = field(default_factory=dict)
 
     def to_json(self) -> str:
         return json.dumps(asdict(self), indent=2)
@@ -140,7 +145,42 @@ def to_render_box(box, offset) -> list:
     return [box[0] - dx, box[1] - dtop, box[2] - dx, box[3] - dtop]
 
 
-def rasterize_pages(pdf_path: str, page_numbers: List[int], out_dir: Path, dpi: int = 150) -> Dict[int, Path]:
+ROTATED_FRACTION = 0.5      # a page whose characters are mostly sideways is read turned
+
+
+def _rotation(page) -> int:
+    """0, or the turn (90 / 270) that makes a sideways page upright: most of its characters
+    aren't upright, and their text matrix says which way they run."""
+    chars = page.chars
+    sideways = [c for c in chars if not c.get("upright", True)]
+    if not chars or len(sideways) / len(chars) <= ROTATED_FRACTION:
+        return 0
+    upward = sum(1 for c in sideways if c["matrix"][1] > 0)       # b > 0: text runs bottom to top
+    return 90 if upward >= len(sideways) / 2 else 270
+
+
+def _turned_page_text(pdf_path: Path, index: int, angle: int) -> tuple:
+    """_page_text of one page after turning it by `angle` (a copy, in memory)."""
+    import io
+    import pdfplumber
+    import pypdfium2 as pdfium
+    src = pdfium.PdfDocument(str(pdf_path))
+    out = pdfium.PdfDocument.new()
+    try:
+        out.import_pages(src, [index])
+        out[0].set_rotation((out[0].get_rotation() + angle) % 360)
+        buf = io.BytesIO()
+        out.save(buf)
+    finally:
+        out.close()
+        src.close()
+    buf.seek(0)
+    with pdfplumber.open(buf) as doc:
+        return _page_text(doc.pages[0])
+
+
+def rasterize_pages(pdf_path: str, page_numbers: List[int], out_dir: Path, dpi: int = 150,
+                    rotations: Optional[Dict[int, int]] = None) -> Dict[int, Path]:
     """Renders the given 1-indexed pages to JPEG and returns {page_number:
     image_path}. Only renders the pages asked for -- NOT the whole document
     -- to keep this cheap for long papers."""
@@ -151,7 +191,7 @@ def rasterize_pages(pdf_path: str, page_numbers: List[int], out_dir: Path, dpi: 
     doc = pdfium.PdfDocument(pdf_path)
     try:
         for page_num in page_numbers:
-            bitmap = doc[page_num - 1].render(scale=dpi / 72)
+            bitmap = doc[page_num - 1].render(scale=dpi / 72, rotation=(rotations or {}).get(page_num, 0))
             path = out_dir / f"page-{page_num}.jpg"
             bitmap.to_pil().convert("RGB").save(path, "JPEG", quality=85)
             images[page_num] = path
@@ -166,22 +206,62 @@ def rasterize_table_pages(parsed: "ParsedPaper", out_dir: Path, dpi: int = 150) 
     reports everything in running text with no tables)."""
     if not parsed.table_pages:
         return {}
-    return rasterize_pages(parsed.source_pdf, sorted(parsed.table_pages.keys()), out_dir, dpi=dpi)
+    return rasterize_pages(parsed.source_pdf, sorted(parsed.table_pages.keys()), out_dir, dpi=dpi,
+                           rotations=parsed.page_rotations)
+
+
+_shared_lock = threading.RLock()
+_shared: Dict[str, object] = {}        # {"key": (path, mtime, size), "doc": pdfplumber.PDF}
+
+
+@contextmanager
+def open_plumber(pdf_path):
+    """The PDF as one pdfplumber document shared by the parser, the figure finder and the
+    equation finder, so each page's layout is parsed once (teng2023: 42 pages with heavy
+    vector graphics, ~3.5 s each, were parsed three times -- 2.5 min). Only the most
+    recent PDF is kept open; the lock keeps pdfminer's file reads to one thread."""
+    import pdfplumber
+    path = Path(pdf_path).resolve()
+    stat = path.stat()
+    key = (str(path), stat.st_mtime_ns, stat.st_size)
+    with _shared_lock:
+        if _shared.get("key") != key:
+            close_shared()
+            _shared["doc"] = pdfplumber.open(path)
+            _shared["key"] = key
+        yield _shared["doc"]
+
+
+def close_shared() -> None:
+    with _shared_lock:
+        doc = _shared.pop("doc", None)
+        _shared.pop("key", None)
+        if doc is not None:
+            try:
+                doc.close()
+            except Exception:
+                pass
 
 
 def parse_pdf(pdf_path: str, paper_id: Optional[str] = None) -> ParsedPaper:
-    import pdfplumber
 
     path = Path(pdf_path)
     paper_id = paper_id or path.stem
     warnings: List[str] = []
 
     try:
-        with pdfplumber.open(path) as doc:
+        with open_plumber(path) as doc:
             page_count = len(doc.pages)
             char_count = sum(len(p.chars) for p in doc.pages)
             img_count = sum(len(p.images) for p in doc.pages)
-            extracted = [_page_text(p) for p in doc.pages] if char_count else []
+            extracted, rotations = [], {}
+            for i, p in enumerate(doc.pages if char_count else []):
+                angle = _rotation(p)
+                if angle:
+                    rotations[i + 1] = angle
+                    extracted.append(_turned_page_text(path, i, angle))
+                else:
+                    extracted.append(_page_text(p))
             page_texts = [_clean(t) for t, _ in extracted]
             tightened = [i for i, (_, tight) in enumerate(extracted, start=1) if tight]
     except Exception as e:  # pdfminer raises a zoo of types for corrupt/encrypted files
@@ -199,6 +279,8 @@ def parse_pdf(pdf_path: str, paper_id: Optional[str] = None) -> ParsedPaper:
         )
 
     table_pages = find_table_pages(page_texts)
+    if rotations:
+        warnings.append(f"Page(s) {sorted(rotations)} are printed sideways (landscape); read turned upright.")
     if tightened:
         warnings.append(f"Words ran together on page(s) {tightened} with the default spacing setting; "
                         f"re-extracted with a tighter word-gap threshold.")
@@ -220,6 +302,7 @@ def parse_pdf(pdf_path: str, paper_id: Optional[str] = None) -> ParsedPaper:
         paper_id=paper_id, source_pdf=str(path), page_count=page_count,
         has_text_layer=True, text="\f".join(page_texts), page_texts=page_texts,
         embedded_image_count=img_count, table_pages=table_pages, warnings=warnings,
+        page_rotations=rotations,
     )
 
 

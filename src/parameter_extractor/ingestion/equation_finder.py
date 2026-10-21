@@ -254,13 +254,12 @@ def _find_on_page(page) -> List[dict]:
 
 def find_equations(pdf_path: str, out_dir: Path, render_scale: float = RENDER_SCALE) -> List[EquationCandidate]:
     """Labelled equations, in page order, each with a cropped image in out_dir."""
-    import pdfplumber
     import pypdfium2 as pdfium
-    from parameter_extractor.ingestion.pdf_parser import render_offset, to_render_box
+    from parameter_extractor.ingestion.pdf_parser import open_plumber, render_offset, to_render_box
 
     out_dir = Path(out_dir)
     hits: List[tuple] = []
-    with pdfplumber.open(pdf_path) as pdf:
+    with open_plumber(pdf_path) as pdf:
         for page_no, page in enumerate(pdf.pages, start=1):
             for eq in _find_on_page(page):
                 hits.append((page_no, eq))

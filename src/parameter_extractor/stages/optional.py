@@ -38,6 +38,7 @@ Columns that aren't template columns become standard columns of the app
 from __future__ import annotations
 import json
 import re
+from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
 from typing import Dict, List, Literal, Optional, Tuple
@@ -53,6 +54,9 @@ class StageParameter(BaseModel):
     column: str
     unit: str = ""
     description: str = ""
+    kind: Literal["number", "text"] = "number"
+    uncertainties: bool = False     # also +/- uncertainty and limit columns (StageSpec.error_suffixes)
+    error_suffixes: Optional[List[str]] = None   # this parameter's own (e.g. no limit column)
 
 
 class StageTrigger(BaseModel):
@@ -73,9 +77,22 @@ class StageSpec(BaseModel):
     # "set": one value per set (or '' = every set); "sample": values can also name a sample
     # (a row) -- e.g. one planet of a planetary system
     per: Literal["set", "sample"] = "set"
+    # column suffixes for a parameter's upper uncertainty, lower uncertainty and limit flag
+    # (the Exoplanet Archive's convention: pl_orbpererr1, pl_orbpererr2, pl_orbperlim)
+    error_suffixes: List[str] = Field(default_factory=lambda: ["err1", "err2", "lim"])
     intro: str
     parameters: List[StageParameter]
     rules: List[str] = Field(default_factory=list)
+
+    def _field_rules(self) -> List[str]:
+        rules = []
+        if self.has_text:
+            rules.append("Text parameters: put the text in `text` (exactly as printed) and 0 in `value`.")
+        if self.has_uncertainties:
+            rules.append("Uncertainties: `err_plus` is the upper uncertainty (positive), `err_minus` the lower one "
+                         "(negative, e.g. -0.05); for a symmetric '±x' give x and -x. Leave both 0 when none is "
+                         "given. For an upper or lower limit ('<', '>') set `limit` to 'upper' or 'lower'.")
+        return rules
 
     def units(self, which: str) -> str:
         from parameter_extractor.packs import current
@@ -92,6 +109,27 @@ class StageSpec(BaseModel):
     @property
     def columns(self) -> List[str]:
         return [p.column for p in self.parameters]
+
+    def suffixes_for(self, p: StageParameter) -> List[str]:
+        return p.error_suffixes if p.error_suffixes is not None else self.error_suffixes
+
+    @property
+    def has_text(self) -> bool:
+        return any(p.kind == "text" for p in self.parameters)
+
+    @property
+    def has_uncertainties(self) -> bool:
+        return any(p.uncertainties for p in self.parameters)
+
+    def output_columns(self) -> List[str]:
+        """Every column the stage can fill, in order: each parameter, then its uncertainty and
+        limit columns when it has them."""
+        out = []
+        for p in self.parameters:
+            out.append(p.column)
+            if p.uncertainties:
+                out += [p.column + s for s in self.suffixes_for(p)]
+        return out
 
     # ---- when it runs, and which sets it concerns ---------------------------------
 
@@ -123,7 +161,7 @@ class StageSpec(BaseModel):
                             for p in self.parameters)
         return load_prompt("optional_stage", INTRO=self.intro, PARAMETER_LIST=listing,
                            SET_WORD=self.set_word, SCHEMA_NAME=self.model_name,
-                           EXTRA_RULES="".join(f"- {r}\n" for r in self.rules + (
+                           EXTRA_RULES="".join(f"- {r}\n" for r in self.rules + self._field_rules() + (
                                [f"Give `sample_label` exactly as in the structure plan when a value belongs "
                                 f"to one {self.units('sample')} only; '' when it applies to the whole set."]
                                if self.per == "sample" else [])),
@@ -144,7 +182,16 @@ def _models(spec_json: str) -> Tuple[type, type]:
                                           f"{spec.set_word} set.")),
         **sample_field,
         parameter=(Literal[tuple(spec.columns)], ...),
-        value=(float, Field(description="In the parameter's unit.")),
+        value=(float, Field(description="As printed (see `unit`).")),
+        unit=(str, Field(default="", description="The unit the value is printed in, e.g. 'rad', 'min', 'JD-2450000', "
+                                                 "'L_sun'; '' if it's already the parameter's unit. The app converts.")),
+        **({"text": (str, Field(default="", description="For a text parameter: the text as printed; '' otherwise."))}
+           if spec.has_text else {}),
+        **({"err_plus": (float, Field(default=0.0, description="Upper uncertainty, positive; 0 if none.")),
+            "err_minus": (float, Field(default=0.0, description="Lower uncertainty, negative; 0 if none.")),
+            "limit": (Literal["", "upper", "lower"], Field(default="", description="'upper' for '<x', 'lower' for "
+                                                                                   "'>x'; '' otherwise."))}
+           if spec.has_uncertainties else {}),
         basis=(Basis, Field(default="stated", description="'stated' in the paper; 'derived' by arithmetic from "
                                                           "stated values; 'assumed' if not stated.")),
         quote=(str, Field(description="Copied word for word from the paper (for a table value: its row/column "
@@ -184,8 +231,8 @@ def spec_standard_columns() -> List[Tuple[str, str]]:
     the ones that aren't template columns to its standard columns."""
     out = []
     for spec in load_specs().values():
-        for p in spec.parameters:
-            out.append((p.column, f"{spec.label}: {p.description}"))
+        for column in spec.output_columns():
+            out.append((column, spec.label))
     return out
 
 
@@ -202,19 +249,113 @@ def run_optional_stage(ctx, spec: StageSpec, paper_text: str, structure: Structu
     )
 
 
-def optional_values(spec: StageSpec, result, structure: StructurePlan) -> Dict[Tuple[str, str, str], object]:
-    """{(set_label, sample_label, column): value record} for the values written automatically
+@dataclass
+class StageValue:
+    """One value a stage writes into one column, after conversion to the parameter's unit."""
+    value: object
+    basis: str
+    quote: str
+    source: str
+    confidence: str
+    note: str = ""
+
+
+def stage_values(spec: StageSpec, item) -> Tuple[Dict[str, StageValue], List[str]]:
+    """{column: StageValue} for one extracted item (its value, and its uncertainty and limit
+    columns), converted to the parameter's unit; and the problems (unconvertible units)."""
+    param = next(p for p in spec.parameters if p.column == item.parameter)
+    printed = getattr(item, "unit", "") or ""
+    base = dict(basis=item.basis, quote=item.quote, source=item.source, confidence=item.confidence)
+    if param.kind == "text":
+        text = (getattr(item, "text", "") or "").strip()
+        return ({param.column: StageValue(text, note=item.note, **base)} if text else {}), []
+    from parameter_extractor.units import convert_printed
+    value, note = convert_printed(item.value, printed, param.unit)
+    if value is None:
+        return {}, [f"{spec.label}: {param.column} = {item.value:g} {printed} for '{item.set_label}' left out -- {note}."]
+    notes = "; ".join(n for n in (item.note, note) if n)
+    out = {param.column: StageValue(value, note=notes, **base)}
+    if param.uncertainties:
+        suffixes = spec.suffixes_for(param)
+        cols = [param.column + s for s in suffixes]
+        for col, err in zip(cols[:2], (getattr(item, "err_plus", 0.0), getattr(item, "err_minus", 0.0))):
+            if err:
+                converted, _ = convert_printed(err, printed, param.unit, is_error=True)
+                if converted is not None:
+                    out[col] = StageValue(converted, **base)
+        if len(cols) > 2:                       # limit flag: 1 upper limit, -1 lower limit, 0 a measurement
+            out[cols[2]] = StageValue({"upper": 1, "lower": -1}.get(getattr(item, "limit", ""), 0), **base)
+    return out, []
+
+
+@dataclass
+class StageConflict:
+    """The same parameter given twice for one set/sample with different values (e.g. a
+    planet's orbit from an RV-only fit and from a joint fit): the first is kept, with its
+    own uncertainties, and the user is told."""
+    message: str
+    quote: str
+    source: str
+
+
+def _same_value(a, b, unit: str = "") -> bool:
+    if isinstance(a, (int, float)) and isinstance(b, (int, float)):
+        if unit == "deg":                                   # -12.7 deg is 347.3 deg
+            a = b + ((a - b + 180) % 360 - 180)
+        return abs(a - b) <= 0.005 * max(abs(a), abs(b), 1e-12)
+    return str(a).strip().lower() == str(b).strip().lower()
+
+
+def optional_values(spec: StageSpec, result, structure: StructurePlan,
+                    problems: Optional[List[str]] = None,
+                    conflicts: Optional[List[StageConflict]] = None) -> Dict[Tuple[str, str, str], StageValue]:
+    """{(set_label, sample_label, column): StageValue} for the values written automatically
     (sample_label '' = the whole set): assumed ones are left to the review; a set-specific
-    value wins over a paper-wide one."""
+    value wins over a paper-wide one. A value and its uncertainty/limit columns always come
+    from the same item: when two items give one parameter different values, the first one
+    is kept and the other reported in `conflicts`. Unconvertible values go in `problems`."""
     targets = spec.target_sets(structure)
-    out: Dict[Tuple[str, str, str], object] = {}
+    out: Dict[Tuple[str, str, str], StageValue] = {}
+    owner: Dict[Tuple[str, str, str], Tuple[object, List[str]]] = {}   # (label, sample, parameter) -> (item, its columns)
     for v in (result.parameters if result is not None else []):
         if v.basis == "assumed":
             continue
+        columns, issues = stage_values(spec, v)
+        if problems is not None:
+            problems += issues
+        if not columns:
+            continue
         sample = getattr(v, "sample_label", "") or ""
         for label in ([v.set_label] if v.set_label else targets):
-            if v.set_label or (label, sample, v.parameter) not in out:
-                out[(label, sample, v.parameter)] = v
+            key = (label, sample, v.parameter)
+            if key in owner:
+                first, first_cols = owner[key]
+                if not v.set_label and first.set_label:
+                    continue                                    # paper-wide never replaces set-specific
+                if v.set_label and not first.set_label:
+                    for c in first_cols:                        # set-specific replaces paper-wide, whole group
+                        out.pop((label, sample, c), None)
+                else:
+                    old, new = out.get((label, sample, v.parameter)), columns.get(v.parameter)
+                    unit = next((p.unit for p in spec.parameters if p.column == v.parameter), "")
+                    if old is not None and new is not None and _same_value(old.value, new.value, unit):
+                        for column, value in columns.items():   # same value: only fill what's missing
+                            out.setdefault((label, sample, column), value)
+                        continue
+                    if conflicts is not None and old is not None and new is not None:
+                        where = sample or label
+                        conflicts.append(StageConflict(
+                            f"{spec.label}: {where} has two values for {v.parameter} -- {old.value:g} "
+                            f"({old.source or 'no source'}) and {new.value:g} ({new.source or 'no source'}); "
+                            f"the first is in the CSV with its own uncertainties"
+                            if isinstance(old.value, (int, float)) and isinstance(new.value, (int, float)) else
+                            f"{spec.label}: {where} has two values for {v.parameter} -- '{old.value}' "
+                            f"({old.source or 'no source'}) and '{new.value}' ({new.source or 'no source'}); "
+                            f"the first is in the CSV", quote=new.quote, source=new.source))
+                    continue
+            owner[key] = (v, list(columns))
+            for column, value in columns.items():
+                out[(label, sample, column)] = value
     return out
 
 

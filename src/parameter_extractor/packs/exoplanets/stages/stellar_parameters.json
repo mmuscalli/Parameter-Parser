@@ -1,0 +1,100 @@
+{
+ "name": "stellar_parameters",
+ "label": "Stellar parameters",
+ "origin": "stellar parameters",
+ "system_prompt": "Extract host-star parameters from an astronomy paper, exactly as the paper reports them.",
+ "trigger": {
+  "always": true
+ },
+ "per": "set",
+ "set_word": "planetary system",
+ "intro": "For every host star (set) in the structure plan below, extract the stellar parameters the paper reports. Give each value the star's set_label.",
+ "parameters": [
+  {
+   "column": "st_spectype",
+   "unit": "",
+   "description": "spectral type, e.g. 'G8 III'",
+   "kind": "text"
+  },
+  {
+   "column": "st_teff",
+   "unit": "K",
+   "description": "effective temperature",
+   "uncertainties": true
+  },
+  {
+   "column": "st_rad",
+   "unit": "R_sun",
+   "description": "stellar radius",
+   "uncertainties": true
+  },
+  {
+   "column": "st_mass",
+   "unit": "M_sun",
+   "description": "stellar mass",
+   "uncertainties": true
+  },
+  {
+   "column": "st_met",
+   "unit": "",
+   "description": "metallicity, dex",
+   "uncertainties": true
+  },
+  {
+   "column": "st_metratio",
+   "unit": "",
+   "description": "what the metallicity is measured as, e.g. '[Fe/H]' or '[M/H]'",
+   "kind": "text"
+  },
+  {
+   "column": "st_lum",
+   "unit": "log(L_sun)",
+   "description": "luminosity; give the unit as printed ('L_sun' for a linear value -- the app takes the log -- or 'log(L_sun)')",
+   "uncertainties": true
+  },
+  {
+   "column": "st_logg",
+   "unit": "",
+   "description": "surface gravity log g, cgs",
+   "uncertainties": true
+  },
+  {
+   "column": "st_age",
+   "unit": "Gyr",
+   "description": "age",
+   "uncertainties": true
+  },
+  {
+   "column": "st_dens",
+   "unit": "",
+   "description": "stellar density, g cm-3",
+   "uncertainties": true
+  },
+  {
+   "column": "st_vsin",
+   "unit": "km/s",
+   "description": "projected rotational velocity v sin i",
+   "uncertainties": true
+  },
+  {
+   "column": "st_rotp",
+   "unit": "d",
+   "description": "rotation period",
+   "uncertainties": true
+  },
+  {
+   "column": "st_radv",
+   "unit": "km/s",
+   "description": "systemic radial velocity",
+   "uncertainties": true
+  }
+ ],
+ "rules": [
+  "Report the values THIS paper gives for each star -- its own fit, or the values it adopts and uses (then say in `note` where they come from, e.g. 'adopted from Takeda et al. 2008'). Don't fill in values from other papers that this paper only mentions in passing.",
+  "When a value is given in several places (abstract, text, table), use the table value with its uncertainties.",
+  "Asymmetric uncertainties are printed as superscript/subscript (e.g. 323.21 +0.06 -0.05): `err_plus` 0.06, `err_minus` -0.05.",
+  "A value marked '(fixed)' was fixed in the fit, not measured: give it with no uncertainties and say so in `note`.",
+  "If the paper gives two determinations of one parameter (e.g. a spectroscopic Teff and an adopted/evolutionary one), give the one the paper ADOPTS for the planet analysis and mention the other in `note`.",
+  "A luminosity given as a linear value with an uncertainty: give the value and say in `note` that its uncertainty is linear (the app can't take the log of an uncertainty exactly)."
+ ]
+}

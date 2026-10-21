@@ -13,7 +13,10 @@ Rules:
   anything not given; if you include an interpretation the paper doesn't
   state outright, mark it `basis` "assumed" -- it will be shown to the user
   instead of written automatically.
-- Convert to the parameter's unit (minutes -> hours, kPa -> bar, etc.).
+- Give each `value` as printed, with the unit it's printed in as `unit`
+  ('' if that's already the parameter's unit): the app converts it
+  (minutes -> hours, rad -> deg, JD-2450000 -> JD, ...). Don't convert
+  values yourself.
 - Give `set_label` exactly as in the structure plan; use '' only when a value
   applies to every {{SET_WORD}} set. If a value differs between sets, give one
   entry per set.

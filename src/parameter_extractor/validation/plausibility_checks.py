@@ -23,7 +23,8 @@ FlagKind = Literal["out_of_range", "low_confidence", "ambiguous_paper_wide_speci
                    "possible_duplicate", "figure_problem", "new_variable",
                    "term_not_found", "cited_data", "conflicting_values",
                    "assumed_value", "unit_conversion", "derived_value", "lookup_unavailable",
-                   "not_calculated", "concentration_not_stated", "duplicate_removed"]
+                   "not_calculated", "concentration_not_stated", "duplicate_removed",
+                   "archive_check", "archive_match"]
 
 
 @dataclass

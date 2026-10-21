@@ -13,6 +13,7 @@ skips the end-to-end tests otherwise.
 Run with: python -m pytest tests/ -v   (or just: python tests/test_pipeline_offline.py)
 """
 import json
+import re
 import sys
 import tempfile
 import threading
@@ -38,7 +39,8 @@ STAGE_FOR_MODEL = {"StructurePlan": "structure_planner", "PaperMetadata": "metad
 def make_replay(replay_dir: Path):
     """An api_client._send stand-in that returns the saved responses from a reference run."""
     def send(ctx, *, model, system_prompt, content, response_model, stop_reason="end_turn"):
-        stage = STAGE_FOR_MODEL[response_model.__name__]
+        name = response_model.__name__        # optional stages: PlanetParametersResult -> planet_parameters
+        stage = STAGE_FOR_MODEL.get(name) or re.sub(r"(?<!^)(?=[A-Z])", "_", name.removesuffix("Result")).lower()
         audit = json.loads((replay_dir / f"{stage}.audit.json").read_text())
         output = (replay_dir / f"{stage}.output.json").read_text()
         return SimpleNamespace(

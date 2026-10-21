@@ -1,0 +1,10 @@
+{
+  "_comment": "Columns beyond the archive's layout: which paper the row was extracted from.",
+  "columns": [
+    {"column": "paper_title", "description": "Title of the paper the row was extracted from"},
+    {"column": "paper_DOI", "description": "DOI of that paper"},
+    {"column": "author1", "description": "First author"},
+    {"column": "year_published", "description": "Publication year"},
+    {"column": "journal_published", "description": "Journal"}
+  ]
+}

@@ -16,6 +16,7 @@ A pack is a folder with a pack.json manifest:
                     "mixing", "molar_ratios", "peptide_totals"
   units             what a set and a sample are called, e.g. {"set": "planetary
                     system", "sample": "planet"}
+  compact_text      collapse long runs of layout spaces in the text sent to the model
 
 and, next to it:
   prompts/*.md      the pack's prompts (structure_planner, figure_planner, ...); a
@@ -50,6 +51,9 @@ class PackManifest(BaseModel):
     builtin_stages: List[str] = Field(default_factory=list)
     postprocess: List[str] = Field(default_factory=list)
     units: Dict[str, str] = Field(default_factory=lambda: {"set": "set", "sample": "sample"})
+    # send the paper text with long runs of layout spaces collapsed (-20% tokens; tables go
+    # as images anyway)
+    compact_text: bool = False
 
 
 class Pack:

@@ -30,6 +30,7 @@ run_triage_only() below for optional screening.
 """
 from __future__ import annotations
 import json
+import re
 import threading
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import asdict, dataclass, field
@@ -40,6 +41,8 @@ from typing import Callable, Dict, List, Optional, Sequence
 from parameter_extractor.calculators.peptide_totals import fill_total_peptide_yield
 from parameter_extractor.calculators.mixing import derive_from_ratios, derive_mixture_concentrations
 from parameter_extractor import packs
+from parameter_extractor.calculators import exoplanets as exo
+from parameter_extractor.validation import exoplanet_archive
 from parameter_extractor.config import settings
 from parameter_extractor.config.run_config import RunConfig
 from parameter_extractor.errors import ApiKeyMissingError, PdfNotReadableError, PipelineError
@@ -56,7 +59,7 @@ from parameter_extractor.ingestion.new_variables import (
     VariableDecision, VariableGroup, apply_decisions, collect_new_variables, group_new_variables, row_index,
     split_known, write_values)
 from parameter_extractor.registry import VariableRegistry
-from parameter_extractor.ingestion.pdf_parser import ParsedPaper, parse_pdf, rasterize_table_pages
+from parameter_extractor.ingestion.pdf_parser import ParsedPaper, close_shared, parse_pdf, rasterize_table_pages
 from parameter_extractor.run_context import ProgressCallback, RunContext, StageUsage, total_cost
 from parameter_extractor.pricing import PRICES_CHECKED
 from parameter_extractor.pubchem import PubChem
@@ -232,7 +235,10 @@ def extract(
     figures = find_figures(str(pdf_path), ctx.run_dir / "figures")
     (ctx.run_dir / "figures_found.json").write_text(
         json.dumps([f.model_dump() for f in figures], indent=2, ensure_ascii=False))
-    equations = find_equations(str(pdf_path), ctx.run_dir / "equations")     # local, no API call
+    try:
+        equations = find_equations(str(pdf_path), ctx.run_dir / "equations")     # local, no API call
+    finally:
+        close_shared()                   # the page layouts were shared by the three steps above
     _write_equations(ctx, equations)
     vocab = packs.current().vocab
     ex = Extraction(ctx=ctx, pdf_path=pdf_path, started=started, parsed=parsed, vocab=vocab,
@@ -240,6 +246,8 @@ def extract(
     if figures and on_figures:
         on_figures(ex)
 
+    # the text sent to the model: long runs of layout spaces collapsed if the pack asks
+    text = compact_text(parsed.text) if packs.current().manifest.compact_text else parsed.text
     convert_equations = bool(config.equations_to_latex and equations)
     if convert_equations:
         ctx.total_steps += 1            # optional (RunConfig.equations_to_latex), one small call
@@ -250,24 +258,24 @@ def extract(
         if convert_equations:
             running["equations"] = pool.submit(_convert_equations, ctx, equations)
         ctx.step("structure_planner", "Planning the experiment structure")
-        ex.structure = run_structure_planner(ctx, parsed.text, table_images=table_images)
+        ex.structure = run_structure_planner(ctx, text, table_images=table_images)
         ex.structure_ready.set()
 
         # everything else depends only on the structure: run it all at once
         pack = packs.current()
         if pack.uses("methodology"):
-            running["methodology"] = pool.submit(run_methodology_extraction, ctx, parsed.text, ex.structure)
+            running["methodology"] = pool.submit(run_methodology_extraction, ctx, text, ex.structure)
         if pack.uses("chemistry"):
-            running["chemistry"] = pool.submit(run_chemistry_extraction, ctx, parsed.text, ex.structure,
+            running["chemistry"] = pool.submit(run_chemistry_extraction, ctx, text, ex.structure,
                                                vocab["species_names"], table_images=table_images)
         if terms:
             columns = VariableRegistry(config.registry_path).known_columns()
-            running["term_search"] = pool.submit(run_term_search, ctx, terms, parsed.text, ex.structure, columns)
+            running["term_search"] = pool.submit(run_term_search, ctx, terms, text, ex.structure, columns)
         # optional stages whose trigger matches this paper (decided locally, no API call)
         specs = triggered_specs(ex.structure, parsed.text, config.optional_stages)
         for spec in specs:
             ctx.total_steps += 1
-            running[spec.name] = pool.submit(run_optional_stage, ctx, spec, parsed.text, ex.structure)
+            running[spec.name] = pool.submit(run_optional_stage, ctx, spec, text, ex.structure)
         results = _collect(ctx, running)
         # a domain pack without these stages gets empty stand-ins, so the rest works unchanged
         ex.metadata = results["metadata"]
@@ -332,6 +340,66 @@ def _convert_equations(ctx: RunContext, equations: List[EquationCandidate]) -> N
     _write_equations(ctx, equations)
 
 
+def _pack_postprocess(pack, rows, ex: "Extraction", config: RunConfig) -> List[Flag]:
+    """The pack's row-level calculators (exoplanets: names, masses, references); returns
+    flags from the optional stages: unconvertible units, parameters given twice."""
+    from parameter_extractor.stages.optional import optional_values
+    problems: List[str] = []
+    conflicts = []
+    for spec, result in ex.optional_list:
+        optional_values(spec, result, ex.structure, problems, conflicts)
+    if pack.uses("row_labels"):
+        exo.row_labels(rows, ex.structure, config.paper_prefix)
+    if pack.uses("exoplanet_masses"):
+        exo.exoplanet_masses(rows)
+    if pack.uses("reference_names"):
+        exo.reference_names(rows, ex.metadata)
+    heavy = exo.companion_masses(rows) if pack.uses("exoplanet_masses") else []
+    return [Flag("unit_conversion", p) for p in problems] + [Flag("out_of_range", m) for m in heavy] + \
+           [Flag("conflicting_values", c.message, quote=c.quote or None, source=c.source or None) for c in conflicts]
+
+
+def _archive_check(rows, ex: "Extraction", ctx: RunContext) -> dict:
+    from parameter_extractor.ingestion.flatten_to_template import row_to_template_dict
+    reference = exo.reference_name(list(ex.metadata.authors or []), ex.metadata.year_published)
+    records = [row_to_template_dict(r) for r in rows]
+    return {**exoplanet_archive.check(records, reference, ctx.run_dir), "reference": reference}
+
+
+def archive_flags(archive: dict) -> List[Flag]:
+    """One flag per planet: how its values compare with the archive's parameter set for this paper."""
+    if archive.get("error"):
+        return [Flag("lookup_unavailable", f"Archive check skipped: {archive['error']}.")]
+    flags = []
+    for e in archive["report"]:
+        if e["status"] != "compared":
+            refs = ", ".join(e.get("archive_references", [])) or "none"
+            flags.append(Flag("archive_check", f"{e['pl_name']}: {e['status']} ('{archive['reference']}'); the "
+                                               f"archive has: {refs}."))
+            continue
+        differs = "; ".join(f"{d['column']} {d['extracted']:.6g} vs {d['archive']:.6g}"
+                            if isinstance(d["extracted"], (int, float)) and isinstance(d["archive"], (int, float))
+                            else f"{d['column']} '{d['extracted']}' vs '{d['archive']}'" for d in e["differs"])
+        name = e["pl_name"] + (f" (the archive's {e['archive_name']}"
+                               + (", matched by orbital period" if e.get("matched_by") else "") + ")"
+                               if e.get("archive_name") else "")
+        flags.append(Flag(
+            "archive_check" if e["differs"] else "archive_match",
+            f"{name}: {len(e['matches'])} of {len(e['matches']) + len(e['differs'])} values match the NASA "
+            f"Exoplanet Archive's '{archive['reference']}' parameter set"
+            + (f"; differ: {differs}" if differs else "")
+            + (f"; the archive also has {len(e['not_extracted'])} value(s) not extracted "
+               f"({', '.join(e['not_extracted'][:8])}{'...' if len(e['not_extracted']) > 8 else ''})"
+               if e["not_extracted"] else "") + "."))
+    return flags
+
+
+def compact_text(text: str) -> str:
+    """Runs of 3+ spaces -> 3, of 3+ blank lines -> 2: ~20% fewer tokens for papers with wide
+    tables (teng2023), columns still visibly apart."""
+    return re.sub(r"\n{3,}", "\n\n", re.sub(r"[ \t]{3,}", "   ", text))
+
+
 def _write_equations(ctx: RunContext, equations: List[EquationCandidate]) -> None:
     if equations:
         (ctx.run_dir / "equations.json").write_text(
@@ -383,10 +451,12 @@ def finish(
     mixing += derive_from_ratios(ex.chemistry, set_labels) if pack.uses("molar_ratios") else []
     rows = build_rows(ex.metadata, ex.structure, ex.methodology, ex.chemistry, config.paper_prefix,
                       drop_below=config.confidence_drop_below, registry=registry, optional=ex.optional_list)
+    stage_flags = _pack_postprocess(pack, rows, ex, config)
     thresholds = dict(flag_below=config.confidence_flag_below,
                       drop_below=config.confidence_drop_below)
     paper_flags = check_extraction(ex.methodology, ex.chemistry, optional=ex.optional_list, **thresholds)
     paper_flags += _cited_data_flags(ex.structure)
+    paper_flags += stage_flags
     paper_flags += [Flag("unit_conversion", n.message, quote=n.quote or None, source=n.source or None)
                     for n in normalization if n.kind == "unit_corrected"]
     if pubchem and pubchem.unavailable_reason:
@@ -497,6 +567,10 @@ def finish(
             "derived_value", f"total_sampled_peptides_yield calculated for {len(totals)} row(s) as the sum of the "
             f"peptide % yields reported for each (linear and cyclic); rows where the paper "
             f"states the total keep the stated value. Hover a value to see what was added."))
+    archive = None
+    if pack.uses("archive_validation") and config.online_checks:
+        archive = _archive_check(rows, ex, ctx)
+        paper_flags += archive_flags(archive)
     row_flags = {r.full_id: f for r in rows if (f := check_row(r, **thresholds))}
     image_tables = image_table_numbers(ex.parsed.table_pages) if config.rasterize_table_pages else set()
     check_flag_quotes([*paper_flags, *(f for fs in row_flags.values() for f in fs)], ex.parsed.text, image_tables)

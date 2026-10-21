@@ -40,6 +40,9 @@ class RunConfig:
     equations_to_latex: bool = False
     # Domain pack (packs/): template, vocabulary, prompts and stages of a research area
     pack: str = "prebiotic_chemistry"
+    # Online cross-checks a pack offers (exoplanets: the NASA Exoplanet Archive). Off by default
+    # so library use and tests stay offline; the GUI and CLI turn it on.
+    online_checks: bool = False
     # Optional stages (the domain pack's stages/*.json) by name: "auto" (run when its trigger matches the
     # paper -- the default), "on" (always) or "off" (never)
     optional_stages: Dict[str, str] = field(default_factory=dict)

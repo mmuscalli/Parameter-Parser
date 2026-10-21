@@ -54,8 +54,8 @@ def main() -> int:
                         help="Domain pack (research area) to extract with; see --list-packs")
     parser.add_argument("--list-packs", action="store_true", help="List the available domain packs and exit")
     parser.add_argument("--no-pubchem", action="store_true",
-                        help="Don't look up species names on PubChem (used to recognise synonyms; "
-                             "only the names are sent)")
+                        help="No online lookups: PubChem species names, NASA Exoplanet Archive check "
+                             "(only names are sent)")
     parser.add_argument("--equations-latex", action="store_true",
                         help="Convert the paper's labelled equations to LaTeX (one small extra API call); "
                              "they're found and cropped either way")
@@ -72,6 +72,7 @@ def main() -> int:
     overrides = {"paper_prefix": args.prefix, "registry_path": default_registry_path(),
                  "focus_terms": args.look_for, "use_pubchem": not args.no_pubchem,
                  "equations_to_latex": args.equations_latex, "pack": args.pack,
+                 "online_checks": not args.no_pubchem,
                  "pubchem_cache_path": default_pubchem_cache_path()}
     if args.out:
         overrides["output_dir"] = args.out
