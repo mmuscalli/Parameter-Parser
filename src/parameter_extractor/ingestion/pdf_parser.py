@@ -179,28 +179,34 @@ def _turned_page_text(pdf_path: Path, index: int, angle: int) -> tuple:
         return _page_text(doc.pages[0])
 
 
-def rasterize_pages(pdf_path: str, page_numbers: List[int], out_dir: Path, dpi: int = 150,
-                    rotations: Optional[Dict[int, int]] = None) -> Dict[int, Path]:
+def rasterize_pages(pdf_path: str, page_numbers: List[int], out_dir: Path, dpi: int = 220,
+                    rotations: Optional[Dict[int, int]] = None) -> Dict[int, List[Path]]:
     """Renders the given 1-indexed pages to JPEG and returns {page_number:
-    image_path}. Only renders the pages asked for -- NOT the whole document
-    -- to keep this cheap for long papers."""
+    [image paths]}: the page cropped to its content, cut into pieces when it's
+    larger than the API reads without scaling (ingestion/table_tiles.py) --
+    page-9.jpg, or page-9-1of2.jpg, page-9-2of2.jpg. Only renders the pages
+    asked for -- NOT the whole document -- to keep this cheap for long papers."""
     import pypdfium2 as pdfium
+    from parameter_extractor.ingestion.table_tiles import tile
 
     out_dir.mkdir(parents=True, exist_ok=True)
-    images: Dict[int, Path] = {}
+    images: Dict[int, List[Path]] = {}
     doc = pdfium.PdfDocument(pdf_path)
     try:
         for page_num in page_numbers:
             bitmap = doc[page_num - 1].render(scale=dpi / 72, rotation=(rotations or {}).get(page_num, 0))
-            path = out_dir / f"page-{page_num}.jpg"
-            bitmap.to_pil().convert("RGB").save(path, "JPEG", quality=85)
-            images[page_num] = path
+            pieces = tile(bitmap.to_pil().convert("RGB"))
+            images[page_num] = []
+            for k, piece in enumerate(pieces, start=1):
+                name = f"page-{page_num}.jpg" if len(pieces) == 1 else f"page-{page_num}-{k}of{len(pieces)}.jpg"
+                piece.save(out_dir / name, "JPEG", quality=85)
+                images[page_num].append(out_dir / name)
     finally:
         doc.close()
     return images
 
 
-def rasterize_table_pages(parsed: "ParsedPaper", out_dir: Path, dpi: int = 150) -> Dict[int, Path]:
+def rasterize_table_pages(parsed: "ParsedPaper", out_dir: Path, dpi: int = 220) -> Dict[int, List[Path]]:
     """Convenience wrapper: rasterizes exactly the pages parsed.table_pages
     flagged, nothing more. Returns {} if none were found (e.g. a paper that
     reports everything in running text with no tables)."""

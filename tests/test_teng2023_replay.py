@@ -1,7 +1,8 @@
 """
 Offline replay of the exoplanet pack's reference paper, teng2023 (PASJ; 32
 systems, sideways tables; re-recorded 2026-10-21 with one row per solution, the
-fitting-model stage, posterior modes and table images for every stage, $1.85): the saved model responses in runs/teng2023_auto/
+fitting-model stage, posterior modes, and table images -- cut into legible pieces
+-- for every stage, $1.84): the saved model responses in runs/teng2023_auto/
 go through the real pipeline, which must reproduce the committed CSV exactly;
 the NASA Exoplanet Archive comparison runs against the saved archive rows
 (archive_rows.json) instead of the network. Covers units as printed (rad,
@@ -81,6 +82,7 @@ def test_teng2023_replay_reproduces_reference():
             # page image, with uncertainties); the archive's prograde value matches mode 1
             assert (joint["pl_orbincl"], joint["pl_orbinclerr1"], joint["pl_orbinclerr2"]) == ("118.0", "31.0", "-84.0")
             assert (joint["pl_orbinclmode1"], joint["pl_orbinclmode2"], joint["pl_orbinclmodal_flag"]) == ("39.0", "141.0", "1")
+            assert (joint["pl_orbinclmode2err1"], joint["pl_orbinclmode2err2"]) == ("12.0", "-23.0")
             assert joint["pl_orbinclmode1desc"].startswith("i < 90")
             assert not joint_e["differs"] and joint_e["matched_mode"]["pl_orbincl"].startswith("mode 1")
             # minor differences keep the paper's values (here: uncertainties within 20% -- wording is
@@ -89,14 +91,17 @@ def test_teng2023_replay_reproduces_reference():
             minor = {m["column"]: m for e in hd120084 for m in e.get("minor", [])}
             assert minor["st_masserr1"]["extracted"] == 0.31 and minor["st_masserr1"]["archive"] == 0.28
             assert not any(d["column"] == "st_masserr1" for e in hd120084 for d in e["differs"])
-            # a real misreading is still caught: HD 167042 b's e is +0.033 in the paper, read as +0.003
-            assert [d["column"] for d in by_row[("HD 167042 b", "RV-only Keplerian fits (Table 3)")]["differs"]] == [
-                "pl_orbeccenerr1"]
+            # with the dense Table 3 page sent in two legible pieces, HD 167042 b's e uncertainty is read
+            # as printed (+0.033; at 150 dpi in one image it was misread as +0.003), and every remaining
+            # difference is on a solution row the archive didn't take
+            e167 = next(r for r in rows if r["pl_name"] == "HD 167042 b")
+            assert (e167["pl_orbeccen"], e167["pl_orbeccenerr1"]) == ("0.01", "0.033")
+            assert all(e.get("archive_solution") for e in report if e.get("differs"))
 
             flags = json.loads(result.flags_path.read_text())["paper_level"]
             assert any("so differences here are expected" in f["message"] and "HD 14067 b" in f["message"]
                        for f in flags if f["kind"] == "archive_check")
-            assert sum(f["kind"] == "multimodal" for f in flags) == 3
+            assert sum(f["kind"] == "multimodal" for f in flags) == 4
             heavy = sorted(f["message"].split(":")[0] for f in flags if f["kind"] == "out_of_range")
             assert heavy == ["HD 175679 b", "HD 175679 b", "HD 5608 B"]
             assert not [f for f in flags if f["kind"] == "conflicting_values"]       # solutions are separate rows

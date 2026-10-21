@@ -19,6 +19,7 @@ environment directly, so a GUI can supply them at run time.
 from __future__ import annotations
 import base64
 import json
+import re
 import time
 from pathlib import Path
 from typing import List, Optional, Type, TypeVar
@@ -32,6 +33,16 @@ from parameter_extractor.run_context import RunContext, StageUsage
 T = TypeVar("T", bound=BaseModel)
 
 _MEDIA_TYPES = {".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".png": "image/png"}
+
+
+def _piece_label(path: Path) -> str:
+    """'page-9-2of2.jpg' -> a note saying how the pieces of a large table page fit together."""
+    m = re.fullmatch(r"page-(\d+)-(\d+)of(\d+)", path.stem)
+    if not m:
+        return ""
+    page, k, n = m.groups()
+    return (f"Page {page}, piece {k} of {n} (a large table page is cut into pieces, top to bottom and left to "
+            f"right; a piece that continues the table to the right repeats the row labels on its left):")
 
 
 def _image_block(path: Path) -> dict:
@@ -102,7 +113,13 @@ def call_structured(
     """
     model = ctx.config.model_for(stage)
     if image_paths:
-        content = [_image_block(p) for p in image_paths] + [{"type": "text", "text": user_content}]
+        content = []
+        for p in image_paths:
+            label = _piece_label(Path(p))
+            if label:
+                content.append({"type": "text", "text": label})
+            content.append(_image_block(Path(p)))
+        content.append({"type": "text", "text": user_content})
     else:
         content = user_content
 

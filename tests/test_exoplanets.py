@@ -215,6 +215,38 @@ def test_sideways_tables_are_read_upright():
     assert p.table_pages[9][0].startswith("Table 3. Orbital parameters")
 
 
+def test_dense_table_pages_are_cut_into_readable_pieces():
+    """A table page bigger than the API reads unscaled is cropped and cut at white space; a
+    piece continuing to the right repeats the row labels."""
+    from PIL import Image, ImageDraw
+    from parameter_extractor.ingestion.table_tiles import MAX_SIDE, TOLERANCE, tile
+    from parameter_extractor.api_client import _piece_label
+    small = Image.new("RGB", (1200, 900), "white")
+    ImageDraw.Draw(small).text((100, 100), "Table 1", fill="black")
+    assert len(tile(small)) == 1 and tile(small)[0].size[0] < 300                  # cropped to the content
+    wide = Image.new("RGB", (3000, 1200), "white")
+    d = ImageDraw.Draw(wide)
+    for row in range(20):
+        d.rectangle((20, 40 + row * 50, 220, 60 + row * 50), fill="black")          # row labels
+        for col in range(10):
+            x = 400 + col * 250
+            d.rectangle((x, 40 + row * 50, x + 150, 60 + row * 50), fill="black")
+    pieces = tile(wide)
+    assert len(pieces) == 2 and all(max(p.size) <= MAX_SIDE * TOLERANCE for p in pieces)
+    import numpy as np
+    assert (np.asarray(pieces[1].convert("L"))[:, 15:200] < 128).any()           # labels repeated on the left
+    assert _piece_label(Path("page-9-2of2.jpg")).startswith("Page 9, piece 2 of 2")
+    assert _piece_label(Path("page-9.jpg")) == ""
+    if not PDF.is_file():
+        print(f"SKIP (teng part): needs {PDF}"); return
+    from parameter_extractor.ingestion.pdf_parser import rasterize_pages
+    with tempfile.TemporaryDirectory() as tmp:
+        images = rasterize_pages(str(PDF), [9], Path(tmp), rotations={9: 90})
+        assert [p.name for p in images[9]] == ["page-9-1of2.jpg", "page-9-2of2.jpg"]
+        sizes = [Image.open(p).size for p in images[9]]
+        assert all(max(sz) <= MAX_SIDE * TOLERANCE for sz in sizes), sizes
+
+
 if __name__ == "__main__":
     for name, fn in list(globals().items()):
         if name.startswith("test_") and callable(fn):

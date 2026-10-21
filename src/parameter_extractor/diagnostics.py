@@ -73,7 +73,7 @@ def run_checks(pdf: Optional[Path] = None, api_key: Optional[str] = None) -> Lis
             parsed = parse_pdf(str(pdf))
             with tempfile.TemporaryDirectory() as tmp:
                 images = rasterize_table_pages(parsed, Path(tmp))
-                sizes = [p.stat().st_size for p in images.values()]
+                sizes = [p.stat().st_size for paths in images.values() for p in paths]
                 figures = find_figures(str(pdf), Path(tmp) / "figures")
             return (f"{parsed.page_count} pages, {len(parsed.text):,} chars of text, table pages "
                     f"{sorted(parsed.table_pages)}, rendered {len(sizes)} image(s), figures found: "

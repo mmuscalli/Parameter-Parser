@@ -235,7 +235,7 @@ def extract(
     if config.rasterize_table_pages and parsed.table_pages:
         images_by_page = rasterize_table_pages(parsed, ctx.run_dir / "page_images",
                                                dpi=config.table_raster_dpi)
-        table_images = [images_by_page[p] for p in sorted(images_by_page)]
+        table_images = [path for p in sorted(images_by_page) for path in images_by_page[p]]
     figures = find_figures(str(pdf_path), ctx.run_dir / "figures")
     (ctx.run_dir / "figures_found.json").write_text(
         json.dumps([f.model_dump() for f in figures], indent=2, ensure_ascii=False))

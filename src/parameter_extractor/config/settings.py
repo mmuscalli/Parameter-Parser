@@ -106,5 +106,7 @@ def crossref_user_agent() -> str:
 # order in plain text extraction. Pages whose text matches a "Table N"
 # caption get rasterized and handed to the model as images alongside the
 # text for the stages that most depend on table precision.
-TABLE_RASTER_DPI = 150
+# 220 dpi + cropping + cutting pages bigger than the API reads unscaled into pieces
+# (ingestion/table_tiles.py): superscript uncertainties stay legible (teng2023 Table 3).
+TABLE_RASTER_DPI = 220
 RASTERIZE_TABLE_PAGES = True

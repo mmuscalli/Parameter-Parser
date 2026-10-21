@@ -685,6 +685,25 @@ discrepancy. Plus table images for the planet/stellar/system stages.
 - tests/test_exoplanet_fits.py now uses frozen fixtures
   (tests/fixtures/exoplanet_fits/) instead of runs/teng2023_auto.
 
+## Dense table pages cut into pieces (2026-10-21)
+
+`ingestion/table_tiles.py` + `pdf_parser.rasterize_pages` (all packs): table
+pages render at 220 dpi (settings.TABLE_RASTER_DPI, was 150), cropped to the
+content; if still > 1568 px (the API's unscaled limit) x 1.15 tolerance, cut
+at white space -- rows first, then columns; column pieces after the first get
+the row-label strip (first column up to the widest vertical gap in the left
+40%, "gap" = ink in <3% of rows, since captions/rules cross it) pasted on the
+left. Files page-N.jpg or page-N-KofM.jpg; `rasterize_*` return {page:
+[paths]}. api_client puts a text label before each piece ("Page 9, piece 2
+of 2 ..."). teng2023: every table page -> 2 pieces (Table 3's label strip
+also takes the P column -- harmless repeat). Live (4.5 min, 547K in / 75K
+out, $1.84, same cost as before -- fewer output tokens): HD 167042 b e err
+read correctly (+0.033), retrograde inclination errors captured, 0 real
+differences left (all 32 on the RV-only rows the archive didn't take),
+low-confidence flags 9. Reference re-recorded. Prebiotic papers also get the
+sharper pieces on their next live runs (their reference runs replay
+unchanged; image tokens up somewhat per table page).
+
 ## Non-obvious decisions — don't redo this research
 
 - **Schema shape is grounded in `../POLO_variable_mapping.csv`** (one level
