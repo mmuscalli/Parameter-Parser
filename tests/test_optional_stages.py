@@ -1,0 +1,92 @@
+"""
+Offline tests for optional stages defined as data (stages/specs/*.json): the
+wet-dry spec builds the same models the hand-written stage had, and a new
+stage needs only a spec -- trigger, schema, prompt, per-set values and
+standard columns all follow from it. No API calls.
+
+Run with: python tests/test_optional_stages.py
+"""
+import json
+import sys
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT / "tests"))
+sys.path.insert(0, str(ROOT / "src"))
+
+from parameter_extractor.registry import standard_columns
+from parameter_extractor.schemas.structure_plan import StructurePlan
+from parameter_extractor.stages.optional import StageSpec, load_specs, optional_values, triggered_specs
+from test_pipeline_offline import REPLAY_DIR
+
+STRUCTURE = StructurePlan.model_validate_json((REPLAY_DIR / "structure_planner.output.json").read_text())
+
+
+def test_wet_dry_spec():
+    spec = load_specs()["wet_dry"]
+    Item, Result = spec.models()
+    assert Result.__name__ == "WetDryConditions"                     # what replays look up
+    assert list(Item.model_fields) == ["set_label", "parameter", "value", "basis", "quote", "source",
+                                       "confidence", "note"]
+    assert not spec.triggered(STRUCTURE, "")                          # eder1994: no cycling
+    truman = StructurePlan.model_validate_json(
+        (ROOT / "runs" / "truman2024_auto" / "structure_planner.output.json").read_text())
+    assert spec.triggered(truman, "") and len(spec.target_sets(truman)) == 4
+    # the wet/dry phase columns are standard columns, in spec order, after any listed ones
+    cols = standard_columns()
+    assert cols[-5:] == ["wet_phase_temperature_C", "wet_phase_duration_hr", "wet_phase_relative_humidity_pct",
+                         "dry_phase_temperature_C", "dry_phase_duration_hr"]
+    assert "cycle_duration_hr" not in cols                            # a template column already
+
+
+def test_a_new_stage_needs_only_a_spec():
+    spec = StageSpec.model_validate({
+        "name": "uv_irradiation", "label": "UV irradiation conditions", "set_word": "irradiated",
+        "trigger": {"keywords": ["UV", "ultraviolet"]},
+        "intro": "This paper irradiates samples with UV light.",
+        "parameters": [{"column": "uv_wavelength_nm", "unit": "nm", "description": "peak wavelength"},
+                       {"column": "uv_flux_W_m2", "unit": "W m-2", "description": "irradiance at the sample"}],
+        "rules": ["A lamp's nominal power is not the irradiance at the sample."]})
+    assert spec.model_name == "UvIrradiationResult" and spec.origin_label == "uv irradiation conditions"
+    assert not spec.triggered(STRUCTURE, "heated at 80 C")
+    assert spec.triggered(STRUCTURE, "samples were exposed to ultraviolet light (254 nm)")
+    assert not spec.triggered(STRUCTURE, "ultraviolets")                     # whole words only
+    Item, Result = spec.models()
+    prompt = spec.prompt(STRUCTURE, "PAPER")
+    assert "- `uv_wavelength_nm` (nm): peak wavelength" in prompt and "nominal power" in prompt
+    assert "every irradiated set" in prompt and "Return a UvIrradiationResult object." in prompt
+    result = Result.model_validate({"parameters": [
+        {"set_label": "", "parameter": "uv_wavelength_nm", "value": 254, "quote": "254 nm", "source": "Methods",
+         "confidence": "high"},
+        {"set_label": STRUCTURE.experiment_sets[0].set_label, "parameter": "uv_wavelength_nm", "value": 185,
+         "quote": "185 nm", "source": "Table 1", "confidence": "high"},
+        {"set_label": "", "parameter": "uv_flux_W_m2", "value": 5, "basis": "assumed", "quote": "", "source": "",
+         "confidence": "low"}]})
+    values = optional_values(spec, result, STRUCTURE)
+    first, second = STRUCTURE.experiment_sets[0].set_label, STRUCTURE.experiment_sets[1].set_label
+    assert values[(first, "uv_wavelength_nm")].value == 185                  # set-specific wins
+    assert values[(second, "uv_wavelength_nm")].value == 254                 # keyword stage: every set
+    assert not any(k[1] == "uv_flux_W_m2" for k in values)                  # assumed: left to the review
+    try:
+        Result.model_validate({"parameters": [{"set_label": "", "parameter": "not_a_column", "value": 1,
+                                               "quote": "", "source": "", "confidence": "low"}]})
+    except Exception:
+        pass
+    else:
+        raise AssertionError("parameters are limited to the spec's columns")
+
+
+def test_user_choices():
+    truman = StructurePlan.model_validate_json(
+        (ROOT / "runs" / "truman2024_auto" / "structure_planner.output.json").read_text())
+    names = lambda s, c=None: [x.name for x in triggered_specs(s, "", c)]
+    assert names(truman) == ["wet_dry"] and names(STRUCTURE) == []
+    assert names(truman, {"wet_dry": "off"}) == [] and names(STRUCTURE, {"wet_dry": "on"}) == ["wet_dry"]
+
+
+if __name__ == "__main__":
+    for name, fn in list(globals().items()):
+        if name.startswith("test_") and callable(fn):
+            fn()
+            print(f"PASS: {name}")
+    print("All optional-stage tests passed.")

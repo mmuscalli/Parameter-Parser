@@ -1,0 +1,26 @@
+{
+  "name": "wet_dry",
+  "label": "Wet-dry cycling conditions",
+  "origin": "wet-dry cycling",
+  "schema_name": "WetDryConditions",
+  "system_prompt": "Extract wet-dry cycling conditions. Report only what the paper states.",
+  "trigger": {
+    "set_types": ["Evaporation Cycle"],
+    "sample_fields": ["cycle_number"]
+  },
+  "set_word": "cycling",
+  "intro": "This paper includes wet-dry (hydration-dehydration / evaporation) cycling experiments. For each cycling set in the structure plan below, extract the cycle conditions the paper states.",
+  "parameters": [
+    {"column": "cycle_duration_hr", "unit": "h", "description": "length of one full wet + dry cycle, in hours."},
+    {"column": "wet_phase_temperature_C", "unit": "°C", "description": "temperature while the sample is wet, rehydrated or held humid (e.g. \"40 C and 70% RH for 20 h\")."},
+    {"column": "wet_phase_duration_hr", "unit": "h", "description": "duration of the wet phase of each cycle."},
+    {"column": "wet_phase_relative_humidity_pct", "unit": "%", "description": "relative humidity during the wet phase."},
+    {"column": "dry_phase_temperature_C", "unit": "°C", "description": "temperature while it dries / is dehydrated (e.g. \"120 C for 4 h on a hot plate\")."},
+    {"column": "dry_phase_duration_hr", "unit": "h", "description": "duration of the dry phase of each cycle."}
+  ],
+  "rules": [
+    "A cycle's length can follow from its phases (a 24 h cycle from 20 h + 4 h): that is `basis` \"derived\".",
+    "Which phase a single stated temperature belongs to, if the paper doesn't say, is an interpretation: `basis` \"assumed\".",
+    "If a set's cycling scheme doesn't fit these fields (e.g. phases that change from cycle to cycle), describe it in `notes`."
+  ]
+}

@@ -29,8 +29,16 @@ _STANDARD_COLUMNS = Path(__file__).resolve().parent / "schemas" / "standard_colu
 
 
 def standard_columns() -> list:
-    """App-defined standard columns (beyond the template), in their defined order."""
-    return [c["column"] for c in json.loads(_STANDARD_COLUMNS.read_text())["columns"]]
+    """App-defined standard columns (beyond the template), in their defined order: the
+    ones listed in standard_columns.json, then the optional stages' parameter columns
+    that aren't template columns (stages/specs/*.json), in spec order."""
+    from parameter_extractor.stages.optional import spec_standard_columns
+    listed = [c["column"] for c in json.loads(_STANDARD_COLUMNS.read_text())["columns"]]
+    template = set(json.loads(_TEMPLATE_VOCAB.read_text())["all_columns"])
+    for column, _ in spec_standard_columns():
+        if column not in template and column not in listed:
+            listed.append(column)
+    return listed
 
 
 def default_registry_path() -> Path:

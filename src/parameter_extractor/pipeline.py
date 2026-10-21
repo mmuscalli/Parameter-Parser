@@ -76,8 +76,7 @@ from parameter_extractor.stages.metadata_extractor import run_metadata_extractio
 from parameter_extractor.stages.methodology_extractor import run_methodology_extraction
 from parameter_extractor.stages.structure_planner import run_structure_planner
 from parameter_extractor.stages.term_search import run_term_search
-from parameter_extractor.stages.wet_dry import has_cycling, run_wet_dry
-from parameter_extractor.schemas.wet_dry import WetDryConditions
+from parameter_extractor.stages.optional import StageSpec, load_specs, run_optional_stage, triggered_specs
 from parameter_extractor.stages.triage import run_triage
 from parameter_extractor.validation.plausibility_checks import Flag, check_extraction, check_row, flags_to_json
 
@@ -186,7 +185,8 @@ class Extraction:
     methodology: Optional[Methodology] = None
     chemistry: Optional[ChemistryExtraction] = None
     term_search: Optional[TermSearch] = None
-    wet_dry: Optional[WetDryConditions] = None
+    # optional stages (stages/specs/*.json) that ran: name -> (spec, result)
+    optional: Dict[str, tuple] = field(default_factory=dict)
     equations: List[EquationCandidate] = field(default_factory=list)
     structure_ready: threading.Event = field(default_factory=threading.Event)
     failure: Optional[str] = None
@@ -194,6 +194,14 @@ class Extraction:
     @property
     def paper_id(self) -> str:
         return self.pdf_path.stem
+
+    @property
+    def wet_dry(self):
+        return self.optional.get("wet_dry", (None, None))[1]
+
+    @property
+    def optional_list(self) -> list:
+        return list(self.optional.values())
 
 
 def extract(
@@ -247,13 +255,16 @@ def extract(
         if terms:
             columns = VariableRegistry(config.registry_path).known_columns()
             running["term_search"] = pool.submit(run_term_search, ctx, terms, parsed.text, ex.structure, columns)
-        if has_cycling(ex.structure):
-            ctx.total_steps += 1        # only papers with wet-dry cycling get this step
-            running["wet_dry"] = pool.submit(run_wet_dry, ctx, parsed.text, ex.structure)
+        # optional stages whose trigger matches this paper (decided locally, no API call)
+        specs = triggered_specs(ex.structure, parsed.text, config.optional_stages)
+        for spec in specs:
+            ctx.total_steps += 1
+            running[spec.name] = pool.submit(run_optional_stage, ctx, spec, parsed.text, ex.structure)
         results = _collect(ctx, running)
         ex.metadata, ex.methodology, ex.chemistry = results["metadata"], results["methodology"], results["chemistry"]
-        ex.term_search, ex.wet_dry = results.get("term_search"), results.get("wet_dry")
-        ctx.sort_usage(STAGE_ORDER)
+        ex.term_search = results.get("term_search")
+        ex.optional = {spec.name: (spec, results[spec.name]) for spec in specs}
+        ctx.sort_usage(stage_order())
     except BaseException as e:
         pool.shutdown(wait=False, cancel_futures=True)
         ex.failure = str(e) or type(e).__name__
@@ -263,12 +274,21 @@ def extract(
     return ex
 
 
-# the order stages are listed in (summary, usage table) whatever order they finish in
-STAGE_ORDER = ["structure_planner", "metadata", "methodology", "term_search", "wet_dry", "chemistry",
-               "equations", "figure_planner"]
-STAGE_LABELS = {"metadata": "Bibliographic metadata", "methodology": "Experimental methodology",
-                "chemistry": "Solution chemistry", "term_search": "Parameter search",
-                "wet_dry": "Wet-dry cycling conditions", "equations": "Equations to LaTeX"}
+# the order stages are listed in (summary, usage table) whatever order they finish in;
+# optional stages (specs) go before chemistry
+def stage_order() -> List[str]:
+    return (["structure_planner", "metadata", "methodology", "term_search"] + list(load_specs())
+            + ["chemistry", "equations", "figure_planner"])
+
+
+def stage_label(name: str) -> str:
+    spec = load_specs().get(name)
+    return spec.label if spec else _STAGE_LABELS.get(name, name)
+
+
+_STAGE_LABELS = {"metadata": "Bibliographic metadata", "methodology": "Experimental methodology",
+                 "chemistry": "Solution chemistry", "term_search": "Parameter search",
+                 "equations": "Equations to LaTeX"}
 
 
 def _collect(ctx: RunContext, running: dict) -> dict:
@@ -282,13 +302,14 @@ def _collect(ctx: RunContext, running: dict) -> dict:
         name = by_future[future]
         results[name] = future.result()          # re-raises the stage's error here
         pending.discard(name)
-        ctx.step(name, f"{STAGE_LABELS.get(name, name)} done"
+        ctx.step(name, f"{stage_label(name)} done"
                        + (f" -- still running: {_names(pending)}" if pending else ""))
     return results
 
 
 def _names(stages) -> str:
-    return ", ".join(STAGE_LABELS.get(n, n).lower() for n in sorted(stages, key=STAGE_ORDER.index))
+    order = stage_order()
+    return ", ".join(stage_label(n).lower() for n in sorted(stages, key=lambda n: order.index(n) if n in order else 99))
 
 
 def _convert_equations(ctx: RunContext, equations: List[EquationCandidate]) -> None:
@@ -348,10 +369,10 @@ def finish(
     mixing = derive_mixture_concentrations(ex.chemistry, set_labels)
     mixing += derive_from_ratios(ex.chemistry, set_labels)
     rows = build_rows(ex.metadata, ex.structure, ex.methodology, ex.chemistry, config.paper_prefix,
-                      drop_below=config.confidence_drop_below, registry=registry, wet_dry=ex.wet_dry)
+                      drop_below=config.confidence_drop_below, registry=registry, optional=ex.optional_list)
     thresholds = dict(flag_below=config.confidence_flag_below,
                       drop_below=config.confidence_drop_below)
-    paper_flags = check_extraction(ex.methodology, ex.chemistry, wet_dry=ex.wet_dry, **thresholds)
+    paper_flags = check_extraction(ex.methodology, ex.chemistry, optional=ex.optional_list, **thresholds)
     paper_flags += _cited_data_flags(ex.structure)
     paper_flags += [Flag("unit_conversion", n.message, quote=n.quote or None, source=n.source or None)
                     for n in normalization if n.kind == "unit_corrected"]
@@ -410,7 +431,7 @@ def finish(
                          f"the amount.", quote=d.parameter.quote or None, source=d.parameter.source or None)
                     for d in repeats]
     new_vars = collect_new_variables(ex.methodology, ex.chemistry, registry, index, ex.term_search,
-                                     wet_dry=ex.wet_dry, structure=ex.structure)
+                                     optional=ex.optional_list, structure=ex.structure)
     new_vars += fig_new_vars
     known, pending = split_known(new_vars, registry)
     accepted = []

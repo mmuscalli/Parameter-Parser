@@ -35,7 +35,7 @@ from parameter_extractor.gui.variable_review import VariableReviewDialog
 from parameter_extractor.gui.worker import PipelineWorker
 from parameter_extractor.pricing import PRICES_CHECKED, format_usd
 from parameter_extractor.registry import default_pubchem_cache_path, default_registry_path
-from parameter_extractor.pipeline import Extraction, finish, plan_figure
+from parameter_extractor.pipeline import Extraction, finish, plan_figure, stage_label
 
 DEFAULT_OUTPUT_DIR = Path.home() / "Documents" / "Parameter Extractor"
 FLAGGED_ROW_COLOR = QColor(255, 243, 205)   # soft amber, readable in light and dark themes
@@ -55,7 +55,7 @@ PRIVACY_NOTE = ("The paper's text, and images of its table pages, are sent to An
 
 STEP_LABELS = {"structure_planner": "Experiment structure", "metadata": "Bibliographic metadata",
                "methodology": "Methodology", "term_search": "Parameters to look for",
-               "wet_dry": "Wet-dry cycling", "chemistry": "Solution chemistry",
+               "chemistry": "Solution chemistry",
                "figure_planner": "Figure suggestions", "triage": "Screening",
                "equations": "Equations to LaTeX"}
 
@@ -639,7 +639,7 @@ class MainWindow(QMainWindow):
 
     def _fill_summary(self, result) -> None:
         usage_rows = "".join(
-            f"<tr><td>{STEP_LABELS.get(u.stage, u.stage)}</td><td>{u.model}</td>"
+            f"<tr><td>{STEP_LABELS.get(u.stage) or stage_label(u.stage)}</td><td>{u.model}</td>"
             f"<td align=right>{u.input_tokens:,}</td><td align=right>{u.output_tokens:,}</td>"
             f"<td align=right>{format_usd(u.cost_usd)}</td><td align=right>{u.elapsed_sec:.0f} s</td></tr>"
             for u in result.usage)

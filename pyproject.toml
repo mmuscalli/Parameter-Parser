@@ -44,4 +44,4 @@ parameter-extractor-gui = "parameter_extractor.gui.app:main"
 where = ["src"]
 
 [tool.setuptools.package-data]
-parameter_extractor = ["prompts/*.md", "schemas/*.json", "gui/resources/*.png"]
+parameter_extractor = ["prompts/*.md", "schemas/*.json", "stages/specs/*.json", "gui/resources/*.png"]

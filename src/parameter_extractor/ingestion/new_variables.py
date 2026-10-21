@@ -75,7 +75,7 @@ def _rows_for(set_label, sample_label, index) -> List[str]:
 def collect_new_variables(
     methodology: Methodology, chemistry: ChemistryExtraction,
     registry: Optional[VariableRegistry] = None, index=None,
-    term_search: Optional[TermSearch] = None, wet_dry=None, structure=None,
+    term_search: Optional[TermSearch] = None, wet_dry=None, structure=None, optional=None,
 ) -> List[NewVariable]:
     """Every value without a known column (species) or not yet mapped by the user
     (parameters, search findings). `index` (from row_index) fills row_ids."""
@@ -115,15 +115,14 @@ def collect_new_variables(
         if o.basis == "assumed":
             found.append(_assumed(o.field_name, o.value, o.set_label, o.quote, o.source, o.confidence,
                                   "methodology", rows_for))
-    if wet_dry is not None:
-        cycling = [s.set_label for s in structure.experiment_sets
-                   if s.set_type == "Evaporation Cycle" or any(x.cycle_number is not None for x in s.samples)
-                   ] if structure else []
-        for cp in wet_dry.parameters:
-            if cp.basis == "assumed":
-                for label in ([cp.set_label] if cp.set_label else cycling):
-                    found.append(_assumed(cp.parameter, cp.value, label, cp.quote, cp.source, cp.confidence,
-                                          "wet-dry cycling", rows_for))
+    from parameter_extractor.stages.optional import optional_results
+    for spec, result in optional_results(optional, wet_dry):
+        targets = spec.target_sets(structure) if structure else []
+        for v in result.parameters:
+            if v.basis == "assumed":
+                for label in ([v.set_label] if v.set_label else targets):
+                    found.append(_assumed(v.parameter, v.value, label, v.quote, v.source, v.confidence,
+                                          spec.origin_label, rows_for))
     for f in (term_search.findings if term_search else []):
         if not f.found:
             continue

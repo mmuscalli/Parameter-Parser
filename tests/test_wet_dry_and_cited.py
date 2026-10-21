@@ -49,7 +49,7 @@ WET_DRY = WetDryConditions(parameters=[
 
 
 def _run(tmp: Path, structure: StructurePlan, wet_dry_calls: list):
-    def fake_wet_dry(ctx, text, struct):
+    def fake_wet_dry(ctx, spec, text, struct):
         wet_dry_calls.append(struct.experiment_sets[0].set_label)
         return WET_DRY
     original_send = _replay_send
@@ -59,7 +59,7 @@ def _run(tmp: Path, structure: StructurePlan, wet_dry_calls: list):
         if kw["response_model"] is StructurePlan:
             resp.parsed_output = structure
         return resp
-    with patch.object(api_client, "_send", send), patch.object(pipeline, "run_wet_dry", fake_wet_dry):
+    with patch.object(api_client, "_send", send), patch.object(pipeline, "run_optional_stage", fake_wet_dry):
         return pipeline.run_pipeline(PDF, RunConfig.from_settings(api_key="x", output_dir=tmp))
 
 
@@ -147,7 +147,7 @@ def test_assumed_values_are_never_written_automatically():
 
     for decide in (None, review):
         with tempfile.TemporaryDirectory() as tmp, patch.object(api_client, "_send", send), \
-                patch.object(pipeline, "run_wet_dry", lambda *a: wet_dry):
+                patch.object(pipeline, "run_optional_stage", lambda *a: wet_dry):
             config = RunConfig.from_settings(api_key="x", output_dir=Path(tmp), registry_path=Path(tmp) / "r.json")
             ex = pipeline.extract(PDF, config)
             add_overrides(ex)

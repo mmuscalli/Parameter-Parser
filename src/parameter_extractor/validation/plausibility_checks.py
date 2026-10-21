@@ -103,6 +103,7 @@ def check_extraction(
     flag_below: Optional[str] = settings.CONFIDENCE_FLAG_BELOW,
     drop_below: Optional[str] = settings.CONFIDENCE_DROP_BELOW,
     wet_dry=None,
+    optional=None,
 ) -> List[Flag]:
     """Paper-level flags: problems with values that apply to many rows at once
     (paper-wide methodology, initial compositions), reported once here rather
@@ -142,8 +143,10 @@ def check_extraction(
     # per-set and cycling values (assumed ones are reported separately: never written)
     per_set = [(o.field_name, o.value, o.set_label, o.confidence, o.basis, o.quote, o.source, o.note)
                for o in methodology.per_set_overrides]
-    per_set += [(c.parameter, c.value, c.set_label or "every cycling set", c.confidence, c.basis, c.quote,
-                 c.source, c.note) for c in (wet_dry.parameters if wet_dry else [])]
+    from parameter_extractor.stages.optional import optional_results
+    per_set += [(c.parameter, c.value, c.set_label or f"every {spec.set_word} set", c.confidence, c.basis,
+                 c.quote, c.source, c.note)
+                for spec, result in optional_results(optional, wet_dry) for c in result.parameters]
     # one flag per field and confidence level, listing every set it applies to -- the same doubt
     # repeated set by set (kim2019: sampled_temperature_C in 10 sets) is one thing to check
     groups: Dict[tuple, list] = {}

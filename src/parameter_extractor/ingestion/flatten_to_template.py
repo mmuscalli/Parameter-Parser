@@ -204,6 +204,7 @@ def build_rows(
     drop_below: Optional[str] = settings.CONFIDENCE_DROP_BELOW,
     registry=None,
     wet_dry=None,
+    optional=None,
 ) -> List[ExtractedRow]:
     """`drop_below`: values whose confidence ranks below this are left blank
     (None = keep everything). They're still reported by the plausibility checks."""
@@ -226,17 +227,11 @@ def build_rows(
         and _kept(s.confidence)
     }
 
-    # wet-dry cycle conditions per set ('' = every cycling set; set-specific wins)
-    cycling_sets = {s.set_label for s in structure.experiment_sets
-                    if s.set_type == "Evaporation Cycle" or any(x.cycle_number is not None for x in s.samples)}
-    cycle_values: dict = {}
-    for cp in (wet_dry.parameters if wet_dry else []):
-        if cp.basis == "assumed":
-            continue                  # never written automatically; offered in the review
-        targets = [cp.set_label] if cp.set_label else sorted(cycling_sets)
-        for label in targets:
-            if cp.set_label or (label, cp.parameter) not in cycle_values:
-                cycle_values[(label, cp.parameter)] = cp
+    # optional stages' values per set (stages/optional.py: '' = every set the stage concerns,
+    # set-specific wins; assumed values never written -- offered in the review)
+    from parameter_extractor.stages.optional import optional_results, optional_values
+    stage_values = [(spec, optional_values(spec, result, structure))
+                    for spec, result in optional_results(optional, wet_dry)]
 
     entry_number = 0
     for set_idx, pset in enumerate(structure.experiment_sets, start=1):
@@ -322,11 +317,12 @@ def build_rows(
             if sample.cycle_number is not None:
                 extra["cycle_number"] = sample.cycle_number
                 prov["cycle_number"] = structure_src
-            for (label, param), cp in cycle_values.items():
-                if label == pset.set_label and _kept(cp.confidence):
-                    extra[param] = cp.value
-                    prov[param] = CellSource(origin="wet-dry cycling" + (", derived" if cp.basis == "derived" else ""),
-                                             quote=cp.quote, source=cp.source, confidence=cp.confidence)
+            for spec, values in stage_values:
+                for (label, param), v in values.items():
+                    if label == pset.set_label and _kept(v.confidence):
+                        extra[param] = v.value
+                        prov[param] = CellSource(origin=spec.origin_label + (", derived" if v.basis == "derived" else ""),
+                                                 quote=v.quote, source=v.source, confidence=v.confidence)
             if pset.data_source:
                 prov["original_data_reference"] = CellSource(
                     origin="structure (data reproduced from another publication)",

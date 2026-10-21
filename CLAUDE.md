@@ -471,6 +471,27 @@ to the other papers) with an Exoplanet Archive export
 b values, then `# COLUMN name: description` lines; default_flag = 1). Rows
 there are per planet/star, not per sample.
 
+## Optional stages as data (2026-10-20, step 2)
+
+`stages/specs/*.json` + `stages/optional.py`: a spec (name, label, origin,
+schema_name, trigger {set_types, sample_fields, keywords, always}, set_word,
+intro, parameters [{column, unit, description}], rules) is all a stage needs:
+models built with pydantic create_model (flat, Literal of the spec's columns;
+same field layout as the old CycleParameter), prompt = spec text inside
+`prompts/optional_stage.md` (shared rules: stated/derived/assumed, verbatim
+quotes, per-set values), `optional_values` -> rows (set-specific wins,
+assumed -> review), flags and review generic over `[(spec, result)]`
+(`optional=`; `wet_dry=` still accepted). Non-template spec columns become
+registry standard columns (after standard_columns.json's, in spec order).
+`RunConfig.optional_stages` {name: auto/on/off}. Wet-dry converted:
+truman2024 replay byte-identical; live call matches the reference values.
+`schemas/wet_dry.py` / `stages/wet_dry.py` are thin compatibility shims.
+Exoplanet validation (Mickey): compare against the archive row whose
+PLANETARY PARAMETER reference is the paper -- for 11 Com b that's Teng et al.
+2023 (folder Teng2023 holds that paper and the PS_*.csv export); the archive
+TAP API (exoplanetarchive.ipac.caltech.edu/TAP/sync, table ps) gives every
+published parameter set (pl_refname) without a key.
+
 ## Non-obvious decisions — don't redo this research
 
 - **Schema shape is grounded in `../POLO_variable_mapping.csv`** (one level
