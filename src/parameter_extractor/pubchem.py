@@ -33,7 +33,6 @@ from typing import Dict, Optional
 BASE = "https://pubchem.ncbi.nlm.nih.gov/rest/pug"
 MIN_INTERVAL_SEC = 0.25
 TIMEOUT_SEC = 10
-SPECIES_CIDS = Path(__file__).resolve().parent / "schemas" / "species_cids.json"
 
 
 @dataclass(frozen=True)
@@ -59,11 +58,13 @@ def _cache_key(name: str) -> str:
 
 def template_species_cids() -> Dict[int, str]:
     """CID -> template species name, for the template species whose identity
-    was confirmed (schemas/species_cids.json, built by scripts/build_species_cids.py)."""
-    if not SPECIES_CIDS.is_file():
+    was confirmed (the active pack's species_cids.json, built by scripts/build_species_cids.py)."""
+    from parameter_extractor.packs import current
+    path = current().species_cids_path
+    if path is None or not path.is_file():
         return {}
     from parameter_extractor.names import match_species
-    data = json.loads(SPECIES_CIDS.read_text())
+    data = json.loads(path.read_text())
     # in the app's naming (the template's DKP_Gly is cyclo_Gly-Gly)
     return {int(v["cid"]): (match_species(name) or (name,))[0] for name, v in data["species"].items()}
 

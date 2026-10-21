@@ -19,7 +19,6 @@ from functools import lru_cache
 from pathlib import Path
 from typing import List, Optional, Tuple
 
-_VOCAB = Path(__file__).resolve().parent / "schemas" / "template_vocab.json"
 
 AMINO_ACIDS = {  # 3-letter code -> full name
     "Ala": "alanine", "Arg": "arginine", "Asn": "asparagine", "Asp": "aspartic acid", "Cys": "cysteine",
@@ -124,9 +123,9 @@ def peptide_codes(name: str) -> Optional[List[str]]:
     return None
 
 
-@lru_cache(maxsize=1)
 def vocabulary() -> Tuple[str, ...]:
-    return tuple(json.loads(_VOCAB.read_text())["species_names"])
+    from parameter_extractor.packs import current
+    return tuple(current().species_names)
 
 
 def _salt_formula(cation: str, anion: str) -> List[str]:

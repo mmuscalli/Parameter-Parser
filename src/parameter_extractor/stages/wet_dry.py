@@ -1,5 +1,5 @@
 """
-Wet-dry cycling -- now an optional stage defined in stages/specs/wet_dry.json and run
+Wet-dry cycling -- now an optional stage defined in packs/prebiotic_chemistry/stages/wet_dry.json and run
 by stages/optional.py. Kept so existing imports keep working.
 """
 from parameter_extractor.stages.optional import load_specs, run_optional_stage

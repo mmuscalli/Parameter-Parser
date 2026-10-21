@@ -38,7 +38,9 @@ class RunConfig:
     # Convert the labelled equations found in the paper to LaTeX: one small extra API call
     # (stages/equations.py). Finding and cropping them is free and always done.
     equations_to_latex: bool = False
-    # Optional stages (stages/specs/*.json) by name: "auto" (run when its trigger matches the
+    # Domain pack (packs/): template, vocabulary, prompts and stages of a research area
+    pack: str = "prebiotic_chemistry"
+    # Optional stages (the domain pack's stages/*.json) by name: "auto" (run when its trigger matches the
     # paper -- the default), "on" (always) or "off" (never)
     optional_stages: Dict[str, str] = field(default_factory=dict)
     pubchem_cache_path: Optional[Path] = None

@@ -2,10 +2,9 @@
 The variable registry: which columns exist, and which extracted names map to
 them.
 
-  - Base list (bundled, read-only): PaperDataTemplate's 280 columns, from
-    schemas/template_vocab.json (the app never edits the template), plus the
-    app's own standard columns from schemas/standard_columns.json (e.g. the
-    wet/dry phase conditions).
+  - Base list (bundled, read-only): the active domain pack's template columns
+    (prebiotic chemistry: PaperDataTemplate's 280, which the app never edits)
+    plus its standard columns and its optional stages' columns (packs/).
   - Local additions (per user, a JSON file in the user's app-data folder):
     columns the user accepted in the "Review new variables" screen, and
     aliases -- "this extracted name means that column" -- so the same
@@ -24,17 +23,17 @@ from pathlib import Path
 from typing import Dict, Optional, Set
 
 APP_NAME = "Parameter Extractor"
-_TEMPLATE_VOCAB = Path(__file__).resolve().parent / "schemas" / "template_vocab.json"
-_STANDARD_COLUMNS = Path(__file__).resolve().parent / "schemas" / "standard_columns.json"
 
 
 def standard_columns() -> list:
     """App-defined standard columns (beyond the template), in their defined order: the
-    ones listed in standard_columns.json, then the optional stages' parameter columns
-    that aren't template columns (stages/specs/*.json), in spec order."""
+    ones the active domain pack lists (packs/), then its optional stages' parameter columns
+    that aren't template columns (the pack's stages/*.json), in spec order."""
+    from parameter_extractor.packs import current
     from parameter_extractor.stages.optional import spec_standard_columns
-    listed = [c["column"] for c in json.loads(_STANDARD_COLUMNS.read_text())["columns"]]
-    template = set(json.loads(_TEMPLATE_VOCAB.read_text())["all_columns"])
+    pack = current()
+    listed = [c["column"] for c in pack.standard_column_entries]
+    template = set(pack.template_columns)
     for column, _ in spec_standard_columns():
         if column not in template and column not in listed:
             listed.append(column)
@@ -102,8 +101,8 @@ def suggest_column_name(kind: str, name: str, role: Optional[str] = None) -> str
 class VariableRegistry:
     def __init__(self, path: Optional[Path] = None):
         self.path = Path(path) if path else None
-        vocab = json.loads(_TEMPLATE_VOCAB.read_text())
-        self.template_columns = list(vocab["all_columns"])
+        from parameter_extractor.packs import current
+        self.template_columns = current().template_columns
         self.standard_columns = standard_columns()
         self._template_set: Set[str] = set(self.template_columns)
         self._base_set: Set[str] = self._template_set | set(self.standard_columns)

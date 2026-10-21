@@ -18,7 +18,7 @@ import html
 from PySide6.QtCore import QSettings, Qt, QThread, QUrl
 from PySide6.QtGui import QAction, QBrush, QColor, QDesktopServices, QKeySequence
 from PySide6.QtWidgets import (
-    QAbstractItemView, QCheckBox, QFileDialog, QFormLayout, QGroupBox, QHBoxLayout,
+    QAbstractItemView, QCheckBox, QComboBox, QFileDialog, QFormLayout, QGroupBox, QHBoxLayout,
     QHeaderView, QLabel, QLineEdit, QMainWindow, QMessageBox, QPlainTextEdit, QProgressBar, QPushButton,
     QSplitter,
     QTableWidget, QTableWidgetItem, QTabWidget, QTextBrowser, QTreeWidget, QTreeWidgetItem,
@@ -129,6 +129,16 @@ class MainWindow(QMainWindow):
         self.terms_edit.setToolTip("Each term gets an explicit answer from a targeted search -- its value, "
                                    "or 'not stated in the paper'. One extra API call when used.")
         form.addRow("Parameters to look for:", self.terms_edit)
+        from parameter_extractor import packs
+        self.pack_combo = QComboBox()
+        for pack_id, pack in sorted(packs.available().items(), key=lambda kv: kv[1].label):
+            self.pack_combo.addItem(pack.label, pack_id)
+            self.pack_combo.setItemData(self.pack_combo.count() - 1, pack.manifest.description,
+                                        Qt.ItemDataRole.ToolTipRole)
+        self.pack_combo.setToolTip("The research area: which dataset columns, vocabulary, prompts and "
+                                   "extraction stages are used (domain packs).")
+        self.pack_combo.currentIndexChanged.connect(self._on_pack_changed)
+        form.addRow("Research area:", self.pack_combo)
         self.pubchem_box = QCheckBox("Look up chemical names on PubChem")
         self.pubchem_box.setToolTip("Recognises different names for the same compound (e.g. 2'-CMP and "
                                     "cytidine 2'-monophosphate), so it goes in the same column. Only the "
@@ -223,12 +233,22 @@ class MainWindow(QMainWindow):
         self.out_edit.setText(self._settings.value("output_dir", str(DEFAULT_OUTPUT_DIR)))
         self.terms_edit.setPlainText(self._settings.value("focus_terms", ""))
         self.pubchem_box.setChecked(self._settings.value("use_pubchem", True, type=bool))
+        saved_pack = self._settings.value("pack", "prebiotic_chemistry")
+        index = self.pack_combo.findData(saved_pack)
+        self.pack_combo.setCurrentIndex(index if index >= 0 else self.pack_combo.findData("prebiotic_chemistry"))
         self.equations_box.setChecked(self._settings.value("equations_to_latex", False, type=bool))
         stored_key = key_store.load_key()
         self._key_was_stored = bool(stored_key)
         if stored_key:
             self.key_edit.setText(stored_key)
             self.remember_key_box.setChecked(True)
+
+    def _on_pack_changed(self, _index: int) -> None:
+        """Windows opened before a run (Remembered variables) show the chosen area's columns."""
+        from parameter_extractor import packs
+        pack_id = self.pack_combo.currentData()
+        if pack_id:
+            packs.activate(pack_id)
 
     def focus_terms(self) -> list:
         text = self.terms_edit.toPlainText().replace(";", "\n")
@@ -238,6 +258,7 @@ class MainWindow(QMainWindow):
         self._settings.setValue("output_dir", self.out_edit.text().strip())
         self._settings.setValue("focus_terms", self.terms_edit.toPlainText())
         self._settings.setValue("use_pubchem", self.pubchem_box.isChecked())
+        self._settings.setValue("pack", self.pack_combo.currentData())
         self._settings.setValue("equations_to_latex", self.equations_box.isChecked())
         key = self.key_edit.text().strip()
         if self.remember_key_box.isChecked():
@@ -315,6 +336,7 @@ class MainWindow(QMainWindow):
                            registry_path=self.registry_path, focus_terms=self.focus_terms(),
                            use_pubchem=self.pubchem_box.isChecked(),
                            equations_to_latex=self.equations_box.isChecked(),
+                           pack=self.pack_combo.currentData() or "prebiotic_chemistry",
                            pubchem_cache_path=default_pubchem_cache_path())
         self._extraction, self._extraction_ok, self._review = None, False, None
         self._worker = PipelineWorker(pdf, config)

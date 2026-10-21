@@ -41,7 +41,7 @@ def main() -> int:
         return self_check(sys.argv[1:])
 
     parser = argparse.ArgumentParser(description="Extract experimental data from a paper PDF.")
-    parser.add_argument("--pdf", required=True, help="Path to the paper PDF")
+    parser.add_argument("--pdf", help="Path to the paper PDF")
     parser.add_argument("--out", type=Path, help="Folder for run outputs (default: runs/)")
     parser.add_argument("--prefix", default="001", help="3-digit-ish paper prefix for full_id/set_id")
     parser.add_argument("--look-for", action="append", default=[], metavar="TERM",
@@ -50,6 +50,9 @@ def main() -> int:
     parser.add_argument("--triage-only", action="store_true",
                         help="Only screen the paper against prompts/triage.md's inclusion "
                              "criteria; skip extraction")
+    parser.add_argument("--pack", default="prebiotic_chemistry",
+                        help="Domain pack (research area) to extract with; see --list-packs")
+    parser.add_argument("--list-packs", action="store_true", help="List the available domain packs and exit")
     parser.add_argument("--no-pubchem", action="store_true",
                         help="Don't look up species names on PubChem (used to recognise synonyms; "
                              "only the names are sent)")
@@ -57,11 +60,18 @@ def main() -> int:
                         help="Convert the paper's labelled equations to LaTeX (one small extra API call); "
                              "they're found and cropped either way")
     args = parser.parse_args()
+    if args.list_packs:
+        from parameter_extractor import packs
+        for pack_id, pack in sorted(packs.available().items()):
+            print(f"{pack_id:24} {pack.label} -- {pack.manifest.description}")
+        return 0
+    if not args.pdf:
+        parser.error("--pdf is required")
 
     from parameter_extractor.registry import default_pubchem_cache_path, default_registry_path
     overrides = {"paper_prefix": args.prefix, "registry_path": default_registry_path(),
                  "focus_terms": args.look_for, "use_pubchem": not args.no_pubchem,
-                 "equations_to_latex": args.equations_latex,
+                 "equations_to_latex": args.equations_latex, "pack": args.pack,
                  "pubchem_cache_path": default_pubchem_cache_path()}
     if args.out:
         overrides["output_dir"] = args.out

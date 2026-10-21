@@ -38,14 +38,18 @@ def run_checks(pdf: Optional[Path] = None, api_key: Optional[str] = None) -> Lis
     checks: List[Check] = []
 
     def resources() -> str:
-        prompts = sorted(p.stem for p in settings.PROMPTS_DIR.glob("*.md"))
-        expected = {"chemistry", "figure_planner", "metadata", "methodology",
-                    "structure_planner", "triage"}
+        from parameter_extractor import packs
+        found = packs.available()
+        pack = packs.activate(packs.DEFAULT_PACK)
+        prompts = sorted({p.stem for p in settings.PROMPTS_DIR.glob("*.md")}
+                         | {p.stem for p in (pack.folder / "prompts").glob("*.md")})
+        expected = {"chemistry", "figure_planner", "metadata", "methodology", "structure_planner",
+                    "triage", "optional_stage"}
         missing = expected - set(prompts)
         if missing:
-            raise FileNotFoundError(f"missing prompts: {sorted(missing)} in {settings.PROMPTS_DIR}")
-        vocab = json.loads((settings.SCHEMAS_DIR / "template_vocab.json").read_text())
-        return f"{len(prompts)} prompts, {len(vocab['species_names'])} vocabulary species"
+            raise FileNotFoundError(f"missing prompts: {sorted(missing)} (app and {pack.id} pack)")
+        return (f"{len(prompts)} prompts, {len(found)} domain pack(s) ({', '.join(sorted(found))}); "
+                f"{pack.label}: {len(pack.template_columns)} columns, {len(pack.species_names)} species")
     checks.append(_run("Bundled prompts & vocabulary", resources))
 
     def pdf_libs() -> str:

@@ -22,7 +22,7 @@ from typing import List, Optional, Tuple
 
 from parameter_extractor.digitizing.calibration import pixel_to_data
 from parameter_extractor.ingestion.flatten_to_template import (
-    FIELD_TO_TEMPLATE, UNRECOGNIZED_SUFFIX, _TEMPLATE_COLUMNS, resolve_template_column, set_row_value, current_column_name)
+    FIELD_TO_TEMPLATE, UNRECOGNIZED_SUFFIX, resolve_template_column, set_row_value, current_column_name)
 from parameter_extractor.schemas.figures import DigitizedFigure, SeriesCondition
 from parameter_extractor.schemas.methodology import Methodology
 from parameter_extractor.schemas.paper_metadata import PaperMetadata

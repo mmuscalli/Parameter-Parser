@@ -1,5 +1,5 @@
 """
-Builds src/parameter_extractor/schemas/species_cids.json: PubChem CIDs for the
+Builds src/parameter_extractor/packs/prebiotic_chemistry/species_cids.json: PubChem CIDs for the
 template's species names, so a paper's name for one of them ("2'-cytidylic
 acid", "calcium dichloride") can be matched by identity (pubchem.py).
 
@@ -20,7 +20,10 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 from parameter_extractor.names import AMINO_ACIDS, vocabulary
-from parameter_extractor.pubchem import SPECIES_CIDS, PubChem
+from parameter_extractor import packs
+from parameter_extractor.pubchem import PubChem
+
+SPECIES_CIDS = packs.activate("prebiotic_chemistry").species_cids_path
 
 SKIP = {"H+_constituents", "Na+_WORMadd", "total_monomers", "poly(A)", "poly(C)", "poly(G)", "poly(U)",
         "polyvinylpyrrolidone", "sodium_polyphosphate", "sodium_polyphosphate_n26", "ammonium_polyphosphate",

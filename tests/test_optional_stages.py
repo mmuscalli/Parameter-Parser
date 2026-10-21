@@ -64,9 +64,9 @@ def test_a_new_stage_needs_only_a_spec():
          "confidence": "low"}]})
     values = optional_values(spec, result, STRUCTURE)
     first, second = STRUCTURE.experiment_sets[0].set_label, STRUCTURE.experiment_sets[1].set_label
-    assert values[(first, "uv_wavelength_nm")].value == 185                  # set-specific wins
-    assert values[(second, "uv_wavelength_nm")].value == 254                 # keyword stage: every set
-    assert not any(k[1] == "uv_flux_W_m2" for k in values)                  # assumed: left to the review
+    assert values[(first, "", "uv_wavelength_nm")].value == 185                  # set-specific wins
+    assert values[(second, "", "uv_wavelength_nm")].value == 254                 # keyword stage: every set
+    assert not any(k[2] == "uv_flux_W_m2" for k in values)                  # assumed: left to the review
     try:
         Result.model_validate({"parameters": [{"set_label": "", "parameter": "not_a_column", "value": 1,
                                                "quote": "", "source": "", "confidence": "low"}]})

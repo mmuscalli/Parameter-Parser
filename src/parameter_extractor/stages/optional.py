@@ -1,5 +1,5 @@
 """
-Optional extraction stages defined as data (stages/specs/*.json), not code.
+Optional extraction stages defined as data (each domain pack's stages/*.json), not code.
 
 A spec names the stage, says when it runs (its trigger), and lists the
 parameters it extracts -- each a column with a unit and a description. From
@@ -47,7 +47,6 @@ from pydantic import BaseModel, Field, create_model
 from parameter_extractor.schemas.common import Basis
 from parameter_extractor.schemas.structure_plan import StructurePlan
 
-SPEC_DIR = Path(__file__).resolve().parent / "specs"
 
 
 class StageParameter(BaseModel):
@@ -71,9 +70,16 @@ class StageSpec(BaseModel):
     system_prompt: str = ""
     trigger: StageTrigger = Field(default_factory=StageTrigger)
     set_word: str = "relevant"
+    # "set": one value per set (or '' = every set); "sample": values can also name a sample
+    # (a row) -- e.g. one planet of a planetary system
+    per: Literal["set", "sample"] = "set"
     intro: str
     parameters: List[StageParameter]
     rules: List[str] = Field(default_factory=list)
+
+    def units(self, which: str) -> str:
+        from parameter_extractor.packs import current
+        return current().manifest.units.get(which, which)
 
     @property
     def origin_label(self) -> str:
@@ -117,7 +123,10 @@ class StageSpec(BaseModel):
                             for p in self.parameters)
         return load_prompt("optional_stage", INTRO=self.intro, PARAMETER_LIST=listing,
                            SET_WORD=self.set_word, SCHEMA_NAME=self.model_name,
-                           EXTRA_RULES="".join(f"- {r}\n" for r in self.rules),
+                           EXTRA_RULES="".join(f"- {r}\n" for r in self.rules + (
+                               [f"Give `sample_label` exactly as in the structure plan when a value belongs "
+                                f"to one {self.units('sample')} only; '' when it applies to the whole set."]
+                               if self.per == "sample" else [])),
                            STRUCTURE_PLAN_JSON=structure.model_dump_json(indent=2), PAPER_TEXT=paper_text)
 
 
@@ -126,10 +135,14 @@ def _models(spec_json: str) -> Tuple[type, type]:
     """(item model, result model) for a spec -- the same classes for the same spec."""
     spec = StageSpec.model_validate_json(spec_json)
     name = spec.model_name
+    sample_field = {} if spec.per == "set" else {"sample_label": (str, Field(
+        default="", description="Exact structure-plan sample_label within the set if the value is for one "
+                                "sample only; '' if it applies to the whole set."))}
     Item = create_model(
         f"{name}Value",
         set_label=(str, Field(description="Exact structure-plan set_label; '' if it applies to every "
                                           f"{spec.set_word} set.")),
+        **sample_field,
         parameter=(Literal[tuple(spec.columns)], ...),
         value=(float, Field(description="In the parameter's unit.")),
         basis=(Basis, Field(default="stated", description="'stated' in the paper; 'derived' by arithmetic from "
@@ -151,11 +164,16 @@ def _models(spec_json: str) -> Tuple[type, type]:
     return Item, Result
 
 
-@lru_cache(maxsize=1)
 def load_specs() -> Dict[str, StageSpec]:
-    """All stage specs, by name, in file-name order."""
+    """The active domain pack's stage specs (its stages/*.json), by name, in file order."""
+    from parameter_extractor.packs import current
+    return _specs_in(current().stages_dir)
+
+
+@lru_cache(maxsize=None)
+def _specs_in(folder: Path) -> Dict[str, StageSpec]:
     specs = {}
-    for path in sorted(SPEC_DIR.glob("*.json")):
+    for path in sorted(Path(folder).glob("*.json")):
         spec = StageSpec.model_validate_json(path.read_text())
         specs[spec.name] = spec
     return specs
@@ -184,17 +202,19 @@ def run_optional_stage(ctx, spec: StageSpec, paper_text: str, structure: Structu
     )
 
 
-def optional_values(spec: StageSpec, result, structure: StructurePlan) -> Dict[Tuple[str, str], object]:
-    """{(set_label, column): value record} for the values written automatically: assumed
-    ones are left to the review; a set-specific value wins over a paper-wide one."""
+def optional_values(spec: StageSpec, result, structure: StructurePlan) -> Dict[Tuple[str, str, str], object]:
+    """{(set_label, sample_label, column): value record} for the values written automatically
+    (sample_label '' = the whole set): assumed ones are left to the review; a set-specific
+    value wins over a paper-wide one."""
     targets = spec.target_sets(structure)
-    out: Dict[Tuple[str, str], object] = {}
+    out: Dict[Tuple[str, str, str], object] = {}
     for v in (result.parameters if result is not None else []):
         if v.basis == "assumed":
             continue
+        sample = getattr(v, "sample_label", "") or ""
         for label in ([v.set_label] if v.set_label else targets):
-            if v.set_label or (label, v.parameter) not in out:
-                out[(label, v.parameter)] = v
+            if v.set_label or (label, sample, v.parameter) not in out:
+                out[(label, sample, v.parameter)] = v
     return out
 
 

@@ -24,9 +24,18 @@ from parameter_extractor.schemas.row_schema import CellSource, ExtractedRow
 from parameter_extractor.schemas.structure_plan import StructurePlan
 from parameter_extractor.calculators.peptide_yield import peptide_mM_from_yield_pct
 
-_VOCAB_PATH = Path(__file__).resolve().parent.parent / "schemas" / "template_vocab.json"
-_TEMPLATE_COLUMNS_ORDERED = json.loads(_VOCAB_PATH.read_text())["all_columns"] if _VOCAB_PATH.exists() else []
-_TEMPLATE_COLUMNS = set(_TEMPLATE_COLUMNS_ORDERED)
+def template_columns() -> List[str]:
+    """The active domain pack's columns, in template order (packs/)."""
+    from parameter_extractor.packs import current
+    return current().template_columns
+
+
+def _template_set() -> set:
+    from parameter_extractor.packs import current
+    pack = current()
+    if getattr(pack, "_column_set", None) is None:
+        pack._column_set = set(pack.template_columns)
+    return pack._column_set
 
 
 UNRECOGNIZED_SUFFIX = "__UNRECOGNIZED_COLUMN"
@@ -45,9 +54,9 @@ def resolve_template_column(species_name: str, role: str) -> str:
     """
     aq_form = f"{role}_{species_name}_aq_mM"
     plain_form = f"{role}_{species_name}_mM"
-    if aq_form in _TEMPLATE_COLUMNS:
+    if aq_form in _template_set():
         return aq_form
-    if plain_form in _TEMPLATE_COLUMNS:
+    if plain_form in _template_set():
         return plain_form
     return f"{aq_form}{UNRECOGNIZED_SUFFIX}"
 
@@ -56,16 +65,17 @@ def is_percent(entry) -> bool:
     return "%" in (entry.concentration_unit_raw or "")
 
 
-_BASE_REGISTRY = None
+_BASE_REGISTRY: dict = {}
 
 
 def base_registry():
-    """Template columns only (no local additions)."""
-    global _BASE_REGISTRY
-    if _BASE_REGISTRY is None:
-        from parameter_extractor.registry import VariableRegistry
-        _BASE_REGISTRY = VariableRegistry(None)
-    return _BASE_REGISTRY
+    """The active pack's template columns only (no local additions)."""
+    from parameter_extractor.packs import current
+    from parameter_extractor.registry import VariableRegistry
+    pack_id = current().id
+    if pack_id not in _BASE_REGISTRY:
+        _BASE_REGISTRY[pack_id] = VariableRegistry(None)
+    return _BASE_REGISTRY[pack_id]
 
 
 def species_alias_name(entry) -> str:
@@ -318,8 +328,10 @@ def build_rows(
                 extra["cycle_number"] = sample.cycle_number
                 prov["cycle_number"] = structure_src
             for spec, values in stage_values:
-                for (label, param), v in values.items():
-                    if label == pset.set_label and _kept(v.confidence):
+                # whole-set values first, so a value for this sample (row) wins
+                for (label, sample_label, param), v in sorted(values.items(), key=lambda kv: bool(kv[0][1])):
+                    if (label == pset.set_label and sample_label in ("", sample.sample_label)
+                            and _kept(v.confidence)):
                         extra[param] = v.value
                         prov[param] = CellSource(origin=spec.origin_label + (", derived" if v.basis == "derived" else ""),
                                                  quote=v.quote, source=v.source, confidence=v.confidence)
@@ -400,9 +412,9 @@ def ordered_columns(present: set) -> List[str]:
     provenance = set(PROVENANCE_COLUMNS) | set(OPTIONAL_PROVENANCE_COLUMNS)
     standard = [c for c in standard_columns() if c in present]
     extras = sorted(c for c in present
-                    if c not in _TEMPLATE_COLUMNS and c not in provenance and c not in standard)
+                    if c not in _template_set() and c not in provenance and c not in standard)
     optional = [c for c in OPTIONAL_PROVENANCE_COLUMNS if c in present]
-    return list(_TEMPLATE_COLUMNS_ORDERED) + standard + extras + PROVENANCE_COLUMNS + optional
+    return template_columns() + standard + extras + PROVENANCE_COLUMNS + optional
 
 
 def write_template_csv(records: List[dict], out_path: Path) -> None:

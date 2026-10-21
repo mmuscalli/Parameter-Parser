@@ -102,3 +102,10 @@ class Methodology(BaseModel):
     def override_details(self, set_label: str) -> Dict[str, "SetOverride"]:
         return {o.field_name: o for o in self.per_set_overrides
                 if o.set_label == set_label and o.basis != "assumed"}
+
+
+def empty_methodology(paper_id: str) -> "Methodology":
+    """Stand-in for a domain pack without the methodology stage: every field not reported."""
+    fields = {name: {} for name, f in Methodology.model_fields.items()
+              if f.is_required() and name != "paper_id"}
+    return Methodology.model_validate({"paper_id": paper_id, **fields})

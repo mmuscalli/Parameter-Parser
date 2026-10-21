@@ -492,6 +492,31 @@ PLANETARY PARAMETER reference is the paper -- for 11 Com b that's Teng et al.
 TAP API (exoplanetarchive.ipac.caltech.edu/TAP/sync, table ps) gives every
 published parameter set (pl_refname) without a key.
 
+## Domain packs (2026-10-20, step 3)
+
+`src/parameter_extractor/packs/<id>/` (pack.json + template + standard columns +
+species CIDs + prompts/ + stages/), loader in `packs/__init__.py`; also the
+user's `<app data>/packs/`. `RunConfig.pack` (default prebiotic_chemistry) is
+activated in pipeline._start; template/vocab (registry, names,
+flatten_to_template, pubchem), prompts (`prompt_loader`: pack's own, else
+app's prompts/), stage specs (`optional.load_specs`) all come from
+`packs.current()`. Manifest `builtin_stages` (methodology, chemistry) and
+`postprocess` (normalize_species, mixing, molar_ratios, peptide_totals)
+switch those on; a pack without them gets empty stand-ins
+(`empty_methodology`, empty ChemistryExtraction) and rows come from the
+structure plan + its stages. Specs can be `"per": "sample"` (values name a
+sample = a row, e.g. a planet; whole-set values apply to every row of the set,
+sample values win). Moved to the prebiotic pack: template_vocab.json,
+standard_columns.json, species_cids.json, wet_dry.json, and the prompts
+structure_planner/methodology/chemistry/figure_planner/triage; generic
+prompts stay in prompts/ (metadata, term_search, optional_stage, equations).
+GUI "Research area" combo (QSettings `pack`), CLI `--pack` / `--list-packs`.
+`tests/test_domain_packs.py` runs a throwaway exoplanet-like pack end to end.
+Still prebiotic-shaped (for step 4): ExtractedRow's fixed fields and
+FIELD_TO_TEMPLATE (metadata column names, Gly peptide yields), the
+Methodology fields, names.py's peptide rules. A new pack needs at least its
+own structure_planner and figure_planner prompts.
+
 ## Non-obvious decisions — don't redo this research
 
 - **Schema shape is grounded in `../POLO_variable_mapping.csv`** (one level
@@ -502,7 +527,7 @@ published parameter set (pl_refname) without a key.
   (`schemas/chemistry.py`) instead of ~150 separate fields — those columns
   are literally the same repeated ontology pattern, not distinct properties.
   Re-read that CSV before changing the chemistry schema.
-- **`schemas/template_vocab.json` is generated, not hand-written** — built
+- **`packs/prebiotic_chemistry/template_vocab.json` is generated, not hand-written** — built
   directly from `../PaperDataTemplate.xlsx`'s own header row. If the
   template's columns change, regenerate it (see the one-off script history
   in this conversation — not currently saved as its own script in the repo;

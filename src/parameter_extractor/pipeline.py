@@ -39,6 +39,7 @@ from typing import Callable, Dict, List, Optional, Sequence
 
 from parameter_extractor.calculators.peptide_totals import fill_total_peptide_yield
 from parameter_extractor.calculators.mixing import derive_from_ratios, derive_mixture_concentrations
+from parameter_extractor import packs
 from parameter_extractor.config import settings
 from parameter_extractor.config.run_config import RunConfig
 from parameter_extractor.errors import ApiKeyMissingError, PdfNotReadableError, PipelineError
@@ -64,7 +65,7 @@ from parameter_extractor.schemas.chemistry import ChemistryExtraction
 from parameter_extractor.schemas.equations import EquationCandidate
 from parameter_extractor.stages.equations import transcribe_equations
 from parameter_extractor.schemas.figures import DigitizedFigure, FigureCandidate, FigurePlan
-from parameter_extractor.schemas.methodology import Methodology
+from parameter_extractor.schemas.methodology import Methodology, empty_methodology
 from parameter_extractor.schemas.paper_metadata import PaperMetadata
 from parameter_extractor.schemas.row_schema import ExtractedRow
 from parameter_extractor.schemas.structure_plan import StructurePlan
@@ -147,6 +148,7 @@ def _start(pdf_path, config: RunConfig, total_steps: int,
     run_dir = _new_run_dir(Path(config.output_dir), pdf_path.stem)
     ctx = RunContext(config=config, run_dir=run_dir, total_steps=total_steps,
                      on_progress=on_progress, cancel_event=cancel_event)
+    packs.activate(config.pack)           # template, vocabulary, prompts and stages of this domain
     return pdf_path, ctx
 
 
@@ -185,7 +187,7 @@ class Extraction:
     methodology: Optional[Methodology] = None
     chemistry: Optional[ChemistryExtraction] = None
     term_search: Optional[TermSearch] = None
-    # optional stages (stages/specs/*.json) that ran: name -> (spec, result)
+    # optional stages (the domain pack's stages/*.json) that ran: name -> (spec, result)
     optional: Dict[str, tuple] = field(default_factory=dict)
     equations: List[EquationCandidate] = field(default_factory=list)
     structure_ready: threading.Event = field(default_factory=threading.Event)
@@ -215,7 +217,10 @@ def extract(
     extraction stages. Call finish() afterwards to write the dataset."""
     started = datetime.now()
     terms = [t.strip() for t in config.focus_terms if t.strip()]
-    pdf_path, ctx = _start(pdf_path, config, 7 if terms else 6, on_progress, cancel_event)
+    pdf_path, ctx = _start(pdf_path, config, 0, on_progress, cancel_event)
+    pack = packs.current()
+    # parse, structure, metadata and assembly, plus the pack's built-in stages and the term search
+    ctx.total_steps = 4 + pack.uses("methodology") + pack.uses("chemistry") + bool(terms)
 
     ctx.step("parse", "Reading the PDF")
     parsed = _parse(pdf_path, ctx.run_dir)
@@ -229,7 +234,7 @@ def extract(
         json.dumps([f.model_dump() for f in figures], indent=2, ensure_ascii=False))
     equations = find_equations(str(pdf_path), ctx.run_dir / "equations")     # local, no API call
     _write_equations(ctx, equations)
-    vocab = json.loads((settings.SCHEMAS_DIR / "template_vocab.json").read_text())
+    vocab = packs.current().vocab
     ex = Extraction(ctx=ctx, pdf_path=pdf_path, started=started, parsed=parsed, vocab=vocab,
                     figures=figures, equations=equations)
     if figures and on_figures:
@@ -249,9 +254,12 @@ def extract(
         ex.structure_ready.set()
 
         # everything else depends only on the structure: run it all at once
-        running["methodology"] = pool.submit(run_methodology_extraction, ctx, parsed.text, ex.structure)
-        running["chemistry"] = pool.submit(run_chemistry_extraction, ctx, parsed.text, ex.structure,
-                                           vocab["species_names"], table_images=table_images)
+        pack = packs.current()
+        if pack.uses("methodology"):
+            running["methodology"] = pool.submit(run_methodology_extraction, ctx, parsed.text, ex.structure)
+        if pack.uses("chemistry"):
+            running["chemistry"] = pool.submit(run_chemistry_extraction, ctx, parsed.text, ex.structure,
+                                               vocab["species_names"], table_images=table_images)
         if terms:
             columns = VariableRegistry(config.registry_path).known_columns()
             running["term_search"] = pool.submit(run_term_search, ctx, terms, parsed.text, ex.structure, columns)
@@ -261,7 +269,10 @@ def extract(
             ctx.total_steps += 1
             running[spec.name] = pool.submit(run_optional_stage, ctx, spec, parsed.text, ex.structure)
         results = _collect(ctx, running)
-        ex.metadata, ex.methodology, ex.chemistry = results["metadata"], results["methodology"], results["chemistry"]
+        # a domain pack without these stages gets empty stand-ins, so the rest works unchanged
+        ex.metadata = results["metadata"]
+        ex.methodology = results.get("methodology") or empty_methodology(ex.paper_id)
+        ex.chemistry = results.get("chemistry") or ChemistryExtraction(paper_id=ex.paper_id, solutes=[])
         ex.term_search = results.get("term_search")
         ex.optional = {spec.name: (spec, results[spec.name]) for spec in specs}
         ctx.sort_usage(stage_order())
@@ -361,13 +372,15 @@ def finish(
     registry = VariableRegistry(config.registry_path)
     pubchem = PubChem(config.pubchem_cache_path) if config.use_pubchem else None
     # names -> vocabulary (rules, then PubChem identity); mM re-checked
-    normalization = normalize_chemistry(ex.chemistry, pubchem=pubchem, registry=registry)
+    pack = packs.current()
+    normalization = (normalize_chemistry(ex.chemistry, pubchem=pubchem, registry=registry)
+                     if pack.uses("normalize_species") else [])
     if pubchem:
         pubchem.save()
     set_labels = [s.set_label for s in ex.structure.experiment_sets]
     # stock -> mixture concentrations, then molar ratios -> missing concentrations; marked derived
-    mixing = derive_mixture_concentrations(ex.chemistry, set_labels)
-    mixing += derive_from_ratios(ex.chemistry, set_labels)
+    mixing = derive_mixture_concentrations(ex.chemistry, set_labels) if pack.uses("mixing") else []
+    mixing += derive_from_ratios(ex.chemistry, set_labels) if pack.uses("molar_ratios") else []
     rows = build_rows(ex.metadata, ex.structure, ex.methodology, ex.chemistry, config.paper_prefix,
                       drop_below=config.confidence_drop_below, registry=registry, optional=ex.optional_list)
     thresholds = dict(flag_below=config.confidence_flag_below,
@@ -473,7 +486,7 @@ def finish(
              "decisions": [d.__dict__ for d in decisions]}, indent=2, ensure_ascii=False))
 
     # after the review, so accepted peptide columns count too
-    totals, differing = fill_total_peptide_yield(rows)
+    totals, differing = fill_total_peptide_yield(rows) if pack.uses("peptide_totals") else ([], [])
     for full_id, stated, total, listed in differing:
         paper_flags.append(Flag(
             "conflicting_values", f"Row {full_id}: the paper's total peptide yield is {stated:g}%, but the peptide "
