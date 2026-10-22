@@ -44,7 +44,9 @@ candidates later; don't wire it back in as a gate.
   Mickey's Mac are leftovers, not needed.
 - **API integration notes:** `api_client.py` uses native structured outputs
   (`client.messages.stream(output_format=Model)`), not forced tool use --
-  current models 400 on `tool_choice` "tool"/"any". Consequence: schemas
+  current models 400 on `tool_choice` "tool"/"any" (Sonnet 5.5 still does; with
+  caching on, paper-reading steps use non-strict tools + "auto" -- see "Cost
+  options"). Consequence: schemas
   sent to the model can't contain free-form dicts (they become always-empty
   objects), hence `Methodology.per_set_overrides` is a list. Streaming +
   `MAX_TOKENS = 64000` because eder1994's chemistry output alone overflowed
@@ -758,33 +760,43 @@ can't). Not reproducible (rerun: 1.3K output tokens). Now:
 
 Mickey asked about cheaper processing (asked about TypeSafe's Jev: early access,
 text-only, no free-form strings -> not for extraction; maybe decision-shaped
-steps later). Built and measured live (11 runs, ~$5):
-- **Prompt caching** (`RunConfig.prompt_caching`, CLI `--cache`): paper text +
-  table images sent first with cache_control, step task after, shared system
-  prompt (api_client `PaperContext`, `SHARED_SYSTEM`, `PAPER_ABOVE`). DOESN'T PAY:
-  the cache key includes the request's output schema (verified with two Haiku
-  calls, schema A/B, paper in messages AND in system: B always writes, A
-  again reads) -> every step wrote its own entry (1.25x), no reads within a
-  run. OFF by default. Would need identical schemas across steps (e.g. one
-  shared schema for the exoplanet spec stages + serialising the first call).
+steps later).
+- **Prompt caching via shared tools** (`RunConfig.prompt_caching`, ON by default;
+  CLI `--no-cache`). The API's cache key includes the request's OUTPUT SCHEMA
+  (verified: two calls differing only in output_format never share, paper in
+  messages or system alike), so per-step `output_format` can't share a cached
+  paper. Instead every paper-reading step sends: SHARED_SYSTEM, the same tool
+  list (`PaperContext.tools` = every paper-reading step the run may make, fixed
+  before structure planning -- pipeline `_paper_tools`; non-strict, since all
+  of them strict exceeds the API's "compiled grammar is too large" limit in
+  both packs), the paper (table-image pieces + text, cache_control on the text),
+  then "YOUR TASK: <step prompt> ... Answer by calling the `<stage>` tool".
+  tool_choice "auto" + disable_parallel_tool_use: Sonnet 5.5 400s on forced
+  "tool"/"any" (Haiku 5.5 accepts them). `_send` turns the tool call into
+  parsed_output (`_from_tool_call`, `_decoded` fixes lists sent as JSON strings);
+  a missing/invalid call is a broken answer -> retried once. The structure
+  planner writes the cache (runs alone), the parallel steps read it.
+  Live, cached (vs the same profile uncached):
+  | paper | standard | economy |
+  | teng | $1.43 (was $2.15), 2110 archive matches, 0 real diffs | $0.43 ($0.51), 2082, 0 |
+  | nielsen | $0.24 ($0.49), 118, 0 | $0.016 ($0.027), 115, 3 (insol unit blank) |
+  | aa57186 | $0.40 ($0.88), 139, 1* | $0.028 ($0.043), 148, 1* |
+  | eder1994 | $0.32 ($0.42), 94.9% cells = reference | $0.022, 79.6% |
+  (*the archive's st_rotplim). One Haiku answer sent its list as a JSON string
+  with junk -> retried fine (non-strict risk). Cached prefix ~7K tokens larger
+  (tool definitions).
 - **Model profiles** (`RunConfig.model_profile`, settings.MODEL_PROFILES, GUI
-  "Models", CLI `--models`): standard (Sonnet), balanced (Sonnet structure +
-  fit_models + chemistry, Haiku rest), economy (Haiku; figure_planner /
-  equations exempt). Cost without caching (replayed accuracy, current code):
-  | paper | standard | balanced | economy |
-  | teng | $2.15, 1944 archive matches, 0 real diffs | $0.86, 1380, 0 | $0.51, 1803, 5 (no inclination modes) |
-  | nielsen | $0.49, 121, 0 | $0.20, 117, 3 (pl_insol unit left blank) | $0.027, 120, 0 |
-  | aa57186 | $0.88, 139 (2 rows), 1* | $0.39, 137, 2 (no v sin i estimate) | $0.043, 107 (missed GP solution row), 2 |
-  | eder1994 | $0.42, 89.8% cells = reference | -- | $0.024, 84.7% |
-  (*the archive's own st_rotplim). Haiku: ~20x cheaper on <100K prompts,
-  ~4x on Teng-size (>100K tier). Balanced is NOT a sweet spot (Haiku's
-  extraction step is the weak one; Sonnet structure costs most).
+  "Models" with hover text naming the models, CLI `--models`): standard
+  (Sonnet 5.5; page-1 metadata Haiku), economy (Haiku 5.5; figure_planner /
+  equations exempt -> Sonnet). "balanced" (Sonnet structure, Haiku extraction)
+  was measured and DROPPED (Mickey): $0.86 / 1380 matches on teng, worse than
+  economy on both.
 - Fixes from these runs: `_surname` dropped all-caps surnames ("Huan-Yu TENG"
   -> "Huan-Yu et al.", archive check found no set); pl_insol had no unit ->
   "S_E" + flux units + "10^N <unit>" scale prefixes; a dimensioned unit for a
   unitless parameter is refused, not passed through. `_record` returns its
   StageUsage (audit no longer reads ctx.usage[-1] across threads).
-- Batch API (50% off, async) not built yet.
+- Batch API (50% off, async) not built yet; stacks with caching.
 
 ## Non-obvious decisions — don't redo this research
 

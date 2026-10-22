@@ -1,11 +1,12 @@
 """
-Offline tests for the cost options (2026-10-22): prompt caching (opt-in -- the
-paper, text + table images, sent first and identically in every paper-reading
-step, marked for caching, each step's own task after it, one shared system
-prompt; measured live it doesn't pay off yet because the API's cache key
-includes each step's output schema), cache-aware cost estimates, and the model
-profiles (standard / balanced / economy). Replays nielsen2019's recorded
-responses; no API calls.
+Offline tests for the cost options (2026-10-22): prompt caching (on by default --
+the paper, text + table images, sent first and identically in every
+paper-reading step, marked for caching, each step's own task after it, one
+shared system prompt and the same tool list, each step answering through its
+own tool: the API's cache key includes a request's output schema, so per-step
+output formats couldn't share the cache), cache-aware cost estimates, and the
+model profiles (standard / economy). Replays nielsen2019's recorded responses;
+no API calls.
 
 Run with: python tests/test_cost_options.py
 """
@@ -36,7 +37,7 @@ def _run(tmp, **kw):
     replay, sent = make_replay(REF), {}
 
     def send(ctx, *, model, system_prompt, content, response_model, **rest):
-        sent[response_model.__name__] = (model, system_prompt, content)
+        sent[response_model.__name__] = (model, system_prompt, content, getattr(api_client._streamed, "tool", None))
         out = replay(ctx, model=model, system_prompt=system_prompt, content=content, response_model=response_model)
         if response_model.__name__ in PAPER_STAGES and isinstance(content, list):   # as the API reports caching
             first = response_model.__name__ == "StructurePlan"
@@ -57,8 +58,13 @@ def test_the_paper_is_one_cached_prefix():
             result, sent = _run(tmp, prompt_caching=True)
             assert result.csv_path.read_text() == (REF / "nielsen2019_extracted.csv").read_text()   # same result
             prefixes = []
+            tool_lists = set()
             for name in PAPER_STAGES:
-                model, system, content = sent[name]
+                model, system, content, tool = sent[name]
+                # every step: the same tool list (all the run's paper-reading steps), forced to its own
+                assert tool is not None and tool[0] in [t["name"] for t in tool[1]]
+                assert sent[name][2][-1]["text"].endswith(f"Answer by calling the `{tool[0]}` tool.")
+                tool_lists.add(json.dumps(tool[1]))
                 assert system == api_client.SHARED_SYSTEM
                 marked = [i for i, b in enumerate(content) if "cache_control" in b]
                 assert len(marked) == 1 and content[marked[0]]["text"].startswith("PAPER TEXT:")
@@ -68,6 +74,11 @@ def test_the_paper_is_one_cached_prefix():
                 paper = content[marked[0]]["text"]
                 assert paper[200:700] not in task and len(task) < len(paper)  # the paper isn't sent twice
             assert len(set(prefixes)) == 1                                       # byte-identical prefix
+            assert len(tool_lists) == 1                                          # ... and tool list
+            names = [t["name"] for t in json.loads(tool_lists.pop())]
+            assert names == ["structure_planner", "fit_models", "planet_parameters", "stellar_parameters",
+                             "system_and_discovery"]
+            assert sent["PaperMetadata"][3] is None                              # not a paper-reading step
             assert any(b["type"] == "image" for b in json.loads(prefixes[0]))   # table pages included
             assert isinstance(sent["PaperMetadata"][2], str)                    # page 1 only: not shared
             # cached tokens counted, and priced at the cache rates
@@ -89,9 +100,10 @@ def test_caching_can_be_switched_off():
         print(f"SKIP: needs {PDF}"); return
     try:
         with tempfile.TemporaryDirectory() as tmp:
-            result, sent = _run(tmp)                                          # off by default
+            result, sent = _run(tmp, prompt_caching=False)
             assert result.csv_path.read_text() == (REF / "nielsen2019_extracted.csv").read_text()
-            model, system, content = sent["PlanetParametersResult"]
+            model, system, content, tool = sent["PlanetParametersResult"]
+            assert tool is None                                                  # structured output as before
             assert system != api_client.SHARED_SYSTEM
             assert not any("cache_control" in b for b in content if isinstance(b, dict))
             assert "PAPER TEXT" in content[-1]["text"]
@@ -104,8 +116,6 @@ def test_model_profiles():
         print(f"SKIP: needs {PDF}"); return
     try:
         for profile, expect in (("standard", {"StructurePlan": "sonnet", "PlanetParametersResult": "sonnet"}),
-                                ("balanced", {"StructurePlan": "sonnet", "FitModels": "sonnet",
-                                              "PlanetParametersResult": "haiku", "StellarParametersResult": "haiku"}),
                                 ("economy", {"StructurePlan": "haiku", "FitModels": "haiku",
                                              "PlanetParametersResult": "haiku"})):
             with tempfile.TemporaryDirectory() as tmp:
@@ -126,6 +136,32 @@ def test_units_and_names_found_in_the_live_tests():
     assert convert_printed(0.2, "deg", "")[0] is None and convert_printed(0.1, "dex", "")[0] == 0.1
     assert reference_name(["Huan-Yu TENG", "Bun'ei SATO", "Masayuki KUZUHARA"], 2023) == "Teng et al. 2023"
     assert reference_name(["H.-Y. Teng", "B. Sato"], 2023) == "Teng & Sato 2023"
+
+
+def test_a_forced_tool_call_is_read_like_a_structured_output():
+    from pydantic import BaseModel, ValidationError
+
+    class Answer(BaseModel):
+        planet: str
+        period_days: float
+    message = SimpleNamespace(id="m", stop_reason="tool_use", usage=SimpleNamespace(input_tokens=1, output_tokens=1),
+                              content=[SimpleNamespace(type="tool_use", name="other", input={}),
+                                       SimpleNamespace(type="tool_use", name="planet_parameters",
+                                                       input={"planet": "HD 1397 b", "period_days": 11.5})])
+    out = api_client._from_tool_call(message, "planet_parameters", Answer)
+    as_string = SimpleNamespace(**{**vars(message), "content": [SimpleNamespace(
+        type="tool_use", name="planet_parameters", input={"planet": "HD 1397 b", "period_days": 11.5})]})
+    assert api_client._decoded({"items": '[{"a": 1}]', "notes": "[not json"}) == {"items": [{"a": 1}], "notes": "[not json"}
+    assert api_client._from_tool_call(as_string, "planet_parameters", Answer).parsed_output.period_days == 11.5
+    assert out.parsed_output == Answer(planet="HD 1397 b", period_days=11.5) and out.stop_reason == "end_turn"
+    bad = SimpleNamespace(**{**vars(message), "content": [SimpleNamespace(type="tool_use", name="planet_parameters",
+                                                                          input={"planet": "x"})]})
+    try:
+        api_client._from_tool_call(bad, "planet_parameters", Answer)
+    except ValidationError:
+        pass                                     # handled like a broken answer: retried once
+    else:
+        raise AssertionError("an answer missing a field must not pass")
 
 
 def test_cache_prices():

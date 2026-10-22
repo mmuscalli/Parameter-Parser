@@ -49,11 +49,10 @@ MODELS = {
 
 # Model profiles (RunConfig.model_profile; GUI "Models", CLI --models): per-stage overrides of
 # MODELS, "*" = every other paper-reading stage. Haiku 5.5 is ~20x cheaper than Sonnet 5.5
-# (~4x for prompts over 100K tokens). Measured on the exoplanet references (CLAUDE.md).
+# (~4x for prompts over 100K tokens). Measured 2026-10-22 (CLAUDE.md); a "balanced" profile
+# (Sonnet planning, Haiku extracting) was dropped: costlier than economy, no more accurate.
 MODEL_PROFILES = {
     "standard": {},
-    "balanced": {"structure_planner": "claude-sonnet-5-5", "fit_models": "claude-sonnet-5-5",
-                 "chemistry": "claude-sonnet-5-5", "*": "claude-haiku-5-5"},
     "economy": {"*": "claude-haiku-5-5"},
 }
 # stages a profile's "*" doesn't change (only run when the user asks; quality matters there)

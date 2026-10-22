@@ -62,12 +62,15 @@ STEP_LABELS = {"structure_planner": "Experiment structure", "metadata": "Bibliog
 
 # (RunConfig.model_profile, label, tooltip) -- costs measured 2026-10-22 (CLAUDE.md)
 MODEL_PROFILE_CHOICES = [
-    ("standard", "Standard (Sonnet 5.5) -- most accurate",
-     "Sonnet 5.5 for every step."),
-    ("balanced", "Balanced -- Sonnet plans, Haiku extracts",
-     "Sonnet 5.5 plans the rows (and reads fitting models / chemistry); Haiku 5.5 extracts the parameters."),
-    ("economy", "Economy (Haiku 5.5) -- cheapest",
-     "Haiku 5.5 for every step: a fraction of the cost; expect more missed or misread values."),
+    ("standard", "Standard (Claude Sonnet 5.5) -- most accurate",
+     "<b>Standard</b>: Claude Sonnet 5.5 plans the rows and does every extraction step (only the "
+     "bibliographic details from page 1 use Claude Haiku 5.5).<br>Most complete and accurate. "
+     "Measured: about $0.40-$0.90 for a typical paper, ~$2 for a 40-page paper with large tables."),
+    ("economy", "Economy (Claude Haiku 5.5) -- cheapest",
+     "<b>Economy</b>: Claude Haiku 5.5 for every step.<br>Roughly 20x cheaper on typical papers (a few cents), "
+     "about 4x on very long ones. On simple papers it matched Standard closely; on complex ones it "
+     "missed more -- e.g. a second fit of a planet, values for each mode of a bimodal result, "
+     "alternative estimates. Good for screening many papers; check flagged values."),
 ]
 
 
@@ -161,8 +164,10 @@ class MainWindow(QMainWindow):
         for key, label, tip in MODEL_PROFILE_CHOICES:
             self.profile_combo.addItem(label, key)
             self.profile_combo.setItemData(self.profile_combo.count() - 1, tip, Qt.ItemDataRole.ToolTipRole)
-        self.profile_combo.setToolTip("Which Claude models do the extraction. Cheaper models cost less per paper "
-                                      "and may miss or misread more; every value is still flagged and checked.")
+        self.profile_combo.setToolTip("Which Claude models read the paper:<br><br>"
+                                      + "<br><br>".join(tip for _, _, tip in MODEL_PROFILE_CHOICES)
+                                      + "<br><br>Figure-digitizing suggestions and LaTeX conversion (when you ask "
+                                        "for them) always use Sonnet 5.5.")
         form.addRow("Models:", self.profile_combo)
         self._inputs_form = form
         self.pubchem_box = QCheckBox("Use online lookups (PubChem names, NASA Exoplanet Archive check)")

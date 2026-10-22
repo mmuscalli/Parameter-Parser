@@ -24,7 +24,7 @@ import threading
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import List, Optional, Type, TypeVar
+from typing import Dict, List, Optional, Type, TypeVar
 
 from pydantic import BaseModel, ValidationError
 
@@ -54,6 +54,17 @@ class PaperContext:
     the prefix must be byte-identical -- same system prompt, same images, same text)."""
     text: str
     images: List[Path] = field(default_factory=list)
+    # every paper-reading step of the run: stage name -> its answer schema, sent as tools in EVERY
+    # request (same list, same order) so the cached prefix is shared; non-strict, because the API's
+    # strict-grammar size limit can't take them all -- answers are validated here instead
+    tools: Dict[str, type] = field(default_factory=dict)
+    _definitions: Optional[list] = None
+
+    def tool_definitions(self) -> list:
+        if self._definitions is None:
+            self._definitions = [{"name": stage, "description": f"Record your answer for the '{stage}' step.",
+                                  "input_schema": model.model_json_schema()} for stage, model in self.tools.items()]
+        return self._definitions
 
 
 SHARED_SYSTEM = ("You extract information from one scientific paper for a research dataset. Report only what the "
@@ -102,20 +113,55 @@ def _send(ctx: RunContext, *, model: str, system_prompt: str, content, response_
     streaming for max_tokens that large. (Tests replace this function to
     replay saved responses without calling the API.)"""
     _streamed.text = ""
-    with ctx.client.messages.stream(
-        model=model,
-        max_tokens=getattr(_streamed, "max_tokens", None) or ctx.config.max_tokens,
-        system=system_prompt,
-        messages=[{"role": "user", "content": content}],
-        output_format=response_model,
-    ) as stream:
+    tool = getattr(_streamed, "tool", None)          # (tool name, every tool's definition): shared-paper mode
+    request = dict(model=model, max_tokens=getattr(_streamed, "max_tokens", None) or ctx.config.max_tokens,
+                   system=system_prompt, messages=[{"role": "user", "content": content}])
+    if tool:
+        # "auto" (Sonnet 5.5 rejects a forced tool); the task names the tool; one call only
+        request.update(tools=tool[1], tool_choice={"type": "auto", "disable_parallel_tool_use": True})
+    else:
+        request.update(output_format=response_model)
+    with ctx.client.messages.stream(**request) as stream:
         chunks = []
         try:
-            for text in stream.text_stream:          # kept so a broken answer can be saved
-                chunks.append(text)
+            for event in stream:                     # kept so a broken answer can be saved
+                piece = getattr(event, "partial_json", None) if event.type == "input_json" else (
+                    getattr(event, "text", None) if event.type == "text" else None)
+                if piece:
+                    chunks.append(piece)
         finally:
             _streamed.text = "".join(chunks)
-        return stream.get_final_message()
+        message = stream.get_final_message()
+    return _from_tool_call(message, tool[0], response_model) if tool else message
+
+
+def _decoded(data):
+    """Tool inputs aren't grammar-constrained (non-strict tools): a list or object sent as a JSON
+    *string* (Haiku, teng2023: "parameters": "[{...}]") is decoded instead of failing the step."""
+    if not isinstance(data, dict):
+        return data
+    out = {}
+    for key, value in data.items():
+        if isinstance(value, str) and value.lstrip()[:1] in ("[", "{"):
+            try:
+                value = json.loads(value)
+            except ValueError:
+                pass
+        out[key] = value
+    return out
+
+
+def _from_tool_call(message, name: str, response_model):
+    """A forced tool call's input, validated like a structured output (a ValidationError here is
+    handled like a broken answer: retried once)."""
+    from types import SimpleNamespace
+    block = next((b for b in message.content if b.type == "tool_use" and b.name == name), None)
+    parsed = response_model.model_validate(_decoded(block.input)) if block is not None else None
+    return SimpleNamespace(
+        id=message.id, usage=message.usage, parsed_output=parsed,
+        stop_reason="end_turn" if message.stop_reason == "tool_use" else message.stop_reason,
+        stop_details=getattr(message, "stop_details", None),
+        content=[SimpleNamespace(type="text", text=json.dumps(block.input))] if block is not None else [])
 
 
 # the text streamed by the current thread's call (stages run in parallel threads)
@@ -174,12 +220,19 @@ def call_structured(
     model = ctx.config.model_for(stage)
     shared = (paper_text is not None and ctx.paper is not None and ctx.config.prompt_caching
               and paper_text in user_content)
+    _streamed.tool = None
     if shared:
-        # the paper first, identical in every step and cached; the step's own task after it
+        # the paper first, identical in every step and cached; the step's own task after it. With
+        # tools (`ctx.paper.tools`), every step sends the same tool list and is made to call its own:
+        # the API's cache key includes a request's output schema, so a different schema per step
+        # (output_format) would give every step its own cache entry (measured 2026-10-22)
         content = _paper_blocks(ctx.paper) + [{"type": "text", "text": (
-            f"YOUR TASK: {system_prompt}\n\n" + user_content.replace(paper_text, PAPER_ABOVE))}]
+            f"YOUR TASK: {system_prompt}\n\n" + user_content.replace(paper_text, PAPER_ABOVE)
+            + (f"\n\nAnswer by calling the `{stage}` tool." if stage in ctx.paper.tools else ""))}]
         system_prompt = SHARED_SYSTEM
         image_paths = ctx.paper.images
+        if stage in ctx.paper.tools:
+            _streamed.tool = (stage, ctx.paper.tool_definitions())
     elif image_paths:
         content = _image_blocks(image_paths) + [{"type": "text", "text": user_content}]
     else:

@@ -59,12 +59,11 @@ def main() -> int:
     parser.add_argument("--equations-latex", action="store_true",
                         help="Convert the paper's labelled equations to LaTeX (one small extra API call); "
                              "they're found and cropped either way")
-    parser.add_argument("--models", choices=["standard", "balanced", "economy"], default="standard",
-                        help="standard: Sonnet for every step; balanced: Sonnet plans the rows (and the fitting "
-                             "models / chemistry), Haiku does the rest; economy: Haiku for everything (cheapest)")
-    parser.add_argument("--cache", action="store_true",
-                        help="Send the paper as a cached prefix (experimental: steps with different output "
-                             "schemas can't share it, so this currently costs MORE)")
+    parser.add_argument("--models", choices=["standard", "economy"], default="standard",
+                        help="standard: Claude Sonnet 5.5 for every step (most accurate); economy: Claude Haiku "
+                             "5.5 for every step (roughly 4-20x cheaper; misses more on complex papers)")
+    parser.add_argument("--no-cache", action="store_true",
+                        help="Don't share the cached paper between steps (costs more; for comparison)")
     parser.add_argument("--skip-stage", action="append", default=[], metavar="STAGE",
                         help="Don't run this optional extraction stage (repeatable; --list-packs shows each "
                              "pack's stages), e.g. --skip-stage fit_models")
@@ -92,7 +91,7 @@ def main() -> int:
                  "equations_to_latex": args.equations_latex, "pack": args.pack,
                  "online_checks": not args.no_pubchem,
                  "optional_stages": {name: "off" for name in args.skip_stage},
-                 "model_profile": args.models, "prompt_caching": args.cache,
+                 "model_profile": args.models, "prompt_caching": not args.no_cache,
                  "pubchem_cache_path": default_pubchem_cache_path()}
     if args.out:
         overrides["output_dir"] = args.out

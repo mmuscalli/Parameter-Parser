@@ -262,7 +262,7 @@ def extract(
     text = compact_text(parsed.text) if packs.current().manifest.compact_text else parsed.text
     # every paper-reading step gets the same paper first -- cached once, read at a fraction of the
     # price by the steps after the structure planner (api_client, RunConfig.prompt_caching)
-    ctx.paper = PaperContext(text=text, images=list(table_images))
+    ctx.paper = PaperContext(text=text, images=list(table_images), tools=_paper_tools(pack, config, terms))
     convert_equations = bool(config.equations_to_latex and equations)
     if convert_equations:
         ctx.total_steps += 1            # optional (RunConfig.equations_to_latex), one small call
@@ -310,6 +310,26 @@ def extract(
         raise
     pool.shutdown(wait=False)
     return ex
+
+
+def _paper_tools(pack, config: RunConfig, terms) -> dict:
+    """Every paper-reading step this run may make, with its answer schema -- sent as the same tool
+    list in every request (api_client), so all of them share the cached paper. Fixed before the
+    structure is planned: optional stages are included unless switched off, triggered or not."""
+    from parameter_extractor.schemas.variables import TermSearch
+    tools = {"structure_planner": StructurePlan}
+    if pack.uses("methodology"):
+        tools["methodology"] = Methodology
+    if pack.uses("chemistry"):
+        tools["chemistry"] = ChemistryExtraction
+    if terms:
+        tools["term_search"] = TermSearch
+    if pack.uses("fit_models") and config.optional_stages.get("fit_models", "auto") != "off":
+        tools["fit_models"] = FitModels
+    for name, spec in load_specs().items():
+        if config.optional_stages.get(name, "auto") != "off":
+            tools[name] = spec.models()[1]
+    return tools
 
 
 # the order stages are listed in (summary, usage table) whatever order they finish in;

@@ -47,12 +47,14 @@ class RunConfig:
     # paper -- the default), "on" (always) or "off" (never)
     optional_stages: Dict[str, str] = field(default_factory=dict)
     pubchem_cache_path: Optional[Path] = None
-    # Send the paper (text + table images) first, marked for caching (api_client). OFF by default:
-    # measured 2026-10-22, the API's cache key includes each step's output schema, so steps with
-    # different schemas can't share the cached paper -- every step paid the 1.25x write, none read.
-    prompt_caching: bool = False
-    # Which models do the work (settings.MODEL_PROFILES): "standard" (Sonnet), "balanced"
-    # (Sonnet plans the rows and the fitting models, Haiku the parameter steps), "economy" (Haiku)
+    # Send the paper (text + table images) first, marked for caching, with the same tool list in
+    # every paper-reading step (api_client): the structure planner writes the cache, the later steps
+    # read it at 5-10% of the input price. Measured 2026-10-22: Standard runs 26-57% cheaper, accuracy
+    # unchanged. (With per-step output schemas the cache can't be shared -- the schema is part of
+    # the cache key -- hence tools.)
+    prompt_caching: bool = True
+    # Which models do the work (settings.MODEL_PROFILES): "standard" (Sonnet 5.5 for every step
+    # but the page-1 metadata) or "economy" (Haiku 5.5 for every step)
     model_profile: str = "standard"
 
     @classmethod
