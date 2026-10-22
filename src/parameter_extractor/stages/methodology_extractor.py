@@ -20,4 +20,5 @@ def run_methodology_extraction(
                       "than assuming a typical/default value when the paper is silent.",
         user_content=prompt,
         response_model=Methodology,
+        paper_text=paper_text,
     )

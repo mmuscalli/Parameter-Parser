@@ -60,6 +60,17 @@ STEP_LABELS = {"structure_planner": "Experiment structure", "metadata": "Bibliog
                "equations": "Equations to LaTeX"}
 
 
+# (RunConfig.model_profile, label, tooltip) -- costs measured 2026-10-22 (CLAUDE.md)
+MODEL_PROFILE_CHOICES = [
+    ("standard", "Standard (Sonnet 5.5) -- most accurate",
+     "Sonnet 5.5 for every step."),
+    ("balanced", "Balanced -- Sonnet plans, Haiku extracts",
+     "Sonnet 5.5 plans the rows (and reads fitting models / chemistry); Haiku 5.5 extracts the parameters."),
+    ("economy", "Economy (Haiku 5.5) -- cheapest",
+     "Haiku 5.5 for every step: a fraction of the cost; expect more missed or misread values."),
+]
+
+
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
@@ -146,6 +157,13 @@ class MainWindow(QMainWindow):
         self.stages_layout.setSpacing(2)
         self.stage_boxes: dict = {}
         form.addRow("Extraction stages:", self.stages_widget)
+        self.profile_combo = QComboBox()
+        for key, label, tip in MODEL_PROFILE_CHOICES:
+            self.profile_combo.addItem(label, key)
+            self.profile_combo.setItemData(self.profile_combo.count() - 1, tip, Qt.ItemDataRole.ToolTipRole)
+        self.profile_combo.setToolTip("Which Claude models do the extraction. Cheaper models cost less per paper "
+                                      "and may miss or misread more; every value is still flagged and checked.")
+        form.addRow("Models:", self.profile_combo)
         self._inputs_form = form
         self.pubchem_box = QCheckBox("Use online lookups (PubChem names, NASA Exoplanet Archive check)")
         self.pubchem_box.setToolTip("PubChem: recognises different names for the same compound (e.g. 2'-CMP and "
@@ -246,6 +264,8 @@ class MainWindow(QMainWindow):
         self.pack_combo.setCurrentIndex(index if index >= 0 else self.pack_combo.findData("prebiotic_chemistry"))
         self._rebuild_stage_boxes(self.pack_combo.currentData())     # no change signal if index 0 was kept
         self.equations_box.setChecked(self._settings.value("equations_to_latex", False, type=bool))
+        index = self.profile_combo.findData(self._settings.value("model_profile", "standard"))
+        self.profile_combo.setCurrentIndex(max(index, 0))
         stored_key = key_store.load_key()
         self._key_was_stored = bool(stored_key)
         if stored_key:
@@ -296,6 +316,7 @@ class MainWindow(QMainWindow):
         self._settings.setValue("use_pubchem", self.pubchem_box.isChecked())
         self._settings.setValue("pack", self.pack_combo.currentData())
         self._settings.setValue("equations_to_latex", self.equations_box.isChecked())
+        self._settings.setValue("model_profile", self.profile_combo.currentData())
         key = self.key_edit.text().strip()
         if self.remember_key_box.isChecked():
             if not key_store.save_key(key):
@@ -375,6 +396,7 @@ class MainWindow(QMainWindow):
                            pack=self.pack_combo.currentData() or "prebiotic_chemistry",
                            online_checks=self.pubchem_box.isChecked(),
                            optional_stages=self.optional_stage_choices(),
+                           model_profile=self.profile_combo.currentData() or "standard",
                            pubchem_cache_path=default_pubchem_cache_path())
         self._extraction, self._extraction_ok, self._review = None, False, None
         self._worker = PipelineWorker(pdf, config)
@@ -510,7 +532,7 @@ class MainWindow(QMainWindow):
     def _set_inputs_enabled(self, enabled: bool) -> None:
         for w in (self.pdf_edit, self.key_edit, self.out_edit, self.remember_key_box,
                   self.show_key_box, self.terms_edit, self.registry_action, self.pack_combo,
-                  self.stages_widget, self.pubchem_box, self.equations_box):   # the pack is active during a run
+                  self.stages_widget, self.pubchem_box, self.equations_box, self.profile_combo):   # the pack is active during a run
             w.setEnabled(enabled)
         self._update_run_enabled()
 
@@ -709,7 +731,8 @@ class MainWindow(QMainWindow):
     def _fill_summary(self, result) -> None:
         usage_rows = "".join(
             f"<tr><td>{STEP_LABELS.get(u.stage) or stage_label(u.stage)}</td><td>{u.model}</td>"
-            f"<td align=right>{u.input_tokens:,}</td><td align=right>{u.output_tokens:,}</td>"
+            f"<td align=right>{u.prompt_tokens:,}</td><td align=right>{u.cache_read_tokens:,}</td>"
+            f"<td align=right>{u.output_tokens:,}</td>"
             f"<td align=right>{format_usd(u.cost_usd)}</td><td align=right>{u.elapsed_sec:.0f} s</td></tr>"
             for u in result.usage)
         self.summary_text.setHtml(f"""
@@ -726,15 +749,17 @@ class MainWindow(QMainWindow):
             {self._figures_html(result)}
             <h4>API usage</h4>
             <table cellspacing=0 cellpadding=4 border=1>
-              <tr><th>Step</th><th>Model</th><th>Input tokens</th><th>Output tokens</th>
+              <tr><th>Step</th><th>Model</th><th>Input tokens</th><th>of which cached</th><th>Output tokens</th>
                   <th>Est. cost (USD)</th><th>Time</th></tr>
               {usage_rows}
               <tr><td colspan=2><b>Total</b></td><td align=right><b>{result.input_tokens:,}</b></td>
+                  <td align=right><b>{result.cached_tokens:,}</b></td>
                   <td align=right><b>{result.output_tokens:,}</b></td>
                   <td align=right><b>{format_usd(result.cost_usd)}</b></td><td></td></tr>
             </table>
             <p style="color:gray">Costs are estimates from Anthropic's list prices as of {PRICES_CHECKED}
-            (the API reports tokens, not charges); your invoice is the authority.</p>
+            (the API reports tokens, not charges); your invoice is the authority. Cached input -- the
+            paper, sent once and reused by the later steps -- costs 5-10% of the normal input price.</p>
             <p style="color:gray">Parameter Extractor {__version__}. Every value should be
             checked against the paper; flagged items first.</p>""")
 

@@ -22,6 +22,7 @@ import json
 import re
 import threading
 import time
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import List, Optional, Type, TypeVar
 
@@ -46,13 +47,45 @@ def _piece_label(path: Path) -> str:
             f"right; a piece that continues the table to the right repeats the row labels on its left):")
 
 
-def _record(ctx: RunContext, stage: str, model: str, response, elapsed: float) -> None:
-    ctx.record_usage(StageUsage(stage=stage, model=model,
-                                input_tokens=response.usage.input_tokens,
-                                output_tokens=response.usage.output_tokens,
-                                elapsed_sec=round(elapsed, 2),
-                                cost_usd=request_cost(model, response.usage.input_tokens,
-                                                      response.usage.output_tokens)))
+@dataclass
+class PaperContext:
+    """The paper as every paper-reading step sees it, sent first in each request so it's
+    cached once and read by the other steps at 5-10% of the input price (prompt caching:
+    the prefix must be byte-identical -- same system prompt, same images, same text)."""
+    text: str
+    images: List[Path] = field(default_factory=list)
+
+
+SHARED_SYSTEM = ("You extract information from one scientific paper for a research dataset. Report only what the "
+                 "paper states. The paper (its text, and images of its table pages) comes first; your task for "
+                 "this step follows it.")
+PAPER_ABOVE = "(The paper's full text is given above, before these instructions, with images of its table pages.)"
+
+
+def _image_blocks(image_paths) -> list:
+    blocks = []
+    for p in image_paths:
+        label = _piece_label(Path(p))
+        if label:
+            blocks.append({"type": "text", "text": label})
+        blocks.append(_image_block(Path(p)))
+    return blocks
+
+
+def _paper_blocks(paper: PaperContext) -> list:
+    return _image_blocks(paper.images) + [{"type": "text", "text": f"PAPER TEXT:\n\n{paper.text}",
+                                           "cache_control": {"type": "ephemeral"}}]
+
+
+def _record(ctx: RunContext, stage: str, model: str, response, elapsed: float) -> StageUsage:
+    u = response.usage
+    write, read = getattr(u, "cache_creation_input_tokens", 0) or 0, getattr(u, "cache_read_input_tokens", 0) or 0
+    usage = StageUsage(stage=stage, model=model, input_tokens=u.input_tokens, output_tokens=u.output_tokens,
+                       elapsed_sec=round(elapsed, 2),
+                       cost_usd=request_cost(model, u.input_tokens, u.output_tokens, write, read),
+                       cache_write_tokens=write, cache_read_tokens=read)
+    ctx.record_usage(usage)
+    return usage
 
 
 def _image_block(path: Path) -> dict:
@@ -123,6 +156,7 @@ def call_structured(
     image_paths: Optional[List[Path]] = None,
     audit_name: Optional[str] = None,
     max_tokens: Optional[int] = None,
+    paper_text: Optional[str] = None,
 ) -> T:
     """
     Calls the model, constrains its response to `response_model`'s schema via
@@ -138,14 +172,16 @@ def call_structured(
     actual page layout available, not just the OCR'd/column-garbled text.
     """
     model = ctx.config.model_for(stage)
-    if image_paths:
-        content = []
-        for p in image_paths:
-            label = _piece_label(Path(p))
-            if label:
-                content.append({"type": "text", "text": label})
-            content.append(_image_block(Path(p)))
-        content.append({"type": "text", "text": user_content})
+    shared = (paper_text is not None and ctx.paper is not None and ctx.config.prompt_caching
+              and paper_text in user_content)
+    if shared:
+        # the paper first, identical in every step and cached; the step's own task after it
+        content = _paper_blocks(ctx.paper) + [{"type": "text", "text": (
+            f"YOUR TASK: {system_prompt}\n\n" + user_content.replace(paper_text, PAPER_ABOVE))}]
+        system_prompt = SHARED_SYSTEM
+        image_paths = ctx.paper.images
+    elif image_paths:
+        content = _image_blocks(image_paths) + [{"type": "text", "text": user_content}]
     else:
         content = user_content
 
@@ -180,17 +216,19 @@ def call_structured(
     parsed = response.parsed_output
     raw_text = next((b.text for b in response.content if b.type == "text"), None)
 
-    _record(ctx, stage, model, response, elapsed)
+    usage = _record(ctx, stage, model, response, elapsed)
 
     run_dir = ctx.run_dir
     run_dir.mkdir(parents=True, exist_ok=True)
     audit = {
+        "cache_write_tokens": usage.cache_write_tokens,
+        "cache_read_tokens": usage.cache_read_tokens,
         "stage": stage,
         "model": model,
         "elapsed_sec": round(elapsed, 2),
         "input_tokens": response.usage.input_tokens,
         "output_tokens": response.usage.output_tokens,
-        "estimated_cost_usd": ctx.usage[-1].cost_usd,
+        "estimated_cost_usd": usage.cost_usd,
         "images_attached": [str(p) for p in (image_paths or [])],
         "system_prompt": system_prompt,
         "user_content": user_content,

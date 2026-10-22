@@ -177,6 +177,8 @@ _ASTRO: Dict[str, Tuple[str, float]] = {
     "au": ("distance", 1.0), "pc": ("distance", 206264.806), "ly": ("distance", 63241.077),
     "K": ("temperature", 1.0), "L_sun": ("luminosity", 1.0),
     "%": ("fraction", 0.01), "fraction": ("fraction", 1.0), "ppt": ("fraction", 1e-3), "ppm": ("fraction", 1e-6),
+    # insolation: Earth flux (the archive's pl_insol), the solar constant 1361 W/m2 = 1.361e6 erg/s/cm2
+    "S_E": ("flux", 1.0), "W/m2": ("flux", 1 / 1361.0), "erg/s/cm2": ("flux", 1 / 1.361e6),
 }
 _ASTRO_ALIASES = {
     "deg": "deg", "degree": "deg", "degrees": "deg", "°": "deg", "rad": "rad", "radian": "rad", "radians": "rad",
@@ -193,12 +195,25 @@ _ASTRO_ALIASES = {
     "au": "au", "pc": "pc", "parsec": "pc", "ly": "ly", "k": "K", "kelvin": "K",
     "lsun": "L_sun", "l_sun": "L_sun", "l⊙": "L_sun", "lsol": "L_sun",
     "%": "%", "percent": "%", "fraction": "fraction", "fractional": "fraction", "ppt": "ppt", "ppm": "ppm",
+    "s_e": "S_E", "s⊕": "S_E", "searth": "S_E", "s_earth": "S_E", "f⊕": "S_E", "fearth": "S_E",
+    "earthflux": "S_E", "w/m2": "W/m2", "wm-2": "W/m2", "ergs-1cm-2": "erg/s/cm2", "erg/s/cm2": "erg/s/cm2",
+    "ergcm-2s-1": "erg/s/cm2",
 }
 # Julian dates, with the time scale a paper may add (BJD_TDB, HJD_UTC: all days on the JD count)
 _JD = r"(?:B|H|M)?JD(?:[_\s-]?(?:TDB|UTC|TT))?"
 _JD_OFFSET = re.compile(rf"^{_JD}\s*[-−–]\s*([\d,]+)$", re.IGNORECASE)
 _JD_PLAIN = re.compile(rf"^{_JD}$", re.IGNORECASE)
 _LOG_OF = re.compile(r"^log\s*\(?\s*(.+?)\s*\)?$", re.IGNORECASE)
+
+
+_SCALE = re.compile(r"^\s*(?:[x×]\s*)?10\^?\s*([+-−]?\d+)\s*")      # "10^9 erg s-1 cm-2" -> 1e9, "erg s-1 cm-2"
+
+
+def _scaled(text: str) -> Tuple[float, str]:
+    m = _SCALE.match(text or "")
+    if m and m.end() < len(text):
+        return 10.0 ** int(m.group(1).replace("−", "-")), text[m.end():]
+    return 1.0, text
 
 
 def astro_unit(text: str) -> Optional[str]:
@@ -214,7 +229,15 @@ def convert_printed(value: float, printed: str, target: str, is_error: bool = Fa
     aren't shifted), logarithmic targets ('L_sun' -> 'log(L_sun)'), the astronomy table
     and the chemistry one. Same or empty unit: unchanged."""
     p, t = (printed or "").strip(), (target or "").strip()
-    if not p or p == t or not t or p.lower() == t.lower():
+    if not p or p == t or p.lower() == t.lower():
+        return value, ""
+    scale, rest = _scaled(p)
+    if scale != 1.0 and (astro_unit(rest) or canonical_unit(rest)):     # "10^9 erg s-1 cm-2"
+        out, note = convert_printed(value * scale, rest, t, is_error)
+        return out, (f"{value:g} {p} -> {t}" if out is not None else note)
+    if not t:                       # a dimensionless parameter: a real unit here means a misreading
+        if astro_unit(p) or canonical_unit(p):
+            return None, f"'{p}' given for a parameter without a unit"
         return value, ""
     if _JD_PLAIN.match(p) and _JD_PLAIN.match(t):
         return value, ""                                  # 'BJD_TDB' is already a full Julian date

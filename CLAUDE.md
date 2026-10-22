@@ -754,6 +754,38 @@ can't). Not reproducible (rerun: 1.3K output tokens). Now:
   (st_vsin "< 3.5" -> lim 1): 1 = upper, -1 = lower, as we map. The archive's
   st_rotp 13 with lim 1 contradicts the paper's "> 13 days" -- left flagged.
 
+## Cost options measured (2026-10-22)
+
+Mickey asked about cheaper processing (asked about TypeSafe's Jev: early access,
+text-only, no free-form strings -> not for extraction; maybe decision-shaped
+steps later). Built and measured live (11 runs, ~$5):
+- **Prompt caching** (`RunConfig.prompt_caching`, CLI `--cache`): paper text +
+  table images sent first with cache_control, step task after, shared system
+  prompt (api_client `PaperContext`, `SHARED_SYSTEM`, `PAPER_ABOVE`). DOESN'T PAY:
+  the cache key includes the request's output schema (verified with two Haiku
+  calls, schema A/B, paper in messages AND in system: B always writes, A
+  again reads) -> every step wrote its own entry (1.25x), no reads within a
+  run. OFF by default. Would need identical schemas across steps (e.g. one
+  shared schema for the exoplanet spec stages + serialising the first call).
+- **Model profiles** (`RunConfig.model_profile`, settings.MODEL_PROFILES, GUI
+  "Models", CLI `--models`): standard (Sonnet), balanced (Sonnet structure +
+  fit_models + chemistry, Haiku rest), economy (Haiku; figure_planner /
+  equations exempt). Cost without caching (replayed accuracy, current code):
+  | paper | standard | balanced | economy |
+  | teng | $2.15, 1944 archive matches, 0 real diffs | $0.86, 1380, 0 | $0.51, 1803, 5 (no inclination modes) |
+  | nielsen | $0.49, 121, 0 | $0.20, 117, 3 (pl_insol unit left blank) | $0.027, 120, 0 |
+  | aa57186 | $0.88, 139 (2 rows), 1* | $0.39, 137, 2 (no v sin i estimate) | $0.043, 107 (missed GP solution row), 2 |
+  | eder1994 | $0.42, 89.8% cells = reference | -- | $0.024, 84.7% |
+  (*the archive's own st_rotplim). Haiku: ~20x cheaper on <100K prompts,
+  ~4x on Teng-size (>100K tier). Balanced is NOT a sweet spot (Haiku's
+  extraction step is the weak one; Sonnet structure costs most).
+- Fixes from these runs: `_surname` dropped all-caps surnames ("Huan-Yu TENG"
+  -> "Huan-Yu et al.", archive check found no set); pl_insol had no unit ->
+  "S_E" + flux units + "10^N <unit>" scale prefixes; a dimensioned unit for a
+  unitless parameter is refused, not passed through. `_record` returns its
+  StageUsage (audit no longer reads ctx.usage[-1] across threads).
+- Batch API (50% off, async) not built yet.
+
 ## Non-obvious decisions — don't redo this research
 
 - **Schema shape is grounded in `../POLO_variable_mapping.csv`** (one level

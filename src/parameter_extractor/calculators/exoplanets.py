@@ -119,7 +119,8 @@ def _surname(name: str) -> str:
     if "," in name:                                   # "Teng, H.-Y."
         return name.split(",")[0].strip().title()
     name = re.sub(r"[*†‡∗]|\d+$", "", name).strip()
-    parts = [p for p in name.split() if not re.fullmatch(r"(?:[A-Z]\.?-?)+", p)]   # drop initials
+    # drop initials ("H.-Y.", "J"), not an all-caps surname ("Huan-Yu TENG" as some PDFs print it)
+    parts = [p for p in name.split() if not re.fullmatch(r"(?:[A-Z]\.-?)+|[A-Z]", p)]
     last = parts[-1] if parts else name.split()[-1]
     return last.title() if last.isupper() else last
 

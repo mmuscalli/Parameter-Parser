@@ -323,6 +323,7 @@ def run_optional_stage(ctx, spec: StageSpec, paper_text: str, structure: Structu
                                             f"only what the paper states.",
         user_content=spec.prompt(structure, paper_text),
         response_model=Result,
+        paper_text=paper_text,
         image_paths=(table_images or None) if spec.table_images else None,
         max_tokens=spec.output_budget(structure),
     )

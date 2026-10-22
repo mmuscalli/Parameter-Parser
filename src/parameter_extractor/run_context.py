@@ -34,6 +34,15 @@ class StageUsage:
     output_tokens: int
     elapsed_sec: float
     cost_usd: Optional[float] = None      # estimate from pricing.py; None = model price unknown
+    # prompt caching (api_client): the paper's text and table images, written once per run and
+    # read by the later steps; `input_tokens` counts only the rest
+    cache_write_tokens: int = 0
+    cache_read_tokens: int = 0
+
+    @property
+    def prompt_tokens(self) -> int:
+        """All input tokens of the request, cached or not."""
+        return self.input_tokens + self.cache_write_tokens + self.cache_read_tokens
 
 
 def total_cost(usage) -> Optional[float]:
@@ -53,6 +62,8 @@ class RunContext:
     on_progress: Optional[ProgressCallback] = None
     cancel_event: Optional[threading.Event] = None
     usage: List[StageUsage] = field(default_factory=list)
+    # the paper as every paper-reading step sees it (text + table images), sent first and cached
+    paper: Optional["PaperContext"] = None
     _step: int = 0
     _client: object = None
     # stages run in parallel (pipeline.extract): progress, usage and the client are shared

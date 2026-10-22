@@ -18,5 +18,6 @@ def run_structure_planner(
                       "depends on getting this right.",
         user_content=prompt,
         response_model=StructurePlan,
+        paper_text=paper_text,
         image_paths=table_images,
     )

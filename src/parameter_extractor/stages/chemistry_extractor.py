@@ -26,5 +26,6 @@ def run_chemistry_extraction(
                       "controlled vocabulary -- flag it instead.",
         user_content=prompt,
         response_model=ChemistryExtraction,
+        paper_text=paper_text,
         image_paths=table_images,
     )

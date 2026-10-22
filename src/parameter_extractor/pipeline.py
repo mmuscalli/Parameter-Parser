@@ -80,6 +80,7 @@ from parameter_extractor.stages.metadata_extractor import run_metadata_extractio
 from parameter_extractor.stages.methodology_extractor import run_methodology_extraction
 from parameter_extractor.stages.structure_planner import run_structure_planner
 from parameter_extractor.stages.term_search import run_term_search
+from parameter_extractor.api_client import PaperContext
 from parameter_extractor.stages.optional import StageSpec, load_specs, run_optional_stage, triggered_specs
 from parameter_extractor.stages.fit_models import LABEL as FIT_MODELS_LABEL, run_fit_models
 from parameter_extractor.schemas.fit_models import FitModels
@@ -108,7 +109,12 @@ class RunResult:
 
     @property
     def input_tokens(self) -> int:
-        return sum(u.input_tokens for u in self.usage)
+        """All input tokens, cached or not (comparable across runs)."""
+        return sum(u.prompt_tokens for u in self.usage)
+
+    @property
+    def cached_tokens(self) -> int:
+        return sum(u.cache_read_tokens for u in self.usage)
 
     @property
     def output_tokens(self) -> int:
@@ -165,7 +171,9 @@ def _write_summary(ctx: RunContext, pdf_path: Path, started: datetime, **extra) 
         "finished": datetime.now().isoformat(timespec="seconds"),
         "config": ctx.config.to_public_dict(),
         "usage": [asdict(u) for u in ctx.usage],
-        "input_tokens": sum(u.input_tokens for u in ctx.usage),
+        "input_tokens": sum(u.prompt_tokens for u in ctx.usage),      # cached ones included
+        "cache_read_tokens": sum(u.cache_read_tokens for u in ctx.usage),
+        "cache_write_tokens": sum(u.cache_write_tokens for u in ctx.usage),
         "output_tokens": sum(u.output_tokens for u in ctx.usage),
         "estimated_cost_usd": total_cost(ctx.usage),
         "prices_checked": PRICES_CHECKED,
@@ -252,6 +260,9 @@ def extract(
 
     # the text sent to the model: long runs of layout spaces collapsed if the pack asks
     text = compact_text(parsed.text) if packs.current().manifest.compact_text else parsed.text
+    # every paper-reading step gets the same paper first -- cached once, read at a fraction of the
+    # price by the steps after the structure planner (api_client, RunConfig.prompt_caching)
+    ctx.paper = PaperContext(text=text, images=list(table_images))
     convert_equations = bool(config.equations_to_latex and equations)
     if convert_equations:
         ctx.total_steps += 1            # optional (RunConfig.equations_to_latex), one small call

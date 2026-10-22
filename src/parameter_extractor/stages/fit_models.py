@@ -28,5 +28,6 @@ def run_fit_models(ctx: RunContext, paper_text: str, structure: StructurePlan,
         user_content=load_prompt("fit_models", STRUCTURE_PLAN_JSON=structure.model_dump_json(indent=2),
                                  PAPER_TEXT=paper_text),
         response_model=FitModels,
+        paper_text=paper_text,
         image_paths=table_images,
     )

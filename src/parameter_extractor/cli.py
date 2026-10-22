@@ -59,6 +59,12 @@ def main() -> int:
     parser.add_argument("--equations-latex", action="store_true",
                         help="Convert the paper's labelled equations to LaTeX (one small extra API call); "
                              "they're found and cropped either way")
+    parser.add_argument("--models", choices=["standard", "balanced", "economy"], default="standard",
+                        help="standard: Sonnet for every step; balanced: Sonnet plans the rows (and the fitting "
+                             "models / chemistry), Haiku does the rest; economy: Haiku for everything (cheapest)")
+    parser.add_argument("--cache", action="store_true",
+                        help="Send the paper as a cached prefix (experimental: steps with different output "
+                             "schemas can't share it, so this currently costs MORE)")
     parser.add_argument("--skip-stage", action="append", default=[], metavar="STAGE",
                         help="Don't run this optional extraction stage (repeatable; --list-packs shows each "
                              "pack's stages), e.g. --skip-stage fit_models")
@@ -86,6 +92,7 @@ def main() -> int:
                  "equations_to_latex": args.equations_latex, "pack": args.pack,
                  "online_checks": not args.no_pubchem,
                  "optional_stages": {name: "off" for name in args.skip_stage},
+                 "model_profile": args.models, "prompt_caching": args.cache,
                  "pubchem_cache_path": default_pubchem_cache_path()}
     if args.out:
         overrides["output_dir"] = args.out
@@ -123,7 +130,7 @@ def main() -> int:
         for e in result.equations:
             if e.latex:
                 print(f"  ({e.label})  {e.latex}")
-    print(f"Tokens: {result.input_tokens:,} in / {result.output_tokens:,} out "
+    print(f"Tokens: {result.input_tokens:,} in ({result.cached_tokens:,} from cache) / {result.output_tokens:,} out "
           f"(estimated cost {format_usd(result.cost_usd)})")
     return 0
 

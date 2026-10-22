@@ -47,6 +47,13 @@ class RunConfig:
     # paper -- the default), "on" (always) or "off" (never)
     optional_stages: Dict[str, str] = field(default_factory=dict)
     pubchem_cache_path: Optional[Path] = None
+    # Send the paper (text + table images) first, marked for caching (api_client). OFF by default:
+    # measured 2026-10-22, the API's cache key includes each step's output schema, so steps with
+    # different schemas can't share the cached paper -- every step paid the 1.25x write, none read.
+    prompt_caching: bool = False
+    # Which models do the work (settings.MODEL_PROFILES): "standard" (Sonnet), "balanced"
+    # (Sonnet plans the rows and the fitting models, Haiku the parameter steps), "economy" (Haiku)
+    model_profile: str = "standard"
 
     @classmethod
     def from_settings(cls, **overrides) -> "RunConfig":
@@ -57,6 +64,11 @@ class RunConfig:
         return cls(**values)
 
     def model_for(self, stage: str) -> str:
+        profile = settings.MODEL_PROFILES.get(self.model_profile, {})
+        if stage in profile:
+            return profile[stage]
+        if "*" in profile and stage not in settings.PROFILE_EXEMPT:
+            return profile["*"]
         return self.models.get(stage, self.models["chemistry"])
 
     def to_public_dict(self) -> dict:

@@ -32,6 +32,7 @@ def run_term_search(ctx: RunContext, terms: List[str], paper_text: str, structur
                       "for. Report only what the paper states; say plainly when it doesn't.",
         user_content=prompt,
         response_model=TermSearch,
+        paper_text=paper_text,
     )
     # make sure every term has an answer, even if the model skipped one
     answered = {f.term.strip().lower() for f in result.findings}

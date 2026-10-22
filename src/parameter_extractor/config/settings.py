@@ -47,6 +47,18 @@ MODELS = {
     "equations": "claude-sonnet-5-5",        # optional LaTeX conversion; ~2 cents for 13 equations
 }
 
+# Model profiles (RunConfig.model_profile; GUI "Models", CLI --models): per-stage overrides of
+# MODELS, "*" = every other paper-reading stage. Haiku 5.5 is ~20x cheaper than Sonnet 5.5
+# (~4x for prompts over 100K tokens). Measured on the exoplanet references (CLAUDE.md).
+MODEL_PROFILES = {
+    "standard": {},
+    "balanced": {"structure_planner": "claude-sonnet-5-5", "fit_models": "claude-sonnet-5-5",
+                 "chemistry": "claude-sonnet-5-5", "*": "claude-haiku-5-5"},
+    "economy": {"*": "claude-haiku-5-5"},
+}
+# stages a profile's "*" doesn't change (only run when the user asks; quality matters there)
+PROFILE_EXEMPT = {"figure_planner", "equations"}
+
 # Stages that depend only on the experiment structure run at the same time (pipeline.extract)
 MAX_PARALLEL_STAGES = 6
 

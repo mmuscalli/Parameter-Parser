@@ -88,7 +88,7 @@
   },
   {
    "column": "pl_insol",
-   "unit": "",
+   "unit": "S_E",
    "description": "insolation flux, in Earth flux",
    "uncertainties": true
   },
