@@ -12,7 +12,7 @@
  "alternatives": true,
  "per": "sample",
  "set_word": "planetary system",
- "intro": "For every planet (or substellar companion) in the structure plan below, extract the planet's orbital and physical parameters the paper reports. The structure plan's sets are host stars (planetary systems) and its samples are planets: give each value the planet's set_label and sample_label.",
+ "intro": "For every planet (or substellar companion) in the structure plan below, extract the planet's orbital and physical parameters the paper reports. The structure plan's sets are host stars (planetary systems) and its samples are planets: give each planet's values in one row, with its set_label as `set` and its sample_label as `sample`.",
  "parameters": [
   {
    "column": "pl_orbper",
@@ -154,11 +154,11 @@
   }
  ],
  "rules": [
-  "Report the values THIS paper gives for each planet -- its own fit, or the values it adopts and uses (then say in `note` where they come from, e.g. 'adopted from Takeda et al. 2008'). Don't fill in values from other papers that this paper only mentions in passing.",
+  "Report the values THIS paper gives for each planet -- its own fit, or the values it adopts and uses (then say in `n` where they come from, e.g. 'adopted from Takeda et al. 2008'). Don't fill in values from other papers that this paper only mentions in passing.",
   "When a value is given in several places (abstract, text, table), use the table value with its uncertainties.",
-  "Asymmetric uncertainties are printed as superscript/subscript (e.g. 323.21 +0.06 -0.05): `err_plus` 0.06, `err_minus` -0.05.",
-  "A value marked '(fixed)' was fixed in the fit, not measured: give it with no uncertainties and say so in `note`.",
+  "Asymmetric uncertainties are printed as superscript/subscript (e.g. 323.21 +0.06 -0.05): `ep` 0.06, `em` -0.05.",
+  "A value marked '(fixed)' was fixed in the fit, not measured: give it with no uncertainties and say so in `n`.",
   "Minimum mass (M sin i) and true mass are different parameters: an RV-only fit gives M sin i (pl_msinij); give pl_massj only when the paper derives the true mass (inclination known).",
-  "A planet with several samples (one per solution, the solution in [brackets] in its sample_label) gets each solution's values on its own sample_label -- never mix values from different solutions on one row."
+  "A planet with several samples (one per solution, the solution in [brackets] in its sample_label) gets each solution's values in its own row -- never mix values from different solutions on one row."
  ]
 }

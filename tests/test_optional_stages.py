@@ -84,6 +84,44 @@ def test_user_choices():
     assert names(truman, {"wet_dry": "off"}) == [] and names(STRUCTURE, {"wet_dry": "on"}) == ["wet_dry"]
 
 
+
+def test_compact_answer_format():
+    """The model answers in rows of values with short field names, empty fields left out (30% fewer
+    output tokens); the code reads the usual names; old flat answers still load."""
+    from parameter_extractor import packs
+    from parameter_extractor.stages.optional import CORE_FIELDS, load_specs
+    packs.activate("exoplanets")
+    try:
+        spec = load_specs()["planet_parameters"]
+        Item, Result = spec.models()
+        schema = Result.model_json_schema()
+        item = schema["$defs"][f"{spec.model_name}Value"]
+        assert item["required"] == CORE_FIELDS and "u" in CORE_FIELDS and "set_label" not in item["properties"]
+        assert {"ep", "em", "lim", "mode", "meth", "n", "b"} <= set(item["properties"])
+        row = schema["$defs"][f"{spec.model_name}Row"]
+        assert row["required"] == ["set", "values"] and "sample" in row["properties"]
+        assert set(schema["properties"]) == {"rows", "notes"}
+        answer = Result.model_validate({"rows": [
+            {"set": "HD 14067", "sample": "HD 14067 b [joint fit]", "values": [
+                {"col": "pl_orbper", "v": 7.513, "u": "yr", "ep": 0.044, "em": -0.038, "q": "7.513", "src": "Table 4",
+                 "c": "high"},
+                {"col": "pl_orbincl", "v": 39, "mode": "i < 90 deg", "q": "39", "src": "Table 4", "c": "medium",
+                 "b": "derived", "n": "from the prograde mode"}]},
+            {"set": "HD 14067", "values": [{"col": "pl_rvamp", "v": 100.2, "q": "100.17", "src": "Table 3", "c": "high"}]}],
+            "notes": ""})
+        flat = answer.parameters
+        assert [(v.set_label, v.sample_label, v.parameter) for v in flat] == [
+            ("HD 14067", "HD 14067 b [joint fit]", "pl_orbper"), ("HD 14067", "HD 14067 b [joint fit]", "pl_orbincl"),
+            ("HD 14067", "", "pl_rvamp")]
+        assert (flat[0].unit, flat[0].err_plus, flat[1].mode, flat[1].basis, flat[2].note) == ("yr", 0.044, "i < 90 deg", "derived", "")
+        assert Result.model_validate_json(answer.model_dump_json()).parameters == flat          # recordings replay
+        old = Result.model_validate({"parameters": [{"set_label": "11 Com", "sample_label": "11 Com b",
+                                                     "parameter": "pl_orbper", "value": 323.21, "quote": "323.21",
+                                                     "source": "Table 3", "confidence": "high"}]})
+        assert old.parameters[0].sample_label == "11 Com b"                                    # old flat format
+    finally:
+        packs.activate("prebiotic_chemistry")
+
 if __name__ == "__main__":
     for name, fn in list(globals().items()):
         if name.startswith("test_") and callable(fn):

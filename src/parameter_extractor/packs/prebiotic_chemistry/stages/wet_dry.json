@@ -20,8 +20,8 @@
     {"column": "dry_phase_duration_hr", "unit": "h", "description": "duration of the dry phase of each cycle."}
   ],
   "rules": [
-    "A cycle's length can follow from its phases (a 24 h cycle from 20 h + 4 h): that is `basis` \"derived\".",
-    "Which phase a single stated temperature belongs to, if the paper doesn't say, is an interpretation: `basis` \"assumed\".",
+    "A cycle's length can follow from its phases (a 24 h cycle from 20 h + 4 h): that is `b` \"derived\".",
+    "Which phase a single stated temperature belongs to, if the paper doesn't say, is an interpretation: `b` \"assumed\".",
     "If a set's cycling scheme doesn't fit these fields (e.g. phases that change from cycle to cycle), describe it in `notes`."
   ]
 }

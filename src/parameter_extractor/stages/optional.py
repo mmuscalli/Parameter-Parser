@@ -44,6 +44,7 @@ from pathlib import Path
 from typing import Dict, List, Literal, Optional, Tuple
 
 from pydantic import BaseModel, ConfigDict, Field, create_model
+from pydantic.json_schema import SkipJsonSchema
 
 from parameter_extractor.schemas.common import NOTE_DESC, QUOTE_DESC, SOURCE_DESC, Basis
 from parameter_extractor.schemas.structure_plan import StructurePlan
@@ -97,19 +98,19 @@ class StageSpec(BaseModel):
     def _field_rules(self) -> List[str]:
         rules = []
         if self.has_text:
-            rules.append("Text parameters: put the text in `text` (exactly as printed) and 0 in `value`.")
+            rules.append("Text parameters: put the text in `txt` (exactly as printed) and 0 in `v`.")
         if self.modes:
             rules.append("Record EVERY value the paper reports for a parameter. If the posterior is bi- or "
                          "multimodal and the paper gives a value per mode (e.g. an inclination for prograde "
-                         "i < 90 deg and retrograde i > 90 deg orbits), give the overall value (if printed) with "
-                         "`mode` '' and each mode's value as its own entry with `mode` describing the mode as "
-                         "printed, e.g. 'i < 90 deg (prograde)'. Otherwise `mode` is ''.")
+                         "i < 90 deg and retrograde i > 90 deg orbits), give the overall value (if printed) "
+                         "without `mode` and each mode's value as its own entry with `mode` describing the mode "
+                         "as printed, e.g. 'i < 90 deg (prograde)'.")
         if self.alternatives:
             rules.append("If the paper gives SEVERAL estimates of one parameter for the same object from different "
                          "methods (e.g. a rotation period from v sin i, from an activity-rotation relation and from "
                          "a GP fit; a stellar mass from isochrones and from asteroseismology), give each: the one "
-                         "the paper adopts (its tables) with `method` '', every other one as its own entry with "
-                         "`method` naming the method as the paper does, e.g. 'activity-rotation relation "
+                         "the paper adopts (its tables) without `meth`, every other one as its own entry with "
+                         "`meth` naming the method as the paper does, e.g. 'activity-rotation relation "
                          "(Mamajek & Hillenbrand 2008)'. Limits ('> 13 d') count as estimates. Different fits of "
                          "a planet are separate rows, not methods.")
         if self.table_images:
@@ -117,9 +118,9 @@ class StageSpec(BaseModel):
                          "upright). Read table values and their uncertainties from the images; the text layer "
                          "of a table can be scrambled.")
         if self.has_uncertainties:
-            rules.append("Uncertainties: `err_plus` is the upper uncertainty (positive), `err_minus` the lower one "
-                         "(negative, e.g. -0.05); for a symmetric '±x' give x and -x. Leave both 0 when none is "
-                         "given. For an upper or lower limit ('<', '>') set `limit` to 'upper' or 'lower'.")
+            rules.append("Uncertainties: `ep` is the upper uncertainty (positive), `em` the lower one "
+                         "(negative, e.g. -0.05); for a symmetric '±x' give x and -x. Leave both out when none "
+                         "is given. For an upper or lower limit ('<', '>') set `lim` to 'upper' or 'lower'.")
         return rules
 
     def units(self, which: str) -> str:
@@ -210,9 +211,12 @@ class StageSpec(BaseModel):
                             for p in self.parameters)
         return load_prompt("optional_stage", INTRO=self.intro, PARAMETER_LIST=listing,
                            SET_WORD=self.set_word, SCHEMA_NAME=self.model_name,
+                           SAMPLE_KEY="`sample` (the sample_label, if the values are for one "
+                                      f"{self.units('sample')} only) " if self.per == "sample" else "",
                            EXTRA_RULES="".join(f"- {r}\n" for r in self.rules + self._field_rules() + (
-                               [f"Give `sample_label` exactly as in the structure plan when a value belongs "
-                                f"to one {self.units('sample')} only; '' when it applies to the whole set."]
+                               [f"Give a row's `sample` exactly as the structure plan's sample_label when its "
+                                f"values belong to one {self.units('sample')} only; leave `sample` out for values "
+                                f"of the whole set."]
                                if self.per == "sample" else [])),
                            STRUCTURE_PLAN_JSON=structure.model_dump_json(indent=2), PAPER_TEXT=paper_text)
 
@@ -227,53 +231,100 @@ def _require_all(schema: dict) -> None:
 ALL_REQUIRED = ConfigDict(json_schema_extra=_require_all)
 
 
+# The answer format (2026-10-22, measured with the token-counting endpoint on teng2023's 306
+# stellar values): values grouped under their row -- the system / planet named once, not per value --
+# with short field names, and empty fields left out: 30% fewer output tokens than one object with 16
+# named fields per value (field names were 45% of the output). Short names are ALIASES: the code
+# reads `item.parameter`, `item.quote`, ...; answers recorded in the old flat format
+# ({"parameters": [...]}) still load. Only the core fields are required (col, v, q, src, c);
+# the note stays capped -- with fields optional, the model once wrote a skipped field into the note
+# and ran on (aa57186-25), which the short-note rule, the stage's output budget and the retry guard.
+# `u` is required too: optional, the model left out "fraction" for a transit depth (nielsen2019) and
+# the value went in unconverted -- a wrong number costs more than the ~4 tokens a value
+CORE_FIELDS = ["col", "v", "u", "q", "src", "c"]
+
+
+def _required(names: List[str]):
+    def extra(schema: dict) -> None:
+        schema["required"] = [n for n in names if n in schema.get("properties", {})]
+    return extra
+
+
+class _CompactResult(BaseModel):
+    """Base of every stage's answer: `rows` of grouped values (the model's format) and the flat
+    `parameters` list the code works with (rows flattened, plus answers recorded in the old format)."""
+    model_config = ConfigDict(populate_by_name=True, json_schema_extra=_required(["rows", "notes"]))
+
+    @property
+    def parameters(self) -> list:
+        out = list(self.legacy_parameters)
+        for row in self.rows:
+            labels = {"set_label": row.set_label}
+            if "sample_label" in type(row).model_fields:
+                labels["sample_label"] = row.sample_label
+            out += [v.model_copy(update=labels) for v in row.values]
+        return out
+
+
 @lru_cache(maxsize=None)
 def _models(spec_json: str) -> Tuple[type, type]:
     """(item model, result model) for a spec -- the same classes for the same spec."""
     spec = StageSpec.model_validate_json(spec_json)
     name = spec.model_name
-    sample_field = {} if spec.per == "set" else {"sample_label": (str, Field(
-        default="", description="Exact structure-plan sample_label within the set if the value is for one "
-                                "sample only; '' if it applies to the whole set."))}
+    hidden_sample = {} if spec.per == "set" else {"sample_label": (SkipJsonSchema[str], "")}
     Item = create_model(
         f"{name}Value",
-        __config__=ALL_REQUIRED,
-        set_label=(str, Field(description="Exact structure-plan set_label; '' if it applies to every "
-                                          f"{spec.set_word} set.")),
-        **sample_field,
-        parameter=(Literal[tuple(spec.columns)], ...),
-        value=(float, Field(description="As printed (see `unit`).")),
-        unit=(str, Field(default="", description="The unit the value is printed in, e.g. 'rad', 'min', 'JD-2450000', "
-                                                 "'L_sun'; '' if it's already the parameter's unit. The app converts.")),
-        **({"text": (str, Field(default="", description="For a text parameter: the text as printed; '' otherwise."))}
+        __config__=ConfigDict(populate_by_name=True, json_schema_extra=_required(CORE_FIELDS)),
+        set_label=(SkipJsonSchema[str], ""),            # from the row (or the old flat format)
+        **hidden_sample,
+        parameter=(Literal[tuple(spec.columns)], Field(alias="col", description="The parameter (column).")),
+        value=(float, Field(alias="v", description="As printed (see u); 0 for a text parameter.")),
+        unit=(str, Field(default="", alias="u", description="Unit as printed, e.g. 'rad', 'min', 'JD-2450000', "
+                                                            "'L_sun', 'fraction', 'ppm', '10^9 erg s-1 cm-2'; '' only "
+                                                            "if printed in exactly the parameter's unit. The app "
+                                                            "converts.")),
+        **({"text": (str, Field(default="", alias="txt", description="A text parameter's text as printed."))}
            if spec.has_text else {}),
-        **({"mode": (str, Field(default="", description="'' for the parameter's (overall) value; for one mode of a "
-                                                        "bi-/multimodal posterior, the mode as printed, e.g. "
-                                                        "'i < 90 deg (prograde)'."))}
+        **({"mode": (str, Field(default="", alias="mode", description="Only for one mode of a bi-/multimodal "
+                                                                      "posterior: the mode as printed, e.g. "
+                                                                      "'i < 90 deg (prograde)'."))}
            if spec.modes else {}),
-        **({"method": (str, Field(default="", description="'' for the value the paper adopts; for another "
-                                                          "estimate of the same parameter, the method as the paper "
-                                                          "names it, e.g. 'activity-rotation relation'."))}
+        **({"method": (str, Field(default="", alias="meth", description="Only for an estimate the paper does NOT "
+                                                                        "adopt: its method as the paper names it."))}
            if spec.alternatives else {}),
-        **({"err_plus": (float, Field(default=0.0, description="Upper uncertainty, positive; 0 if none.")),
-            "err_minus": (float, Field(default=0.0, description="Lower uncertainty, negative; 0 if none.")),
-            "limit": (Literal["", "upper", "lower"], Field(default="", description="'upper' for '<x', 'lower' for "
-                                                                                   "'>x'; '' otherwise."))}
+        **({"err_plus": (float, Field(default=0.0, alias="ep", description="Upper uncertainty, positive.")),
+            "err_minus": (float, Field(default=0.0, alias="em", description="Lower uncertainty, negative.")),
+            "limit": (Literal["", "upper", "lower"], Field(default="", alias="lim",
+                                                           description="'upper' for '<x', 'lower' for '>x'."))}
            if spec.has_uncertainties else {}),
-        basis=(Basis, Field(default="stated", description="'stated' in the paper; 'derived' by arithmetic from "
-                                                          "stated values; 'assumed' if not stated.")),
-        quote=(str, Field(description=QUOTE_DESC)),
-        source=(str, Field(description=SOURCE_DESC)),
-        confidence=(Literal["high", "medium", "low"], ...),
-        note=(str, Field(default="", description=NOTE_DESC + " Never the method or mode -- those have "
-                                                             "their own fields.")),
+        basis=(Basis, Field(default="stated", alias="b", description="Leave out when stated; 'derived' if "
+                                                                     "calculated from stated values; 'assumed' "
+                                                                     "if not stated.")),
+        quote=(str, Field(alias="q", description=QUOTE_DESC)),
+        source=(str, Field(alias="src", description=SOURCE_DESC)),
+        confidence=(Literal["high", "medium", "low"], Field(alias="c")),
+        note=(str, Field(default="", alias="n", description=NOTE_DESC + " Never the method or mode -- those "
+                                                                        "have their own fields.")),
+    )
+    sample_field = {} if spec.per == "set" else {"sample_label": (str, Field(
+        default="", alias="sample", description=f"Exact structure-plan sample_label if these values are for one "
+                                                f"{spec.units('sample')} only; leave out for the whole set."))}
+    Row = create_model(
+        f"{name}Row",
+        __config__=ConfigDict(populate_by_name=True, json_schema_extra=_required(["set", "values"])),
+        set_label=(str, Field(alias="set", description="Exact structure-plan set_label; '' if these values apply "
+                                                       f"to every {spec.set_word} set.")),
+        **sample_field,
+        values=(List[Item], Field(description="This row's values.")),
     )
     Result = create_model(
         name,
-        __config__=ALL_REQUIRED,
-        parameters=(List[Item], Field(default_factory=list,
-                                      description="Only values the paper states. Leave a parameter out if not given.")),
-        notes=(str, Field(default="", description="Anything that didn't fit the parameters.")),
+        __base__=_CompactResult,
+        rows=(List[Row], Field(default_factory=list, description="Values grouped by set (and sample): one entry per "
+                                                                 "set/sample with values. Only values the paper "
+                                                                 "states.")),
+        notes=(str, Field(default="", description="Anything that didn't fit, briefly.")),
+        legacy_parameters=(SkipJsonSchema[List[Item]], Field(default_factory=list, validation_alias="parameters")),
     )
     return Item, Result
 

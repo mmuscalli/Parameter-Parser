@@ -834,6 +834,20 @@ steps later).
   JSON FIELD NAMES: 45% of output chars (16 required keys per value), quotes+
   notes+sources 24%. Next lever: a compact answer format (shorter keys, or values
   grouped per row) -- not done, Mickey to decide.
+- **Compact answer format** (optional stages, stages/optional.py): `rows: [{set,
+  sample, values: [...]}]`, short field-name ALIASES (col v u txt mode meth ep em
+  lim b q src c n; code still reads .parameter/.quote/...), required only
+  CORE_FIELDS (col v u q src c), the rest left out when empty. `_CompactResult.
+  parameters` flattens rows (+ `legacy_parameters` = old flat {"parameters": [...]}
+  recordings, which still load). Chosen from token counts (count_tokens, teng's
+  306 stellar values): grouped+short+omit 70% of the old format; positional arrays
+  58% (rejected: swapped positions can't be validated). Live: teng economy 176 ->
+  115 output tok/value (out 129K -> 89K, $0.43 -> $0.33, 2111 archive matches, 0
+  real); nielsen standard 168 -> ~118 tok/value, 122 matches 0 real. `u` had to be
+  REQUIRED: optional, Sonnet left out "fraction" for pl_trandep (unconverted).
+  Prompt legend of the short names in optional_stage.md; pack rules use them.
+  fit_models / methodology / chemistry keep their formats (prebiotic to be
+  reworked by Mickey).
 - Kim 2019 folder renamed to Kim2019 by Mickey: two tests had been SKIPPING
   silently (test_kim2019_replay, test_pdf_parsing) -- paths fixed. A SKIP prints
   but exits 0: grep suite output for SKIP after moving papers.
