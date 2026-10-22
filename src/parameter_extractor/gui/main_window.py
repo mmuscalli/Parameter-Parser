@@ -169,6 +169,12 @@ class MainWindow(QMainWindow):
                                       + "<br><br>Figure-digitizing suggestions and LaTeX conversion (when you ask "
                                         "for them) always use Sonnet 5.5.")
         form.addRow("Models:", self.profile_combo)
+        self.batch_box = QCheckBox("Batch mode -- half price, slower")
+        self.batch_box.setToolTip("Sends every request through Anthropic's Message Batches API at half the price. "
+                                  "Each step then waits in Anthropic's batch queue: usually a few minutes, at "
+                                  "most 24 hours, so a paper can take much longer. Results are the same. Best for "
+                                  "papers you don't need right away.")
+        form.addRow("", self.batch_box)
         self._inputs_form = form
         self.pubchem_box = QCheckBox("Use online lookups (PubChem names, NASA Exoplanet Archive check)")
         self.pubchem_box.setToolTip("PubChem: recognises different names for the same compound (e.g. 2'-CMP and "
@@ -271,6 +277,7 @@ class MainWindow(QMainWindow):
         self.equations_box.setChecked(self._settings.value("equations_to_latex", False, type=bool))
         index = self.profile_combo.findData(self._settings.value("model_profile", "standard"))
         self.profile_combo.setCurrentIndex(max(index, 0))
+        self.batch_box.setChecked(self._settings.value("batch_mode", False, type=bool))
         stored_key = key_store.load_key()
         self._key_was_stored = bool(stored_key)
         if stored_key:
@@ -322,6 +329,7 @@ class MainWindow(QMainWindow):
         self._settings.setValue("pack", self.pack_combo.currentData())
         self._settings.setValue("equations_to_latex", self.equations_box.isChecked())
         self._settings.setValue("model_profile", self.profile_combo.currentData())
+        self._settings.setValue("batch_mode", self.batch_box.isChecked())
         key = self.key_edit.text().strip()
         if self.remember_key_box.isChecked():
             if not key_store.save_key(key):
@@ -402,6 +410,7 @@ class MainWindow(QMainWindow):
                            online_checks=self.pubchem_box.isChecked(),
                            optional_stages=self.optional_stage_choices(),
                            model_profile=self.profile_combo.currentData() or "standard",
+                           batch_mode=self.batch_box.isChecked(),
                            pubchem_cache_path=default_pubchem_cache_path())
         self._extraction, self._extraction_ok, self._review = None, False, None
         self._worker = PipelineWorker(pdf, config)
@@ -537,7 +546,8 @@ class MainWindow(QMainWindow):
     def _set_inputs_enabled(self, enabled: bool) -> None:
         for w in (self.pdf_edit, self.key_edit, self.out_edit, self.remember_key_box,
                   self.show_key_box, self.terms_edit, self.registry_action, self.pack_combo,
-                  self.stages_widget, self.pubchem_box, self.equations_box, self.profile_combo):   # the pack is active during a run
+                  self.stages_widget, self.pubchem_box, self.equations_box, self.profile_combo,
+                  self.batch_box):   # the pack is active during a run
             w.setEnabled(enabled)
         self._update_run_enabled()
 
@@ -598,8 +608,8 @@ class MainWindow(QMainWindow):
             return ""
         lines = [f"From: {src.origin}" + (f" ({src.confidence} confidence)"
                                           if src.confidence in ("high", "medium", "low") else "")]
-        if src.source:
-            lines.append(f"Where: {src.source}")
+        if src.source or src.page:
+            lines.append("Where: " + ", ".join(x for x in (src.source, f"p. {src.page}" if src.page else "") if x))
         if src.quote and src.quote_check == "table image":
             lines.append(f"Read from the table's image (the model's transcription; the table's text layer "
                          f"differs): {src.quote}")
@@ -620,7 +630,8 @@ class MainWindow(QMainWindow):
                 shown = f.quote or (f"(from the table image) {f.table_image_quote}" if f.table_image_quote else
                                     f"(model's wording, not in the paper) {f.unverified_quote}"
                                     if f.unverified_quote else "")
-                child = QTreeWidgetItem([f.message, shown, f.source or ""])
+                where = ", ".join(x for x in (f.source or "", f"p. {f.page}" if f.page else "") if x)
+                child = QTreeWidgetItem([f.message, shown, where])
                 child.setData(0, Qt.ItemDataRole.UserRole, f)
                 child.setToolTip(0, f.message)
                 child.setToolTip(1, shown)
@@ -677,7 +688,8 @@ class MainWindow(QMainWindow):
                       f"description, not a quote. Check the paper.</span></p>")
         if flag.model_note:
             quote += f"<p><b>Model's note</b><br>{html.escape(flag.model_note)}</p>"
-        source = f"<p><b>Where</b><br>{html.escape(flag.source)}</p>" if flag.source else ""
+        where = ", ".join(x for x in (flag.source or "", f"page {flag.page}" if flag.page else "") if x)
+        source = f"<p><b>Where</b><br>{html.escape(where)}</p>" if where else ""
         self.flag_details.setHtml(f"<p>{html.escape(flag.message)}</p>{quote}{source}")
 
     @staticmethod
@@ -735,7 +747,8 @@ class MainWindow(QMainWindow):
 
     def _fill_summary(self, result) -> None:
         usage_rows = "".join(
-            f"<tr><td>{STEP_LABELS.get(u.stage) or stage_label(u.stage)}</td><td>{u.model}</td>"
+            f"<tr><td>{STEP_LABELS.get(u.stage) or stage_label(u.stage)}</td>"
+            f"<td>{u.model}{' (batch, half price)' if getattr(u, 'batch', False) else ''}</td>"
             f"<td align=right>{u.prompt_tokens:,}</td><td align=right>{u.cache_read_tokens:,}</td>"
             f"<td align=right>{u.output_tokens:,}</td>"
             f"<td align=right>{format_usd(u.cost_usd)}</td><td align=right>{u.elapsed_sec:.0f} s</td></tr>"

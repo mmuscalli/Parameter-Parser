@@ -128,6 +128,34 @@ def test_flag_quotes_must_be_the_papers_words():
     assert cell.quote is None and cell.table_image_quote == "Temperature (C) 100" and cell.unverified_quote is None
 
 
+
+def test_quotes_are_capped_and_located_by_page():
+    """Quotes and notes kept short (schemas.common), with the page the quote is on (Mickey, 2026-10-22)."""
+    from parameter_extractor.schemas.common import QUOTE_MAX_CHARS, capped
+    from parameter_extractor.schemas.row_schema import CellSource
+    from parameter_extractor.validation.plausibility_checks import Flag
+    from parameter_extractor.validation.quotes import PaperText, check_row_quotes, table_page_numbers
+    long = "word " * 80
+    assert len(CellSource(origin="x", quote=long).quote) <= QUOTE_MAX_CHARS + 2
+    assert CellSource(origin="x", quote=long).quote.endswith(" …")
+    assert capped("short quote", 50) == "short quote"
+    f = Flag("low_confidence", "m", quote=long + " | " + "second quote", model_note="n " * 200)
+    assert f.quote.endswith("| second quote") and f.quote.split(" | ")[0].endswith("…")
+    assert len(f.model_note) < 160
+    pages = ["Title page. Introduction text here.", "Methods: the solution was heated to 81 C for 3 days.",
+             "Table 2. Yields\nGly2 1.5"]
+    paper = PaperText("\n".join(pages), pages)
+    assert paper.page_of("heated to 81 C for 3 days") == 2
+    assert paper.page_of("heated to 81 C for …") == 2                 # a capped quote is still found
+    assert paper.page_of("not in this paper at all, really not") is None
+    from types import SimpleNamespace
+    rows = [SimpleNamespace(provenance={"a": CellSource(origin="m", quote="heated to 81 C for 3 days", source="Methods"),
+                                        "b": CellSource(origin="c", quote="Gly2 yield 1.5 percent", source="Table 2")})]
+    check_row_quotes(rows, "\n".join(pages), {"2"}, pages, table_page_numbers({3: ["Table 2. Yields"]}))
+    a, b = rows[0].provenance["a"], rows[0].provenance["b"]
+    assert (a.quote_check, a.page) == ("in text", 2)
+    assert (b.quote_check, b.page) == ("table image", 3)               # not in the text: its table's page
+
 if __name__ == "__main__":
     for name, fn in list(globals().items()):
         if name.startswith("test_") and callable(fn):

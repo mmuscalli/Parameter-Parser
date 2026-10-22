@@ -13,6 +13,7 @@ regardless of how many species the full template happens to track.
 from __future__ import annotations
 from typing import List, Literal, Optional
 from pydantic import BaseModel, Field
+from parameter_extractor.schemas.common import QUOTE_DESC, SOURCE_DESC
 from pydantic.json_schema import SkipJsonSchema
 
 Phase = Literal["aq", "gas", "solid"]
@@ -30,8 +31,8 @@ class AddedSolution(BaseModel):
     solution: str = Field(description="Short label, e.g. 'ribose 1,2-cyclic phosphate stock', 'nucleobase "
                                       "solution', 'water'. Species entries refer to it in `stock_solution`.")
     volume: str = Field(description="Volume added, exactly as printed with its unit, e.g. '5 µL', '0.2 mL'.")
-    quote: str = ""
-    source: str = ""
+    quote: str = Field(default="", description=QUOTE_DESC)
+    source: str = Field(default="", description=SOURCE_DESC)
 
 
 class MolarRatio(BaseModel):
@@ -46,8 +47,8 @@ class MolarRatio(BaseModel):
     species_parts: float
     reference_parts: float
     ratio_text: str = Field(description="The ratio exactly as printed, e.g. '3 : cytosine = 1:2'.")
-    quote: str = ""
-    source: str = ""
+    quote: str = Field(default="", description=QUOTE_DESC)
+    source: str = Field(default="", description=SOURCE_DESC)
 
 
 class SoluteEntry(BaseModel):
@@ -95,8 +96,8 @@ class SoluteEntry(BaseModel):
                     "rather than silently computing a possibly-wrong number.",
     )
     conversion_note: Optional[str] = None
-    quote: str
-    source: str
+    quote: str = Field(description=QUOTE_DESC)
+    source: str = Field(description=SOURCE_DESC)
     confidence: Literal["high", "medium", "low"]
     # set by calculators/mixing.py, never by the model (hidden from its schema)
     derived: SkipJsonSchema[bool] = False

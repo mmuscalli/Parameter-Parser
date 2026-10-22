@@ -33,18 +33,24 @@ def _tiers(model: str):
     return None
 
 
+BATCH_DISCOUNT = 0.5          # Message Batches API: half price on everything, caching included
+
+
 def request_cost(model: str, input_tokens: int, output_tokens: int,
-                 cache_write_tokens: int = 0, cache_read_tokens: int = 0) -> Optional[float]:
+                 cache_write_tokens: int = 0, cache_read_tokens: int = 0,
+                 cache_write_1h_tokens: int = 0, batch: bool = False) -> Optional[float]:
     """Estimated USD for one request, or None for a model without a known price. `input_tokens`
-    are the uncached ones (as the API reports them)."""
+    are the uncached ones (as the API reports them); `cache_write_tokens` the 5-minute cache
+    writes, `cache_write_1h_tokens` the 1-hour ones (2x the input price); `batch` halves it all."""
     tiers = _tiers(model)
     if tiers is None:
         return None
-    prompt = input_tokens + cache_write_tokens + cache_read_tokens
+    prompt = input_tokens + cache_write_tokens + cache_write_1h_tokens + cache_read_tokens
     for limit, in_price, out_price, write_price, read_price in tiers:
         if limit is None or prompt <= limit:
-            return (input_tokens * in_price + output_tokens * out_price + cache_write_tokens * write_price
-                    + cache_read_tokens * read_price) / 1_000_000
+            cost = (input_tokens * in_price + output_tokens * out_price + cache_write_tokens * write_price
+                    + cache_write_1h_tokens * 2 * in_price + cache_read_tokens * read_price) / 1_000_000
+            return cost * (BATCH_DISCOUNT if batch else 1.0)
     return None
 
 

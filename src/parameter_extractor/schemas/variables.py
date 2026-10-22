@@ -12,6 +12,7 @@ from __future__ import annotations
 from typing import List, Literal, Optional
 
 from pydantic import BaseModel, Field
+from parameter_extractor.schemas.common import QUOTE_DESC, SOURCE_DESC
 
 from parameter_extractor.schemas.common import Confidence
 
@@ -46,8 +47,8 @@ class TermFinding(BaseModel):
     value: str = Field(description="As stated, with its unit, e.g. '1 cm3', '45 min'.")
     column: str = Field(description="Best matching column from the provided list, or '' if none fits.")
     set_label: str = Field(description="Exact structure-plan set_label if it applies to one set; '' if paper-wide.")
-    quote: str
-    source: str
+    quote: str = Field(description=QUOTE_DESC)
+    source: str = Field(description=SOURCE_DESC)
     confidence: Literal["high", "medium", "low"]
 
 

@@ -12,7 +12,7 @@ differs slightly per condition) -- see `per_set_overrides`.
 from __future__ import annotations
 from typing import Dict, List, Literal, Optional
 from pydantic import BaseModel, Field, field_validator
-from .common import Basis, Extracted
+from .common import NOTE_DESC, QUOTE_DESC, SOURCE_DESC, Basis, Extracted
 
 ExperimentType = Literal["Batch", "Flowthrough"]  # POLO's ExperimentType enum
 OverridableField = Literal[
@@ -30,10 +30,9 @@ class SetOverride(BaseModel):
     basis: Basis = Field(default="stated", description="'stated' in the paper; 'derived' by arithmetic "
                                                        "from stated values; 'assumed' if not stated.")
     confidence: Literal["high", "medium", "low"] = "high"
-    quote: str = Field(default="", description="Copied word for word from the paper (for a table value: its row/column labels and the value exactly as printed). Never your own words -- explanations go in `note`.")
-    source: str = ""
-    note: str = Field(default="", description="Your explanation, e.g. how a 'derived' value was calculated; "
-                                              "'' if none.")
+    quote: str = Field(default="", description=QUOTE_DESC)
+    source: str = Field(default="", description=SOURCE_DESC)
+    note: str = Field(default="", description=NOTE_DESC)
 
 
 class OtherParameter(BaseModel):
@@ -50,8 +49,8 @@ class OtherParameter(BaseModel):
     value: str = Field(description="As stated, with its unit, e.g. '300 rpm', '254 nm', 'montmorillonite'.")
     set_label: Optional[str] = Field(default=None, description="Exact structure-plan set_label if it "
                                                                "applies to one set only; null if paper-wide.")
-    quote: str
-    source: str
+    quote: str = Field(description=QUOTE_DESC)
+    source: str = Field(description=SOURCE_DESC)
     confidence: Literal["high", "medium", "low"]
 
 

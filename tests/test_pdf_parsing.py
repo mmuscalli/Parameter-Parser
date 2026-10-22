@@ -18,7 +18,7 @@ sys.path.insert(0, str(ROOT / "src"))
 from parameter_extractor.ingestion.pdf_parser import _merged_word_ratio, find_table_pages, parse_pdf
 
 PAPERS = ROOT.parent / "Paper Files" / "Paper Lists"
-KIM = PAPERS / "Kim 2019" / "kim2019.pdf"
+KIM = PAPERS / "Kim2019" / "kim2019.pdf"
 
 
 def test_kim2019_text_tables_and_micro():

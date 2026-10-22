@@ -43,6 +43,26 @@ class NetworkError(PipelineError):
         super().__init__("Couldn't reach the Anthropic API. Check the internet connection.")
 
 
+class OutOfCreditsError(PipelineError):
+    """The account behind the key can't pay for more requests: credit balance used up, a spend
+    limit or the monthly spend cap reached, or a billing problem. Says where the run stopped."""
+    def __init__(self, stage: str, detail: str, finished: list, run_dir=None):
+        done = ", ".join(finished) if finished else "none"
+        super().__init__(
+            f"Your Anthropic account has run out of credits (or hit a spend limit) during the '{stage}' step, "
+            f"so the run stopped there. Steps already finished: {done}. "
+            + (f"What was done so far is kept in {run_dir} (the CSV is only written at the end). " if run_dir else "")
+            + f"Add credits or raise the limit in the Claude Console (Settings > Billing), then run the paper "
+              f"again. The API said: {detail}")
+        self.stage, self.finished, self.run_dir = stage, list(finished), run_dir
+
+
+class BatchExpiredError(PipelineError):
+    def __init__(self, stage: str):
+        super().__init__(f"The '{stage}' step's batch request wasn't processed within Anthropic's 24-hour batch "
+                         f"window (nothing was charged for it). Run the paper again, or without batch mode.")
+
+
 class ApiRequestError(PipelineError):
     """Any other API-side failure; the message carries the API's own explanation."""
 

@@ -21,7 +21,7 @@ from parameter_extractor.schemas.row_schema import ExtractedRow
 
 ROW_KEYS = ("full_id", "set_id", "sample_id", "entry_number")   # identify the row; not observations
 OBSERVATION_FIELDS = ["full_id", "set_id", "sample_id", "column", "value", "unit",
-                      "origin", "source", "quote", "quote_in_paper", "confidence"]
+                      "origin", "source", "page", "quote", "quote_in_paper", "confidence"]
 
 
 class Observation(BaseModel):
@@ -34,6 +34,7 @@ class Observation(BaseModel):
     unit: str = ""
     origin: str = ""
     source: str = ""
+    page: Union[int, str] = ""          # the page the quote / table is on (validation/quotes.py)
     quote: str = ""
     # "yes": found word for word in the paper's text; "table image": transcribed by the model
     # from a table sent as an image (its text layer differs); "no": the model's own wording --
@@ -78,6 +79,7 @@ def rows_to_observations(rows: List[ExtractedRow]) -> List[Observation]:
                 entry_number=row.entry_number, column=column, value=value, unit=unit_for_column(column),
                 origin=src.origin if src else ("pipeline" if column in _PIPELINE_COLUMNS else ""),
                 source=src.source if src else "", quote=src.quote if src else "",
+                page=src.page if src and src.page else "",
                 quote_in_paper=QUOTE_IN_PAPER.get(src.quote_check, "") if src else "",
                 confidence=src.confidence if src else None))
     return out

@@ -27,7 +27,7 @@ different temperatures) rather than being constant across the whole paper,
 set it "ambiguous" at the top level with a note pointing to
 `per_set_overrides`, and add one `per_set_overrides` entry per (set, field),
 using the exact `set_label` strings from the structure plan below. Give each
-entry a `quote`, `source`, `confidence`, and `basis`:
+entry a `quote`, `source`, `confidence`, and `basis` (keep every `quote` to the shortest span that shows the value (at most 20 words; for a table: row label, column label, value) and make `source` exact (table + row + column, or section + paragraph), so a reader can find the full context. `note`: at most 15 words):
 - "stated": the paper gives this value for this set;
 - "derived": calculated from stated values (say how in `note`, not in the
   quote -- a quote is always the paper's own words, copied exactly);

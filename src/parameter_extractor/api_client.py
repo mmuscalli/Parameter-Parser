@@ -83,18 +83,23 @@ def _image_blocks(image_paths) -> list:
     return blocks
 
 
-def _paper_blocks(paper: PaperContext) -> list:
+def _paper_blocks(paper: PaperContext, long_lived: bool = False) -> list:
+    # batch mode: the 1-hour cache (batches can take longer than the default 5 minutes)
+    cache = {"type": "ephemeral", "ttl": "1h"} if long_lived else {"type": "ephemeral"}
     return _image_blocks(paper.images) + [{"type": "text", "text": f"PAPER TEXT:\n\n{paper.text}",
-                                           "cache_control": {"type": "ephemeral"}}]
+                                           "cache_control": cache}]
 
 
 def _record(ctx: RunContext, stage: str, model: str, response, elapsed: float) -> StageUsage:
     u = response.usage
     write, read = getattr(u, "cache_creation_input_tokens", 0) or 0, getattr(u, "cache_read_input_tokens", 0) or 0
+    write_1h = getattr(getattr(u, "cache_creation", None), "ephemeral_1h_input_tokens", 0) or 0
+    batch = bool(ctx.config.batch_mode)
     usage = StageUsage(stage=stage, model=model, input_tokens=u.input_tokens, output_tokens=u.output_tokens,
                        elapsed_sec=round(elapsed, 2),
-                       cost_usd=request_cost(model, u.input_tokens, u.output_tokens, write, read),
-                       cache_write_tokens=write, cache_read_tokens=read)
+                       cost_usd=request_cost(model, u.input_tokens, u.output_tokens, write - write_1h, read,
+                                             cache_write_1h_tokens=write_1h, batch=batch),
+                       cache_write_tokens=write, cache_read_tokens=read, batch=batch)
     ctx.record_usage(usage)
     return usage
 
@@ -119,8 +124,16 @@ def _send(ctx: RunContext, *, model: str, system_prompt: str, content, response_
     if tool:
         # "auto" (Sonnet 5.5 rejects a forced tool); the task names the tool; one call only
         request.update(tools=tool[1], tool_choice={"type": "auto", "disable_parallel_tool_use": True})
+    elif ctx.config.batch_mode:                      # a batch takes raw API parameters
+        from anthropic.lib._parse._transform import transform_schema
+        request.update(output_config={"format": {"type": "json_schema", "schema": transform_schema(response_model)}})
     else:
         request.update(output_format=response_model)
+    if ctx.config.batch_mode:
+        message = _send_batch(ctx, request)
+        if tool:
+            return _from_tool_call(message, tool[0], response_model)
+        return _from_json_text(message, response_model)
     with ctx.client.messages.stream(**request) as stream:
         chunks = []
         try:
@@ -133,6 +146,72 @@ def _send(ctx: RunContext, *, model: str, system_prompt: str, content, response_
             _streamed.text = "".join(chunks)
         message = stream.get_final_message()
     return _from_tool_call(message, tool[0], response_model) if tool else message
+
+
+BATCH_POLL_SECONDS = (5, 60)          # first wait, longest wait between status checks
+
+
+def _send_batch(ctx: RunContext, request: dict):
+    """One request through the Message Batches API (half price; usually done in seconds to minutes,
+    at most 24 h): submit, poll until it has ended, return its message. Cancelling the run cancels
+    the batch. Errors come back per request and are mapped like direct-call errors."""
+    import uuid
+    stage = getattr(_streamed, "stage", "step")
+    batch = ctx.client.messages.batches.create(
+        requests=[{"custom_id": f"{stage}-{uuid.uuid4().hex[:12]}", "params": request}])
+    _streamed.batch_id = batch.id
+    ctx.note(stage, f"{stage}: queued as a batch request (half price) -- waiting for Anthropic to process it")
+    started, delay, last_note = time.time(), BATCH_POLL_SECONDS[0], time.time()
+    while batch.processing_status != "ended":
+        cancel = ctx.cancel_event
+        if cancel is not None:
+            cancelled = cancel.wait(delay)            # wakes at once when the user cancels
+        else:
+            time.sleep(delay)
+            cancelled = False
+        if cancelled:
+            ctx.client.messages.batches.cancel(batch.id)
+            raise errors.RunCancelledError()
+        delay = min(delay * 1.5, BATCH_POLL_SECONDS[1])
+        batch = ctx.client.messages.batches.retrieve(batch.id)
+        if time.time() - last_note > 60:
+            ctx.note(stage, f"{stage}: batch request still queued ({(time.time() - started) / 60:.0f} min)")
+            last_note = time.time()
+    result = next(iter(ctx.client.messages.batches.results(batch.id))).result
+    if result.type == "succeeded":
+        return result.message
+    if result.type == "errored":
+        error = getattr(result.error, "error", result.error)
+        kind, text = getattr(error, "type", ""), getattr(error, "message", str(error))
+        raise _BatchRequestError(kind, text)
+    if result.type == "expired":
+        raise errors.BatchExpiredError(stage)
+    raise errors.RunCancelledError()
+
+
+class _BatchRequestError(Exception):
+    """A batch request that came back errored: mapped in _send_mapping_errors."""
+    def __init__(self, kind: str, message: str):
+        super().__init__(message)
+        self.kind, self.message = kind, message
+
+
+def _from_json_text(message, response_model):
+    """A batch answer with output_config: its JSON text validated into the response model, in the
+    shape the streaming helper returns (parsed_output)."""
+    from types import SimpleNamespace
+    text = next((b.text for b in message.content if b.type == "text"), None)
+    _streamed.text = text or ""
+    parsed = response_model.model_validate_json(text) if text else None
+    return SimpleNamespace(id=message.id, usage=message.usage, parsed_output=parsed, stop_reason=message.stop_reason,
+                           stop_details=getattr(message, "stop_details", None), content=message.content)
+
+
+def _out_of_credits(status: int, kind: str, text: str) -> bool:
+    """Credit balance used up, a spend limit / the monthly spend cap reached, or a billing problem."""
+    text = (text or "").lower()
+    return status == 402 or kind == "billing_error" or any(
+        k in text for k in ("credit balance", "spend limit", "spend cap", "spending limit", "billing"))
 
 
 def _decoded(data):
@@ -168,19 +247,39 @@ def _from_tool_call(message, name: str, response_model):
 _streamed = threading.local()
 
 
+def _finished_steps(ctx: RunContext) -> list:
+    seen = []
+    for u in ctx.usage:
+        if u.stage not in seen:
+            seen.append(u.stage)
+    return seen
+
+
 def _send_mapping_errors(ctx: RunContext, stage: str, model: str, **kwargs):
     import anthropic
+    _streamed.stage = stage
+    credits = lambda detail: errors.OutOfCreditsError(stage, detail, _finished_steps(ctx), getattr(ctx, "run_dir", None))
     try:
         return _send(ctx, model=model, **kwargs)
+    except _BatchRequestError as e:
+        if _out_of_credits(0, e.kind, e.message):
+            raise credits(e.message) from None
+        raise errors.ApiRequestError(f"The Anthropic API returned an error for the '{stage}' step's batch "
+                                     f"request: {e.message}") from None
     except anthropic.AuthenticationError:
         raise errors.InvalidApiKeyError() from None
     except anthropic.NotFoundError:
         raise errors.ModelUnavailableError(model) from None
-    except anthropic.RateLimitError:
+    except anthropic.RateLimitError as e:
+        if _out_of_credits(429, "", e.message):           # the tier's monthly spend cap: retrying won't help
+            raise credits(e.message) from None
         raise errors.RateLimitedError() from None
     except anthropic.APIConnectionError:
         raise errors.NetworkError() from None
     except anthropic.APIStatusError as e:
+        kind = getattr(e, "type", None) or ""
+        if _out_of_credits(getattr(e, "status_code", 0), kind, e.message):
+            raise credits(e.message) from None
         raise errors.ApiRequestError(f"The Anthropic API returned an error during the "
                                      f"'{stage}' step: {e.message}") from None
     except ValidationError as e:
@@ -226,7 +325,7 @@ def call_structured(
         # tools (`ctx.paper.tools`), every step sends the same tool list and is made to call its own:
         # the API's cache key includes a request's output schema, so a different schema per step
         # (output_format) would give every step its own cache entry (measured 2026-10-22)
-        content = _paper_blocks(ctx.paper) + [{"type": "text", "text": (
+        content = _paper_blocks(ctx.paper, ctx.config.batch_mode) + [{"type": "text", "text": (
             f"YOUR TASK: {system_prompt}\n\n" + user_content.replace(paper_text, PAPER_ABOVE)
             + (f"\n\nAnswer by calling the `{stage}` tool." if stage in ctx.paper.tools else ""))}]
         system_prompt = SHARED_SYSTEM
@@ -282,6 +381,7 @@ def call_structured(
         "input_tokens": response.usage.input_tokens,
         "output_tokens": response.usage.output_tokens,
         "estimated_cost_usd": usage.cost_usd,
+        "batch_id": getattr(_streamed, "batch_id", None) if ctx.config.batch_mode else None,
         "images_attached": [str(p) for p in (image_paths or [])],
         "system_prompt": system_prompt,
         "user_content": user_content,

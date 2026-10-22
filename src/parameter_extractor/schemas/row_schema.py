@@ -10,7 +10,9 @@ one shot. Species concentrations stay as a dict keyed by template column name
 """
 from __future__ import annotations
 from typing import Dict, List, Optional, Union
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
+
+from parameter_extractor.schemas.common import QUOTE_MAX_CHARS, capped
 
 
 class CellSource(BaseModel):
@@ -24,6 +26,13 @@ class CellSource(BaseModel):
     # transcribed by the model from a table sent as an image; "not found" = the model's own
     # wording; None = not checked / no quote
     quote_check: Optional[str] = None
+    # the page the quote is on (found in the text, or the table's page) -- to find the full context
+    page: Optional[int] = None
+
+    @field_validator("quote", mode="before")
+    @classmethod
+    def _short(cls, v):
+        return capped(v, QUOTE_MAX_CHARS) if isinstance(v, str) else v
 
 
 class ExtractedRow(BaseModel):

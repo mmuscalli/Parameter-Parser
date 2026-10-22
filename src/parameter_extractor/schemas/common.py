@@ -12,6 +12,31 @@ from pydantic import BaseModel, Field, field_validator
 
 T = TypeVar("T")
 
+# How much of the paper each value carries back (Mickey, 2026-10-22: quotes and notes were bulky --
+# output tokens are most of a long paper's cost). The model is asked for short ones; what's kept is
+# capped too (row_schema.CellSource, plausibility_checks.Flag), and every value keeps a precise
+# `source` plus the page its quote was found on (validation/quotes.py) to find the full context.
+QUOTE_WORDS = 20
+NOTE_WORDS = 15
+QUOTE_MAX_CHARS = 200          # kept; longer quotes are cut at a word with " …"
+NOTE_MAX_CHARS = 150
+QUOTE_SEPARATOR_SAFE = " | "   # = validation.quotes.QUOTE_SEPARATOR (grouped flags join quotes with it)
+QUOTE_DESC = (f"The SHORTEST span of the paper's own words that shows the value -- at most {QUOTE_WORDS} words, "
+              f"copied exactly (for a table value: its row label, column label and the value as printed). "
+              f"Never your own words.")
+SOURCE_DESC = ("Exactly where: e.g. 'Table 3, row HD 14067 b, column e', 'Sect. 4.2, 2nd paragraph', "
+               "'Fig. 5 caption', 'Methods, p. 4'.")
+NOTE_DESC = f"At most {NOTE_WORDS} words of your own (e.g. how a derived value was calculated); '' if none."
+
+
+def capped(text: str, limit: int) -> str:
+    """Cut at a word boundary with ' …' if longer than `limit` characters."""
+    text = (text or "").strip()
+    if len(text) <= limit:
+        return text
+    cut = text[:limit].rsplit(" ", 1)[0].rstrip(",;:")
+    return f"{cut} …"
+
 Confidence = Literal["high", "medium", "low"]
 CONFIDENCE_ORDER = ("low", "medium", "high")
 
@@ -59,22 +84,17 @@ class Extracted(BaseModel, Generic[T]):
     # Methodology schema (10 of these) hit the API's grammar size limit with them.
     quote: str = Field(
         default="",
-        description="Short snippet copied word for word from the paper that supports this "
-                    "value (never a paraphrase or your reasoning -- that goes in `note`); empty "
-                    "if none. Required whenever status == 'found'; absence of a quote is itself "
-                    "a signal to distrust the value.",
+        description=QUOTE_DESC + " Required whenever status == 'found'; empty if none.",
     )
     source: str = Field(
         default="",
-        description="Where in the paper, e.g. 'Table 1', 'Experimental section, para 2', "
-                    "'page 3'; empty if not found.",
+        description=SOURCE_DESC + " Empty if not found.",
     )
     confidence: Confidence = "low"
     note: str = Field(
         default="",
-        description="Free-text explanation when status is ambiguous/conflicting/below_threshold "
-                    "-- e.g. 'paper states <0.15% for all samples, exact value not given'; "
-                    "empty otherwise.",
+        description=f"At most {NOTE_WORDS} words, only when status is ambiguous/conflicting/below_threshold "
+                    "-- e.g. '<0.15% for all samples, exact value not given'; empty otherwise.",
     )
 
     @field_validator("quote", "source", "note", mode="before")

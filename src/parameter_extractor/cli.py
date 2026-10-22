@@ -62,6 +62,9 @@ def main() -> int:
     parser.add_argument("--models", choices=["standard", "economy"], default="standard",
                         help="standard: Claude Sonnet 5.5 for every step (most accurate); economy: Claude Haiku "
                              "5.5 for every step (roughly 4-20x cheaper; misses more on complex papers)")
+    parser.add_argument("--batch", action="store_true",
+                        help="Batch mode: every request at half price through Anthropic's Message Batches API; "
+                             "each step waits in the batch queue (usually minutes, at most 24 h)")
     parser.add_argument("--no-cache", action="store_true",
                         help="Don't share the cached paper between steps (costs more; for comparison)")
     parser.add_argument("--skip-stage", action="append", default=[], metavar="STAGE",
@@ -92,6 +95,7 @@ def main() -> int:
                  "online_checks": not args.no_pubchem,
                  "optional_stages": {name: "off" for name in args.skip_stage},
                  "model_profile": args.models, "prompt_caching": not args.no_cache,
+                 "batch_mode": args.batch,
                  "pubchem_cache_path": default_pubchem_cache_path()}
     if args.out:
         overrides["output_dir"] = args.out
@@ -108,6 +112,10 @@ def main() -> int:
         result = run_pipeline(args.pdf, config, on_progress=print_progress)
     except PipelineError as e:
         print(f"\nError: {e}", file=sys.stderr)
+        run_dir = getattr(e, "run_dir", None)          # e.g. out of credits: say so in the run folder too
+        if run_dir and Path(run_dir).is_dir():
+            with open(Path(run_dir) / "error.txt", "a") as f:
+                f.write(f"{e}\n")
         return 1
     except KeyboardInterrupt:
         print("\nCancelled.", file=sys.stderr)

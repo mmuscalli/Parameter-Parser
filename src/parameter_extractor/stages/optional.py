@@ -45,7 +45,7 @@ from typing import Dict, List, Literal, Optional, Tuple
 
 from pydantic import BaseModel, ConfigDict, Field, create_model
 
-from parameter_extractor.schemas.common import Basis
+from parameter_extractor.schemas.common import NOTE_DESC, QUOTE_DESC, SOURCE_DESC, Basis
 from parameter_extractor.schemas.structure_plan import StructurePlan
 
 
@@ -262,14 +262,11 @@ def _models(spec_json: str) -> Tuple[type, type]:
            if spec.has_uncertainties else {}),
         basis=(Basis, Field(default="stated", description="'stated' in the paper; 'derived' by arithmetic from "
                                                           "stated values; 'assumed' if not stated.")),
-        quote=(str, Field(description="Copied word for word from the paper (for a table value: its row/column "
-                                      "labels and the value exactly as printed). Never your own words -- "
-                                      "explanations go in `note`.")),
-        source=(str, ...),
+        quote=(str, Field(description=QUOTE_DESC)),
+        source=(str, Field(description=SOURCE_DESC)),
         confidence=(Literal["high", "medium", "low"], ...),
-        note=(str, Field(default="", description="At most one short sentence of your own, e.g. how a 'derived' "
-                                                 "value was calculated; '' if none. Never the method or mode -- "
-                                                 "those have their own fields.")),
+        note=(str, Field(default="", description=NOTE_DESC + " Never the method or mode -- those have "
+                                                             "their own fields.")),
     )
     Result = create_model(
         name,

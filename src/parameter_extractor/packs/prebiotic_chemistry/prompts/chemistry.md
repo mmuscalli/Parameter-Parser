@@ -63,7 +63,7 @@ For each species:
   null for them.
 - Do not extract values that only appear as a point on a scatter plot/figure
   -- table and in-text values only, for this pass.
-- Every entry needs a `quote` and `source`.
+- Every entry needs a `quote` and `source`. Keep every `quote` to the shortest span that shows the value (at most 20 words; for a table: row label, column label, value) and make `source` exact (table + row + column, or section + paragraph), so a reader can find the full context.
 - If page images are attached, they are rasterized renders of the pages
   containing a "Table N" caption, given alongside the OCR'd/pdftotext text
   below. For numeric table values specifically, read them off the IMAGE, not

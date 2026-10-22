@@ -38,6 +38,7 @@ class StageUsage:
     # read by the later steps; `input_tokens` counts only the rest
     cache_write_tokens: int = 0
     cache_read_tokens: int = 0
+    batch: bool = False                    # sent through the Message Batches API (half price)
 
     @property
     def prompt_tokens(self) -> int:

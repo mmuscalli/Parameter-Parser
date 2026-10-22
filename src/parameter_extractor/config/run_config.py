@@ -56,6 +56,9 @@ class RunConfig:
     # Which models do the work (settings.MODEL_PROFILES): "standard" (Sonnet 5.5 for every step
     # but the page-1 metadata) or "economy" (Haiku 5.5 for every step)
     model_profile: str = "standard"
+    # Send every request through the Message Batches API: half price, but each step waits in
+    # Anthropic's batch queue (usually seconds to minutes, at most 24 h). Uses the 1-hour cache.
+    batch_mode: bool = False
 
     @classmethod
     def from_settings(cls, **overrides) -> "RunConfig":

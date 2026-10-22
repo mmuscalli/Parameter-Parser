@@ -39,6 +39,15 @@ class Flag:
     unverified_quote: Optional[str] = None
     table_image_quote: Optional[str] = None   # transcribed by the model from a table sent as an image
     model_note: Optional[str] = None          # the model's explanation (e.g. how a value was derived)
+    page: Optional[int] = None                # page of the quote / table (validation/quotes.py)
+
+    def __post_init__(self):
+        from parameter_extractor.schemas.common import NOTE_MAX_CHARS, QUOTE_MAX_CHARS, QUOTE_SEPARATOR_SAFE, capped
+        if self.quote:                          # each part of a grouped quote kept short
+            self.quote = QUOTE_SEPARATOR_SAFE.join(capped(q, QUOTE_MAX_CHARS)
+                                                   for q in self.quote.split(QUOTE_SEPARATOR_SAFE))
+        if self.model_note:
+            self.model_note = capped(self.model_note, NOTE_MAX_CHARS)
 
     def to_dict(self) -> dict:
         return {k: v for k, v in asdict(self).items() if v is not None}

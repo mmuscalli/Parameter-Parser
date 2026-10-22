@@ -798,6 +798,46 @@ steps later).
   StageUsage (audit no longer reads ctx.usage[-1] across threads).
 - Batch API (50% off, async) not built yet; stacks with caching.
 
+## Batch mode, out-of-credits, shorter quotes (2026-10-22)
+
+- **Batch mode** (`RunConfig.batch_mode`, GUI checkbox, CLI `--batch`): `_send`
+  submits each request as a one-request Message Batch (`_send_batch`: create,
+  poll 5 s -> 60 s via cancel_event.wait so Cancel is immediate and cancels the
+  batch, read the single result; raw params -- `output_config.format` json_schema
+  via transform_schema instead of the SDK's `output_format`; tools as usual).
+  Parallel stages = parallel one-request batches. 1-hour cache (`_paper_blocks
+  (long_lived=True)`). Pricing: `request_cost(..., cache_write_1h_tokens, batch)`
+  -- 1h writes 2x input, batch x0.5 on everything; StageUsage.batch; audit
+  `batch_id`. Errored results -> `_BatchRequestError` -> mapped like direct
+  errors; expired -> BatchExpiredError. Live: nielsen economy $0.010 (vs $0.016),
+  ~6.5 min (two ~2.7-min queue waits), cache reads work, 116/0 archive.
+- **Out of credits** (`errors.OutOfCreditsError`): 402 / billing_error, or
+  "credit balance" / "spend limit" / "spend cap" / "billing" in the message
+  (400 spend limits, 429 monthly spend cap) -- direct or batch -- says which
+  step, which steps had finished (ctx.usage), and the run folder; CLI also
+  appends it to the run's error.txt (GUI already did). Tested offline with real
+  SDK exception classes (tests/test_batch_and_credits.py).
+- **Shorter quotes/notes** (schemas/common.py): QUOTE_DESC (shortest verbatim
+  span, <= 20 words; table: row + column + value), SOURCE_DESC (exact table/row/
+  column or section/paragraph), NOTE_DESC (<= 15 words) used by every schema +
+  prompt rules. Kept capped: CellSource.quote <= 200 chars, Flag quote parts /
+  model_note (`capped`, word boundary + " …"). **Page**: validation/quotes.py
+  `PaperText(text, page_texts).page_of()` -> CellSource.page / Flag.page (else the
+  page of the table named in the source, `table_page_numbers`); observations
+  column `page`; GUI hover "Where: Table 3, p. 9". Reference observations
+  regenerated (only page column + 174 capped teng quotes; CSVs unchanged).
+- Measured (economy): teng batch run $0.27 (cached non-batch $0.43), 9.5 min,
+  2082 archive matches / 0 real diffs, page on 72% of observations. Output did
+  NOT shrink (teng 129K -> 153K tokens: more alternative estimates; sources longer
+  by design): exoplanet quotes were already ~20 chars. eder: notes 128 -> 60
+  chars, chemistry max quote 66 -> 38, tokens ~unchanged. The real overhead is
+  JSON FIELD NAMES: 45% of output chars (16 required keys per value), quotes+
+  notes+sources 24%. Next lever: a compact answer format (shorter keys, or values
+  grouped per row) -- not done, Mickey to decide.
+- Kim 2019 folder renamed to Kim2019 by Mickey: two tests had been SKIPPING
+  silently (test_kim2019_replay, test_pdf_parsing) -- paths fixed. A SKIP prints
+  but exits 0: grep suite output for SKIP after moving papers.
+
 ## Non-obvious decisions — don't redo this research
 
 - **Schema shape is grounded in `../POLO_variable_mapping.csv`** (one level

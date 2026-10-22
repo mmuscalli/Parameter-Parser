@@ -26,7 +26,7 @@ from parameter_extractor.config.run_config import RunConfig
 from parameter_extractor.pipeline import run_pipeline
 from test_pipeline_offline import make_replay
 
-PDF = ROOT.parent / "Paper Files" / "Paper Lists" / "Kim 2019" / "kim2019.pdf"
+PDF = ROOT.parent / "Paper Files" / "Paper Lists" / "Kim2019" / "kim2019.pdf"
 REF = ROOT / "runs" / "kim2019_auto"
 
 

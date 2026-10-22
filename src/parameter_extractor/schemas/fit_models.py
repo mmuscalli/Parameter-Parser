@@ -19,7 +19,7 @@ from typing import List, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from parameter_extractor.schemas.common import Confidence
+from parameter_extractor.schemas.common import NOTE_DESC, QUOTE_DESC, SOURCE_DESC, Confidence
 
 DataKind = Literal["radial velocity", "transit photometry", "SED photometry", "spectroscopy", "astrometry",
                    "imaging", "secondary eclipse", "phase curve", "transit timing", "parallax",
@@ -45,7 +45,7 @@ class FitDataset(_Strict):
     instrument: str = Field(description="Instrument as printed, e.g. 'HIDES', 'HARPS'; '' if not stated.")
     bands: str = Field(description="Filters / photometric bands / wavelength range as printed, e.g. "
                                    "'2MASS J, H, Ks; WISE W1-W3', 'TESS band', 'I2 cell 500-620 nm'; '' if none.")
-    note: str = Field(default="", description="Dates, number of points etc. if useful; '' otherwise.")
+    note: str = Field(default="", description=NOTE_DESC)
 
 
 class FitSoftware(_Strict):
@@ -69,14 +69,14 @@ class FitPrior(_Strict):
     unit: str = Field(description="Unit the numbers are printed in; '' if dimensionless or already the "
                                   "archive column's unit.")
     as_printed: str = Field(description="The prior exactly as printed, e.g. 'N(4874, 100) K', 'U(0, 1)'.")
-    source: str = Field(description="Table/section where it's stated.")
+    source: str = Field(description=SOURCE_DESC)
 
 
 class FitAssumption(_Strict):
     text: str = Field(description="The assumption in a few words, e.g. 'circular orbit (e fixed to 0)', "
                                   "'transit is not grazing', 'no RV jitter between instruments'.")
     parameter: str = Field(default="", description="Archive column it concerns, e.g. 'pl_orbeccen'; '' if none.")
-    quote: str = Field(description="Copied word for word from the paper.")
+    quote: str = Field(description=QUOTE_DESC)
     source: str
 
 
@@ -98,7 +98,7 @@ class FitModel(_Strict):
     software: List[FitSoftware]
     priors: List[FitPrior] = Field(description="Every prior the paper states for this model.")
     assumptions: List[FitAssumption] = Field(description="Key, especially simplifying, assumptions.")
-    quote: str = Field(description="A sentence from the paper describing the model, word for word.")
+    quote: str = Field(description=QUOTE_DESC)
     source: str
     confidence: Confidence
 

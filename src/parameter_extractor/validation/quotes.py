@@ -20,8 +20,9 @@ missing (OCR, a line split across columns). A value read from a table IMAGE can 
 table's text layer is garbled -- the label says that too.
 """
 from __future__ import annotations
+import bisect
 import re
-from typing import Iterable
+from typing import Iterable, List, Optional
 
 QUOTE_SEPARATOR = " | "          # grouped flags join several quotes with this
 
@@ -44,12 +45,30 @@ def words(text: str) -> list:
 
 
 class PaperText:
-    def __init__(self, text: str):
-        self.compact = compact(text)
-        self.words = words(text)
+    """The paper for quote matching. Given its pages, it also says which page a quote is on --
+    kept with every value (CellSource.page, Flag.page), so a short quote can be found in context."""
+    def __init__(self, text: str, page_texts: Optional[List[str]] = None):
+        pages = page_texts if page_texts else [text]
+        self.compact, self.words = "", []
+        self._compact_starts, self._word_starts = [], []
+        for page in pages:
+            self._compact_starts.append(len(self.compact))
+            self._word_starts.append(len(self.words))
+            self.compact += compact(page)
+            self.words += words(page)
+        self.paged = bool(page_texts)
         self.positions: dict = {}
         for i, w in enumerate(self.words):
             self.positions.setdefault(w, []).append(i)
+
+    def page_of(self, quote: str) -> Optional[int]:
+        """1-based page the quote starts on, or None (not found / no pages given)."""
+        found = self._find(quote)
+        if found is None or not self.paged:
+            return None
+        kind, at = found
+        starts = self._compact_starts if kind == "compact" else self._word_starts
+        return bisect.bisect_right(starts, at)
 
     def _next(self, word: str, after: int, limit: int):
         for p in self.positions.get(word, ()):
@@ -58,14 +77,20 @@ class PaperText:
         return None
 
     def contains(self, quote: str) -> bool:
+        return self._find(quote) is not None
+
+    def _find(self, quote: str):
+        """("compact", offset) or ("words", index) of the match, or None."""
+        quote = (quote or "").replace("…", " ")          # a quote cut to length (schemas.common.capped)
         q = compact(quote)
         if not q:
-            return False
-        if q in self.compact:
-            return True
+            return None
+        at = self.compact.find(q)
+        if at >= 0:
+            return "compact", at
         qw = words(quote)
         if len(qw) <= SHORT_QUOTE_WORDS:
-            return False
+            return None
         allowed_missing = int(len(qw) * (1 - MIN_MATCHED))
         for start_word in range(allowed_missing + 1):          # the first words may be the missing ones
             for start in self.positions.get(qw[start_word], ()):
@@ -79,8 +104,8 @@ class PaperText:
                     else:
                         pos = nxt
                 else:
-                    return True
-        return False
+                    return "words", start
+        return None
 
 
 def is_verbatim(quote: str, paper) -> bool:
@@ -101,15 +126,33 @@ def from_table_image(source: str, image_tables: set) -> bool:
     return any(m.group(1) in image_tables for m in _TABLE_REF.finditer(source or ""))
 
 
-def check_flag_quotes(flags: Iterable, paper_text: str, image_tables: set = frozenset()) -> None:
+def table_page_numbers(table_pages: dict) -> dict:
+    """{table number: page} from ParsedPaper.table_pages (page -> caption lines)."""
+    out = {}
+    for page, lines in sorted(table_pages.items(), key=lambda kv: int(kv[0])):
+        for line in lines:
+            for m in _TABLE_REF.finditer(line):
+                out.setdefault(m.group(1), int(page))
+    return out
+
+
+def _table_page(source: str, table_pages: dict) -> Optional[int]:
+    m = _TABLE_REF.search(source or "")
+    return table_pages.get(m.group(1)) if m else None
+
+
+def check_flag_quotes(flags: Iterable, paper_text: str, image_tables: set = frozenset(),
+                      page_texts: Optional[List[str]] = None, table_pages: Optional[dict] = None) -> None:
     """Splits each flag's quote into verbatim parts (kept as `quote`), parts read from a
-    table image (`table_image_quote`) and the rest (`unverified_quote`)."""
-    paper = PaperText(paper_text)
+    table image (`table_image_quote`) and the rest (`unverified_quote`); notes the page."""
+    paper = PaperText(paper_text, page_texts)
     for f in flags:
         if not f.quote:
             continue
         parts = list(dict.fromkeys(p.strip() for p in f.quote.split(QUOTE_SEPARATOR) if p.strip()))
         found = [p for p in parts if paper.contains(p)]
+        f.page = next((pg for pg in (paper.page_of(p) for p in found) if pg), None) or \
+            _table_page(f.source, table_pages or {})
         missing = [p for p in parts if p not in found]
         f.quote = QUOTE_SEPARATOR.join(found) or None
         if missing and from_table_image(f.source, image_tables):
@@ -118,10 +161,13 @@ def check_flag_quotes(flags: Iterable, paper_text: str, image_tables: set = froz
             f.unverified_quote = QUOTE_SEPARATOR.join(missing)
 
 
-def check_row_quotes(rows, paper_text: str, image_tables: set = frozenset()) -> int:
+def check_row_quotes(rows, paper_text: str, image_tables: set = frozenset(),
+                     page_texts: Optional[List[str]] = None, table_pages: Optional[dict] = None) -> int:
     """Marks every value's provenance quote: found in the paper's text, read from a
-    table image, or not found (CellSource.quote_check). Returns how many were not found."""
-    paper = PaperText(paper_text)
+    table image, or not found (CellSource.quote_check), and the page it's on (CellSource.page:
+    where the quote was found, else the page of the table its source names). Returns how
+    many were not found."""
+    paper = PaperText(paper_text, page_texts)
     seen: dict = {}
     missing = 0
     for row in rows:
@@ -129,8 +175,11 @@ def check_row_quotes(rows, paper_text: str, image_tables: set = frozenset()) -> 
             if not src.quote:
                 continue
             if src.quote not in seen:
-                seen[src.quote] = paper.contains(src.quote)
-            if seen[src.quote]:
+                seen[src.quote] = paper.page_of(src.quote) if paper.paged else paper.contains(src.quote)
+            page = seen[src.quote]
+            src.page = (page if isinstance(page, int) and not isinstance(page, bool) else None) or \
+                _table_page(src.source, table_pages or {})
+            if page:
                 src.quote_check = "in text"
             elif from_table_image(src.source, image_tables):
                 src.quote_check = "table image"

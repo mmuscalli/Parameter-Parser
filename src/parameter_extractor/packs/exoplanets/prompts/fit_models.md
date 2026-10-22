@@ -59,7 +59,9 @@ For each model:
   0), a non-grazing transit, no stellar activity signal, a linear trend from
   an unseen companion, coplanar orbits, M sin i reported because the
   inclination is unknown, stellar parameters taken from an earlier paper.
-- `quote` and every assumption `quote`: the paper's own words, copied exactly.
+- `quote` and every assumption `quote`: the paper's own words, copied exactly --
+  the shortest span that shows it (at most 20 words). `source`: exact table /
+  section and paragraph.
 
 If the paper doesn't describe how some values were obtained, leave them out
 rather than guessing; say so in `notes`.
