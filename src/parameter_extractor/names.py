@@ -43,7 +43,12 @@ _COMMON = {"urea": "urea", "imidazole": "imidazole", "cyanamide": "cyanamide", "
            "edta": "EDTA", "atp": "ATP", "amp": "AMP", "ump": "UMP", "trimetaphosphate": "sodium_triMP",
            "sodium trimetaphosphate": "sodium_triMP", "stmp": "sodium_triMP", "carbonyl sulfide": "COS",
            "hydrogen sulfide": "H2S", "sulfur dioxide": "SO2", "carbon monoxide": "CO",
-           "carbon disulfide": "CS2"}
+           "carbon disulfide": "CS2",
+           # salts whose formulas the cation+anion rule can't build (subscripted anions, complexes)
+           "potassium ferricyanide": "K3[Fe(CN)6]", "potassium hexacyanoferrate(iii)": "K3[Fe(CN)6]",
+           "potassium ferrocyanide": "K4[Fe(CN)6]", "potassium hexacyanoferrate(ii)": "K4[Fe(CN)6]",
+           "sodium carbonate": "Na2CO3", "potassium carbonate": "K2CO3", "sodium sulfite": "Na2SO3",
+           "sodium hydrogensulfite": "NaHSO3", "sodium hydrogen sulfite": "NaHSO3", "sodium bisulfite": "NaHSO3"}
 _SUBSCRIPTS = str.maketrans("₀₁₂₃₄₅₆₇₈₉⁰¹²³⁴⁵⁶⁷⁸⁹⁺⁻−–", "01234567890123456789+---")
 
 

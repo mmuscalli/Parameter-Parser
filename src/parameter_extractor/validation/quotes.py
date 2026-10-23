@@ -187,3 +187,63 @@ def check_row_quotes(rows, paper_text: str, image_tables: set = frozenset(),
                 src.quote_check = "not found"
                 missing += 1
     return missing
+
+
+def species_named_in(name: str, quote: str) -> bool:
+    """Does the quote name this species -- its name, or for amino acids and peptides their
+    residues as full names, three-letter or one-letter codes (Table 3's 'FF, FA, AF')? A quote
+    that doesn't (Chen2007: 'Entry 1 ... Yield (%) 2' for a product drawn as a structure)
+    supports the value but not WHICH species it is."""
+    from parameter_extractor.names import AMINO_ACIDS, _ONE_LETTER, _aa_code, cyclic_codes, peptide_codes
+    if not quote:
+        return False
+    q = compact(quote)
+    base = re.sub(r"\s*\(.*\)\s*$", "", name or "")             # 'X (sequence not determined)'
+    if compact(base) and compact(base) in q:
+        return True
+    from parameter_extractor.names import match_species
+    words = re.findall(r"[\w\[\]()+'’,-]+", quote)
+    for size in (4, 3, 2, 1):                                       # a phrase naming it: 'potassium ferricyanide'
+        for i in range(len(words) - size + 1):
+            hit = match_species(" ".join(words[i:i + size]).strip(",()"), vocab=(base,))
+            if hit and hit[0] == base:
+                return True
+    ion = re.match(r"(NH4|[A-Z][a-z]?)(?=[A-Z(\[]|\d*$)", base) if re.search(r"(Cl|Br|I|SO4|NO3)\d*$", base) else None
+    if ion and re.search(rf"(?<![A-Za-z]){ion.group(1)}\s*(?:\d?\s*\+|\(?I+\)?(?![a-z]))", quote):
+        return True                                               # 'Na+' / 'Ca2+' / 'CuII' for the chloride
+    m = re.fullmatch(r"(\d+)peptide_([A-Za-z]{3})", base)
+    codes = (peptide_codes(base) or cyclic_codes(base) or ([m.group(2)] * int(m.group(1)) if m else None)
+             or ([c] if (c := _aa_code(base)) else None))
+    if not codes:
+        return False
+    one = {v: k for k, v in _ONE_LETTER.items()}
+    letters = "".join(one.get(c, "?") for c in codes)
+    if len(codes) > 1 and re.search(rf"(?<![A-Za-z]){re.escape(letters)}(?![A-Za-z])", quote):
+        return True                                               # 'FA' for Phe-Ala
+    return all(c.lower() in quote.lower() or AMINO_ACIDS.get(c, "~").lower() in quote.lower() for c in set(codes))
+
+
+def unnamed_species(solutes, page_texts: Optional[List[str]] = None) -> list:
+    """Chemistry entries with a value whose species was inferred: the model said how (`identified_by`),
+    or neither the quote nor the page it's on names the species (see species_named_in). A table row
+    quoted as bare numbers ('97.3 2.77 0.064') is named by its column header, on the same page."""
+    paper = PaperText("\n".join(page_texts), page_texts) if page_texts else None
+    named_on_page: dict = {}
+    out = []
+    for s in solutes:
+        if (s.concentration_value is None and s.concentration_mM is None) or getattr(s, "derived", False):
+            continue
+        if getattr(s, "identified_by", ""):
+            out.append(s)
+            continue
+        if species_named_in(s.name, s.quote):
+            continue
+        page = paper.page_of(s.quote) if paper and s.quote else None
+        if page:
+            key = (s.name, page)
+            if key not in named_on_page:
+                named_on_page[key] = species_named_in(s.name, page_texts[page - 1])
+            if named_on_page[key]:
+                continue
+        out.append(s)
+    return out

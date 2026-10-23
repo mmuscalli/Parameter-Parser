@@ -156,6 +156,38 @@ def test_quotes_are_capped_and_located_by_page():
     assert (a.quote_check, a.page) == ("in text", 2)
     assert (b.quote_check, b.page) == ("table image", 3)               # not in the text: its table's page
 
+
+def test_quotes_must_name_the_species():
+    """Chen2007 (2026-10-23): a table of structure drawings gives quotes like 'Entry 1 ... Yield (%) 2',
+    a general procedure 'carboxylic acid (3 mmol)': the value is supported, its species inferred."""
+    from parameter_extractor.validation.quotes import species_named_in, unnamed_species
+    from parameter_extractor.schemas.chemistry import ChemistryExtraction
+    from parameter_extractor.pipeline import _identity_flags
+    named = [("isobutyric acid", "isobutyric acid 5 and cyclohexylamine 6"), ("Ala", "1 L-Alanine AA"),
+             ("Phe-Ala", "FF, FA, AF, AA"), ("2peptide_Phe", "FF, FA, AF"), ("2peptide_Gly", "Gly2 yield 1.2"),
+             ("K3[Fe(CN)6]", "potassium ferricyanide (30 mmol)"), ("Na2CO3", "sodium carbonate buffer"),
+             ("CaCl2", "calcium chloride 2.5 mol dm-3"), ("NaCl", "3.33 mol dm-3 NaCl")]
+    unnamed = [("N-isobutylisobutyramide", "Entry 1 ... Yield (%) 2"),
+               ("isobutyric acid", "carboxylic acid (3 mmol), amine (3.3 mmol)"),
+               ("Ala", "amino acids and/or peptides (1:1 ratio of each component, total 1 mmol)"), ("Gly", "")]
+    for name, quote in named:
+        assert species_named_in(name, quote), (name, quote)
+    for name, quote in unnamed:
+        assert not species_named_in(name, quote), (name, quote)
+    chem = ChemistryExtraction.model_validate({"groups": [
+        {"set": "Table 2", "sample": "Entry 1", "species": [
+            {"nm": "N-isobutylisobutyramide", "r": "sampled", "ph": "aq", "v": 2, "u": "%", "q": "Entry 1 ... Yield (%) 2",
+             "src": "Table 2, entry 1", "c": "medium", "how": "structure drawing, Table 2 entry 1"},
+            {"nm": "isobutylamine", "r": "initial", "ph": "aq", "v": 3.3, "u": "mmol",
+             "q": "isobutylamine (3.3 mmol)", "src": "Sect. 2", "c": "high"}]}],
+        "unmapped_species": [], "added_solutions": [], "molar_ratios": []})
+    assert [s.name for s in unnamed_species(chem.solutes)] == ["N-isobutylisobutyramide"]
+    flags = _identity_flags(chem)
+    assert len(flags) == 1 and flags[0].kind == "identity_not_quoted"
+    assert "structure drawing, Table 2 entry 1" in flags[0].message
+    from parameter_extractor.ingestion.flatten_to_template import _from_solute
+    assert "[identified from: structure drawing, Table 2 entry 1]" in _from_solute(chem.solutes[0]).source
+
 if __name__ == "__main__":
     for name, fn in list(globals().items()):
         if name.startswith("test_") and callable(fn):

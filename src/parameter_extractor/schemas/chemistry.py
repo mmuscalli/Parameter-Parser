@@ -94,6 +94,12 @@ class SoluteEntry(BaseModel):
     quote: str = Field(alias="q", description=QUOTE_DESC)
     source: str = Field(alias="src", description=SOURCE_DESC)
     confidence: Literal["high", "medium", "low"] = Field(alias="c")
+    # how the species was identified when the quote doesn't name it (Chen2007, 2026-10-23: Table 2
+    # gives acids and amines only as structure drawings -- the quote can't show which one it was)
+    identified_by: str = Field(default="", alias="how",
+                               description="Only when the quoted words don't name the species: how you "
+                                           "identified it, at most 15 words -- e.g. 'structure drawing, "
+                                           "Table 2 entry 3', 'compound 7 = ...', 'abbreviation FF'.")
     # set by calculators/mixing.py, never by the model (hidden from its schema)
     derived: SkipJsonSchema[bool] = False
     exact_mM: SkipJsonSchema[float] = 0.0      # a derived value before rounding, for chained calculations

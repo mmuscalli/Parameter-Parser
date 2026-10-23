@@ -192,6 +192,8 @@ def _from_solute(s) -> CellSource:
     source = s.source or ""
     if s.conversion_note:
         source = f"{source} [{s.conversion_note}]" if source else s.conversion_note
+    if getattr(s, "identified_by", ""):
+        source = f"{source} [identified from: {s.identified_by}]"
     return CellSource(origin="calculated" if s.derived else "chemistry", quote=s.quote or "", source=source,
                       confidence=s.confidence)
 

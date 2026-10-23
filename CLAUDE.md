@@ -996,3 +996,25 @@ this pipeline's work began, in case anything here needs to be rolled back.
 4. Figure/scatter-plot digitization is explicitly out of scope so far — a
    real gap (Figs. 1-5 in eder1994 are richer than Tables 1-2 alone), not
    forgotten, just sequenced after the text/table path is trusted.
+
+## Chen2007 round (2026-10-23): quotes that don't say which species
+
+Chen2007 (SO2/ferricyanide amide coupling) puts acids, amines and amide
+products in Table 2 as STRUCTURE DRAWINGS: quotes like "Entry 1 ... Yield (%) 2"
+or the general procedure's "carboxylic acid (3 mmol)" support the number, not
+the species. `SoluteEntry.identified_by` (compact `how`) = how the model
+identified it (prompt: required when the quote can't name it, c medium) ->
+provenance "[identified from: ...]". `validation/quotes.species_named_in`
+(name, phrase windows via match_species, AA/peptide 3- and 1-letter codes,
+ions for salts "Na+"/"CuII") + `unnamed_species(solutes, page_texts)`: flagged
+when `how` is given, or neither the quote nor its PAGE names the species (a
+bare table row "97.3 2.77 0.064" is named by its column header) ->
+`identity_not_quoted` flags, one per species (GUI group). eder1994 replay:
+CaCl2 for Table 2's unlabelled 2.50 M block (the Ca/Ba ambiguity) + 2 unquoted
+yields. Products whose sequence wasn't determined ("(FFA)") are named
+"Phe2Ala (sequence not determined)", never given a sequence. Common salt names
+added to names._COMMON (ferricyanide, carbonate, bisulfite...). Chen2007.xlsx
+in the papers folder is NOT a hand-parsed answer key (fragments of an old
+digitization). Live: $0.30, 17 rows; amide yields correct but all new variables.
+Open (asked Mickey): qualitative Table 3 products (no amounts), "no product
+detected" as 0 vs blank, mmol -> mM via the 10 mL reaction volume.

@@ -8,7 +8,8 @@ Answer format: `groups` -- one entry per set (and sample) that has species:
 `r` role, `ph` phase, `v` value and `u` unit as printed, `q` quote, `src`
 where it is, `c` confidence; and ONLY when they apply (leave them out
 otherwise): `mM` the value in mM, `cn` why there's no mM value, `b` "stock"
-and `stk` for a stock-solution concentration.
+and `stk` for a stock-solution concentration, `how` when the quoted words
+don't name the species (see below).
 
 For each species:
 - Use the controlled vocabulary list provided below when the compound is
@@ -57,6 +58,16 @@ For each species:
   whole set -- but if a starting concentration DIFFERS between the samples
   of one set (a sweep of initial concentrations, one per row), put each in
   its sample's group; otherwise the values can't be told apart.
+- When the quote can't name the species -- a table that shows compounds as
+  structure drawings, a compound number ("7"), a general procedure ("the
+  carboxylic acid (3 mmol)") that applies to several entries -- say in `how`
+  how you identified it ("structure drawing, Table 2 entry 3", "compound 7 =
+  N-cyclohexylisobutyramide", "Table 2 entry 4: phenylacetic acid"), and use
+  `c` "medium" unless the paper also names it in words.
+- A product whose composition is known but whose SEQUENCE the paper says it
+  didn't determine (e.g. shown in parentheses, "(FFA)") must not be given a
+  sequence: name it by its residues and counts, e.g. "Phe2Ala (sequence not
+  determined)".
 - Reported percent yields (e.g. "% (Gly)2") go in `v` with the unit as
   stated in `u` (no `mM`).
 - Do not extract values that only appear as a point on a scatter plot/figure

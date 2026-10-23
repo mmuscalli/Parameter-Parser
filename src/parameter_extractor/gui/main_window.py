@@ -647,10 +647,11 @@ class MainWindow(QMainWindow):
         derived_flags = [f for f in result.paper_flags if f.kind == "derived_value"]
         repeat_flags = [f for f in result.paper_flags if f.kind == "duplicate_removed"]
         fit_flags = [f for f in result.paper_flags if f.kind in ("fit_model", "multimodal", "other_estimates")]
+        identity_flags = [f for f in result.paper_flags if f.kind == "identity_not_quoted"]
         other_paper_flags = [f for f in result.paper_flags
                              if f.kind not in ("new_variable", "cited_data", "derived_value", "duplicate_removed",
                                                "archive_check", "archive_match", "fit_model",
-                                               "multimodal", "other_estimates")]
+                                               "multimodal", "other_estimates", "identity_not_quoted")]
         if cited_flags:
             add_group("Data reproduced from other publications", cited_flags)
         if new_var_flags:
@@ -659,6 +660,8 @@ class MainWindow(QMainWindow):
             add_group("Calculated by the app (not stated in the paper)", derived_flags)
         if archive_flags:
             add_group("Checked against the NASA Exoplanet Archive", archive_flags)
+        if identity_flags:
+            add_group("Species identified without being named in the quote", identity_flags)
         if fit_flags:
             add_group("How the values were obtained (fitting models)", fit_flags)
         if repeat_flags:

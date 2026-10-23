@@ -550,6 +550,26 @@ def _where(v) -> str:
     return f"'{v.sample_label}'" if getattr(v, "sample_label", None) else f"set '{v.set_label}'"
 
 
+def _identity_flags(chemistry, page_texts=None) -> List[Flag]:
+    """Values whose quote doesn't name the species (Chen2007: products drawn as structures in a
+    table, a general procedure's 'the carboxylic acid (3 mmol)'): the number is supported, WHICH
+    species it is was inferred. One flag per species, with how the model identified it."""
+    from parameter_extractor.validation.quotes import unnamed_species
+    groups: Dict[str, list] = {}
+    for s in unnamed_species(chemistry.solutes, page_texts):
+        groups.setdefault(s.variable, []).append(s)
+    flags = []
+    for name, entries in groups.items():
+        where = "; ".join(dict.fromkeys(f"{e.sample_label or e.set_label or 'every set'}"
+                                        + (f" ({e.identified_by})" if e.identified_by else "") for e in entries))
+        flags.append(Flag("identity_not_quoted",
+                          f"{name}: the quote{'s' if len(entries) > 1 else ''} for {len(entries)} value(s) "
+                          f"{'don' if len(entries) > 1 else 'doesn'}'t name it -- the value is in the paper, but "
+                          f"which species it belongs to was inferred: {where[:400]}. Check the paper.",
+                          quote=entries[0].quote or None, source=entries[0].source or None))
+    return flags
+
+
 NO_RESULTS_MESSAGE = (
     "No results data were found to attach the extracted conditions and chemistry to: rows are only made "
     "for results in the paper's tables (read automatically) and figures (through the digitizer). If the "
@@ -636,6 +656,7 @@ def finish(
     paper_flags = check_extraction(ex.methodology, ex.chemistry, optional=ex.optional_list, **thresholds)
     paper_flags += _cited_data_flags(ex.structure)
     paper_flags += stage_flags
+    paper_flags += _identity_flags(ex.chemistry, ex.parsed.page_texts)
     paper_flags += [Flag("unit_conversion", n.message, quote=n.quote or None, source=n.source or None)
                     for n in normalization if n.kind == "unit_corrected"]
     if pubchem and pubchem.unavailable_reason:
