@@ -39,7 +39,7 @@ from pathlib import Path
 from typing import Callable, Dict, List, Optional, Sequence
 
 from parameter_extractor.calculators.peptide_totals import fill_total_peptide_yield
-from parameter_extractor.calculators.amounts import VOLUME_COLUMN, apply_detection, derive_from_amounts
+from parameter_extractor.calculators.amounts import VOLUME_COLUMN, apply_detection, derive_from_amounts, split_totals
 from parameter_extractor.calculators.mixing import derive_from_ratios, derive_mixture_concentrations
 from parameter_extractor import packs
 from parameter_extractor.calculators import exoplanets as exo
@@ -662,6 +662,7 @@ def finish(
     mixing = []
     if pack.uses("amounts"):              # 'not detected' -> 0; amounts / reaction volume -> mM (derived)
         mixing += apply_detection(ex.chemistry)
+        mixing += split_totals(ex.chemistry, set_labels)
         mixing += derive_from_amounts(ex.chemistry, _reaction_volumes(ex),
                                       {s.set_label: [x.sample_label for x in s.samples]
                                        for s in ex.structure.experiment_sets})

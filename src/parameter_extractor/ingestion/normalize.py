@@ -88,6 +88,13 @@ def _rename_ratio_species(chemistry: ChemistryExtraction, original) -> None:
                 matched = match_species(name)
                 renamed = matched[0] if matched else query_name(name)
             setattr(r, field, renamed)
+    for t in getattr(chemistry, "mixture_totals", []):
+        for part in t.parts:
+            renamed = final.get(" ".join(part.name.lower().split()))
+            if renamed is None:
+                matched = match_species(part.name)
+                renamed = matched[0] if matched else query_name(part.name)
+            part.name = renamed
 
 
 def normalize_chemistry(chemistry: ChemistryExtraction, pubchem=None, registry=None) -> List[NormalizationNote]:

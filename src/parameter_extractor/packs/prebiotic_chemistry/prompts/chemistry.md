@@ -52,6 +52,14 @@ For each species:
   paper doesn't state -- the pipeline calculates it from the ratio and marks
   it as calculated. Record the ratio even when the concentrations are also
   given (it's used as a check).
+- Totals: when the paper gives ONE amount or concentration for several
+  species together with their ratio ("amino acids and/or peptides (1:1 ratio
+  of each component, total 1 mmol)"), add a `mixture_totals` entry for each
+  set (and `sample`, when the components differ by sample): `total` as
+  printed, `parts` = every species sharing it with its share (`nm`, `n`; a
+  single species gets the whole total), `q`, `src`. Don't split the total
+  yourself and don't put a share in the species' `v` -- list the species
+  with `v` null, or leave them out; the pipeline divides the total.
 - `set`: exactly a `set_label` from the structure plan, or '' if the value
   is constant across the whole paper (e.g. a fixed background reagent in
   every condition).

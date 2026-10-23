@@ -1031,5 +1031,11 @@ Mickey's answers (2026-10-23), built in `calculators/amounts.py` (postprocess
   a model mM off by >1% is replaced + conflicting_values; no volume ->
   not_calculated. Prompt: amounts as printed, no mM.
 Live (2026-10-23, $0.27): 2 zeros, 18 detected, all amounts converted except
-Table 1 entry 4 (the conditions step gave it no volume). Not handled: "1:1,
-total 1 mmol" mixtures (ratio step needs one known concentration).
+Table 1 entry 4 (the conditions step gave it no volume).
+Totals (Mickey, 2026-10-23): `ChemistryExtraction.mixture_totals` [{set, sample,
+total AS PRINTED, parts [{nm, n share}], q, src}] for "1:1 ratio of each
+component, total 1 mmol"; `amounts.split_totals` (before the amount -> mM step;
+parts renamed with the species in normalize) fills empty / adds entries with
+value x share / sum (calculated_from "total", still converted by
+derive_from_amounts), a stated value is kept + checked (conflicting_values >2%).
+Live Chen Table 3: Ala 100 mM; AA/Phe, Ala/Phe, Ser/Phe 50 mM each ($0.28).

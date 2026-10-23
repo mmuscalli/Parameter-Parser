@@ -11,6 +11,10 @@ amount ("carboxylic acid (3 mmol)") in a stated volume of water. So:
   The value is marked calculated (origin "calculated"), the amount and volume named in
   its provenance. Never guesses: no volume for that set (or differing volumes within it)
   -> nothing calculated, a note says why.
+- a total shared by several species in a stated ratio ("1:1 ratio of each component,
+  total 1 mmol" -> `mixture_totals`) is split into each species' value (split_totals),
+  before the amount -> mM step, so the shares are converted too. A value the paper also
+  states for that species is kept and checked against its share instead.
 Notes use calculators/mixing.MixingNote, so they become derived_value / not_calculated /
 conflicting_values flags, grouped per set.
 """
@@ -18,8 +22,9 @@ from __future__ import annotations
 from typing import Dict, List, Optional, Tuple
 
 from parameter_extractor.calculators.mixing import MixingNote, _sig
-from parameter_extractor.schemas.chemistry import ChemistryExtraction
-from parameter_extractor.units import _UNITS, canonical_unit, convert
+from parameter_extractor.calculators.mixing import RATIO_TOLERANCE, _key
+from parameter_extractor.schemas.chemistry import ChemistryExtraction, SoluteEntry
+from parameter_extractor.units import _UNITS, canonical_unit, convert, parse_quantity
 
 VOLUME_COLUMN = "solvent_volume_mL"
 TOLERANCE = 0.01          # a model-calculated mM further off than this is replaced (and flagged)
@@ -52,6 +57,72 @@ def apply_detection(chemistry: ChemistryExtraction) -> List[MixingNote]:
     if detected:
         notes.append(MixingNote("derived", f"{len(detected)} result(s) the paper lists as detected without an "
                                            f"amount were written as 'detected': {'; '.join(detected)[:600]}"))
+    return notes
+
+
+def _own_value(s) -> bool:
+    """A value to convert: stated, or a share of a stated total (not a mixing/ratio result)."""
+    return not s.derived or s.calculated_from == "total"
+
+
+def split_totals(chemistry: ChemistryExtraction, set_labels: List[str]) -> List[MixingNote]:
+    """Each mixture total -> its species' shares (value x share / sum of shares), in the total's
+    own unit; concentrations also in mM. Entries are added (or an empty one filled), marked
+    calculated (calculated_from "total"); one note per total."""
+    notes: List[MixingNote] = []
+    for t in chemistry.mixture_totals:
+        quantity = parse_quantity(t.total)
+        parts = [p for p in t.parts if p.name.strip()]
+        shares = sum(p.share for p in parts)
+        names = ", ".join(f"{p.name} {p.share:g}" for p in parts)
+        dimension = _UNITS.get(quantity[1], ("",))[0] if quantity else ""
+        if not parts or shares <= 0 or any(p.share <= 0 for p in parts) or dimension not in ("amount",
+                                                                                              "concentration"):
+            why = ("the total isn't a single amount or concentration" if dimension not in ("amount", "concentration")
+                   else "the shares aren't positive numbers")
+            notes.append(MixingNote("not_derived", f"Total '{t.total}' for {names or 'no species'} not split -- "
+                                                   f"{why}.", t.quote, t.source))
+            continue
+        value, unit = quantity
+        targets = [(t.set_label, t.sample_label)] if t.set_label else [(label, t.sample_label) for label in set_labels]
+        done = []
+        for set_label, sample_label in targets:
+            for p in parts:
+                share = value * p.share / shares
+                printed = f"{share:g} {unit}"
+                how = (f"calculated: {p.share:g}/{shares:g} of the stated total {t.total} "
+                       f"({', '.join(f'{q.name}' for q in parts)})")
+                entry = next((s for s in chemistry.solutes if s.role == "initial" and s.concentration_basis == "mixture"
+                              and _key(s.name) == _key(p.name) and (s.set_label or "") == set_label
+                              and (s.sample_label or "") == sample_label), None)
+                if entry is not None and entry.concentration_value is not None:
+                    stated = convert(entry.concentration_value, canonical_unit(entry.concentration_unit_raw or "") or "",
+                                     unit)
+                    if stated is not None and abs(stated - share) > RATIO_TOLERANCE * share:
+                        notes.append(MixingNote(
+                            "mismatch", f"{p.name} ({sample_label or set_label or 'every set'}): the paper gives "
+                            f"{entry.concentration_value:g} {entry.concentration_unit_raw}, but its share of the "
+                            f"total {t.total} is {printed}. The stated value was kept; please check.",
+                            t.quote, t.source))
+                    continue
+                if entry is None:
+                    like = next((s for s in chemistry.solutes if _key(s.name) == _key(p.name)), None)
+                    entry = SoluteEntry(name=p.name, phase=like.phase if like else "aq", role="initial",
+                                        set_label=set_label or None, sample_label=sample_label or None,
+                                        concentration_value=None, concentration_unit_raw=None,
+                                        quote=t.quote, source=t.source, confidence="high")
+                    chemistry.solutes.append(entry)
+                entry.concentration_value, entry.concentration_unit_raw = _sig(share), unit
+                entry.derived, entry.calculated_from = True, "total"
+                entry.conversion_note = how
+                if dimension == "concentration":
+                    entry.exact_mM = convert(share, unit, "mM")
+                    entry.concentration_mM = _sig(entry.exact_mM)
+                done.append(f"{p.name} {printed}" + (f" ({sample_label})" if sample_label else ""))
+        if done:
+            notes.append(MixingNote("derived", f"Total {t.total} split in the ratio {names} "
+                                               f"({t.set_label or 'every set'}): {'; '.join(done)[:600]}",
+                                    t.quote, t.source))
     return notes
 
 
@@ -92,7 +163,7 @@ def _split_by_sample(chemistry: ChemistryExtraction, volumes: Volumes, samples: 
     out = []
     for s in chemistry.solutes:
         labels = samples.get(s.set_label or "", [])
-        if (s.set_label and not s.sample_label and s.concentration_value is not None and not s.derived
+        if (s.set_label and not s.sample_label and s.concentration_value is not None and _own_value(s)
                 and s.concentration_basis != "stock" and (s.set_label, "") not in volumes
                 and _amount_mmol(s.concentration_value, s.concentration_unit_raw) is not None
                 and len({volumes.get((s.set_label, smp), (None,))[0] for smp in labels}) > 1):
@@ -112,7 +183,7 @@ def derive_from_amounts(chemistry: ChemistryExtraction, volumes: Volumes,
     missing: Dict[str, List[str]] = {}
     notes: List[MixingNote] = []
     for s in chemistry.solutes:
-        if s.concentration_value is None or s.concentration_basis == "stock" or s.derived:
+        if s.concentration_value is None or s.concentration_basis == "stock" or not _own_value(s):
             continue
         mmol = _amount_mmol(s.concentration_value, s.concentration_unit_raw)
         if mmol is None:

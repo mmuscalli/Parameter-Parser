@@ -51,6 +51,34 @@ class MolarRatio(BaseModel):
     source: str = Field(default="", description=SOURCE_DESC)
 
 
+class TotalPart(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+    name: str = Field(alias="nm", description="Species name, as in the species entries' `nm`.")
+    share: float = Field(alias="n", description="Its parts in the ratio (1 for '1:1'; for 'A:B = 1:3', "
+                                                "A 1 and B 3).")
+
+
+def _strict_parts(schema: dict) -> None:
+    schema["required"] = list(schema.get("properties", {}))
+
+
+class MixtureTotal(BaseModel):
+    """A combined amount or concentration of several species with their ratio (Chen2007:
+    'amino acids and/or peptides (1:1 ratio of each component, total 1 mmol)') -- split
+    into each species' value by calculators/amounts.py, not by the model."""
+    model_config = ConfigDict(populate_by_name=True, json_schema_extra=_strict_parts)
+    set_label: str = Field(default="", alias="set", description="Exact structure-plan set_label; '' if the "
+                                                                "same in every set.")
+    sample_label: str = Field(default="", alias="sample", description="Exact sample_label when the "
+                                                                      "components differ by sample; else ''.")
+    total: str = Field(description="The combined amount or concentration exactly as printed, e.g. '1 mmol', "
+                                   "'10 mM'.")
+    parts: List[TotalPart] = Field(description="Every species the total is shared between, with its share. A "
+                                               "single species gets the whole total.")
+    quote: str = Field(default="", alias="q", description=QUOTE_DESC)
+    source: str = Field(default="", alias="src", description=SOURCE_DESC)
+
+
 def _required(names):
     def extra(schema: dict) -> None:
         schema["required"] = [n for n in names if n in schema.get("properties", {})]
@@ -144,7 +172,7 @@ class SoluteGroup(BaseModel):
 class ChemistryExtraction(BaseModel):
     model_config = ConfigDict(populate_by_name=True,
                               json_schema_extra=_required(["groups", "unmapped_species", "added_solutions",
-                                                           "molar_ratios"]))
+                                                           "molar_ratios", "mixture_totals"]))
     paper_id: SkipJsonSchema[str] = ""
     groups: List[SoluteGroup] = Field(default_factory=list,
                                       description="Species grouped by set (and sample): one entry per set/sample "
@@ -167,6 +195,12 @@ class ChemistryExtraction(BaseModel):
         default_factory=list,
         description="Molar ratios between species, per set, when the paper states them (e.g. 'ribose "
                     "phosphate : cytosine = 1:2'). Record them even when the concentrations are also given.",
+    )
+
+    mixture_totals: List[MixtureTotal] = Field(
+        default_factory=list,
+        description="A total amount or concentration the paper gives for several species together, with their "
+                    "ratio ('1:1 ratio of each component, total 1 mmol'), per set/sample. The pipeline splits it.",
     )
 
     @model_validator(mode="after")

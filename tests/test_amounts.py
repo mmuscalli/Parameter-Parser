@@ -99,6 +99,42 @@ def test_amounts_to_mM():
     assert any(s.name == "Ala" and s.concentration_mM == 100.0 for s in chem.solutes)
 
 
+
+def test_totals_split_in_their_ratio():
+    """Chen2007 Table 3: '(1:1 ratio of each component, total 1 mmol)' in 10 mL -> 0.5 mmol each = 50 mM."""
+    from parameter_extractor.calculators.amounts import split_totals
+    from parameter_extractor.ingestion.normalize import normalize_chemistry
+    chem = ChemistryExtraction.model_validate({
+        "groups": [{"set": T3, "sample": "E3", "species": [_sp("L-Alanine", "initial", None, "")]},
+                   {"set": T3, "sample": "E4", "species": [_sp("Ser", "initial", 0.4, "mmol")]}],
+        "unmapped_species": [], "added_solutions": [], "molar_ratios": [], "mixture_totals": [
+            {"set": T3, "sample": "E1", "total": "1 mmol", "parts": [{"nm": "Ala", "n": 1}], "q": "total 1 mmol",
+             "src": "Sect. 2.4"},
+            {"set": T3, "sample": "E3", "total": "1 mmol", "parts": [{"nm": "alanine", "n": 1},
+                                                                    {"nm": "phenylalanine", "n": 1}]},
+            {"set": T3, "sample": "E4", "total": "1 mmol", "parts": [{"nm": "Ser", "n": 1}, {"nm": "Phe", "n": 3}]},
+            {"set": "", "total": "30 mM", "parts": [{"nm": "Gly", "n": 1}, {"nm": "Ala", "n": 2}]},
+            {"set": T1, "total": "a few mmol", "parts": [{"nm": "Gly", "n": 1}]}]})
+    normalize_chemistry(chem)                            # 'alanine' -> Ala, as the species entries
+    notes = split_totals(chem, [T1, T3])
+    notes += derive_from_amounts(chem, {(T3, ""): (10.0, "Sect. 2.4")}, {T1: [], T3: ["E1", "E3", "E4"]})
+    by = {(s.name, s.set_label, s.sample_label): s for s in chem.solutes}
+    assert by[("Ala", T3, "E1")].concentration_mM == 100.0
+    ala = by[("Ala", T3, "E3")]                          # the empty entry was filled, not duplicated
+    assert ala.concentration_value == 0.5 and ala.concentration_mM == 50.0 and ala.derived
+    assert "1/2 of the stated total 1 mmol" in ala.conversion_note and "in 10 mL" in ala.conversion_note
+    assert by[("Phe", T3, "E3")].concentration_mM == 50.0
+    assert by[("Ser", T3, "E4")].concentration_value == 0.4                 # stated: kept, checked
+    assert by[("Phe", T3, "E4")].concentration_mM == 75.0
+    assert by[("Gly", T1, None)].concentration_mM == 10.0 and by[("Ala", T1, None)].concentration_mM == 20.0
+    assert sum(1 for s in chem.solutes if s.name == "Ala" and s.sample_label == "E3") == 1
+    kinds = [n.kind for n in notes]
+    assert kinds.count("mismatch") == 1 and "share of the total 1 mmol is 0.25 mmol" in \
+        next(n.message for n in notes if n.kind == "mismatch")
+    assert any(n.kind == "not_derived" and "a few mmol" in n.message for n in notes)
+    assert any(n.kind == "derived" and n.message.startswith("Total 1 mmol split in the ratio Ala 1, Phe 1")
+               for n in notes)
+
 if __name__ == "__main__":
     for name, fn in list(globals().items()):
         if name.startswith("test_") and callable(fn):
