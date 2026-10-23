@@ -11,6 +11,7 @@ Layout, top to bottom:
 """
 from __future__ import annotations
 import csv
+import json
 from pathlib import Path
 from typing import Optional
 
@@ -40,6 +41,7 @@ from parameter_extractor.pipeline import Extraction, finish, plan_figure, stage_
 
 DEFAULT_OUTPUT_DIR = Path.home() / "Documents" / "Parameter Extractor"
 FLAGGED_ROW_COLOR = QColor(255, 243, 205)   # soft amber, readable in light and dark themes
+ARCHIVE_ROW_COLOR = QColor(212, 237, 218)   # soft green: the solution the Exoplanet Archive took
 MAX_COLUMN_WIDTH = 260
 # Rows tab column order: identify the row, then the measured data, then the
 # paper-level details that repeat on every row (DOI, title, ...).
@@ -237,7 +239,14 @@ class MainWindow(QMainWindow):
         self.rows_table = QTableWidget()
         self.rows_table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
         self.rows_table.setAlternatingRowColors(True)
-        tabs.addTab(self.rows_table, "Rows")
+        self.rows_legend = QLabel(wordWrap=True)
+        self.rows_legend.setHidden(True)
+        rows_page = QWidget()
+        rows_layout = QVBoxLayout(rows_page)
+        rows_layout.setContentsMargins(0, 0, 0, 0)
+        rows_layout.addWidget(self.rows_table, stretch=1)
+        rows_layout.addWidget(self.rows_legend)
+        tabs.addTab(rows_page, "Rows")
 
         self.flags_tree = QTreeWidget()
         self.flags_tree.setHeaderLabels(["Issue", "Quote from the paper", "Where"])
@@ -607,9 +616,16 @@ class MainWindow(QMainWindow):
         t.setHorizontalHeaderLabels([header[i] for i in keep])
         id_col = header.index("full_id")
         provenance = {r.full_id: r.provenance for r in result.rows}
+        adopted = self._archive_adopted(result.run_dir)
+        name_col = header.index("pl_name") if "pl_name" in header else None
+        fit_col = header.index("pl_fitlabel") if "pl_fitlabel" in header else None
+        n_adopted = 0
         for r, row in enumerate(body):
             flags = result.row_flags.get(row[id_col], [])
             prov = provenance.get(row[id_col], {})
+            archive_note = adopted.get((row[name_col], row[fit_col] if fit_col is not None else "")) \
+                if name_col is not None else None
+            n_adopted += archive_note is not None
             for c, i in enumerate(keep):
                 item = QTableWidgetItem(row[i])
                 tip = self._provenance_tip(prov.get(header[i])) if row[i] else ""
@@ -619,12 +635,44 @@ class MainWindow(QMainWindow):
                     item.setBackground(QBrush(FLAGGED_ROW_COLOR))
                     item.setForeground(QBrush(Qt.GlobalColor.black))
                     tip = "\n".join(f.message for f in flags) + ("\n\n" + tip if tip else "")
+                if archive_note is not None and not (flags and c == 0):   # a flagged row keeps amber in its id cell
+                    item.setBackground(QBrush(ARCHIVE_ROW_COLOR))
+                    item.setForeground(QBrush(Qt.GlobalColor.black))
+                if archive_note is not None:
+                    tip = archive_note + ("\n\n" + tip if tip else "")
                 if tip:
                     item.setToolTip(tip)
                 t.setItem(r, c, item)
         t.resizeColumnsToContents()
         for c in range(t.columnCount()):
             t.setColumnWidth(c, min(t.columnWidth(c), MAX_COLUMN_WIDTH))
+        self.rows_legend.setText(
+            f"Green rows ({n_adopted}): the solution the NASA Exoplanet Archive took for this paper. Amber: rows "
+            f"with flags (a flagged green row keeps amber in its first cell). Hover over a row for details.")
+        self.rows_legend.setHidden(not n_adopted)
+
+    @staticmethod
+    def _archive_adopted(run_dir) -> dict:
+        """{(pl_name, solution label): hover note} for rows the Exoplanet Archive's parameter set for
+        this paper corresponds to: compared, and not another solution of the planet than the one
+        it took (archive_validation.json; exoplanet runs with online lookups only)."""
+        path = Path(run_dir) / "archive_validation.json" if run_dir else None
+        try:
+            report = json.loads(path.read_text()) if path and path.is_file() else []
+        except (OSError, ValueError):
+            return {}
+        out = {}
+        for e in report:
+            if e.get("status") != "compared" or e.get("archive_solution"):
+                continue
+            n = len(e.get("matches", [])) + len(e.get("differs", []))
+            default = ("it is also the archive's default parameter set for this planet"
+                       if str(e.get("default_flag")) == "1" else
+                       "the archive's default parameter set for this planet is from another paper")
+            out[(e["pl_name"], e.get("solution", ""))] = (
+                f"NASA Exoplanet Archive: this row is the solution the archive took for "
+                f"'{e.get('reference', 'this paper')}' ({len(e.get('matches', []))} of {n} values match); {default}.")
+        return out
 
     @staticmethod
     def _provenance_tip(src) -> str:

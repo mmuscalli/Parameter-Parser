@@ -1061,3 +1061,7 @@ After: 18 left, all on RV-only rows the archive didn't take (incl., true mass).
 Economy misread 75 Cet [Fe/H] -0.05 as -0.1 (real, flagged). References
 regenerated (only pl_tsystemref + st_lumerr added). GUI: cells without
 provenance (source_notes) show their full text on hover.
+Rows tab (2026-10-23, Mickey): rows that are the solution the Exoplanet Archive took for
+the paper (archive_validation.json: compared, no `archive_solution`) are green
+(`ARCHIVE_ROW_COLOR`; a flagged one keeps amber in its id cell), hover says so and whether
+it's also the archive's default set; legend under the table (`rows_legend`).

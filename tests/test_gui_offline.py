@@ -525,6 +525,25 @@ class NoClickReview(main_window.VariableReviewDialog):
     def exec(self): return 0
 
 
+def test_archive_adopted_rows():
+    """Exoplanet runs: the rows the Exoplanet Archive took for the paper (not a planet's other solutions)."""
+    import json as _json
+    report = [{"pl_name": "HD 14067 b", "solution": "RV fit", "status": "compared", "matches": ["a"], "differs": ["b"],
+               "archive_solution": "joint fit", "reference": "Teng et al. 2023", "default_flag": "1"},
+              {"pl_name": "HD 14067 b", "solution": "joint fit", "status": "compared", "matches": ["a", "b"],
+               "differs": [], "reference": "Teng et al. 2023", "default_flag": "1"},
+              {"pl_name": "11 Com b", "status": "compared", "matches": ["a"], "differs": [], "default_flag": "0",
+               "reference": "Teng et al. 2023"},
+              {"pl_name": "HD 5608 B", "status": "planet not in the archive"}]
+    with tempfile.TemporaryDirectory() as tmp:
+        (Path(tmp) / "archive_validation.json").write_text(_json.dumps(report))
+        adopted = main_window.MainWindow._archive_adopted(tmp)
+        assert set(adopted) == {("HD 14067 b", "joint fit"), ("11 Com b", "")}
+        assert "2 of 2 values match" in adopted[("HD 14067 b", "joint fit")]
+        assert "default parameter set for this planet is from another paper" in adopted[("11 Com b", "")]
+        assert main_window.MainWindow._archive_adopted(Path(tmp) / "none") == {}
+
+
 def test_stage_toggles():
     """Research area -> its switchable stages; unticked stages are skipped (checked with a
     cycling paper, truman2024, whose wet-dry stage would otherwise run); choices are kept
