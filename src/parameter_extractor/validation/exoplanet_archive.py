@@ -40,6 +40,11 @@ TAP_URL = "https://exoplanetarchive.ipac.caltech.edu/TAP/sync"
 TIMEOUT_SEC = 30
 REL_TOLERANCE = 0.005
 SKIP = {"pl_name", "hostname", "pl_letter", "pl_refname", "st_refname", "sy_refname", "disc_refname"}
+# the archive's own bookkeeping, not values a paper reports: counts of the archive's holdings, its
+# controversy flag, the reference's publication month -- never counted as "not extracted"
+ARCHIVE_ONLY = {"pl_controv_flag", "pl_pubdate", "releasedate", "rowupdate", "pl_nnotes", "pl_nespec",
+                "pl_ntranspec", "pl_ndispec", "st_nphot", "st_nrvc", "st_nspec", "sy_pnum", "sy_snum",
+                "sy_mnum", "default_flag", "soltype"}
 PERIOD_MATCH = 0.01                 # alias fallback: orbital periods within 1%
 # column prefix -> the archive column naming the reference those values came from
 REFERENCE_OF = {"st_": "st_refname", "sy_": "sy_refname", "disc_": "disc_refname"}
@@ -162,7 +167,10 @@ def compare(records: List[dict], archive_rows: List[dict], reference: str) -> Li
             if base != column and base in via_mode:      # errors / limit of the estimate the value matched
                 values = [x for x in values if x[0] == via_mode[base]] or values
             if not values:
-                if column.startswith(("pl_", "st_")) and not column.endswith("lim"):
+                if base != column and _number(archived) == 0 and recorded_values(rec, base):
+                    matches.append(column)          # '+0.000/-0.000' printed: a zero uncertainty isn't written
+                elif (column.startswith(("pl_", "st_")) and not column.endswith("lim")
+                      and column not in ARCHIVE_ONLY):
                     missing.append(column)
                 continue
             hit = next((label for label, value in values if _matches(value, archived, column)), None)
@@ -248,6 +256,13 @@ def _mark_archive_solution(report: List[dict]) -> None:
         for e in entries:
             if e is not best:
                 e["archive_solution"] = best["solution"]
+                # what the archive's set has but the adopted solution's row doesn't, and this row gives
+                # (teng2023: K and M sin i are in the RV-only fit's row, not the joint fit's)
+                given = set(e["matches"]) | {d["column"] for d in e["differs"]}
+                moved = [c for c in best["not_extracted"] if c in given]
+                if moved:
+                    best["not_extracted"] = [c for c in best["not_extracted"] if c not in moved]
+                    best.setdefault("in_other_solution", {})[e["solution"]] = moved
 
 
 def check(records: List[dict], reference: str, run_dir, fetch: Optional[Callable] = None) -> dict:

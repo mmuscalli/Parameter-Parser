@@ -104,7 +104,10 @@ class StageSpec(BaseModel):
     # between a parameter and the extra columns of its modes / other estimates: "" gives the archive's
     # style (pl_orbinclmode1, st_rotpalt1method), "_" gives initial_temperature_C_alt1_method
     suffix_separator: str = ""
-    open_ended_hint: str = ""        # what kinds of other parameters to look for (prompt)
+    open_ended_hint: str = ""
+    # a text column for the time system of the epochs, filled from the printed unit of any
+    # Julian-date parameter ('BJD_TDB - 2450000' -> 'BJD_TDB'): exoplanets' pl_tsystemref
+    time_system_column: str = ""        # what kinds of other parameters to look for (prompt)
 
     def _field_rules(self) -> List[str]:
         rules = []
@@ -490,17 +493,30 @@ def stage_values(spec: StageSpec, item) -> Tuple[Dict[str, StageValue], List[str
     if param.integer and float(value).is_integer():
         value = int(value)
     out = {param.column: StageValue(value, note=notes, **base)}
+    system = time_system(printed) if spec.time_system_column else ""
+    if system:                         # 'JD-2450000' printed: the epochs are on the JD time system
+        out[spec.time_system_column] = StageValue(system, note=f"from the unit printed for {param.column}",
+                                                  **dict(base, basis="derived"))
     if param.uncertainties:
         suffixes = spec.suffixes_for(param)
         cols = [param.column + s for s in suffixes]
         for col, err in zip(cols[:2], (getattr(item, "err_plus", 0.0), getattr(item, "err_minus", 0.0))):
             if err:
-                converted, _ = convert_printed(err, printed, param.unit, is_error=True)
+                converted, _ = convert_printed(err, printed, param.unit, is_error=True, about=item.value)
                 if converted is not None:
                     out[col] = StageValue(converted, **base)
         if len(cols) > 2:                       # limit flag: 1 upper limit, -1 lower limit, 0 a measurement
             out[cols[2]] = StageValue({"upper": 1, "lower": -1}.get(getattr(item, "limit", ""), 0), **base)
     return out, []
+
+
+def time_system(printed: str) -> str:
+    """'JD-2450000' -> 'JD', 'BJD_TDB - 2,450,000' -> 'BJD_TDB'; '' when it isn't a Julian date."""
+    from parameter_extractor.units import _JD_OFFSET, _JD_PLAIN
+    p = (printed or "").strip()
+    if not (_JD_OFFSET.match(p) or _JD_PLAIN.match(p)):
+        return ""
+    return re.split(r"\s*[-−–]\s*[\d,]+$", p)[0].strip()
 
 
 MAX_MODES = 3

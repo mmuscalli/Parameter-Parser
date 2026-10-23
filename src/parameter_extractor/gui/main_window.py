@@ -613,6 +613,8 @@ class MainWindow(QMainWindow):
             for c, i in enumerate(keep):
                 item = QTableWidgetItem(row[i])
                 tip = self._provenance_tip(prov.get(header[i])) if row[i] else ""
+                if not tip and len(row[i]) > 30:            # no provenance (source_notes ...): the full text
+                    tip = row[i]
                 if flags:
                     item.setBackground(QBrush(FLAGGED_ROW_COLOR))
                     item.setForeground(QBrush(Qt.GlobalColor.black))

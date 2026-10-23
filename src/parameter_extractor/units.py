@@ -226,17 +226,19 @@ def astro_unit(text: str) -> Optional[str]:
     return _ASTRO_ALIASES.get(re.sub(r"\s+", "", t).lower()) or _ASTRO_ALIASES.get(t.lower())
 
 
-def convert_printed(value: float, printed: str, target: str, is_error: bool = False) -> Tuple[Optional[float], str]:
+def convert_printed(value: float, printed: str, target: str, is_error: bool = False,
+                    about: Optional[float] = None) -> Tuple[Optional[float], str]:
     """A value given in the unit as printed, in a stage parameter's unit: (value, note), or
     (None, reason). Handles Julian-date offsets ('JD-2450000' -> 'JD'; uncertainties
-    aren't shifted), logarithmic targets ('L_sun' -> 'log(L_sun)'), the astronomy table
+    aren't shifted), logarithmic targets ('L_sun' -> 'log(L_sun)'; an uncertainty needs the value
+    it belongs to, `about`: log10(about + err) - log10(about), the archive's own convention), the astronomy table
     and the chemistry one. Same or empty unit: unchanged."""
     p, t = (printed or "").strip(), (target or "").strip()
     if not p or p == t or p.lower() == t.lower():
         return value, ""
     scale, rest = _scaled(p)
     if scale != 1.0 and (astro_unit(rest) or canonical_unit(rest)):     # "10^9 erg s-1 cm-2"
-        out, note = convert_printed(value * scale, rest, t, is_error)
+        out, note = convert_printed(value * scale, rest, t, is_error, about * scale if about is not None else None)
         return out, (f"{value:g} {p} -> {t}" if out is not None else note)
     if not t:                       # a dimensionless parameter: a real unit here means a misreading
         if astro_unit(p) or canonical_unit(p):
@@ -252,10 +254,13 @@ def convert_printed(value: float, printed: str, target: str, is_error: bool = Fa
     m = _LOG_OF.match(t)
     if m and not _LOG_OF.match(p):
         inner = m.group(1)
-        if astro_unit(p) and astro_unit(p) == astro_unit(inner) and value > 0:
-            if is_error:
-                return None, "an uncertainty in linear units can't be turned into a log one exactly"
+        if astro_unit(p) and astro_unit(p) == astro_unit(inner) and (value > 0 or is_error):
             import math
+            if is_error:
+                if about is None or about <= 0 or about + value <= 0:
+                    return None, "an uncertainty in linear units needs its value to become a log one"
+                return (float(f"{math.log10(about + value) - math.log10(about):.10g}"),
+                        f"log10({about:g} {value:+g}) - log10({about:g})")
             return float(f"{math.log10(value):.10g}"), f"log10 of {value:g} {p}"
     a, b = astro_unit(p), astro_unit(t)
     if a and b and _ASTRO[a][0] == _ASTRO[b][0]:

@@ -524,7 +524,11 @@ def archive_flags(archive: dict) -> List[Flag]:
             + (f"; matched another recorded value: "
                + "; ".join(f"{c} ({how})" for c, how in e["matched_mode"].items())
                if e.get("matched_mode") else "")
-            + (f"; the archive also has {len(e['not_extracted'])} value(s) not extracted "
+            + "".join(f"; {len(cols)} more of the archive's values ({', '.join(cols[:6])}"
+                      f"{'...' if len(cols) > 6 else ''}) are in this planet's [{solution}] row"
+                      for solution, cols in e.get("in_other_solution", {}).items())
+            + (f"; the archive's {'solution' if e.get('archive_solution') else 'parameter set'} also has "
+               f"{len(e['not_extracted'])} value(s) {'this solution does not give' if e.get('archive_solution') else 'not extracted'} "
                f"({', '.join(e['not_extracted'][:8])}{'...' if len(e['not_extracted']) > 8 else ''})"
                if e["not_extracted"] else "") + "."))
     return flags

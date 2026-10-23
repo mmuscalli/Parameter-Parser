@@ -153,6 +153,7 @@
    "kind": "text"
   }
  ],
+ "time_system_column": "pl_tsystemref",
  "rules": [
   "Report the values THIS paper gives for each planet -- its own fit, or the values it adopts and uses (then say in `n` where they come from, e.g. 'adopted from Takeda et al. 2008'). Don't fill in values from other papers that this paper only mentions in passing.",
   "When a value is given in several places (abstract, text, table), use the table value with its uncertainties.",

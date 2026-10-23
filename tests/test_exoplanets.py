@@ -285,6 +285,31 @@ def test_dense_table_pages_are_cut_into_readable_pieces():
         assert all(max(sz) <= MAX_SIDE * TOLERANCE for sz in sizes), sizes
 
 
+
+def test_what_the_archive_has_that_a_row_lacks():
+    """Mickey's teng2023 economy run (2026-10-23): 463 'not extracted' archive values, nearly all
+    false -- bookkeeping fields, printed +-0 uncertainties, log-luminosity errors, a time system
+    implied by the epochs' unit, and values in the planet's other solution row."""
+    # log(L) uncertainties exactly as the archive computes them: log10(L + e) - log10(L)
+    assert abs(convert_printed(8.12, "L_sun", "log(L_sun)", is_error=True, about=58.59)[0] - 0.05637) < 5e-5
+    assert abs(convert_printed(-6.43, "L_sun", "log(L_sun)", True, 58.59)[0] + 0.05049) < 5e-5
+    assert convert_printed(8.12, "L_sun", "log(L_sun)", is_error=True)[0] is None        # needs the value
+    from parameter_extractor.stages.optional import time_system
+    assert [time_system(u) for u in ("JD-2450000", "BJD_TDB - 2,450,000", "HJD", "d", "")] == \
+        ["JD", "BJD_TDB", "HJD", "", ""]
+    rows = [{"pl_name": "HD 1 b", "pl_refname": "Teng et al. 2023", "pl_orbsmax": "1.178", "pl_orbsmaxerr1": "0.0",
+             "pl_orbsmaxerr2": "0.0", "pl_controv_flag": "0", "pl_pubdate": "2023-12", "st_nrvc": "1",
+             "pl_rvamp": "51.3", "pl_orbincl": "40", "pl_tsystemref": "JD", "st_refname": "Teng et al. 2023"}]
+    rv = {"pl_name": "HD 1 b", "pl_fitlabel": "RV fit", "pl_orbsmax": 1.25, "pl_rvamp": 51.3, "pl_tsystemref": "JD"}
+    joint = {"pl_name": "HD 1 b", "pl_fitlabel": "joint fit", "pl_orbsmax": 1.178, "pl_orbincl": 40.0,
+             "pl_tsystemref": "JD"}
+    report = archive.compare([rv, joint], rows, "Teng et al. 2023")
+    by = {e["solution"]: e for e in report}
+    assert {"pl_orbsmaxerr1", "pl_orbsmaxerr2", "pl_tsystemref"} <= set(by["joint fit"]["matches"])
+    assert by["joint fit"]["not_extracted"] == []                 # bookkeeping ignored; K is in the RV row
+    assert by["joint fit"]["in_other_solution"] == {"RV fit": ["pl_rvamp"]}
+    assert by["RV fit"]["archive_solution"] == "joint fit" and by["RV fit"]["not_extracted"] == ["pl_orbincl"]
+
 if __name__ == "__main__":
     for name, fn in list(globals().items()):
         if name.startswith("test_") and callable(fn):

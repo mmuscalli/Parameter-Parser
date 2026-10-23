@@ -1042,3 +1042,22 @@ parts renamed with the species in normalize) fills empty / adds entries with
 value x share / sum (calculated_from "total", still converted by
 derive_from_amounts), a stated value is kept + checked (conflicting_values >2%).
 Live Chen Table 3: Ala 100 mM; AA/Phe, Ala/Phe, Ser/Phe 50 mM each ($0.28).
+
+## Archive "not extracted" audit (2026-10-23, Mickey's teng2023 economy batch run)
+
+463 "the archive also has N values not extracted" were nearly all false:
+- archive bookkeeping (`exoplanet_archive.ARCHIVE_ONLY`: pl_controv_flag,
+  pl_pubdate, pl_n*/st_n* holding counts...) -> never counted;
+- printed "+0.000/-0.000" uncertainties (the compact format can't tell 0 from
+  not given, so 0 isn't written) -> archive 0 + our value present = match;
+- log(L) uncertainties: `convert_printed(..., is_error=True, about=value)` =
+  log10(L+e) - log10(L) (exactly the archive's numbers); a sign check had also
+  dropped the negative side;
+- pl_tsystemref: spec field `time_system_column` (planet_parameters) fills it
+  from the printed epoch unit (`optional.time_system`: "JD-2450000" -> "JD");
+- values only in the planet's OTHER solution row (K, M sin i on the joint row)
+  -> `in_other_solution` on the adopted row, said so in the flag.
+After: 18 left, all on RV-only rows the archive didn't take (incl., true mass).
+Economy misread 75 Cet [Fe/H] -0.05 as -0.1 (real, flagged). References
+regenerated (only pl_tsystemref + st_lumerr added). GUI: cells without
+provenance (source_notes) show their full text on hover.
