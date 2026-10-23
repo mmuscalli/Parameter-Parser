@@ -41,14 +41,13 @@ def test_truman2024_replay_reproduces_reference():
         assert len(rows) == 11
         assert all(r["original_data_reference"] for r in rows)            # all reproduced from other papers
         table1 = [r for r in rows if r["set_id"] == "001001"]
-        assert [r["cycle_number"] for r in table1] == ["1", "2", "3", "4"]
         assert [r["sampled_2peptide_Gly_%yield"] for r in table1] == ["13.96", "10.26", "9.42", "8.36"]
-        assert all(r["initial_pH"] == "9.8" and r["cycle_duration_hr"] == "24.0" for r in table1)
+        assert all(r["initial_pH"] == "9.8" for r in table1) and "cycle_number" not in rows[0]
         starting = sorted(float(r["initial_Gly_mM"]) for r in rows if r["sampled_2peptide_Gly_mM"])
         assert starting == [0.1, 1.0, 10.0, 100.0]                         # Table 2, per sample
         campbell = [r for r in rows if r["wet_phase_relative_humidity_pct"]]
         assert sorted(r["wet_phase_relative_humidity_pct"] for r in campbell) == ["30.0", "50.0", "70.0"]
-        assert all(r["dry_phase_temperature_C"] == "120.0" and r["cycle_number"] == "10" for r in campbell)
+        assert all(r["dry_phase_temperature_C"] == "120.0" for r in campbell)
 
         flags = json.loads(result.flags_path.read_text())["paper_level"]
         assert sum(f["kind"] == "cited_data" for f in flags) == 8

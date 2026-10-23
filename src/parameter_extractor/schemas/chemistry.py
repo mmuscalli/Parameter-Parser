@@ -12,7 +12,7 @@ regardless of how many species the full template happens to track.
 """
 from __future__ import annotations
 from typing import List, Literal, Optional
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 from parameter_extractor.schemas.common import QUOTE_DESC, SOURCE_DESC
 from pydantic.json_schema import SkipJsonSchema
 
@@ -51,54 +51,49 @@ class MolarRatio(BaseModel):
     source: str = Field(default="", description=SOURCE_DESC)
 
 
+def _required(names):
+    def extra(schema: dict) -> None:
+        schema["required"] = [n for n in names if n in schema.get("properties", {})]
+    return extra
+
+
 class SoluteEntry(BaseModel):
-    name: str = Field(description="Chemical species/compound name as it should appear in the "
-                                   "database -- match the controlled vocabulary in "
-                                   "schemas/template_vocab.json when the compound is already "
-                                   "tracked there (e.g. 'NaCl', 'CuCl2', 'Gly').")
-    in_controlled_vocab: bool = Field(
-        description="Whether `name` matched an existing template_vocab.json entry. False "
-                    "means this is a new species not yet a column -- flag for ontology/"
-                    "template extension rather than silently coining a new column."
-    )
-    phase: Phase
-    role: Role
-    set_label: Optional[str] = Field(
-        default=None,
-        description="Which structure-plan set this value belongs to, or null if it's "
-                    "constant across the whole paper (e.g. the fixed 0.5 mol dm-3 CuCl2 "
-                    "background present in every condition in eder1994).",
-    )
-    sample_label: Optional[str] = Field(
-        default=None,
-        description="For role 'sampled': the exact structure-plan sample_label (within "
-                    "set_label) this measurement belongs to, e.g. 't = 97.3 h'. Null for "
-                    "initial-composition values that apply to the whole set.",
-    )
-    concentration_value: Optional[float] = Field(description="Numeric value in the ORIGINAL reported unit.")
-    concentration_unit_raw: Optional[str] = Field(description="Unit exactly as stated, e.g. 'mol dm-3'.")
+    """One species' concentration. The model's answer format is compact (2026-10-22, like the
+    exoplanet stages): short field-name ALIASES, entries grouped per set/sample (SoluteGroup),
+    optional fields left out when they don't apply. The code reads the long names; answers
+    recorded in the old flat format still load (populate_by_name)."""
+    model_config = ConfigDict(populate_by_name=True,
+                              json_schema_extra=_required(["nm", "r", "ph", "v", "u", "q", "src", "c"]))
+
+    name: str = Field(alias="nm", description="Species name: the controlled-vocabulary name when it's there "
+                                              "(e.g. 'NaCl', 'Gly'), else as the paper writes it.")
+    # not asked of the model (nothing reads it); kept for older recordings and calculators/mixing.py
+    in_controlled_vocab: SkipJsonSchema[bool] = False
+    phase: Phase = Field(alias="ph")
+    role: Role = Field(alias="r")
+    # from the group (SoluteGroup) -- or, in older recordings, from the entry itself
+    set_label: SkipJsonSchema[Optional[str]] = None
+    sample_label: SkipJsonSchema[Optional[str]] = None
+    concentration_value: Optional[float] = Field(alias="v", description="Numeric value in the ORIGINAL reported "
+                                                                        "unit; null if the paper gives none.")
+    concentration_unit_raw: Optional[str] = Field(alias="u", description="Unit exactly as stated, e.g. 'mol dm-3', "
+                                                                         "'%'.")
     concentration_basis: ConcentrationBasis = Field(
-        default="mixture",
-        description="'mixture' if the value is the concentration in the reaction mixture itself; 'stock' "
-                    "if it's the concentration of a solution BEFORE it was combined with others (e.g. "
-                    "'5 µL of a 15 mM solution was added to ...'). Never convert a stock value to a "
-                    "mixture value yourself -- the pipeline calculates that from `added_solutions`.",
-    )
-    stock_solution: str = Field(
-        default="",
-        description="For a 'stock' value: the `solution` label (in added_solutions) of the solution it "
-                    "was added in. '' otherwise.",
-    )
+        default="mixture", alias="b",
+        description="Leave out for the concentration in the reaction mixture itself; 'stock' for a solution "
+                    "BEFORE it was combined with others ('5 µL of a 15 mM solution was added'). Never convert a "
+                    "stock value yourself -- the pipeline does it from `added_solutions`.")
+    stock_solution: str = Field(default="", alias="stk", description="For a 'stock' value: the `solution` label "
+                                                                     "(in added_solutions) it was added in.")
     concentration_mM: Optional[float] = Field(
-        default=None,
-        description="Converted to mM. Leave null and flag in `conversion_note` if the "
-                    "conversion requires an assumption (e.g. an unstated molecular weight) "
-                    "rather than silently computing a possibly-wrong number.",
-    )
-    conversion_note: Optional[str] = None
-    quote: str = Field(description=QUOTE_DESC)
-    source: str = Field(description=SOURCE_DESC)
-    confidence: Literal["high", "medium", "low"]
+        default=None, alias="mM",
+        description="Converted to mM, only when unambiguous; leave out otherwise (and say why in `cn` if an "
+                    "assumption such as a molecular weight would be needed).")
+    conversion_note: Optional[str] = Field(default=None, alias="cn", description="Why there's no mM value; "
+                                                                                 "at most 15 words.")
+    quote: str = Field(alias="q", description=QUOTE_DESC)
+    source: str = Field(alias="src", description=SOURCE_DESC)
+    confidence: Literal["high", "medium", "low"] = Field(alias="c")
     # set by calculators/mixing.py, never by the model (hidden from its schema)
     derived: SkipJsonSchema[bool] = False
     exact_mM: SkipJsonSchema[float] = 0.0      # a derived value before rounding, for chained calculations
@@ -118,9 +113,29 @@ class SoluteEntry(BaseModel):
         return f"stock {self.name}" if self.concentration_basis == "stock" else self.name
 
 
+class SoluteGroup(BaseModel):
+    """The model's grouping: one entry per set (and sample) with its species."""
+    model_config = ConfigDict(populate_by_name=True, json_schema_extra=_required(["set", "species"]))
+    set_label: str = Field(alias="set", description="Exact structure-plan set_label; '' if these values are "
+                                                    "constant across the whole paper (a fixed background "
+                                                    "reagent in every condition).")
+    sample_label: str = Field(default="", alias="sample",
+                              description="Exact structure-plan sample_label within the set: required for "
+                                          "'sampled' values, and for initial values that differ between the "
+                                          "set's samples; leave out for values of the whole set.")
+    species: List[SoluteEntry]
+
+
 class ChemistryExtraction(BaseModel):
-    paper_id: str
-    solutes: List[SoluteEntry]
+    model_config = ConfigDict(populate_by_name=True,
+                              json_schema_extra=_required(["groups", "unmapped_species", "added_solutions",
+                                                           "molar_ratios"]))
+    paper_id: SkipJsonSchema[str] = ""
+    groups: List[SoluteGroup] = Field(default_factory=list,
+                                      description="Species grouped by set (and sample): one entry per set/sample "
+                                                  "that has species.")
+    # the flat list the code works with: groups flattened (below), or an older recording's "solutes"
+    solutes: SkipJsonSchema[List[SoluteEntry]] = Field(default_factory=list)
     unmapped_species: List[str] = Field(
         default_factory=list,
         description="Species names encountered that don't match the controlled vocabulary "
@@ -138,6 +153,16 @@ class ChemistryExtraction(BaseModel):
         description="Molar ratios between species, per set, when the paper states them (e.g. 'ribose "
                     "phosphate : cytosine = 1:2'). Record them even when the concentrations are also given.",
     )
+
+    @model_validator(mode="after")
+    def _flatten(self):
+        for group in self.groups:
+            for entry in group.species:
+                entry.set_label = group.set_label or None
+                entry.sample_label = group.sample_label or None
+                self.solutes.append(entry)
+        self.groups = []                 # kept once, in `solutes` (what's saved and replayed)
+        return self
 
     def conflicting_set_species(self) -> set:
         """(set_label, name) pairs with several DIFFERENT initial values for the same

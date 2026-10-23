@@ -1,6 +1,6 @@
 """
-Offline tests: wet-dry cycling fields (per-sample cycle_number, per-set cycle
-conditions into cycle_duration_hr + the app's standard wet/dry columns) and
+Offline tests: wet-dry cycling fields (per-set cycle conditions into the app's
+standard wet/dry columns; cycle_number / cycle_duration_hr were removed, 2026-10-22) and
 data cited from other publications (original_data_reference + warning).
 No API calls.
 
@@ -33,13 +33,11 @@ def _cycling_structure() -> StructurePlan:
     s = StructurePlan.model_validate_json((REPLAY_DIR / "structure_planner.output.json").read_text())
     s1 = s.experiment_sets[0]
     s1.set_type, s1.data_source = "Evaporation Cycle", REF
-    for i, sample in enumerate(s1.samples, start=1):
-        sample.cycle_number = i
     return s
 
 
 WET_DRY = WetDryConditions(parameters=[
-    CycleParameter(set_label="", parameter="cycle_duration_hr", value=24, quote="24 h cycles", source="Methods",
+    CycleParameter(set_label="", parameter="wet_phase_duration_hr", value=20, quote="20 h wet", source="Methods",
                    confidence="high"),
     CycleParameter(set_label="", parameter="dry_phase_temperature_C", value=130, quote="dried at 130 C",
                    source="Methods", confidence="high"),
@@ -73,17 +71,18 @@ def test_cycling_fields_and_cited_data():
         with open(result.csv_path, newline="") as f:
             reader = csv.DictReader(f)
             header, rows = reader.fieldnames, list(reader)
-        n_template = 280
+        n_template = 208
         # standard columns straight after the template block, then provenance; only filled ones
-        assert header[n_template:n_template + 2] == ["wet_phase_relative_humidity_pct", "dry_phase_temperature_C"]
+        assert header[n_template:n_template + 3] == ["wet_phase_duration_hr", "wet_phase_relative_humidity_pct",
+                                                     "dry_phase_temperature_C"]
+        assert "cycle_number" not in header and "cycle_duration_hr" not in header
         assert header[-1] == "original_data_reference"
         set1 = [r for r in rows if r["set_id"] == "001001"]
-        assert [r["cycle_number"] for r in set1] == [str(i) for i in range(1, len(set1) + 1)]
-        assert all(r["cycle_duration_hr"] == "24.0" and r["dry_phase_temperature_C"] == "130.0"
+        assert all(r["wet_phase_duration_hr"] == "20.0" and r["dry_phase_temperature_C"] == "130.0"
                    and r["wet_phase_relative_humidity_pct"] == "70.0" for r in set1)
         assert all(r["original_data_reference"] == REF for r in set1)
         others = [r for r in rows if r["set_id"] != "001001"]
-        assert all(r["cycle_number"] == r["cycle_duration_hr"] == r["original_data_reference"] == "" for r in others)
+        assert all(r["wet_phase_duration_hr"] == r["original_data_reference"] == "" for r in others)
 
         cited = [f for f in result.paper_flags if f.kind == "cited_data"]
         assert len(cited) == 1 and REF in cited[0].message

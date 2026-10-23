@@ -28,7 +28,10 @@ from test_pipeline_offline import PDF, REPLAY_DIR
 
 def test_prebiotic_pack_carries_the_old_defaults():
     pack = packs.activate("prebiotic_chemistry")
-    assert len(pack.template_columns) == 280 and len(pack.species_names) == 163
+    # PaperDataTemplate's 280 columns, less 65 Mickey removed and author1..7 -> author_list (2026-10-22)
+    assert len(pack.template_columns) == 208 and len(pack.species_names) == 129
+    assert "author_list" in pack.template_columns and "author1" not in pack.template_columns
+    assert not {"cycle_number", "cycle_duration_hr", "initial_Na+_mM", "isModeled"} & set(pack.template_columns)
     assert pack.uses("methodology") and pack.uses("chemistry") and pack.uses("peptide_totals")
     assert pack.prompt_path("chemistry").parent.name == "prompts" and pack.folder.name in str(pack.prompt_path("chemistry"))
     assert pack.prompt_path("metadata").parent.parent.name == "parameter_extractor"   # generic: the app's

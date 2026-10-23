@@ -43,7 +43,7 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Dict, List, Literal, Optional, Tuple
 
-from pydantic import BaseModel, ConfigDict, Field, create_model
+from pydantic import BaseModel, ConfigDict, Field, create_model, model_validator
 from pydantic.json_schema import SkipJsonSchema
 
 from parameter_extractor.schemas.common import NOTE_DESC, QUOTE_DESC, SOURCE_DESC, Basis
@@ -254,6 +254,25 @@ class _CompactResult(BaseModel):
     """Base of every stage's answer: `rows` of grouped values (the model's format) and the flat
     `parameters` list the code works with (rows flattened, plus answers recorded in the old format)."""
     model_config = ConfigDict(populate_by_name=True, json_schema_extra=_required(["rows", "notes"]))
+    _columns: frozenset = frozenset()          # the stage's parameters (set by _models)
+
+    @model_validator(mode="before")
+    @classmethod
+    def _known_columns_only(cls, data):
+        """A value for a parameter the stage no longer has (a pack dropped it -- e.g.
+        cycle_duration_hr, 2026-10-22 -- in a recorded answer, or a model slip) is skipped
+        rather than failing the whole step."""
+        if not isinstance(data, dict) or not cls._columns:
+            return data
+        known = lambda v: not isinstance(v, dict) or (v.get("col") or v.get("parameter")) in cls._columns
+        data = dict(data)
+        if isinstance(data.get("parameters"), list):
+            data["parameters"] = [v for v in data["parameters"] if known(v)]
+        if isinstance(data.get("rows"), list):
+            data["rows"] = [dict(r, values=[v for v in r.get("values", []) if known(v)])
+                            if isinstance(r, dict) and isinstance(r.get("values"), list) else r
+                            for r in data["rows"]]
+        return data
 
     @property
     def parameters(self) -> list:
@@ -326,6 +345,7 @@ def _models(spec_json: str) -> Tuple[type, type]:
         notes=(str, Field(default="", description="Anything that didn't fit, briefly.")),
         legacy_parameters=(SkipJsonSchema[List[Item]], Field(default_factory=list, validation_alias="parameters")),
     )
+    Result._columns = frozenset(spec.columns)
     return Item, Result
 
 

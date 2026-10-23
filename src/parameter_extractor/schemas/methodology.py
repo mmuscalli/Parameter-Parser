@@ -11,10 +11,17 @@ differs slightly per condition) -- see `per_set_overrides`.
 """
 from __future__ import annotations
 from typing import Dict, List, Literal, Optional
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic.json_schema import SkipJsonSchema
 from .common import NOTE_DESC, QUOTE_DESC, SOURCE_DESC, Basis, Extracted
 
 ExperimentType = Literal["Batch", "Flowthrough"]  # POLO's ExperimentType enum
+
+
+def _required(names):
+    def extra(schema: dict) -> None:
+        schema["required"] = [n for n in names if n in schema.get("properties", {})]
+    return extra
 OverridableField = Literal[
     "initial_pressure_bar", "initial_temperature_C", "sampled_temperature_C", "initial_pH",
 ]
@@ -24,15 +31,18 @@ class SetOverride(BaseModel):
     """One per-set value. A list of these rather than a {set_label: {field: value}}
     dict because the API's structured outputs can't express free-form dict keys --
     a dict field comes back as an always-empty object."""
-    set_label: str = Field(description="Exact set_label string from the structure plan.")
-    field_name: OverridableField
-    value: float
-    basis: Basis = Field(default="stated", description="'stated' in the paper; 'derived' by arithmetic "
-                                                       "from stated values; 'assumed' if not stated.")
-    confidence: Literal["high", "medium", "low"] = "high"
-    quote: str = Field(default="", description=QUOTE_DESC)
-    source: str = Field(default="", description=SOURCE_DESC)
-    note: str = Field(default="", description=NOTE_DESC)
+    model_config = ConfigDict(populate_by_name=True,
+                              json_schema_extra=_required(["set", "f", "v", "q", "src", "c"]))
+    set_label: str = Field(alias="set", description="Exact set_label string from the structure plan.")
+    field_name: OverridableField = Field(alias="f")
+    value: float = Field(alias="v")
+    basis: Basis = Field(default="stated", alias="b", description="Leave out when stated; 'derived' by "
+                                                                  "arithmetic from stated values; 'assumed' if "
+                                                                  "not stated.")
+    confidence: Literal["high", "medium", "low"] = Field(default="high", alias="c")
+    quote: str = Field(default="", alias="q", description=QUOTE_DESC)
+    source: str = Field(default="", alias="src", description=SOURCE_DESC)
+    note: str = Field(default="", alias="n", description=NOTE_DESC)
 
 
 class OtherParameter(BaseModel):
@@ -44,18 +54,22 @@ class OtherParameter(BaseModel):
     three of them pushed the Methodology schema over the API's grammar size
     limit (400 "compiled grammar is too large"). Splitting value and unit is
     left to the review step."""
-    name: str = Field(description="Short descriptive name, e.g. 'stirring rate', 'UV irradiation "
-                                  "wavelength', 'mineral surface', 'reaction volume'.")
-    value: str = Field(description="As stated, with its unit, e.g. '300 rpm', '254 nm', 'montmorillonite'.")
-    set_label: Optional[str] = Field(default=None, description="Exact structure-plan set_label if it "
-                                                               "applies to one set only; null if paper-wide.")
-    quote: str = Field(description=QUOTE_DESC)
-    source: str = Field(description=SOURCE_DESC)
-    confidence: Literal["high", "medium", "low"]
+    model_config = ConfigDict(populate_by_name=True)
+    name: str = Field(alias="nm", description="Short descriptive name, e.g. 'stirring rate', 'UV irradiation "
+                                              "wavelength', 'mineral surface', 'reaction volume'.")
+    value: str = Field(alias="v", description="As stated, with its unit, e.g. '300 rpm', '254 nm', "
+                                              "'montmorillonite'.")
+    set_label: Optional[str] = Field(default=None, alias="set", description="Exact structure-plan set_label if "
+                                                                            "it applies to one set only; null if "
+                                                                            "paper-wide.")
+    quote: str = Field(alias="q", description=QUOTE_DESC)
+    source: str = Field(alias="src", description=SOURCE_DESC)
+    confidence: Literal["high", "medium", "low"] = Field(alias="c")
 
 
 class Methodology(BaseModel):
-    paper_id: str
+    model_config = ConfigDict(populate_by_name=True)
+    paper_id: SkipJsonSchema[str] = ""
     experiment_type: Extracted[ExperimentType]
     solution_type: Extracted[Literal["Wet", "Dry"]]
     vessel_material: Extracted[str]
@@ -89,7 +103,7 @@ class Methodology(BaseModel):
     def _accept_legacy_dict(cls, v):
         # runs/eder1994/build_manual_demo.py predates the list form and passes a dict
         if isinstance(v, dict):
-            return [{"set_label": label, "field_name": f, "value": val}
+            return [{"set_label": label, "field_name": f, "value": val}   # long names: populate_by_name
                     for label, fields in v.items() for f, val in fields.items()]
         return v
 

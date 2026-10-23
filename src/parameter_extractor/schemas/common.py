@@ -8,7 +8,7 @@ used where that would be overkill (e.g. "how many solute entries did we find").
 """
 from __future__ import annotations
 from typing import Generic, Literal, Optional, TypeVar
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 T = TypeVar("T")
 
@@ -77,24 +77,27 @@ class Extracted(BaseModel, Generic[T]):
     isn't "found" -- code downstream should branch on `status`, not on
     `value is None`, since "not stated" and "stated as zero" are different things.
     """
-    value: Optional[T] = None
-    status: Status = "not_reported"
+    # short field names in the model's answer (aliases; the code reads the long ones) -- 2026-10-22
+    model_config = ConfigDict(populate_by_name=True)
+
+    value: Optional[T] = Field(default=None, alias="v")
+    status: Status = Field(default="not_reported", alias="st")
     # quote/source/note are plain strings ("" = none) rather than Optional: every
     # optional field adds an alternative to the structured-output grammar, and the
     # Methodology schema (10 of these) hit the API's grammar size limit with them.
     quote: str = Field(
-        default="",
-        description=QUOTE_DESC + " Required whenever status == 'found'; empty if none.",
+        default="", alias="q",
+        description=QUOTE_DESC + " Required whenever st == 'found'; leave out otherwise.",
     )
     source: str = Field(
-        default="",
-        description=SOURCE_DESC + " Empty if not found.",
+        default="", alias="src",
+        description=SOURCE_DESC + " Leave out if not found.",
     )
-    confidence: Confidence = "low"
+    confidence: Confidence = Field(default="low", alias="c")
     note: str = Field(
-        default="",
-        description=f"At most {NOTE_WORDS} words, only when status is ambiguous/conflicting/below_threshold "
-                    "-- e.g. '<0.15% for all samples, exact value not given'; empty otherwise.",
+        default="", alias="n",
+        description=f"At most {NOTE_WORDS} words, only when st is ambiguous/conflicting/below_threshold "
+                    "-- e.g. '<0.15% for all samples, exact value not given'; leave out otherwise.",
     )
 
     @field_validator("quote", "source", "note", mode="before")

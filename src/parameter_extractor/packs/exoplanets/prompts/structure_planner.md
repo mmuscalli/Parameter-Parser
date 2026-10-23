@@ -26,8 +26,7 @@ Guidance:
   brackets. A table that only repeats or derives quantities from one
   solution (e.g. minimum masses computed from the same fit) is not a new
   solution; mention it in `source`.
-- set_type is "Independent" for every set. Leave `duration_hr` and
-  `cycle_number` empty.
+- set_type is "Independent" for every set. Leave `duration_hr` empty.
 - `data_source`: '' when the paper derives the system's parameters itself;
   if a whole system's values are only quoted from another publication, give
   that reference.

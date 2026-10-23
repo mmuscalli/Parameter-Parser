@@ -8,6 +8,14 @@ from parameter_extractor.schemas.structure_plan import StructurePlan
 from .prompt_loader import load_prompt
 
 
+def chemistry_budget(structure: StructurePlan) -> int:
+    """Output tokens the chemistry step can plausibly need -- a few species per set and per
+    sample, a few hundred tokens each -- so a runaway answer stops early (api_client retries
+    once with twice this). The old format used 7-18K on the reference papers."""
+    rows = len(structure.experiment_sets) + sum(len(s.samples) for s in structure.experiment_sets)
+    return 10000 + 900 * rows
+
+
 def run_chemistry_extraction(
     ctx: RunContext, paper_text: str, structure_plan: StructurePlan,
     controlled_vocab: list[str], table_images: Optional[List[Path]] = None,
@@ -27,5 +35,6 @@ def run_chemistry_extraction(
         user_content=prompt,
         response_model=ChemistryExtraction,
         paper_text=paper_text,
+        max_tokens=chemistry_budget(structure_plan),
         image_paths=table_images,
     )

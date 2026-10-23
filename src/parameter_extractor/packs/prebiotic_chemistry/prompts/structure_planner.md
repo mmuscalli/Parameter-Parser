@@ -16,8 +16,7 @@ Guidance:
 - set_type "Time Series" when samples within a set differ only by elapsed
   time/duration under otherwise-fixed conditions. "Independent" when each row
   is its own self-contained condition with no shared sweep. "Evaporation
-  Cycle" for wet-dry cycling, with each sample's `cycle_number` (cycles
-  completed at that sample, e.g. "Cycle 3" -> 3).
+  Cycle" for wet-dry cycling (name each sample by its cycle, e.g. "Cycle 3").
 - `data_source`: for each set, '' if the data was measured in this paper.
   If the paper presents data from another publication -- a review, a
   comparison table, a redrawn figure, or results quoted from earlier work
@@ -25,9 +24,13 @@ Guidance:
   the original reference as the paper's reference list states it (authors,
   year, journal, reference number). This matters: those values aren't this
   paper's measurements.
-- Only plan rows for data given as explicit text or table values. Data that
-  only exists as a point read off a scatter plot/figure is OUT OF SCOPE for
-  this pass -- list it under `excluded_data` instead of planning a row for it.
+- Only plan rows for data given as explicit text or table values. A result
+  stated only in the running text counts exactly like a table value: "after
+  10 cycles at 30, 50 and 70% RH the total yields were 1.29, 2.56 and
+  17.33%" is three rows (one set per condition), even when scattered through
+  the text or quoted from another paper. Data that only exists as a point
+  read off a scatter plot/figure is OUT OF SCOPE for this pass -- list it
+  under `excluded_data` instead of planning a row for it.
 - If you are not confident a figure doesn't duplicate tabulated data, say so
   in `notes` rather than guessing.
 - If page images are attached, they are rasterized renders of the pages

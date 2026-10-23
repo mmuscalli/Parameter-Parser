@@ -1,16 +1,17 @@
-Extract the experimental methodology parameters below. For EVERY field, you
-must set `status` appropriately:
+Extract the experimental methodology parameters below. Short field names:
+each field is an object with `st` status, `v` value, `q` quote, `src` where
+it is, `c` confidence and `n` a short note -- give `v`/`q`/`src` when found,
+`n` only when needed. For EVERY field, set `st`:
 
-- "found" -- the paper states it; include a short supporting `quote` and
-  `source` (section/table name).
+- "found" -- the paper states it; include a short supporting `q` and `src`.
 - "not_reported" -- the paper never states this; do not guess a typical/
   default value (e.g. don't assume 1 atm pressure just because none is given).
 - "below_threshold" -- paper gives a qualitative bound instead of a number
-  (e.g. "yields below 0.15% were not listed"); put the bound in `note`.
+  (e.g. "yields below 0.15% were not listed"); put the bound in `n`.
 - "ambiguous" -- found, but required a judgment call (e.g. inferring vessel
-  material from a device model name); explain the judgment in `note`.
+  material from a device model name); explain the judgment in `n`.
 - "conflicting" -- the paper states this more than once with different
-  values; give both in `note`.
+  values; give both in `n`.
 
 Fields to extract:
 - experiment_type: "Batch" or "Flowthrough" (POLO's controlled vocabulary --
@@ -25,23 +26,31 @@ Fields to extract:
 If a field's value differs by experiment set (e.g. several sets at slightly
 different temperatures) rather than being constant across the whole paper,
 set it "ambiguous" at the top level with a note pointing to
-`per_set_overrides`, and add one `per_set_overrides` entry per (set, field),
-using the exact `set_label` strings from the structure plan below. Give each
-entry a `quote`, `source`, `confidence`, and `basis` (keep every `quote` to the shortest span that shows the value (at most 20 words; for a table: row label, column label, value) and make `source` exact (table + row + column, or section + paragraph), so a reader can find the full context. `note`: at most 15 words):
-- "stated": the paper gives this value for this set;
-- "derived": calculated from stated values (say how in `note`, not in the
+`per_set_overrides`, and add one `per_set_overrides` entry per (set, field)
+-- for EVERY field that varies: when samples are taken at the reaction
+temperature, sampled_temperature_C varies with it and needs its own entries
+(`b` "derived" if the paper states the temperature only once per set) --
+not just a note saying it's the same:
+`set` (the exact set_label from the structure plan below), `f` the field,
+`v` the value, `q`, `src`, `c`, and `b` (basis) only when not "stated" --
+keep every `q` to the shortest span that shows the value (at most 20 words;
+for a table: row label, column label, value) and make `src` exact (table +
+row + column, or section + paragraph); `n` at most 15 words:
+- stated (leave `b` out): the paper gives this value for this set;
+- "derived": calculated from stated values (say how in `n`, not in the
   quote -- a quote is always the paper's own words, copied exactly);
 - "assumed": NOT stated. Do not fill in values the paper doesn't give --
   in particular, when the paper itself hedges ("probably", "perhaps",
   "likely", "not documented"), that is not a stated value. Prefer leaving
-  such a value out; if you include one, it MUST have basis "assumed".
+  such a value out; if you include one, it MUST have `b` "assumed".
 
 Also list, in `other_parameters`, any OTHER experimental condition or parameter
 that could affect the outcome but isn't one of the fields above -- for
 example stirring or agitation, light/UV irradiation, mineral or solid
 surfaces, buffers, reaction or sample volume, heating method, wet-dry
 cycling details, sealing or atmosphere details. One entry per parameter (one
-per set if it differs between sets), each with a quote and source. Leave out:
+per set if it differs between sets): `nm` name, `v` value as stated with its
+unit, `set` only if it applies to one set, `q`, `src`, `c`. Leave out:
 - anything already covered by the fields above;
 - dissolved species and their concentrations, including catalysts and
   reactants (a separate step extracts those);

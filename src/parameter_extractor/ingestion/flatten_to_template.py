@@ -2,7 +2,7 @@
 Combine StructurePlan + Methodology + ChemistryExtraction (+ calculators) into
 one ExtractedRow per planned sample, and flatten a list of ExtractedRow into
 the wide, PaperDataTemplate-shaped CSV your existing pipeline expects -- with
-the template's own column names (e.g. paper_DOI, author1..7,
+the template's own column names (e.g. paper_DOI, author_list,
 sampled_2peptide_Gly_%yield) and column order.
 
 This is the one place that's allowed to know about the wide template's column
@@ -303,8 +303,8 @@ def build_rows(
             meta_src = CellSource(origin="metadata", source=metadata.source)
             for col in ("paper_DOI", "paper_title", "year_published", "journal_published"):
                 prov[col] = meta_src
-            for i in range(1, min(len(metadata.authors), MAX_AUTHOR_COLUMNS) + 1):
-                prov[f"author{i}"] = meta_src
+            if metadata.authors:
+                prov["author_list"] = meta_src
             if metadata.doi_source == "crossref_api":
                 prov["paper_DOI"] = CellSource(origin="CrossRef", source=metadata.doi_note or "",
                                                quote=metadata.doi_match_title or "")
@@ -324,9 +324,6 @@ def build_rows(
             structure_src = CellSource(origin="structure", source=sample.source)
             prov["set_type"] = CellSource(origin="structure", source=pset.source_table_or_section)
             prov["duration_hr"] = structure_src
-            if sample.cycle_number is not None:
-                extra["cycle_number"] = sample.cycle_number
-                prov["cycle_number"] = structure_src
             for spec, values in stage_values:
                 # whole-set values first, so a value for this sample (row) wins
                 for (label, sample_label, param), v in sorted(values.items(), key=lambda kv: bool(kv[0][1])):
@@ -383,16 +380,16 @@ FIELD_TO_TEMPLATE = {
     "sampled_3peptide_Gly_pct_yield": "sampled_3peptide_Gly_%yield",
 }
 _FIELD_FOR_TEMPLATE = {col: field for field, col in FIELD_TO_TEMPLATE.items()}
-MAX_AUTHOR_COLUMNS = 7          # template has author1..author7
+# every author in one column (Mickey, 2026-10-22; was author1..author7): "; " between names, so
+# the list splits cleanly and a name can be searched for
+AUTHOR_SEPARATOR = "; "
 def row_to_template_dict(row: ExtractedRow) -> dict:
     """{template column: value} for one row, using the template's own names."""
     data = row.model_dump(exclude={"species_mM", "extra", "authors", "provenance"})
     out = {FIELD_TO_TEMPLATE.get(k, k): v for k, v in data.items()}
-    authors = list(row.authors)
-    if len(authors) > MAX_AUTHOR_COLUMNS:   # keep the template's 7 columns: overflow joins the last
-        authors = authors[:MAX_AUTHOR_COLUMNS - 1] + ["; ".join(authors[MAX_AUTHOR_COLUMNS - 1:])]
-    for i, name in enumerate(authors, start=1):
-        out[f"author{i}"] = name
+    authors = [a.replace(AUTHOR_SEPARATOR, ", ").strip() for a in row.authors if a and a.strip()]
+    if authors:
+        out["author_list"] = AUTHOR_SEPARATOR.join(authors)
     out.update(row.species_mM)
     out.update(row.extra)
     return out

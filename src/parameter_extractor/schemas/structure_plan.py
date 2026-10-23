@@ -16,9 +16,6 @@ SetType = Literal["Independent", "Time Series", "Evaporation Cycle"]
 class PlannedSample(BaseModel):
     sample_label: str = Field(description="Short human-readable label, e.g. 't = 97.3 h'")
     duration_hr: Optional[float] = None
-    cycle_number: Optional[int] = Field(
-        default=None, description="Wet-dry cycling only: number of completed cycles at this sample. "
-                                  "null for anything that isn't cycling.")
     source: str = Field(description="e.g. 'Table 1, Na+ 3.33 mol dm-3 row, 1st time point'")
 
 

@@ -70,7 +70,7 @@ class ExtractedRow(BaseModel):
 
     # any other column -> value (e.g. {"initial_pH": 2.6}, {"stirring": "none"}): template
     # columns without a dedicated field above, and columns the user accepted in review
-    extra: Dict[str, Union[int, float, str]] = {}   # int kept whole (e.g. cycle_number)
+    extra: Dict[str, Union[int, float, str]] = {}   # int kept whole
 
     source_notes: Optional[str] = None
     extraction_confidence: Optional[str] = None

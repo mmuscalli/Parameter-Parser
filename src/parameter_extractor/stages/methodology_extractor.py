@@ -21,4 +21,6 @@ def run_methodology_extraction(
         user_content=prompt,
         response_model=Methodology,
         paper_text=paper_text,
+        # 10 fixed fields + a few per-set values and other parameters per set (2-3.5K used so far)
+        max_tokens=6000 + 500 * len(structure_plan.experiment_sets),
     )

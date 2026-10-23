@@ -46,12 +46,12 @@ def test_name_matching():
              "CuCl2·2H2O": "CuCl2", "CuCl₂": "CuCl2", "cupric chloride": "CuCl2", "glycine": "Gly",
              "L-alanine": "Ala", "diglycine": "2peptide_Gly", "Gly-Gly-Gly": "3peptide_Gly",
              "(Gly)2": "2peptide_Gly", "Gly14": "14peptide_Gly", "dialanine": "2peptide_Ala",
-             "Ca2+": "Ca+2", "Ca++": "Ca+2", "Cl−": "Cl-", "SO4 2-": "SO4-2", "HPO4^2-": "HPO4-2",
-             "ammonium chloride": "NH4Cl", "Na⁺": "Na+"}
+             "SO4 2-": "SO4-2", "ammonium chloride": "NH4Cl"}
     for name, expected in cases.items():
         got = match_species(name)
         assert got and got[0] == expected, (name, got)
-    for unmatched in ("RbCl", "Foo-Bar", "Foo", "montmorillonite"):
+    # free ions lost their template columns (initial_Ca+2_mM, ..., removed 2026-10-22): new species now
+    for unmatched in ("RbCl", "Foo-Bar", "Foo", "montmorillonite", "Ca2+", "Na⁺", "HPO4^2-"):
         assert match_species(unmatched) is None, unmatched
     assert closest_names("glycineamide", ["glycinamide", "Gly"]) == ["glycinamide"]
 
@@ -100,7 +100,7 @@ def test_review_preview_shows_stored_value():
     assert dlg.values_table.item(0, 2).text() == "(not added)"
     dlg.set_action(0, "existing_column", "solvent_volume_mL")
     assert dlg.values_table.item(0, 2).text().startswith("1  (read from '1 cm3')")
-    dlg.set_action(0, "existing_column", "cycle_duration_hr")              # wrong dimension
+    dlg.set_action(0, "existing_column", "wet_phase_duration_hr")          # wrong dimension
     assert "not converted" in dlg.values_table.item(0, 2).text()
     assert any("can't be converted" in i for i in dlg.problems())          # blocks "Build dataset"
     g.values[0].value_text = "24 h"

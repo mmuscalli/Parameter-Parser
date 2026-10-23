@@ -36,7 +36,7 @@ def test_wet_dry_spec():
     cols = standard_columns()
     assert cols[-5:] == ["wet_phase_temperature_C", "wet_phase_duration_hr", "wet_phase_relative_humidity_pct",
                          "dry_phase_temperature_C", "dry_phase_duration_hr"]
-    assert "cycle_duration_hr" not in cols                            # a template column already
+    assert "cycle_duration_hr" not in cols                            # removed from the pack (2026-10-22)
 
 
 def test_a_new_stage_needs_only_a_spec():
@@ -67,13 +67,12 @@ def test_a_new_stage_needs_only_a_spec():
     assert values[(first, "", "uv_wavelength_nm")].value == 185                  # set-specific wins
     assert values[(second, "", "uv_wavelength_nm")].value == 254                 # keyword stage: every set
     assert not any(k[2] == "uv_flux_W_m2" for k in values)                  # assumed: left to the review
-    try:
-        Result.model_validate({"parameters": [{"set_label": "", "parameter": "not_a_column", "value": 1,
-                                               "quote": "", "source": "", "confidence": "low"}]})
-    except Exception:
-        pass
-    else:
-        raise AssertionError("parameters are limited to the spec's columns")
+    # parameters are limited to the spec's columns: others (a pack dropped them, or a model slip) are
+    # skipped, not written, and don't fail the step (2026-10-22)
+    kept = Result.model_validate({"parameters": [
+        {"set_label": "", "parameter": "not_a_column", "value": 1, "quote": "", "source": "", "confidence": "low"},
+        {"set_label": "", "parameter": "uv_wavelength_nm", "value": 254, "quote": "", "source": "", "confidence": "low"}]})
+    assert [v.parameter for v in kept.parameters] == ["uv_wavelength_nm"]
 
 
 def test_user_choices():

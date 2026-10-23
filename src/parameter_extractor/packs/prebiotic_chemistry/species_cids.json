@@ -169,23 +169,11 @@
    "formula": "C4H7NO4",
    "query": "aspartic acid"
   },
-  "Ba+2": {
-   "cid": 104810,
-   "title": "Barium ion",
-   "formula": "Ba+2",
-   "query": "barium(2+)"
-  },
   "BaCl2": {
    "cid": 25204,
    "title": "Barium chloride",
    "formula": "BaCl2",
    "query": "BaCl2"
-  },
-  "Br-": {
-   "cid": 259,
-   "title": "Bromide ion",
-   "formula": "Br-",
-   "query": "Br-"
   },
   "C2N3Na": {
    "cid": 4350929,
@@ -205,12 +193,6 @@
    "formula": "C2H3KO2",
    "query": "CH3CO2K"
   },
-  "CH3COO-": {
-   "cid": 175,
-   "title": "Acetate",
-   "formula": "C2H3O2-",
-   "query": "acetate"
-  },
   "CH3NH3+": {
    "cid": 644041,
    "title": "Methylammonium",
@@ -229,23 +211,11 @@
    "formula": "C8H17NO3S",
    "query": "CHES"
   },
-  "CN-": {
-   "cid": 5975,
-   "title": "Cyanide",
-   "formula": "CN-",
-   "query": "CN-"
-  },
   "CO": {
    "cid": 281,
    "title": "Carbon Monoxide",
    "formula": "CO",
    "query": "carbon monoxide"
-  },
-  "CO3-2": {
-   "cid": 19660,
-   "title": "Carbonate Ion",
-   "formula": "CO3-2",
-   "query": "carbonate"
   },
   "COS": {
    "cid": 10039,
@@ -265,12 +235,6 @@
    "formula": "CaH6O9P2",
    "query": "monocalcium phosphate monohydrate"
   },
-  "Ca+2": {
-   "cid": 271,
-   "title": "Calcium Cation",
-   "formula": "Ca+2",
-   "query": "calcium(2+)"
-  },
   "CaCl2": {
    "cid": 5284359,
    "title": "Calcium Chloride",
@@ -283,41 +247,17 @@
    "formula": "CaHO4P",
    "query": "CaHPO4"
   },
-  "Cd+2": {
-   "cid": 31193,
-   "title": "Cadmium cation",
-   "formula": "Cd+2",
-   "query": "cadmium(2+)"
-  },
   "CdCl2": {
    "cid": 24947,
    "title": "Cadmium Chloride",
    "formula": "CdCl2",
    "query": "CdCl2"
   },
-  "Cl-": {
-   "cid": 312,
-   "title": "Chloride",
-   "formula": "Cl-",
-   "query": "Cl-"
-  },
-  "Cs+": {
-   "cid": 104967,
-   "title": "Cesium cation",
-   "formula": "Cs+",
-   "query": "cesium(1+)"
-  },
   "CsCl": {
    "cid": 24293,
    "title": "Cesium Chloride",
    "formula": "ClCs",
    "query": "CsCl"
-  },
-  "Cu+2": {
-   "cid": 27099,
-   "title": "Copper(2+)",
-   "formula": "Cu+2",
-   "query": "copper(2+)"
   },
   "CuCl2": {
    "cid": 24014,
@@ -355,18 +295,6 @@
    "formula": "C10H16N2O8",
    "query": "EDTA"
   },
-  "Fe+2": {
-   "cid": 27284,
-   "title": "Ferrous cation",
-   "formula": "Fe+2",
-   "query": "iron(2+)"
-  },
-  "Fe+3": {
-   "cid": 29936,
-   "title": "Ferric cation",
-   "formula": "Fe+3",
-   "query": "iron(3+)"
-  },
   "FeCl2": {
    "cid": 24458,
    "title": "Ferrous Chloride",
@@ -403,23 +331,11 @@
    "formula": "H2S",
    "query": "H2S"
   },
-  "HPO4-2": {
-   "cid": 3681305,
-   "title": "Hydrogen phosphate",
-   "formula": "HO4P-2",
-   "query": "HPO4-2"
-  },
   "His": {
    "cid": 6274,
    "title": "L-Histidine",
    "formula": "C6H9N3O2",
    "query": "histidine"
-  },
-  "K+": {
-   "cid": 813,
-   "title": "Potassium Cation",
-   "formula": "K+",
-   "query": "potassium(1+)"
   },
   "K2HPO4": {
    "cid": 24450,
@@ -457,12 +373,6 @@
    "formula": "C5H11NO2S",
    "query": "methionine"
   },
-  "Mg+2": {
-   "cid": 888,
-   "title": "Magnesium Cation",
-   "formula": "Mg+2",
-   "query": "magnesium(2+)"
-  },
   "MgCl2": {
    "cid": 5360315,
    "title": "Magnesium Chloride",
@@ -492,12 +402,6 @@
    "title": "Ammonium dihydrogen phosphate",
    "formula": "H6NO4P",
    "query": "NH4H2PO4"
-  },
-  "Na+": {
-   "cid": 923,
-   "title": "Sodium Ion",
-   "formula": "Na+",
-   "query": "sodium(1+)"
   },
   "Na2CO3": {
    "cid": 10340,
@@ -553,12 +457,6 @@
    "formula": "HNaO",
    "query": "NaOH"
   },
-  "Ni+2": {
-   "cid": 934,
-   "title": "Nickel cation",
-   "formula": "Ni+2",
-   "query": "nickel(2+)"
-  },
   "NiCl2": {
    "cid": 24385,
    "title": "Nickel Dichloride",
@@ -571,23 +469,11 @@
    "formula": "NiS",
    "query": "nickel sulfide"
   },
-  "P2O7-4": {
-   "cid": 644102,
-   "title": "Pyrophosphate",
-   "formula": "O7P2-4",
-   "query": "pyrophosphate"
-  },
   "PO4-3": {
    "cid": 1061,
    "title": "Phosphate",
    "formula": "O4P-3",
    "query": "phosphate"
-  },
-  "Pb+2": {
-   "cid": 73212,
-   "title": "Lead, elemental",
-   "formula": "Pb+2",
-   "query": "lead(2+)"
   },
   "PbCl2": {
    "cid": 24459,
@@ -654,12 +540,6 @@
    "title": "Bromoacetate",
    "formula": "C2H2BrO2-",
    "query": "bromoacetate"
-  },
-  "citrate-3": {
-   "cid": 31348,
-   "title": "Citrate",
-   "formula": "C6H5O7-3",
-   "query": "citrate"
   },
   "cyanamide": {
    "cid": 9864,
