@@ -511,7 +511,8 @@ def archive_flags(archive: dict) -> List[Flag]:
                 + (f" (the archive's {e['archive_name']}"
                    + (", matched by orbital period" if e.get("matched_by") else "") + ")"
                    if e.get("archive_name") else ""))
-        other = (f" -- the archive's parameter set is this planet's [{e['archive_solution']}] solution, so "
+        row = packs.row_word()
+        other = (f" -- the archive's parameter set is this planet's [{e['archive_solution']}] {row}, so "
                  f"differences here are expected" if e.get("archive_solution") else "")
         flags.append(Flag(
             "archive_check" if e["differs"] else "archive_match",
@@ -525,10 +526,10 @@ def archive_flags(archive: dict) -> List[Flag]:
                + "; ".join(f"{c} ({how})" for c, how in e["matched_mode"].items())
                if e.get("matched_mode") else "")
             + "".join(f"; {len(cols)} more of the archive's values ({', '.join(cols[:6])}"
-                      f"{'...' if len(cols) > 6 else ''}) are in this planet's [{solution}] row"
+                      f"{'...' if len(cols) > 6 else ''}) are in this planet's [{solution}] {row}"
                       for solution, cols in e.get("in_other_solution", {}).items())
-            + (f"; the archive's {'solution' if e.get('archive_solution') else 'parameter set'} also has "
-               f"{len(e['not_extracted'])} value(s) {'this solution does not give' if e.get('archive_solution') else 'not extracted'} "
+            + (f"; the archive's {row if e.get('archive_solution') else 'parameter set'} also has "
+               f"{len(e['not_extracted'])} value(s) {f'this {row} does not give' if e.get('archive_solution') else 'not extracted'} "
                f"({', '.join(e['not_extracted'][:8])}{'...' if len(e['not_extracted']) > 8 else ''})"
                if e["not_extracted"] else "") + "."))
     return flags

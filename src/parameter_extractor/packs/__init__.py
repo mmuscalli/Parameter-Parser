@@ -15,7 +15,8 @@ A pack is a folder with a pack.json manifest:
   postprocess       calculators run on the results, in order: "normalize_species",
                     "mixing", "molar_ratios", "peptide_totals"
   units             what a set and a sample are called, e.g. {"set": "planetary
-                    system", "sample": "planet"}
+                    system", "sample": "planet"}, and optionally a row ("row": "object model
+                    instance": one planet as one fit models it), used in messages
   compact_text      collapse long runs of layout spaces in the text sent to the model
 
 and, next to it:
@@ -112,6 +113,11 @@ class Pack:
             return own
         from parameter_extractor.config import settings
         return settings.PROMPTS_DIR / f"{name}.md"
+
+
+def row_word(pack: Optional["Pack"] = None) -> str:
+    """What the active pack calls one row in messages ('object model instance' for exoplanets)."""
+    return (pack or current()).manifest.units.get("row", "row")
 
 
 def user_packs_dir() -> Path:

@@ -41,7 +41,8 @@ from parameter_extractor.pipeline import Extraction, finish, plan_figure, stage_
 
 DEFAULT_OUTPUT_DIR = Path.home() / "Documents" / "Parameter Extractor"
 FLAGGED_ROW_COLOR = QColor(255, 243, 205)   # soft amber, readable in light and dark themes
-ARCHIVE_ROW_COLOR = QColor(212, 237, 218)   # soft green: the solution the Exoplanet Archive took
+ARCHIVE_ROW_COLOR = QColor(212, 237, 218)   # soft green: the row (fit) the Exoplanet Archive took
+ARCHIVE_DIFF_COLOR = QColor(255, 196, 140)  # orange: a value that differs from the archive's
 MAX_COLUMN_WIDTH = 260
 # Rows tab column order: identify the row, then the measured data, then the
 # paper-level details that repeat on every row (DOI, title, ...).
@@ -616,16 +617,21 @@ class MainWindow(QMainWindow):
         t.setHorizontalHeaderLabels([header[i] for i in keep])
         id_col = header.index("full_id")
         provenance = {r.full_id: r.provenance for r in result.rows}
-        adopted = self._archive_adopted(result.run_dir)
+        from parameter_extractor import packs
+        run_pack = packs.available().get(self.pack_combo.currentData() or "")   # locked during the run
+        row_word = packs.row_word(run_pack) if run_pack else "row"
+        adopted, differing = self._archive_marks(result.run_dir, row_word)
         name_col = header.index("pl_name") if "pl_name" in header else None
         fit_col = header.index("pl_fitlabel") if "pl_fitlabel" in header else None
-        n_adopted = 0
+        n_adopted = n_differ = 0
         for r, row in enumerate(body):
             flags = result.row_flags.get(row[id_col], [])
             prov = provenance.get(row[id_col], {})
             archive_note = adopted.get((row[name_col], row[fit_col] if fit_col is not None else "")) \
                 if name_col is not None else None
             n_adopted += archive_note is not None
+            cell_notes = differing.get((row[name_col], row[fit_col] if fit_col is not None else ""), {}) \
+                if name_col is not None else {}
             for c, i in enumerate(keep):
                 item = QTableWidgetItem(row[i])
                 tip = self._provenance_tip(prov.get(header[i])) if row[i] else ""
@@ -640,6 +646,11 @@ class MainWindow(QMainWindow):
                     item.setForeground(QBrush(Qt.GlobalColor.black))
                 if archive_note is not None:
                     tip = archive_note + ("\n\n" + tip if tip else "")
+                if header[i] in cell_notes:             # this value differs from the archive's
+                    item.setBackground(QBrush(ARCHIVE_DIFF_COLOR))
+                    item.setForeground(QBrush(Qt.GlobalColor.black))
+                    tip = cell_notes[header[i]] + ("\n\n" + tip if tip else "")
+                    n_differ += 1
                 if tip:
                     item.setToolTip(tip)
                 t.setItem(r, c, item)
@@ -647,32 +658,41 @@ class MainWindow(QMainWindow):
         for c in range(t.columnCount()):
             t.setColumnWidth(c, min(t.columnWidth(c), MAX_COLUMN_WIDTH))
         self.rows_legend.setText(
-            f"Green rows ({n_adopted}): the solution the NASA Exoplanet Archive took for this paper. Amber: rows "
-            f"with flags (a flagged green row keeps amber in its first cell). Hover over a row for details.")
+            f"Green rows ({n_adopted}): the {row_word} the NASA Exoplanet Archive took for this paper. Orange cells "
+            f"({n_differ}): values that differ from the archive's. Amber: rows with flags (a flagged green row keeps "
+            f"amber in its first cell). Hover for details.")
         self.rows_legend.setHidden(not n_adopted)
 
     @staticmethod
-    def _archive_adopted(run_dir) -> dict:
-        """{(pl_name, solution label): hover note} for rows the Exoplanet Archive's parameter set for
-        this paper corresponds to: compared, and not another solution of the planet than the one
-        it took (archive_validation.json; exoplanet runs with online lookups only)."""
+    def _archive_marks(run_dir, row_word: str = "row"):
+        """From archive_validation.json (exoplanet runs with online lookups): ({(pl_name, fit label):
+        hover note} for the rows the Exoplanet Archive's parameter set for this paper corresponds to --
+        compared, and not another fit of the planet than the one it took --, and {same key: {column:
+        hover note}} for those rows' values that differ from the archive's)."""
         path = Path(run_dir) / "archive_validation.json" if run_dir else None
         try:
             report = json.loads(path.read_text()) if path and path.is_file() else []
         except (OSError, ValueError):
-            return {}
-        out = {}
+            return {}, {}
+        adopted, differing = {}, {}
         for e in report:
             if e.get("status") != "compared" or e.get("archive_solution"):
-                continue
+                continue                        # another fit than the archive's: differences expected
+            key = (e["pl_name"], e.get("solution", ""))
             n = len(e.get("matches", [])) + len(e.get("differs", []))
             default = ("it is also the archive's default parameter set for this planet"
                        if str(e.get("default_flag")) == "1" else
                        "the archive's default parameter set for this planet is from another paper")
-            out[(e["pl_name"], e.get("solution", ""))] = (
-                f"NASA Exoplanet Archive: this row is the solution the archive took for "
-                f"'{e.get('reference', 'this paper')}' ({len(e.get('matches', []))} of {n} values match); {default}.")
-        return out
+            adopted[key] = (f"NASA Exoplanet Archive: this row is the {row_word} the archive took for "
+                            f"'{e.get('reference', 'this paper')}' ({len(e.get('matches', []))} of {n} values "
+                            f"match); {default}.")
+            for d in e.get("differs", []):
+                shown = (f"{d['extracted']:.6g}" if isinstance(d["extracted"], (int, float)) else f"'{d['extracted']}'")
+                archived = (f"{d['archive']:.6g}" if isinstance(d["archive"], (int, float)) else f"'{d['archive']}'")
+                differing.setdefault(key, {})[d["column"]] = (
+                    f"Differs from the NASA Exoplanet Archive: extracted {shown}, archive {archived}. Check the "
+                    f"paper -- a misread, or the archive took this value from elsewhere.")
+        return adopted, differing
 
     @staticmethod
     def _provenance_tip(src) -> str:

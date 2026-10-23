@@ -7,6 +7,6 @@
   "standard_columns": "standard_columns.json",
   "builtin_stages": ["fit_models"],
   "postprocess": ["row_labels", "exoplanet_masses", "reference_names", "archive_validation"],
-  "units": {"set": "planetary system", "sample": "planet"},
+  "units": {"set": "planetary system", "sample": "planet", "row": "object model instance"},
   "compact_text": true
 }

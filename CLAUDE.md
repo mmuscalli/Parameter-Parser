@@ -1065,3 +1065,10 @@ Rows tab (2026-10-23, Mickey): rows that are the solution the Exoplanet Archive 
 the paper (archive_validation.json: compared, no `archive_solution`) are green
 (`ARCHIVE_ROW_COLOR`; a flagged one keeps amber in its id cell), hover says so and whether
 it's also the archive's default set; legend under the table (`rows_legend`).
+Wording + differing cells (2026-10-23, Mickey): pack.json `units.row` = what a row is called
+in messages (`packs.row_word`; exoplanets "object model instance" -- one planet as one fit
+models it; default "row"), used in the archive flags and the Rows legend/hover (GUI takes the
+pack from the locked combo, not packs.current()). Values on green rows that differ from the
+archive (`differs`, not `minor`) are orange cells (`ARCHIVE_DIFF_COLOR`) with extracted vs
+archive in the hover (`MainWindow._archive_marks`). Internal names (pl_fitlabel,
+`solution`/`archive_solution` keys) unchanged.

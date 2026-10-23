@@ -528,20 +528,25 @@ class NoClickReview(main_window.VariableReviewDialog):
 def test_archive_adopted_rows():
     """Exoplanet runs: the rows the Exoplanet Archive took for the paper (not a planet's other solutions)."""
     import json as _json
-    report = [{"pl_name": "HD 14067 b", "solution": "RV fit", "status": "compared", "matches": ["a"], "differs": ["b"],
+    report = [{"pl_name": "HD 14067 b", "solution": "RV fit", "status": "compared", "matches": ["a"], "differs": [{"column": "pl_orbper", "extracted": 2725.8, "archive": 2744.0}],
                "archive_solution": "joint fit", "reference": "Teng et al. 2023", "default_flag": "1"},
               {"pl_name": "HD 14067 b", "solution": "joint fit", "status": "compared", "matches": ["a", "b"],
-               "differs": [], "reference": "Teng et al. 2023", "default_flag": "1"},
+               "differs": [{"column": "pl_orbeccen", "extracted": 0.701, "archive": 0.65}],
+               "reference": "Teng et al. 2023", "default_flag": "1"},
               {"pl_name": "11 Com b", "status": "compared", "matches": ["a"], "differs": [], "default_flag": "0",
                "reference": "Teng et al. 2023"},
               {"pl_name": "HD 5608 B", "status": "planet not in the archive"}]
     with tempfile.TemporaryDirectory() as tmp:
         (Path(tmp) / "archive_validation.json").write_text(_json.dumps(report))
-        adopted = main_window.MainWindow._archive_adopted(tmp)
+        adopted, differing = main_window.MainWindow._archive_marks(tmp, "object model instance")
         assert set(adopted) == {("HD 14067 b", "joint fit"), ("11 Com b", "")}
-        assert "2 of 2 values match" in adopted[("HD 14067 b", "joint fit")]
+        assert "the object model instance the archive took" in adopted[("HD 14067 b", "joint fit")]
+        assert "2 of 3 values match" in adopted[("HD 14067 b", "joint fit")]
         assert "default parameter set for this planet is from another paper" in adopted[("11 Com b", "")]
-        assert main_window.MainWindow._archive_adopted(Path(tmp) / "none") == {}
+        # only the adopted row's differing values are marked (the RV fit's are expected to differ)
+        assert list(differing) == [("HD 14067 b", "joint fit")]
+        assert "extracted 0.701, archive 0.65" in differing[("HD 14067 b", "joint fit")]["pl_orbeccen"]
+        assert main_window.MainWindow._archive_marks(Path(tmp) / "none") == ({}, {})
 
 
 def test_stage_toggles():
