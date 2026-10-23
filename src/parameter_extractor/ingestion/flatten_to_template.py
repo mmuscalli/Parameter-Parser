@@ -324,15 +324,16 @@ def build_rows(
             structure_src = CellSource(origin="structure", source=sample.source)
             prov["set_type"] = CellSource(origin="structure", source=pset.source_table_or_section)
             prov["duration_hr"] = structure_src
+            stage_cells = {}                     # written after the row exists: some have dedicated fields
             for spec, values in stage_values:
                 # whole-set values first, so a value for this sample (row) wins
                 for (label, sample_label, param), v in sorted(values.items(), key=lambda kv: bool(kv[0][1])):
                     if (label == pset.set_label and sample_label in ("", sample.sample_label)
                             and _kept(v.confidence)):
-                        extra[param] = v.value
-                        prov[param] = CellSource(origin=spec.origin_label + (", derived" if v.basis == "derived" else ""),
-                                                 quote=v.quote, confidence=v.confidence,
-                                                 source=v.source + (f" [{v.note}]" if v.note else ""))
+                        stage_cells[param] = (v.value, CellSource(
+                            origin=spec.origin_label + (", derived" if v.basis == "derived" else ""),
+                            quote=v.quote, confidence=v.confidence,
+                            source=v.source + (f" [{v.note}]" if v.note else "")))
             if pset.data_source:
                 prov["original_data_reference"] = CellSource(
                     origin="structure (data reproduced from another publication)",
@@ -367,6 +368,8 @@ def build_rows(
                 source_notes=f"set: {pset.varying_condition_summary}; sample source: {sample.source}",
                 original_data_reference=pset.data_source or None,
             ))
+            for param, (value, src) in stage_cells.items():
+                set_row_value(rows[-1], param, value, src)
 
     return rows
 

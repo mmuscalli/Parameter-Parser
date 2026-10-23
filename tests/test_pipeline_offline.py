@@ -41,8 +41,15 @@ def make_replay(replay_dir: Path):
     def send(ctx, *, model, system_prompt, content, response_model, stop_reason="end_turn"):
         name = response_model.__name__        # optional stages: PlanetParametersResult -> planet_parameters
         stage = STAGE_FOR_MODEL.get(name) or re.sub(r"(?<!^)(?=[A-Z])", "_", name.removesuffix("Result")).lower()
-        audit = json.loads((replay_dir / f"{stage}.audit.json").read_text())
-        output = (replay_dir / f"{stage}.output.json").read_text()
+        if stage == "experimental_conditions" and not (replay_dir / f"{stage}.output.json").is_file():
+            # recorded before the methodology step became the experimental_conditions stage (2026-10-22)
+            from parameter_extractor.stages.conditions_migration import conditions_from_methodology
+            audit = json.loads((replay_dir / "methodology.audit.json").read_text())
+            output = json.dumps(conditions_from_methodology(
+                json.loads((replay_dir / "methodology.output.json").read_text())))
+        else:
+            audit = json.loads((replay_dir / f"{stage}.audit.json").read_text())
+            output = (replay_dir / f"{stage}.output.json").read_text()
         return SimpleNamespace(
             id=f"replay-{stage}", stop_reason=stop_reason,
             parsed_output=response_model.model_validate_json(output),
@@ -78,14 +85,15 @@ def test_replay_reproduces_committed_csv():
         assert result.csv_path.read_text() == committed, "replayed CSV differs from committed run"
         assert len(result.rows) == 42
 
-        # metadata runs alongside the structure step, then methodology and chemistry together;
+        # metadata runs alongside the structure step, then conditions and chemistry together;
         # each is reported as it finishes, so their order varies -- the step count doesn't
         steps = [e for e in events if e.stage != "parallel"]
         assert [e.step for e in steps] == [1, 2, 3, 4, 5, 6] and all(e.total_steps == 6 for e in events)
         assert [e.stage for e in steps][:2] == ["parse", "structure_planner"] and steps[-1].stage == "assemble"
-        assert sorted(e.stage for e in steps[2:5]) == ["chemistry", "metadata", "methodology"]
-        assert any(e.stage == "parallel" and "methodology" in e.message for e in events)
-        assert [u.stage for u in result.usage] == ["structure_planner", "metadata", "methodology", "chemistry"]
+        assert sorted(e.stage for e in steps[2:5]) == ["chemistry", "experimental_conditions", "metadata"]
+        assert any(e.stage == "parallel" and "experimental conditions" in e.message for e in events)
+        assert [u.stage for u in result.usage] == ["structure_planner", "metadata", "experimental_conditions",
+                                               "chemistry"]
 
         audits = [json.loads((REPLAY_DIR / f"{s}.audit.json").read_text())
                   for s in STAGE_FOR_MODEL.values() if (REPLAY_DIR / f"{s}.audit.json").exists()]
@@ -95,7 +103,8 @@ def test_replay_reproduces_committed_csv():
         assert "api_key" not in summary["config"] and "replay-not-a-real-key" not in json.dumps(summary)
         assert result.run_dir.name.startswith("eder1994_")
         assert (result.run_dir / "page_images").is_dir()
-        assert {f.kind for f in result.paper_flags} == {"low_confidence", "derived_value"}   # + calculated totals
+        assert {f.kind for f in result.paper_flags} == {"low_confidence", "derived_value",
+                                                          "assumed_default"}       # + 'water' -> distilled   # + calculated totals
         total = next(f for f in result.paper_flags if f.kind == "derived_value")
         assert "total_sampled_peptides_yield calculated for 42 row(s)" in total.message
 
@@ -115,7 +124,7 @@ def test_cancel_between_stages():
     cancel = threading.Event()
 
     def on_progress(event):
-        if event.stage == "methodology":
+        if event.stage == "experimental_conditions":
             cancel.set()  # user presses cancel while metadata is running...
 
     with tempfile.TemporaryDirectory() as tmp, patch.object(api_client, "_send", _replay_send):

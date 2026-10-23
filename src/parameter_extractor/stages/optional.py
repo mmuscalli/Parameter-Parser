@@ -58,6 +58,10 @@ class StageParameter(BaseModel):
     kind: Literal["number", "text"] = "number"
     uncertainties: bool = False     # also +/- uncertainty and limit columns (StageSpec.error_suffixes)
     error_suffixes: Optional[List[str]] = None   # this parameter's own (e.g. no limit column)
+    # a text parameter with a fixed vocabulary (e.g. experiment_type: Batch / Flowthrough): matched
+    # case-insensitively to these spellings; anything else is left out and reported
+    choices: Optional[List[str]] = None
+    integer: bool = False           # a count (cycle_number): written as a whole number
 
 
 class StageTrigger(BaseModel):
@@ -94,6 +98,13 @@ class StageSpec(BaseModel):
     alternatives: bool = False
     # send the rendered table pages along (tables whose text layer is garbled or sideways)
     table_images: bool = False
+    # also collect conditions/parameters that have no column (`other`: name, value as stated, ...),
+    # offered in the review like the old methodology step's other_parameters
+    open_ended: bool = False
+    # between a parameter and the extra columns of its modes / other estimates: "" gives the archive's
+    # style (pl_orbinclmode1, st_rotpalt1method), "_" gives initial_temperature_C_alt1_method
+    suffix_separator: str = ""
+    open_ended_hint: str = ""        # what kinds of other parameters to look for (prompt)
 
     def _field_rules(self) -> List[str]:
         rules = []
@@ -113,6 +124,12 @@ class StageSpec(BaseModel):
                          "`meth` naming the method as the paper does, e.g. 'activity-rotation relation "
                          "(Mamajek & Hillenbrand 2008)'. Limits ('> 13 d') count as estimates. Different fits of "
                          "a planet are separate rows, not methods.")
+        if self.open_ended:
+            rules.append("Also list in `other` any OTHER condition or parameter that could affect the outcome but "
+                         "has no parameter above" + (f" -- {self.open_ended_hint}" if self.open_ended_hint else "")
+                         + ". Each: `nm` a short name, `v` the value as stated with its unit, `set` (and "
+                         "`sample`) only if it applies to one set (sample), `q`, `src`, `c`. Leave `other` empty "
+                         "if there's nothing else.")
         if self.table_images:
             rules.append("Page images, if attached, are renders of the pages with tables (sideways ones shown "
                          "upright). Read table values and their uncertainties from the images; the text layer "
@@ -139,6 +156,16 @@ class StageSpec(BaseModel):
     def columns(self) -> List[str]:
         return [p.column for p in self.parameters]
 
+    # column names of a parameter's modes and other estimates
+    def mode_col(self, param: str, n: int, part: str = "") -> str:
+        return f"{param}{self.suffix_separator}mode{n}" + (f"{self.suffix_separator}desc" if part == "desc" else part)
+
+    def alt_col(self, param: str, n: int, part: str = "") -> str:
+        return f"{param}{self.suffix_separator}alt{n}" + (f"{self.suffix_separator}method" if part == "method" else part)
+
+    def modal_flag_col(self, param: str) -> str:
+        return f"{param}{self.suffix_separator}modal_flag"
+
     def suffixes_for(self, p: StageParameter) -> List[str]:
         return p.error_suffixes if p.error_suffixes is not None else self.error_suffixes
 
@@ -161,11 +188,18 @@ class StageSpec(BaseModel):
         if self.modes:                               # after the archive-style block, per parameter
             for p in self.parameters:
                 if p.kind == "number":
-                    out += mode_columns(p.column, p.uncertainties and self.suffixes_for(p)[:2] or [])
+                    out += [self.modal_flag_col(p.column)] + [
+                        c for n in range(1, MAX_MODES + 1) for c in
+                        [self.mode_col(p.column, n)] + [self.mode_col(p.column, n, s) for s in
+                                                        (p.uncertainties and self.suffixes_for(p)[:2] or [])]
+                        + [self.mode_col(p.column, n, "desc")]]
         if self.alternatives:
             for p in self.parameters:
                 if p.kind == "number":
-                    out += alternative_columns(p.column, p.uncertainties and self.suffixes_for(p) or [])
+                    out += [c for n in range(1, MAX_MODES + 1) for c in
+                            [self.alt_col(p.column, n)] + [self.alt_col(p.column, n, s) for s in
+                                                           (p.uncertainties and self.suffixes_for(p) or [])]
+                            + [self.alt_col(p.column, n, "method")]]
         return out
 
     # ---- when it runs, and which sets it concerns ---------------------------------
@@ -208,6 +242,7 @@ class StageSpec(BaseModel):
     def prompt(self, structure: StructurePlan, paper_text: str) -> str:
         from parameter_extractor.stages.prompt_loader import load_prompt
         listing = "\n".join(f"- `{p.column}`" + (f" ({p.unit})" if p.unit else "") + f": {p.description}"
+                            + (f" One of: {', '.join(p.choices)}." if p.choices else "")
                             for p in self.parameters)
         return load_prompt("optional_stage", INTRO=self.intro, PARAMETER_LIST=listing,
                            SET_WORD=self.set_word, SCHEMA_NAME=self.model_name,
@@ -336,9 +371,23 @@ def _models(spec_json: str) -> Tuple[type, type]:
         **sample_field,
         values=(List[Item], Field(description="This row's values.")),
     )
+    Other = create_model(
+        f"{name}Other",
+        __config__=ConfigDict(populate_by_name=True, json_schema_extra=_required(["nm", "v", "q", "src", "c"])),
+        name=(str, Field(alias="nm", description="Short descriptive name, e.g. 'stirring rate', 'reaction volume'.")),
+        value=(str, Field(alias="v", description="As stated, with its unit, e.g. '300 rpm', '254 nm'.")),
+        set_label=(str, Field(default="", alias="set", description="Exact set_label if for one set only.")),
+        sample_label=(str, Field(default="", alias="sample", description="Exact sample_label if for one sample.")),
+        quote=(str, Field(alias="q", description=QUOTE_DESC)),
+        source=(str, Field(alias="src", description=SOURCE_DESC)),
+        confidence=(Literal["high", "medium", "low"], Field(alias="c")),
+    )
+    other_field = {"other": (List[Other], Field(default_factory=list, description=(
+        "Other conditions that have no parameter of their own."))) } if spec.open_ended else {}
     Result = create_model(
         name,
         __base__=_CompactResult,
+        **other_field,
         rows=(List[Row], Field(default_factory=list, description="Values grouped by set (and sample): one entry per "
                                                                  "set/sample with values. Only values the paper "
                                                                  "states.")),
@@ -419,17 +468,27 @@ class StageValue:
 def stage_values(spec: StageSpec, item) -> Tuple[Dict[str, StageValue], List[str]]:
     """{column: StageValue} for one extracted item (its value, and its uncertainty and limit
     columns), converted to the parameter's unit; and the problems (unconvertible units)."""
-    param = next(p for p in spec.parameters if p.column == item.parameter)
+    param = next((p for p in spec.parameters if p.column == item.parameter), None)
+    if param is None:                           # not (or no longer) one of the stage's parameters
+        return {}, [f"{spec.label}: '{item.parameter}' isn't one of this stage's parameters -- left out."]
     printed = getattr(item, "unit", "") or ""
     base = dict(basis=item.basis, quote=item.quote, source=item.source, confidence=item.confidence)
     if param.kind == "text":
         text = (getattr(item, "text", "") or "").strip()
+        if text and param.choices:
+            match = next((c for c in param.choices if c.lower() == text.lower()), None)
+            if match is None:
+                return {}, [f"{spec.label}: {param.column} '{text}' for '{item.set_label or 'every set'}' left out "
+                            f"-- it must be one of {', '.join(param.choices)}."]
+            text = match
         return ({param.column: StageValue(text, note=item.note, **base)} if text else {}), []
     from parameter_extractor.units import convert_printed
     value, note = convert_printed(item.value, printed, param.unit)
     if value is None:
         return {}, [f"{spec.label}: {param.column} = {item.value:g} {printed} for '{item.set_label}' left out -- {note}."]
     notes = "; ".join(n for n in (item.note, note) if n)
+    if param.integer and float(value).is_integer():
+        value = int(value)
     out = {param.column: StageValue(value, note=notes, **base)}
     if param.uncertainties:
         suffixes = spec.suffixes_for(param)
@@ -445,22 +504,6 @@ def stage_values(spec: StageSpec, item) -> Tuple[Dict[str, StageValue], List[str
 
 
 MAX_MODES = 3
-
-
-def alternative_columns(column: str, error_suffixes: List[str]) -> List[str]:
-    """Per other estimate N: <col>altN, its uncertainties and limit flag, <col>altNmethod."""
-    out = []
-    for n in range(1, MAX_MODES + 1):
-        out += [f"{column}alt{n}"] + [f"{column}alt{n}{s}" for s in error_suffixes] + [f"{column}alt{n}method"]
-    return out
-
-
-def mode_columns(column: str, error_suffixes: List[str]) -> List[str]:
-    """<col>modal_flag, then per mode N: <col>modeN, its uncertainties, <col>modeNdesc."""
-    out = [column + "modal_flag"]
-    for n in range(1, MAX_MODES + 1):
-        out += [f"{column}mode{n}"] + [f"{column}mode{n}{s}" for s in error_suffixes] + [f"{column}mode{n}desc"]
-    return out
 
 
 @dataclass
@@ -556,15 +599,15 @@ def optional_values(spec: StageSpec, result, structure: StructurePlan,
             problems.append(f"{spec.label}: {sample or label} has {len(seen)} modes for {param}; the first "
                             f"{MAX_MODES} are in the CSV ({', '.join(m for m, _ in seen[MAX_MODES:])} left out).")
         first = seen[0][1][param]
-        out[(label, sample, param + "modal_flag")] = StageValue(1, first.basis, first.quote, first.source,
-                                                                first.confidence, "bi-/multimodal posterior")
+        out[(label, sample, spec.modal_flag_col(param))] = StageValue(1, first.basis, first.quote, first.source,
+                                                                      first.confidence, "bi-/multimodal posterior")
         for n, (mode, columns) in enumerate(seen[:MAX_MODES], start=1):
             main = columns[param]
-            out[(label, sample, f"{param}mode{n}")] = main
+            out[(label, sample, spec.mode_col(param, n))] = main
             for s in suffixes:
                 if param + s in columns:
-                    out[(label, sample, f"{param}mode{n}{s}")] = columns[param + s]
-            out[(label, sample, f"{param}mode{n}desc")] = StageValue(mode, main.basis, main.quote, main.source,
+                    out[(label, sample, spec.mode_col(param, n, s))] = columns[param + s]
+            out[(label, sample, spec.mode_col(param, n, "desc"))] = StageValue(mode, main.basis, main.quote, main.source,
                                                                      main.confidence)
     for (label, sample, param), found in alternatives.items():
         param_spec = next(p for p in spec.parameters if p.column == param)
@@ -584,11 +627,11 @@ def optional_values(spec: StageSpec, result, structure: StructurePlan,
                             f"first {MAX_MODES} are in the CSV ({', '.join(m for m, _ in seen[MAX_MODES:])} left out).")
         for n, (method, columns) in enumerate(seen[:MAX_MODES], start=1):
             value = columns[param]
-            out[(label, sample, f"{param}alt{n}")] = value
+            out[(label, sample, spec.alt_col(param, n))] = value
             for s in suffixes:
                 if param + s in columns:
-                    out[(label, sample, f"{param}alt{n}{s}")] = columns[param + s]
-            out[(label, sample, f"{param}alt{n}method")] = StageValue(method, value.basis, value.quote,
+                    out[(label, sample, spec.alt_col(param, n, s))] = columns[param + s]
+            out[(label, sample, spec.alt_col(param, n, "method"))] = StageValue(method, value.basis, value.quote,
                                                                       value.source, value.confidence)
     return out
 

@@ -47,7 +47,11 @@ WET_DRY = WetDryConditions(parameters=[
 
 
 def _run(tmp: Path, structure: StructurePlan, wet_dry_calls: list):
+    real_stage = pipeline.run_optional_stage
+
     def fake_wet_dry(ctx, spec, text, struct, table_images=None):
+        if spec.name != "wet_dry":                 # the conditions stage: replayed as usual
+            return real_stage(ctx, spec, text, struct, table_images)
         wet_dry_calls.append(struct.experiment_sets[0].set_label)
         return WET_DRY
     original_send = _replay_send
@@ -144,9 +148,11 @@ def test_assumed_values_are_never_written_automatically():
             resp.parsed_output = structure
         return resp
 
+    real_stage = pipeline.run_optional_stage
     for decide in (None, review):
         with tempfile.TemporaryDirectory() as tmp, patch.object(api_client, "_send", send), \
-                patch.object(pipeline, "run_optional_stage", lambda *a: wet_dry):
+                patch.object(pipeline, "run_optional_stage",
+                             lambda ctx, spec, *a: wet_dry if spec.name == "wet_dry" else real_stage(ctx, spec, *a)):
             config = RunConfig.from_settings(api_key="x", output_dir=Path(tmp), registry_path=Path(tmp) / "r.json")
             ex = pipeline.extract(PDF, config)
             add_overrides(ex)
@@ -160,7 +166,8 @@ def test_assumed_values_are_never_written_automatically():
             assert any(f.kind == "low_confidence" and "initial_pH" in f.message for f in result.paper_flags)  # ...flagged
             assumed_flags = [f for f in result.paper_flags if f.kind == "assumed_value"]
             if decide is None:
-                assert all(r["initial_temperature_C"] == "" for r in set2_rows)
+                # the assumed 130 C is never written (the paper's own per-set temperature may be)
+                assert all(r["initial_temperature_C"] != "130.0" for r in set2_rows)
                 assert len(assumed_flags) == 2 and all("NOT written" in f.message for f in assumed_flags)
             else:
                 assert ("assumed_value", f"initial_temperature_C @ {set2}") in seen["groups"]
@@ -194,9 +201,14 @@ def test_review_window_never_auto_includes_assumed_values():
 
 
 def test_standard_columns_file():
-    assert standard_columns() == ["wet_phase_temperature_C", "wet_phase_duration_hr",
-                                  "wet_phase_relative_humidity_pct", "dry_phase_temperature_C",
-                                  "dry_phase_duration_hr"]
+    """The pack's own columns beyond the template: the conditions stage's uncertainties and other
+    estimates, then the wet-dry stage's (cycle number and duration included -- not in the main
+    vocabulary, 2026-10-22), in spec order."""
+    cols = standard_columns()
+    assert cols[-7:] == ["cycle_number", "cycle_duration_hr", "wet_phase_temperature_C", "wet_phase_duration_hr",
+                         "wet_phase_relative_humidity_pct", "dry_phase_temperature_C", "dry_phase_duration_hr"]
+    assert cols[:2] == ["initial_pressure_bar_err_plus", "initial_pressure_bar_err_minus"]
+    assert "initial_temperature_C_alt1_method" in cols and "solvent_name" not in cols     # template columns aren't
 
 
 if __name__ == "__main__":

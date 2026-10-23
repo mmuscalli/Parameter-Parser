@@ -43,8 +43,10 @@ def run_checks(pdf: Optional[Path] = None, api_key: Optional[str] = None) -> Lis
         pack = packs.activate(packs.DEFAULT_PACK)
         prompts = sorted({p.stem for p in settings.PROMPTS_DIR.glob("*.md")}
                          | {p.stem for p in (pack.folder / "prompts").glob("*.md")})
-        expected = {"chemistry", "figure_planner", "metadata", "methodology", "structure_planner",
-                    "triage", "optional_stage"}
+        # the methodology step became the pack's experimental_conditions stage (2026-10-22): its
+        # prompt is the shared optional_stage one
+        expected = {"chemistry", "figure_planner", "metadata", "optional_stage", "structure_planner",
+                    "triage"}
         missing = expected - set(prompts)
         if missing:
             raise FileNotFoundError(f"missing prompts: {sorted(missing)} (app and {pack.id} pack)")

@@ -26,17 +26,19 @@ def test_wet_dry_spec():
     spec = load_specs()["wet_dry"]
     Item, Result = spec.models()
     assert Result.__name__ == "WetDryConditions"                     # what replays look up
-    assert list(Item.model_fields) == ["set_label", "parameter", "value", "unit", "basis", "quote", "source",
-                                       "confidence", "note"]
+    assert list(Item.model_fields) == ["set_label", "sample_label", "parameter", "value", "unit", "basis", "quote",
+                                       "source", "confidence", "note"]          # per sample (cycle_number)
     assert not spec.triggered(STRUCTURE, "")                          # eder1994: no cycling
     truman = StructurePlan.model_validate_json(
         (ROOT / "runs" / "truman2024_auto" / "structure_planner.output.json").read_text())
     assert spec.triggered(truman, "") and len(spec.target_sets(truman)) == 4
     # the wet/dry phase columns are standard columns, in spec order, after any listed ones
     cols = standard_columns()
-    assert cols[-5:] == ["wet_phase_temperature_C", "wet_phase_duration_hr", "wet_phase_relative_humidity_pct",
-                         "dry_phase_temperature_C", "dry_phase_duration_hr"]
-    assert "cycle_duration_hr" not in cols                            # removed from the pack (2026-10-22)
+    assert cols[-7:] == ["cycle_number", "cycle_duration_hr", "wet_phase_temperature_C", "wet_phase_duration_hr",
+                         "wet_phase_relative_humidity_pct", "dry_phase_temperature_C", "dry_phase_duration_hr"]
+    # cycle number / duration: the wet-dry stage's own columns, not the main vocabulary (2026-10-22)
+    from parameter_extractor import packs
+    assert "cycle_number" not in packs.current().template_columns
 
 
 def test_a_new_stage_needs_only_a_spec():
@@ -79,8 +81,9 @@ def test_user_choices():
     truman = StructurePlan.model_validate_json(
         (ROOT / "runs" / "truman2024_auto" / "structure_planner.output.json").read_text())
     names = lambda s, c=None: [x.name for x in triggered_specs(s, "", c)]
-    assert names(truman) == ["wet_dry"] and names(STRUCTURE) == []
-    assert names(truman, {"wet_dry": "off"}) == [] and names(STRUCTURE, {"wet_dry": "on"}) == ["wet_dry"]
+    assert names(truman) == ["experimental_conditions", "wet_dry"] and names(STRUCTURE) == ["experimental_conditions"]
+    assert names(truman, {"wet_dry": "off"}) == ["experimental_conditions"]
+    assert names(STRUCTURE, {"wet_dry": "on"}) == ["experimental_conditions", "wet_dry"]
 
 
 

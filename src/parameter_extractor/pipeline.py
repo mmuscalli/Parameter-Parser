@@ -86,6 +86,7 @@ from parameter_extractor.stages.optional import StageSpec, load_specs, run_optio
 from parameter_extractor.stages.fit_models import LABEL as FIT_MODELS_LABEL, run_fit_models
 from parameter_extractor.schemas.fit_models import FitModels
 from parameter_extractor.calculators import exoplanet_fits
+from parameter_extractor.calculators.water import normalize_water
 from parameter_extractor.stages.triage import run_triage
 from parameter_extractor.validation.plausibility_checks import Flag, check_extraction, check_row, flags_to_json
 
@@ -237,6 +238,10 @@ def extract(
     pack = packs.current()
     # parse, structure, metadata and assembly, plus the pack's built-in stages and the term search
     ctx.total_steps = 4 + pack.uses("methodology") + pack.uses("chemistry") + bool(terms)
+    # stages that always run are counted now (the progress bar doesn't jump); triggered ones once known
+    always_on = {name for name, spec in load_specs().items()
+                 if spec.trigger.always and config.optional_stages.get(name, "auto") != "off"}
+    ctx.total_steps += len(always_on)
 
     ctx.step("parse", "Reading the PDF")
     parsed = _parse(pdf_path, ctx.run_dir)
@@ -293,7 +298,8 @@ def extract(
         # optional stages whose trigger matches this paper (decided locally, no API call)
         specs = triggered_specs(ex.structure, parsed.text, config.optional_stages)
         for spec in specs:
-            ctx.total_steps += 1
+            if spec.name not in always_on:
+                ctx.total_steps += 1
             running[spec.name] = pool.submit(run_optional_stage, ctx, spec, text, ex.structure, table_images)
         results = _collect(ctx, running)
         # a domain pack without these stages gets empty stand-ins, so the rest works unchanged
@@ -303,6 +309,7 @@ def extract(
         ex.term_search = results.get("term_search")
         ex.fit_models = results.get("fit_models")
         ex.optional = {spec.name: (spec, results[spec.name]) for spec in specs}
+        _collect_other_parameters(ex)
         ctx.sort_usage(stage_order())
     except BaseException as e:
         pool.shutdown(wait=False, cancel_futures=True)
@@ -311,6 +318,49 @@ def extract(
         raise
     pool.shutdown(wait=False)
     return ex
+
+
+def _collect_other_parameters(ex: "Extraction") -> None:
+    """Open-ended stages' `other` conditions (no column of their own) join the methodology's
+    other_parameters: the duplicate check and the review take them from there."""
+    from parameter_extractor.schemas.methodology import OtherParameter
+    for spec, result in ex.optional_list:
+        for o in getattr(result, "other", []) or []:
+            ex.methodology.other_parameters.append(OtherParameter(
+                name=o.name, value=o.value, set_label=o.set_label or None, quote=o.quote, source=o.source,
+                confidence=o.confidence))
+
+
+def _paper_wide_methodology(ex: "Extraction"):
+    """The methodology as digitized figure rows see it (ingestion/figure_rows.py): the stages'
+    conditions that are the same in every set, as paper-wide values."""
+    from parameter_extractor.ingestion.flatten_to_template import _METHOD_COLUMNS
+    from parameter_extractor.schemas.common import Extracted
+    from parameter_extractor.stages.optional import optional_values
+    from parameter_extractor.stages.optional import stage_values
+    fields = {**_METHOD_COLUMNS, "initial_pH": "initial_pH"}
+    view = ex.methodology.model_copy(deep=True)
+    sets = [s.set_label for s in ex.structure.experiment_sets]
+    for spec, result in ex.optional_list:
+        # values the answer gives for the whole paper (also when no table gave the paper any sets)
+        paper_wide = {}
+        for item in result.parameters:
+            if not item.set_label and not getattr(item, "sample_label", "") and item.basis != "assumed" \
+                    and not getattr(item, "method", "") and not getattr(item, "mode", ""):
+                paper_wide.update(stage_values(spec, item)[0])
+        values = optional_values(spec, result, ex.structure)
+        for column, field in fields.items():
+            if column not in spec.columns or getattr(view, field).status == "found":
+                continue
+            v = paper_wide.get(column)
+            if v is None:                          # or the same value in every set
+                per_set = [values.get((label, "", column)) for label in sets]
+                if per_set and all(x is not None for x in per_set) and len({str(x.value) for x in per_set}) == 1:
+                    v = per_set[0]
+            if v is not None:
+                setattr(view, field, Extracted(value=v.value, status="found", quote=v.quote, source=v.source,
+                                               confidence=v.confidence))
+    return view
 
 
 def _paper_tools(pack, config: RunConfig, terms) -> dict:
@@ -394,23 +444,28 @@ def _pack_postprocess(pack, rows, ex: "Extraction", config: RunConfig) -> List[F
                                                 f"paper again usually helps."))
         values = optional_values(spec, result, ex.structure, problems, conflicts)
         for (label, sample, column), v in values.items():
-            if column.endswith("modal_flag"):
-                param = column[:-len("modal_flag")]
-                modes = [f"{values[(label, sample, f'{param}mode{n}desc')].value} = "
-                         f"{values[(label, sample, f'{param}mode{n}')].value:g}"
-                         for n in range(1, 10) if (label, sample, f"{param}mode{n}") in values]
+            param = next((p.column for p in spec.parameters if column == spec.modal_flag_col(p.column)), None)
+            if param:
+                modes = [f"{values[(label, sample, spec.mode_col(param, n, 'desc'))].value} = "
+                         f"{values[(label, sample, spec.mode_col(param, n))].value:g}"
+                         for n in range(1, 10) if (label, sample, spec.mode_col(param, n)) in values]
                 modal.append(Flag("multimodal", f"{sample or label}: {param} has a bi-/multimodal posterior -- "
-                                                f"{'; '.join(modes)} (in {param}mode1..., {param}modal_flag = 1)",
+                                                f"{'; '.join(modes)} (in {spec.mode_col(param, 1)}..., "
+                                                f"{spec.modal_flag_col(param)} = 1)",
                                   quote=v.quote or None, source=v.source or None))
-            elif column.endswith("alt1method"):
-                param = column[:-len("alt1method")]
-                shown = lambda prefix: _estimate(values, label, sample, prefix)
-                others = [f"{shown(f'{param}alt{n}')} by {values[(label, sample, f'{param}alt{n}method')].value}"
-                          for n in range(1, 10) if (label, sample, f"{param}alt{n}") in values]
-                adopted = (f"adopted {shown(param)}; " if (label, sample, param) in values
+                continue
+            param = next((p for p in spec.parameters if column == spec.alt_col(p.column, 1, "method")), None)
+            if param:
+                suffixes = spec.suffixes_for(param) if param.uncertainties else []
+                shown = lambda col: _estimate(values, label, sample, col, suffixes)
+                others = [f"{shown(spec.alt_col(param.column, n))} by "
+                          f"{values[(label, sample, spec.alt_col(param.column, n, 'method'))].value}"
+                          for n in range(1, 10) if (label, sample, spec.alt_col(param.column, n)) in values]
+                adopted = (f"adopted {shown(param.column)}; " if (label, sample, param.column) in values
                            else "no adopted value; ")
-                modal.append(Flag("other_estimates", f"{sample or label}: {param} is estimated more than one way -- "
-                                                     f"{adopted}other estimates: {'; '.join(others)} (in {param}alt1...)",
+                modal.append(Flag("other_estimates", f"{sample or label}: {param.column} is estimated more than one "
+                                                     f"way -- {adopted}other estimates: {'; '.join(others)} (in "
+                                                     f"{spec.alt_col(param.column, 1)}...)",
                                   quote=v.quote or None, source=v.source or None))
     if pack.uses("row_labels"):
         exo.row_labels(rows, ex.structure, config.paper_prefix)
@@ -474,13 +529,15 @@ def archive_flags(archive: dict) -> List[Flag]:
     return flags
 
 
-def _estimate(values: dict, label: str, sample: str, column: str) -> str:
-    """'22 +3/-3', '> 13' -- a value with its uncertainties or limit, for flag text."""
-    get = lambda suffix: getattr(values.get((label, sample, column + suffix)), "value", None)
-    value, limit = get(""), get("lim")
+def _estimate(values: dict, label: str, sample: str, column: str, suffixes=("err1", "err2", "lim")) -> str:
+    """'22 +3/-3', '> 13' -- a value with its uncertainties or limit, for flag text. `suffixes`: the
+    stage's (upper, lower[, limit]) column suffixes."""
+    get = lambda suffix: None if suffix is None else getattr(values.get((label, sample, column + suffix)), "value", None)
+    suffixes = list(suffixes) + [None] * (3 - len(suffixes))
+    value, limit = get(""), get(suffixes[2])
     if limit in (1, -1):
         return f"{'<' if limit == 1 else '>'} {value:g}"
-    plus, minus = get("err1"), get("err2")
+    plus, minus = get(suffixes[0]), get(suffixes[1])
     return f"{value:g}" + (f" +{plus:g}/{minus:g}" if plus is not None and minus is not None else "")
 
 
@@ -491,6 +548,29 @@ def _shown(v) -> str:
 
 def _where(v) -> str:
     return f"'{v.sample_label}'" if getattr(v, "sample_label", None) else f"set '{v.set_label}'"
+
+
+NO_RESULTS_MESSAGE = (
+    "No results data were found to attach the extracted conditions and chemistry to: rows are only made "
+    "for results in the paper's tables (read automatically) and figures (through the digitizer). If the "
+    "results are in figures, run the paper again and digitize them in the figure review. What was "
+    "extracted is kept in the run folder (experimental_conditions / chemistry .output.json files).")
+
+
+_SAMPLING_CONDITIONS = ("sampled_temperature_C", "sampled_pressure_bar", "sampled_pH")   # conditions, not results
+
+
+def _has_results(rows, new_vars) -> bool:
+    """Any measured result: a row with a sampled value (template column, or one waiting in the
+    review as a 'sampled ...' variable)."""
+    if not rows:
+        return False
+    from parameter_extractor.ingestion.flatten_to_template import row_to_template_dict
+    for row in rows:
+        if any(k.startswith(("sampled_", "total_sampled")) and v not in (None, "")
+               for k, v in row_to_template_dict(row).items() if k not in _SAMPLING_CONDITIONS):
+            return True
+    return any(getattr(v, "role", None) == "sampled" for v in new_vars)
 
 
 def compact_text(text: str) -> str:
@@ -568,7 +648,7 @@ def finish(
     figure_summary, fig_new_vars = [], []
     if digitized:
         fig_rows, problems, fig_new_vars = build_figure_rows(
-            list(digitized), ex.metadata, ex.methodology, config.paper_prefix,
+            list(digitized), ex.metadata, _paper_wide_methodology(ex), config.paper_prefix,
             first_set_index=len(ex.structure.experiment_sets) + 1,
             first_entry_number=len(rows) + 1, registry=registry)
         rows += fig_rows
@@ -603,6 +683,9 @@ def finish(
             c = found[f["figure_id"]]
             f.update(image=c.crop_image, caption=c.caption, page=c.page)
 
+    if pack.uses("water_type"):                 # "water" -> which water (assumed distilled, flagged)
+        paper_flags += [Flag("assumed_default", m) for m in normalize_water(rows)]
+
     # ---- variables without a column: registry first, then the user's review ----
     index = row_index(ex.structure, rows, config.paper_prefix)
     # amounts the chemistry already records aren't offered a second time (one quantity, one variable)
@@ -615,6 +698,8 @@ def finish(
     new_vars = collect_new_variables(ex.methodology, ex.chemistry, registry, index, ex.term_search,
                                      optional=ex.optional_list, structure=ex.structure)
     new_vars += fig_new_vars
+    if pack.uses("results_check") and not _has_results(rows, new_vars):
+        paper_flags.append(Flag("no_results", NO_RESULTS_MESSAGE))
     known, pending = split_known(new_vars, registry)
     accepted = []
     conversion_problems = []

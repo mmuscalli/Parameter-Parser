@@ -1,0 +1,48 @@
+{
+  "name": "experimental_conditions",
+  "label": "Experimental conditions",
+  "description": "How each experiment was run: setup, solvent, vessel, temperatures, pressure, pH, volumes, flow, solid materials, analysis, plus any other condition that could matter.",
+  "origin": "experimental conditions",
+  "schema_name": "ExperimentalConditions",
+  "system_prompt": "Extract the experimental conditions of a chemistry paper. Report only what the paper states.",
+  "trigger": {
+    "always": true
+  },
+  "per": "sample",
+  "error_suffixes": ["_err_plus", "_err_minus"],
+  "suffix_separator": "_",
+  "alternatives": true,
+  "table_images": true,
+  "open_ended": true,
+  "open_ended_hint": "e.g. stirring or agitation, light / UV irradiation, buffers, heating method, sealing or atmosphere details. Not wet-dry cycling details (cycle number, durations, phase temperatures, humidity: a separate step records those), not dissolved species or their concentrations (a separate step extracts those, including catalysts and reactants), and not analysis details beyond analysis_method (columns, mobile phases, wavelengths, standards)",
+  "set_word": "experiment",
+  "intro": "For every experiment set (and sample) in the structure plan below, extract the experimental conditions the paper reports. Conditions that are the same for every set go in ONE row with `set` ''; a condition that differs between sets goes in each set's row; one that differs between the samples of a set goes in each sample's row.",
+  "parameters": [
+    {"column": "experiment_type", "kind": "text", "choices": ["Batch", "Flowthrough"], "description": "sealed or closed vessels heated in place = Batch; continuous fluid flow through a stationary phase = Flowthrough. May be inferred from the described setup: quote the setup."},
+    {"column": "solution_type", "kind": "text", "choices": ["Wet", "Dry"], "description": "whether the reaction ran in solution (Wet) or dried down (Dry)."},
+    {"column": "vessel_material", "kind": "text", "description": "material of the reaction vessel, e.g. 'glass', 'PTFE', 'stainless steel'."},
+    {"column": "solvent_name", "kind": "text", "description": "the solvent. For water, the type exactly as stated: distilled, deionized (DI), Milli-Q, ultrapure, nanopure, tap -- just 'water' if the paper doesn't say (the app then assumes distilled and flags it)."},
+    {"column": "solvent_volume_mL", "unit": "mL", "description": "total volume of the reaction solution. Not the volumes of the solutions combined to make it -- those are recorded with the chemistry."},
+    {"column": "analysis_method", "kind": "text", "description": "how the products were analysed, briefly, e.g. 'HPLC (UV detection)', 'LC-MS'."},
+    {"column": "headspace_gas_name", "kind": "text", "description": "gas above the solution / atmosphere, e.g. 'N2', 'air', 'Ar'."},
+    {"column": "initial_pressure_bar", "unit": "bar", "uncertainties": true, "description": "pressure at the start of the reaction."},
+    {"column": "sampled_pressure_bar", "unit": "bar", "uncertainties": true, "description": "pressure when the sample was taken, if different or stated separately."},
+    {"column": "initial_temperature_C", "unit": "°C", "uncertainties": true, "description": "reaction temperature (at the start)."},
+    {"column": "sampled_temperature_C", "unit": "°C", "uncertainties": true, "description": "temperature at which the samples were taken. When samples are taken at the reaction temperature, give it too (b 'derived' if the paper states the temperature only once per set) -- not just a note saying it's the same."},
+    {"column": "initial_pH", "unit": "", "uncertainties": true, "description": "pH at the start."},
+    {"column": "sampled_pH", "unit": "", "uncertainties": true, "description": "pH measured when the sample was taken, if stated."},
+    {"column": "flow_rate_mL_min", "unit": "mL/min", "uncertainties": true, "description": "flow rate, for flowthrough experiments."},
+    {"column": "loading_volume_mL", "unit": "mL", "description": "volume loaded into a flowthrough system."},
+    {"column": "flow_cycle_duration_sec", "unit": "s", "description": "duration of one flow cycle, for flowthrough experiments."},
+    {"column": "solid_material_name", "kind": "text", "description": "a solid / mineral present in the reaction, e.g. 'montmorillonite', 'TiO2'."},
+    {"column": "solid_material_type", "kind": "text", "description": "kind of solid, e.g. 'clay', 'oxide', 'sand'."},
+    {"column": "solid_material_mass_g", "unit": "g", "description": "mass of that solid."},
+    {"column": "solid_material_preheat_C", "unit": "°C", "description": "temperature the solid was pre-heated to before use."},
+    {"column": "solid_material_preheat_hr", "unit": "h", "description": "duration of that pre-heating."}
+  ],
+  "rules": [
+    "sampled_temperature_C: whenever the samples were taken from the running (heated) reaction, give sampled_temperature_C for each set too -- normally the same value as initial_temperature_C, with b 'derived' if the paper states the temperature only once. Don't leave it out just because it equals the reaction temperature.",
+    "Leave out any condition the paper doesn't state -- never a typical or default value (e.g. don't assume 1 atm or room temperature).",
+    "A value that needed a judgment call (e.g. a vessel material inferred from a device model) gets c 'medium' and the reason in `n`; if the paper states a condition twice with different values, give the one it uses and the other in `n`."
+  ]
+}

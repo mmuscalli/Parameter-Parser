@@ -32,11 +32,13 @@ def test_prebiotic_pack_carries_the_old_defaults():
     assert len(pack.template_columns) == 208 and len(pack.species_names) == 129
     assert "author_list" in pack.template_columns and "author1" not in pack.template_columns
     assert not {"cycle_number", "cycle_duration_hr", "initial_Na+_mM", "isModeled"} & set(pack.template_columns)
-    assert pack.uses("methodology") and pack.uses("chemistry") and pack.uses("peptide_totals")
+    # methodology became the configurable experimental_conditions stage (2026-10-22)
+    assert not pack.uses("methodology") and pack.uses("chemistry") and pack.uses("peptide_totals")
+    assert pack.uses("water_type") and pack.uses("results_check")
     assert pack.prompt_path("chemistry").parent.name == "prompts" and pack.folder.name in str(pack.prompt_path("chemistry"))
     assert pack.prompt_path("metadata").parent.parent.name == "parameter_extractor"   # generic: the app's
     from parameter_extractor.stages.optional import load_specs
-    assert list(load_specs()) == ["wet_dry"]
+    assert list(load_specs()) == ["experimental_conditions", "wet_dry"]
 
 
 def _write_pack(base: Path) -> Path:

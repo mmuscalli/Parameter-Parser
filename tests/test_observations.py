@@ -52,7 +52,7 @@ def test_every_value_has_provenance_and_csv_round_trips():
         assert (y["value"], y["unit"], y["origin"], y["confidence"]) == ("2.77", "%", "chemistry", "high")
         assert "2.77" in y["quote"] and y["source"].startswith("Table 1")
         t = by[("001001001", "initial_temperature_C")]
-        assert t["origin"] == "methodology (per set)" and t["unit"] == "°C"
+        assert t["origin"] == "experimental conditions" and t["unit"] == "°C"
 
         # pivoting the observations back gives exactly the wide records
         rows = result.rows

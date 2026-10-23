@@ -260,7 +260,12 @@ def convert_printed(value: float, printed: str, target: str, is_error: bool = Fa
         return float(f"{out:.10g}"), f"converted from {value:g} {p}"
     ca, cb = canonical_unit(p), canonical_unit(t)
     if ca and cb:
+        if is_error and _UNITS[ca][0] == "temperature" and _UNITS[cb][0] == "temperature":
+            # an uncertainty is a temperature DIFFERENCE: no offset (±1 K = ±1 °C; ±9 °F = ±5 °C)
+            scale = {"°F": 5 / 9}
+            out = value * scale.get(ca, 1.0) / scale.get(cb, 1.0)
+            return float(f"{out:.10g}"), (f"converted from {value:g} {p}" if ca != cb else "")
         out = convert(value, ca, cb)
-        if out is not None and not (is_error and _UNITS[ca][0] == "temperature" and ca != cb):
+        if out is not None:
             return float(f"{out:.10g}"), f"converted from {value:g} {p}"
     return None, f"'{p}' can't be converted to {t}"
