@@ -48,6 +48,11 @@ def fill_total_peptide_yield(rows: List[ExtractedRow]):
         total = round(sum(parts.values()), max(_decimals(v) for v in parts.values()))
         listed = " + ".join(f"{c.removeprefix('sampled_').removesuffix('_%yield')} {v:g}"
                             for c, v in parts.items())
+        unquantified = [c.removeprefix("sampled_").removesuffix("_%yield") for c, v in record.items()
+                        if c.startswith("sampled_") and c.endswith("_%yield") and is_peptide_column(c)
+                        and isinstance(v, str) and v]            # 'detected': not in the sum
+        if unquantified:
+            listed += f" (also detected without an amount, not counted: {', '.join(unquantified)})"
         stated = record.get(TOTAL_COLUMN)
         if stated not in (None, ""):                   # stated by the paper (or digitized): check it
             if isinstance(stated, (int, float)) and abs(stated - total) > CHECK_TOLERANCE:

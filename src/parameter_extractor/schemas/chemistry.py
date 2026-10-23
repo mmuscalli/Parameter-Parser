@@ -100,8 +100,17 @@ class SoluteEntry(BaseModel):
                                description="Only when the quoted words don't name the species: how you "
                                            "identified it, at most 15 words -- e.g. 'structure drawing, "
                                            "Table 2 entry 3', 'compound 7 = ...', 'abbreviation FF'.")
-    # set by calculators/mixing.py, never by the model (hidden from its schema)
+    # a result named without an amount (Mickey, 2026-10-23): 'detected' is written as the text
+    # "detected", 'not detected' as 0 (calculators/amounts.py)
+    detection: Literal["", "detected", "not detected"] = Field(
+        default="", alias="det",
+        description="Only for a 'sampled' species with no amount (v null): 'detected' when the paper lists "
+                    "it as observed / formed, 'not detected' when it says it was looked for and not found "
+                    "('no product was detected'). Set `u` to the unit the paper's other results of that kind "
+                    "use (e.g. '%' in a yield table).")
+    # set by calculators/mixing.py / amounts.py, never by the model (hidden from its schema)
     derived: SkipJsonSchema[bool] = False
+    calculated_from: SkipJsonSchema[str] = ""  # "amount": mM = amount / reaction volume (amounts.py)
     exact_mM: SkipJsonSchema[float] = 0.0      # a derived value before rounding, for chained calculations
 
     @property

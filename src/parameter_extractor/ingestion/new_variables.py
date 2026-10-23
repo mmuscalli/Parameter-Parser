@@ -19,7 +19,7 @@ from dataclasses import dataclass, field
 from typing import Dict, List, Literal, Optional, Tuple
 
 from parameter_extractor.ingestion.flatten_to_template import (
-    _from_solute, _solute_value, column_for_solute, column_safe_name, proposed_column_for_solute, set_row_value, species_alias_name)
+    DETECTED, _from_solute, _solute_value, column_for_solute, column_safe_name, proposed_column_for_solute, set_row_value, species_alias_name)
 from parameter_extractor.registry import VariableRegistry, suggest_column_name
 from parameter_extractor.schemas.chemistry import ChemistryExtraction
 from parameter_extractor.schemas.methodology import Methodology
@@ -86,9 +86,12 @@ def collect_new_variables(
         if column_for_solute(s, registry) is not None:
             continue
         pct = "%" in (s.concentration_unit_raw or "")
+        value = _solute_value(s)
         found.append(NewVariable(
             kind="species", name=s.name, alias_name=species_alias_name(s),
-            proposed_column=proposed_column_for_solute(s), role=s.role, value=_solute_value(s),
+            proposed_column=proposed_column_for_solute(s), role=s.role,
+            value=value if not isinstance(value, str) else None,
+            value_text=value if isinstance(value, str) else None,
             unit="%" if pct else ("mM" if s.concentration_mM is not None else s.concentration_unit_raw),
             set_label=s.set_label, sample_label=s.sample_label, quote=s.quote, source=_from_solute(s).source,
             confidence=s.confidence, origin="calculated" if s.derived else "chemistry",
@@ -183,8 +186,8 @@ def stored_value(v: NewVariable, column: str):
     from parameter_extractor.units import to_column_unit
     raw = v.value if v.value is not None else v.value_text
     column_unit = unit_for_column(column)
-    if raw in (None, "") or not column_unit or column_unit == "pH":
-        return raw, ""
+    if raw in (None, "", DETECTED) or not column_unit or column_unit == "pH":
+        return raw, ""                       # 'detected' is meant as text
     conversion = to_column_unit(raw, v.unit, column_unit)
     if conversion is None:
         return raw, f"not converted to {column_unit}"

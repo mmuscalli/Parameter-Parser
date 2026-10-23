@@ -30,6 +30,7 @@ _UNITS: Dict[str, Tuple[str, float]] = {
     "mL/min": ("flow", 1.0), "µL/min": ("flow", 1e-3), "L/min": ("flow", 1000.0), "mL/h": ("flow", 1 / 60),
     "rpm": ("rate", 1.0),
     "%": ("fraction", 1.0),
+    "mol": ("amount", 1000.0), "mmol": ("amount", 1.0), "µmol": ("amount", 1e-3), "nmol": ("amount", 1e-6),
     "°C": ("temperature", 1.0), "K": ("temperature", 1.0), "°F": ("temperature", 1.0),
 }
 
@@ -53,6 +54,8 @@ _ALIASES = {
     "ml/min": "mL/min", "mlmin-1": "mL/min", "cm3min-1": "mL/min", "cm3/min": "mL/min", "µl/min": "µL/min", "ulmin-1": "µL/min", "µlmin-1": "µL/min",
     "l/min": "L/min", "ml/h": "mL/h", "mlh-1": "mL/h",
     "rpm": "rpm", "r/min": "rpm",
+    "mol": "mol", "mole": "mol", "moles": "mol", "mmol": "mmol", "millimole": "mmol", "millimoles": "mmol",
+    "µmol": "µmol", "umol": "µmol", "micromole": "µmol", "micromoles": "µmol", "nmol": "nmol",
     "%": "%", "percent": "%", "%rh": "%", "rh%": "%",
     "°c": "°C", "c": "°C", "degc": "°C", "oc": "°C", "celsius": "°C", "k": "K", "kelvin": "K",
     "°f": "°F", "f": "°F",

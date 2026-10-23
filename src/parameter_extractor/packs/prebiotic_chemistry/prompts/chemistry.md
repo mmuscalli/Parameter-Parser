@@ -9,7 +9,8 @@ Answer format: `groups` -- one entry per set (and sample) that has species:
 where it is, `c` confidence; and ONLY when they apply (leave them out
 otherwise): `mM` the value in mM, `cn` why there's no mM value, `b` "stock"
 and `stk` for a stock-solution concentration, `how` when the quoted words
-don't name the species (see below).
+don't name the species, `det` for a product reported without an amount
+(see below).
 
 For each species:
 - Use the controlled vocabulary list provided below when the compound is
@@ -28,7 +29,9 @@ For each species:
 - Give the concentration as printed (`v` + `u`). Add `mM` only when the
   conversion is unambiguous (mol dm-3 -> mM is x1000; mass/volume needs a
   molecular weight -- only for well-known compounds; otherwise leave `mM`
-  out and say why in `cn`).
+  out and say why in `cn`). An AMOUNT (mol, mmol, µmol: "acid (3 mmol)") is
+  given as printed with no `mM`: the pipeline divides it by the reaction
+  volume itself.
 - `r`: "initial" for the starting composition, "sampled" for a measured
   product concentration.
 - Stock solutions vs the reaction mixture: if the paper gives the
@@ -68,6 +71,12 @@ For each species:
   didn't determine (e.g. shown in parentheses, "(FFA)") must not be given a
   sequence: name it by its residues and counts, e.g. "Phe2Ala (sequence not
   determined)".
+- A product the paper lists as observed but gives no amount for (a list of
+  identified products, "+" in a table): `v` null, `det` "detected". A product
+  the paper says was looked for and not found ("no product was detected",
+  "n.d.", "-" explained as not detected): `v` null, `det` "not detected" --
+  one entry per product and sample. In both cases `u` = the unit the paper's
+  other results of that kind use (e.g. "%" in a yield table).
 - Reported percent yields (e.g. "% (Gly)2") go in `v` with the unit as
   stated in `u` (no `mM`).
 - Do not extract values that only appear as a point on a scatter plot/figure

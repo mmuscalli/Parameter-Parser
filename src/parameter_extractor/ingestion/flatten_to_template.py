@@ -172,8 +172,14 @@ def proposed_column_for_solute(entry) -> str:
     return resolve_template_column(name, entry.role).removesuffix(UNRECOGNIZED_SUFFIX)
 
 
-def _solute_value(entry) -> Optional[float]:
-    return entry.concentration_value if is_percent(entry) else entry.concentration_mM
+DETECTED = "detected"          # a result the paper names without an amount (calculators/amounts.py)
+
+
+def _solute_value(entry):
+    value = entry.concentration_value if is_percent(entry) else entry.concentration_mM
+    if value is None and entry.role == "sampled" and getattr(entry, "detection", "") == "detected":
+        return DETECTED
+    return value
 
 
 def _lowest_confidence(entries) -> Optional[str]:
@@ -295,7 +301,9 @@ def build_rows(
                 if col is None or value is None:
                     continue
                 prov[col] = _from_solute(s)
-                if col in _FIELD_FOR_TEMPLATE:          # e.g. the Gly 2-/3-peptide % yields
+                if isinstance(value, str):              # 'detected': text, in extra (wins over a field)
+                    extra[col] = value
+                elif col in _FIELD_FOR_TEMPLATE:        # e.g. the Gly 2-/3-peptide % yields
                     yield_fields[_FIELD_FOR_TEMPLATE[col]] = value
                 elif col.endswith("_mM"):
                     sampled_mM[col] = value

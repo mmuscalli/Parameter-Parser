@@ -1016,5 +1016,20 @@ yields. Products whose sequence wasn't determined ("(FFA)") are named
 added to names._COMMON (ferricyanide, carbonate, bisulfite...). Chen2007.xlsx
 in the papers folder is NOT a hand-parsed answer key (fragments of an old
 digitization). Live: $0.30, 17 rows; amide yields correct but all new variables.
-Open (asked Mickey): qualitative Table 3 products (no amounts), "no product
-detected" as 0 vs blank, mmol -> mM via the 10 mL reaction volume.
+Mickey's answers (2026-10-23), built in `calculators/amounts.py` (postprocess
+"amounts", runs BEFORE mixing/ratios so ratios can use its values):
+- `SoluteEntry.detection` (compact `det`, sampled only): "detected" -> the TEXT
+  "detected" in the product's column (`flatten_to_template.DETECTED`, via
+  `extra`; review passes it through; peptide totals list it as "not counted");
+  "not detected" -> 0 (0 mM unless a % yield). One derived_value flag each.
+- Amounts (mol/mmol/µmol/nmol, new "amount" dimension in units.py) -> mM =
+  amount / solvent_volume_mL from the conditions stage (`pipeline._reaction_volumes`,
+  per sample, else set; paper-wide entries only if every set agrees). A set-wide
+  amount in a set whose samples differ in volume is split per sample
+  (`_split_by_sample`; Chen Table 1: 30 mL / 50 mL). Entries marked derived +
+  `calculated_from="amount"` (mixing keeps them; identity check still applies);
+  a model mM off by >1% is replaced + conflicting_values; no volume ->
+  not_calculated. Prompt: amounts as printed, no mM.
+Live (2026-10-23, $0.27): 2 zeros, 18 detected, all amounts converted except
+Table 1 entry 4 (the conditions step gave it no volume). Not handled: "1:1,
+total 1 mmol" mixtures (ratio step needs one known concentration).

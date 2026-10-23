@@ -39,6 +39,7 @@ from pathlib import Path
 from typing import Callable, Dict, List, Optional, Sequence
 
 from parameter_extractor.calculators.peptide_totals import fill_total_peptide_yield
+from parameter_extractor.calculators.amounts import VOLUME_COLUMN, apply_detection, derive_from_amounts
 from parameter_extractor.calculators.mixing import derive_from_ratios, derive_mixture_concentrations
 from parameter_extractor import packs
 from parameter_extractor.calculators import exoplanets as exo
@@ -623,6 +624,18 @@ def plan_figure(extraction: Extraction, figure: FigureCandidate) -> FigurePlan:
 ReviewCallback = Callable[[List[VariableGroup], List[str], VariableRegistry], List[VariableDecision]]
 
 
+def _reaction_volumes(ex) -> dict:
+    """{(set_label, sample_label): (mL, where from)} from the stages' solvent_volume_mL values
+    (assumed values aren't among them -- they wait in the review)."""
+    from parameter_extractor.stages.optional import optional_values
+    out = {}
+    for spec, result in ex.optional_list:
+        for (label, sample, column), v in optional_values(spec, result, ex.structure).items():
+            if column == VOLUME_COLUMN and isinstance(v.value, (int, float)) and v.value > 0:
+                out[(label, sample)] = (float(v.value), v.source or spec.origin_label)
+    return out
+
+
 MIXING_FLAG_KINDS = {"derived": "derived_value", "not_derived": "not_calculated", "mismatch": "conflicting_values"}
 
 
@@ -646,7 +659,13 @@ def finish(
         pubchem.save()
     set_labels = [s.set_label for s in ex.structure.experiment_sets]
     # stock -> mixture concentrations, then molar ratios -> missing concentrations; marked derived
-    mixing = derive_mixture_concentrations(ex.chemistry, set_labels) if pack.uses("mixing") else []
+    mixing = []
+    if pack.uses("amounts"):              # 'not detected' -> 0; amounts / reaction volume -> mM (derived)
+        mixing += apply_detection(ex.chemistry)
+        mixing += derive_from_amounts(ex.chemistry, _reaction_volumes(ex),
+                                      {s.set_label: [x.sample_label for x in s.samples]
+                                       for s in ex.structure.experiment_sets})
+    mixing += derive_mixture_concentrations(ex.chemistry, set_labels) if pack.uses("mixing") else []
     mixing += derive_from_ratios(ex.chemistry, set_labels) if pack.uses("molar_ratios") else []
     rows = build_rows(ex.metadata, ex.structure, ex.methodology, ex.chemistry, config.paper_prefix,
                       drop_below=config.confidence_drop_below, registry=registry, optional=ex.optional_list)

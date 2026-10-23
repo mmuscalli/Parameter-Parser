@@ -95,7 +95,7 @@ def derive_mixture_concentrations(chemistry: ChemistryExtraction, set_labels: Li
     """Adds a derived mixture entry for each stock concentration that can be
     calculated. `set_labels`: the structure plan's sets, for a paper-wide stock
     value whose mixture differs by set."""
-    chemistry.solutes = [s for s in chemistry.solutes if not s.derived]
+    chemistry.solutes = [s for s in chemistry.solutes if not s.derived or s.calculated_from]   # amounts.py's stay
     stated = {(s.set_label, s.sample_label, s.name) for s in chemistry.solutes
               if s.role == "initial" and s.concentration_basis == "mixture"}
     set_specific = any(sol.set_label for sol in chemistry.added_solutions)

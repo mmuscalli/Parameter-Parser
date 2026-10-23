@@ -72,7 +72,7 @@ def _concentration_match(value: float, chemistry: ChemistryExtraction, set_label
     numbers alone aren't enough: kim2019's CaCl2 and ribose phosphate are both 15 mM.)"""
     low = text.lower()
     for s in chemistry.solutes:
-        if s.derived or s.concentration_mM is None or s.role != "initial":
+        if (s.derived and not s.calculated_from) or s.concentration_mM is None or s.role != "initial":
             continue
         if set_label and s.set_label not in (set_label, None):
             continue

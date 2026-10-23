@@ -231,7 +231,8 @@ def unnamed_species(solutes, page_texts: Optional[List[str]] = None) -> list:
     named_on_page: dict = {}
     out = []
     for s in solutes:
-        if (s.concentration_value is None and s.concentration_mM is None) or getattr(s, "derived", False):
+        if ((s.concentration_value is None and s.concentration_mM is None and not getattr(s, "detection", ""))
+                or (getattr(s, "derived", False) and not getattr(s, "calculated_from", ""))):
             continue
         if getattr(s, "identified_by", ""):
             out.append(s)
