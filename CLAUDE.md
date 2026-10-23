@@ -132,6 +132,9 @@ notarization, and a real BUNDLE_ID -- his decision. Windows build untested.
 **Deferred by Mickey (2026-10-13):** signing/notarization and the Windows
 build wait until development has progressed further; until then the app
 only needs to run on his own Mac. Don't start on them unprompted.
+Main window (2026-10-23, Mickey): inputs (in a QScrollArea) and run controls + results tabs
+sit in a vertical QSplitter `main_split`; the user drags the handle, position saved in
+QSettings `main_split`; extra window height goes to the results.
 Remaining ideas: settings dialog (models, thresholds), drop-PDF-on-Dock-icon
 handling (Info.plist already declares PDFs).
 

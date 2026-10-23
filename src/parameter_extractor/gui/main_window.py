@@ -4,6 +4,7 @@ The main window: choose a PDF, enter an API key, run, review the results.
 Layout, top to bottom:
   - inputs: paper PDF, API key (optionally remembered in the system
     keychain), output folder, and a notice that the paper is sent to Anthropic
+  - (a draggable splitter handle: inputs above, everything below it resizes)
   - Extract / Cancel buttons, progress bar and status line
   - results tabs: Rows (the CSV, flagged rows highlighted), Flags (with the
     supporting quote and source for each), Summary (tokens, files)
@@ -20,7 +21,7 @@ from PySide6.QtGui import QAction, QBrush, QColor, QDesktopServices, QKeySequenc
 from PySide6.QtWidgets import (
     QAbstractItemView, QCheckBox, QComboBox, QFileDialog, QFormLayout, QGroupBox, QHBoxLayout,
     QHeaderView, QLabel, QLineEdit, QMainWindow, QMessageBox, QPlainTextEdit, QProgressBar, QPushButton,
-    QSplitter,
+    QFrame, QScrollArea, QSplitter,
     QTableWidget, QTableWidgetItem, QTabWidget, QTextBrowser, QTreeWidget, QTreeWidgetItem,
     QVBoxLayout, QWidget,
 )
@@ -93,12 +94,34 @@ class MainWindow(QMainWindow):
         self._review: Optional[FigureReviewDialog] = None
         self.registry_path = default_registry_path()     # local additions to the variable list
 
+        # inputs above, run controls + results below, with a handle between them the user can
+        # drag (Mickey, 2026-10-23: the results were squeezed); the inputs scroll when made small
+        inputs = QScrollArea()
+        inputs.setWidget(self._build_inputs())
+        inputs.setWidgetResizable(True)
+        inputs.setFrameShape(QFrame.Shape.NoFrame)
+        inputs.setMinimumHeight(80)
+        lower = QWidget()
+        lower_layout = QVBoxLayout(lower)
+        lower_layout.setContentsMargins(0, 0, 0, 0)
+        lower_layout.addLayout(self._build_run_controls())
+        self.tabs = self._build_results()
+        lower_layout.addWidget(self.tabs, stretch=1)
+        self.main_split = QSplitter(Qt.Orientation.Vertical)
+        self.main_split.addWidget(inputs)
+        self.main_split.addWidget(lower)
+        self.main_split.setChildrenCollapsible(False)
+        self.main_split.setHandleWidth(10)
+        self.main_split.setStretchFactor(1, 1)             # a taller window grows the results
+        self.main_split.setSizes([340, 420])
+        saved = self._settings.value("main_split")
+        if saved is not None:
+            self.main_split.restoreState(saved)
+        self.main_split.splitterMoved.connect(
+            lambda *_: self._settings.setValue("main_split", self.main_split.saveState()))
         central = QWidget()
         layout = QVBoxLayout(central)
-        layout.addWidget(self._build_inputs())
-        layout.addLayout(self._build_run_controls())
-        self.tabs = self._build_results()
-        layout.addWidget(self.tabs, stretch=1)
+        layout.addWidget(self.main_split)
         self.setCentralWidget(central)
 
         quit_action = QAction("Quit", self, shortcut=QKeySequence.StandardKey.Quit,
