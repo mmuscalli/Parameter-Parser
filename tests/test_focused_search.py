@@ -54,6 +54,26 @@ def test_keyword_screening():
     assert fs.passages(text, ["juliet"])[1] == 0
 
 
+def test_whole_tables_in_passages():
+    """teng2023's planet table (2026-10-24): rows separated by blank lines, a caption without a 'Table N'
+    label ('Orbital parameters.') several lines above, rows with no search word in them. Whole tables
+    keep every row; rows-only keeps just what's near a match."""
+    text = "\n".join(["Title", "x" * 1600, *[f"intro {i}" for i in range(20)],
+                      "\\tbl", "", "Orbital parameters.", "*", "**", "footnote mark", "",
+                      "Parameters | P | K | e", "", "Unit | (d) | (m/s) |", "",
+                      *[r for i in range(30) for r in (f"HD {1000 + i} b | {100 + i}.5 | 30 | 0.1", "")],
+                      "{tabnote}", *[f"tail {i}" for i in range(20)]])
+    lines = text.splitlines()
+    spans = fs.table_spans(lines)
+    assert len(spans) == 1 and "HD 1029 b" in lines[spans[0].stop - 1]
+    body, hits = fs.passages(text, ["orbital"])
+    assert hits == 1 and "HD 1000 b |" in body and "HD 1029 b |" in body                # every row
+    rows_only, _ = fs.passages(text, ["orbital"], whole_tables=False)
+    assert "HD 1029 b |" not in rows_only and "Orbital parameters." in rows_only
+    captioned = "\n".join(["Table 2: Fit results", "a | b", "", "c | d", "", "e | f"])
+    assert [(s.start, s.stop) for s in fs.table_spans(captioned.splitlines())] == [(0, 6)]
+
+
 def test_answer_conversion_and_paper_lists():
     Answer = fs.answer_model(["pl_orbper", "pl_fitexofastver"])
     a = Answer.model_validate({"values": [

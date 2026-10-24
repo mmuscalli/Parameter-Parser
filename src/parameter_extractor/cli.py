@@ -60,6 +60,9 @@ def main() -> int:
                               "the parameters' descriptions")
     focused.add_argument("--whole-paper", action="store_true",
                          help="Send the whole paper, not only the passages around the search words")
+    focused.add_argument("--rows-only", action="store_true",
+                         help="In passages mode, send only the table rows near the search words instead of "
+                              "whole tables (a little cheaper; misses table values whose rows lack the words)")
     focused.add_argument("--list-parameters", action="store_true",
                          help="List the parameters a focused search can look for (with --pack) and exit")
     parser.add_argument("--out", type=Path, help="Folder for run outputs (default: runs/)")
@@ -192,7 +195,7 @@ def _focused(args, parser) -> int:
     config = RunConfig.from_settings(**overrides)
     try:
         run = run_focused_search(items, args.focus, config, search_words=args.search_word,
-                                 whole_paper=args.whole_paper,
+                                 whole_paper=args.whole_paper, whole_tables=not args.rows_only,
                                  on_progress=lambda done, total, message: print(f"[{done}/{total}] {message}"))
     except PipelineError as e:
         print(f"\nError: {e}", file=sys.stderr)

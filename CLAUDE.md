@@ -1164,3 +1164,12 @@ reference, paper, obj, status, <params...>, read_from, title. The old line-per-v
 quotes) is focused_values_with_quotes.csv. The window's table has the same columns (hover = quote,
 where, as printed). Live teng passages-only gave 14 objects, not every planet: Table 3's rows hold
 no search words -- use "Whole paper" for table-wide parameters.
+Whole tables in passages mode (2026-10-24): `table_spans` = runs of ' | ' rows with blank lines
+between rows allowed (arXiv's are blank-separated -- the old block logic stopped at row 1) + a
+'Table N' caption within 8 lines above / 5 below; a hit within TABLE_LOOKBACK = 10 lines above a
+table or inside it keeps the whole span (PASJ's unlabelled \tbl caption 'Orbital parameters.' is 7
+lines above teng's Table 3). Measured (count_tokens, 3 papers x 3 searches): +10-45% passage tokens
+(+1.8K-3.2K, ~$0.003/paper Economy) -> not negligible relatively, so a TOGGLE: `whole_tables`
+(default on; GUI "Keep whole tables", disabled under Whole paper; CLI --rows-only). Live teng
+period+e: 42 objects (all) vs 17 rows-only; $0.0095 vs $0.0069 (mostly extra output). Answer budget
+raised to 6000 + 4000/parameter (3000 + 500 broke off on teng's ~40 objects).

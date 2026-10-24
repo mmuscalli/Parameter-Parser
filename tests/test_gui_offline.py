@@ -722,6 +722,10 @@ def test_focused_search_window():
             assert f.papers_list.count() == 1 and f.id_edit.text() == "not-an-id"
             f.add_items([PDF])
             f.words_edit.setText("EXOFAST")
+            assert f.tables_box.isChecked() and f.tables_box.isEnabled()          # whole tables by default
+            f.whole_box.setChecked(True)
+            assert not f.tables_box.isEnabled()                                    # whole paper covers them
+            f.whole_box.setChecked(False)
             assert f.run_btn.isEnabled()
             f.run_btn.click()
             assert not w.run_btn.isEnabled() and not w.pack_combo.isEnabled()      # main window locked

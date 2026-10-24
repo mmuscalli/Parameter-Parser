@@ -35,9 +35,9 @@ class FocusedWorker(QObject):
     cancelled = Signal()
     done = Signal()
 
-    def __init__(self, items, columns, config, search_words, whole_paper):
+    def __init__(self, items, columns, config, search_words, whole_paper, whole_tables=True):
         super().__init__()
-        self.args = (items, columns, config, search_words, whole_paper)
+        self.args = (items, columns, config, search_words, whole_paper, whole_tables)
         self._cancel = threading.Event()
 
     def cancel(self) -> None:
@@ -47,9 +47,9 @@ class FocusedWorker(QObject):
     def run(self) -> None:
         from parameter_extractor.focused_search import run_focused_search
         from parameter_extractor.gui.error_log import record
-        items, columns, config, words, whole = self.args
+        items, columns, config, words, whole, tables = self.args
         try:
-            run = run_focused_search(items, columns, config, search_words=words, whole_paper=whole,
+            run = run_focused_search(items, columns, config, search_words=words, whole_paper=whole, whole_tables=tables,
                                      on_progress=self.progress.emit, cancel_event=self._cancel)
         except RunCancelledError:
             self.cancelled.emit()
@@ -124,7 +124,13 @@ class FocusedSearchWindow(QDialog):
         self.words_edit.setToolTip("A paper is searched only if its text contains one of these words (case "
                                    "doesn't matter); the passages around them are what the model reads.")
         form.addRow("Search words:", self.words_edit)
+        self.tables_box = QCheckBox("Keep whole tables -- a match in or just above a table sends the whole table")
+        self.tables_box.setToolTip("Table rows rarely contain the search words (a planet table's rows are names "
+                                   "and numbers), so without this most of a table is left out. Measured: about "
+                                   "10-45% more tokens than the matching lines alone (~$0.003 a paper on Economy).")
+        form.addRow("", self.tables_box)
         self.whole_box = QCheckBox("Whole paper -- send each paper in full (finds more, costs more)")
+        self.whole_box.toggled.connect(lambda on: self.tables_box.setEnabled(not on))
         form.addRow("", self.whole_box)
         layout.addLayout(form)
 
@@ -155,6 +161,7 @@ class FocusedSearchWindow(QDialog):
         layout.addLayout(buttons)
         self.words_edit.setText(self._settings.value("focused/search_words", ""))
         self.whole_box.setChecked(self._settings.value("focused/whole_paper", False, type=bool))
+        self.tables_box.setChecked(self._settings.value("focused/whole_tables", True, type=bool))
 
     # ---- parameters -------------------------------------------------------------------------------
     def showEvent(self, event) -> None:
@@ -298,9 +305,11 @@ class FocusedSearchWindow(QDialog):
         self._settings.setValue(f"focused/{pack_id}/columns", columns)
         self._settings.setValue("focused/search_words", self.words_edit.text())
         self._settings.setValue("focused/whole_paper", self.whole_box.isChecked())
+        self._settings.setValue("focused/whole_tables", self.tables_box.isChecked())
         words = [w.strip() for w in self.words_edit.text().split(",") if w.strip()]
         config = self.main.current_config()
-        self._worker = FocusedWorker(items, columns, config, words, self.whole_box.isChecked())
+        self._worker = FocusedWorker(items, columns, config, words, self.whole_box.isChecked(),
+                                     self.tables_box.isChecked())
         self._thread = QThread(self)
         self._worker.moveToThread(self._thread)
         self._thread.started.connect(self._worker.run)

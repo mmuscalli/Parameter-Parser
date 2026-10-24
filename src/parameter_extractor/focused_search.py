@@ -36,9 +36,14 @@ from parameter_extractor.run_context import RunContext, total_cost
 
 STAGE = "focused_search"
 CONTEXT_LINES = 3                 # lines kept around a hit (a table around a hit is kept whole)
+# a hit this many lines above a table also keeps it: captions without a 'Table N' label (PASJ's \tbl
+# 'Orbital parameters.' sits 7 lines above teng2023's Table 3 rows, past footnote marks)
+TABLE_LOOKBACK = 10
+# answer budget: a table of ~40 planets x 2 parameters is ~8K output tokens (teng2023 broke off at
+# 3000 + 500 per parameter). Only generated tokens are billed; the budget just stops a runaway answer.
+OUTPUT_BASE, OUTPUT_PER_PARAMETER = 6000, 4000
 HEAD_CHARS = 1500                 # the start of the paper (title, authors, abstract) always goes along
 MAX_PASSAGE_CHARS = 60_000
-MAX_TABLE_LINES = 120
 QUOTE_WORDS = 12
 _STOP = {"with", "from", "that", "this", "used", "when", "were", "have", "been", "than", "only", "each", "given",
          "value", "values", "paper", "data", "model", "models", "planet", "planets", "star", "stellar", "e.g.",
@@ -89,31 +94,53 @@ def keywords_for(params: Sequence[FocusParameter], search_words: Sequence[str] =
     return list(dict.fromkeys(found))
 
 
-def _table_block(lines: List[str], i: int) -> range:
-    """The run of table rows (' | ' lines, as in arXiv text) around line i, else just line i."""
-    if " | " not in lines[i]:
-        return range(i, i + 1)
-    lo = hi = i
-    while lo > 0 and " | " in lines[lo - 1] and i - lo < MAX_TABLE_LINES:
-        lo -= 1
-    while hi + 1 < len(lines) and " | " in lines[hi + 1] and hi - i < MAX_TABLE_LINES:
-        hi += 1
-    return range(max(lo - 2, 0), hi + 1)          # with the caption above the table
+_CAPTION = re.compile(r"\s*Table\s*[A-Z]?\d")
 
 
-def passages(text: str, keywords: Sequence[str]) -> tuple:
-    """(the paper's start + every passage around a keyword, number of lines with a hit). A hit in or
-    just above a table keeps the whole table. '[...]' marks skipped text."""
+def table_spans(lines: List[str]) -> List[range]:
+    """The tables in a text: runs of ' | ' rows (arXiv text), blank lines between rows allowed (arXiv's
+    rows are blank-line separated), with the 'Table N' caption just above or below when there is one."""
+    spans, i, n = [], 0, len(lines)
+    is_row = lambda k: k < n and " | " in lines[k]
+    while i < n:
+        if not is_row(i):
+            i += 1
+            continue
+        lo = hi = i
+        j = i + 1
+        while j < n:
+            if is_row(j):
+                hi = j
+            elif lines[j].strip() or not (is_row(j + 1) or (not lines[j + 1].strip() if j + 1 < n else False)
+                                          and is_row(j + 2)):
+                break
+            j += 1
+        caption = next((k for k in range(lo - 1, max(lo - 8, -1), -1) if _CAPTION.match(lines[k])), None)
+        if caption is not None:
+            lo = caption
+        else:
+            below = next((k for k in range(hi + 1, min(hi + 6, n)) if _CAPTION.match(lines[k])), None)
+            hi = below if below is not None else hi
+        spans.append(range(lo, hi + 1))
+        i = hi + 1
+    return spans
+
+
+def passages(text: str, keywords: Sequence[str], whole_tables: bool = True) -> tuple:
+    """(the paper's start + every passage around a keyword, number of lines with a hit). With
+    `whole_tables`, a hit in a table -- a row, its header or its caption -- or just above it keeps
+    the whole table: the rows themselves rarely contain the search words (teng2023's planet table).
+    '[...]' marks skipped text."""
     lines = text.splitlines()
     kws = [k.lower() for k in keywords if k]
     hits = [i for i, line in enumerate(lines) if any(k in line.lower() for k in kws)]
     keep = set()
+    spans = table_spans(lines) if whole_tables else []
     for i in hits:
         keep.update(range(max(i - CONTEXT_LINES, 0), min(i + CONTEXT_LINES + 1, len(lines))))
-        for j in range(i, min(i + 4, len(lines))):          # a caption, then its table
-            if " | " in lines[j]:
-                keep.update(_table_block(lines, j))
-                break
+        for span in spans:
+            if span.start - TABLE_LOOKBACK <= i < span.stop:
+                keep.update(span)
     out, last, size = [text[:HEAD_CHARS].rstrip(), "[...]"], None, HEAD_CHARS
     for i in sorted(keep):
         if size > MAX_PASSAGE_CHARS:
@@ -239,7 +266,7 @@ def _paper_text(source, run_dir: Path, whole_paper: bool, rasterize: bool, dpi: 
 
 def search_paper(item: PaperItem, params: Sequence[FocusParameter], config: RunConfig, run_dir: Path,
                  search_words: Sequence[str] = (), whole_paper: bool = False,
-                 cancel_event: Optional[threading.Event] = None) -> PaperOutcome:
+                 cancel_event: Optional[threading.Event] = None, whole_tables: bool = True) -> PaperOutcome:
     from parameter_extractor.api_client import call_structured
     from parameter_extractor.stages.prompt_loader import load_prompt
     outcome = PaperOutcome(item=str(item), paper=run_name(item), reference=getattr(item, "label", ""))
@@ -259,7 +286,7 @@ def search_paper(item: PaperItem, params: Sequence[FocusParameter], config: RunC
         body = text
         _, outcome.hits = passages(text, keywords)
     else:
-        body, outcome.hits = passages(text, keywords)
+        body, outcome.hits = passages(text, keywords, whole_tables)
         if outcome.hits == 0:
             outcome.status = "not mentioned"
             outcome.message = f"none of the search words appear in the text ({', '.join(keywords[:8])})"
@@ -269,7 +296,8 @@ def search_paper(item: PaperItem, params: Sequence[FocusParameter], config: RunC
                         for p in params)
     scope = ("The whole paper follows." if whole_paper else
              "Only PASSAGES of the paper follow: its start, and the parts around these words: "
-             + ", ".join(keywords[:20]) + ". '[...]' marks text left out; tables near a match are complete.")
+             + ", ".join(keywords[:20]) + ". '[...]' marks text left out"
+             + ("; tables near a match are complete." if whole_tables else "."))
     units = pack.manifest.units
     prompt = load_prompt(STAGE, PARAMETERS=listing, SCOPE=scope,
                          OBJECT_HINT=f"the {units.get('sample', 'sample')} or {units.get('set', 'set')}, named as "
@@ -279,7 +307,7 @@ def search_paper(item: PaperItem, params: Sequence[FocusParameter], config: RunC
     answer = call_structured(ctx, stage=STAGE, system_prompt="Find only the requested parameters in a research "
                              "paper. Report only what the paper states.", user_content=content,
                              response_model=model, image_paths=images or None,
-                             max_tokens=3000 + 500 * len(params))
+                             max_tokens=OUTPUT_BASE + OUTPUT_PER_PARAMETER * len(params))
     by_column = {p.column: p for p in params}
     outcome.values = [_converted(by_column[v.col], v, outcome.paper) for v in answer.values if v.col in by_column]
     outcome.found = list(dict.fromkeys(v.parameter for v in outcome.values))
@@ -389,8 +417,12 @@ def _new_dir(output_dir: Path) -> Path:
 def run_focused_search(items: Sequence[PaperItem], columns: Sequence[str], config: RunConfig,
                        search_words: Sequence[str] = (), whole_paper: bool = False,
                        on_progress: Optional[Callable[[int, int, str], None]] = None,
-                       cancel_event: Optional[threading.Event] = None, max_workers: int = 4) -> FocusedRun:
-    """Search every paper for `columns` only. on_progress(done, total, message)."""
+                       cancel_event: Optional[threading.Event] = None, max_workers: int = 4,
+                       whole_tables: bool = True) -> FocusedRun:
+    """Search every paper for `columns` only. on_progress(done, total, message). `whole_tables`
+    (passages mode): a match in or just above a table sends the whole table (measured 2026-10-24:
+    +10-45% passage tokens, ~$0.003 a paper on Economy; without it teng2023's planet table -- rows
+    without the search words -- was missed)."""
     from parameter_extractor.errors import ApiKeyMissingError
     if not config.api_key:
         raise ApiKeyMissingError()
@@ -415,7 +447,7 @@ def run_focused_search(items: Sequence[PaperItem], columns: Sequence[str], confi
     report(0, len(jobs), f"Searching {len(jobs)} paper(s) for {', '.join(c for c in columns)}")
     with ThreadPoolExecutor(max_workers=max_workers, thread_name_prefix="focused") as pool:
         futures = {pool.submit(search_paper, item, params, config, run_dir, search_words, whole_paper,
-                               cancel_event): (item, run_dir) for item, run_dir in jobs}
+                               cancel_event, whole_tables): (item, run_dir) for item, run_dir in jobs}
         try:
             for future in as_completed(futures):
                 item, run_dir = futures[future]
@@ -438,7 +470,7 @@ def run_focused_search(items: Sequence[PaperItem], columns: Sequence[str], confi
             raise
     order = {str(item): i for i, (item, _) in enumerate(jobs)}
     outcomes.sort(key=lambda o: order.get(o.item, len(order)))
-    return _write(out_dir, outcomes, params, config, search_words, whole_paper)
+    return _write(out_dir, outcomes, params, config, search_words, whole_paper, whole_tables)
 
 
 def result_columns(params: Sequence[FocusParameter], outcomes: Sequence[PaperOutcome]) -> List[tuple]:
@@ -455,7 +487,8 @@ def result_columns(params: Sequence[FocusParameter], outcomes: Sequence[PaperOut
     return out
 
 
-def _write(out_dir: Path, outcomes: List[PaperOutcome], params, config: RunConfig, search_words, whole_paper) -> FocusedRun:
+def _write(out_dir: Path, outcomes: List[PaperOutcome], params, config: RunConfig, search_words, whole_paper,
+           whole_tables: bool = True) -> FocusedRun:
     results_csv, papers_csv = out_dir / "focused_results.csv", out_dir / "papers.csv"
     quotes_csv = out_dir / "focused_values_with_quotes.csv"
     columns = result_columns(params, outcomes)
@@ -484,7 +517,7 @@ def _write(out_dir: Path, outcomes: List[PaperOutcome], params, config: RunConfi
     cost = sum(o.cost_usd for o in outcomes)
     summary = {"finished": datetime.now().isoformat(timespec="seconds"), "config": config.to_public_dict(),
                "parameters": [asdict(p) for p in params], "search_words": list(search_words),
-               "whole_paper": whole_paper, "papers": len(outcomes),
+               "whole_paper": whole_paper, "whole_tables": whole_tables and not whole_paper, "papers": len(outcomes),
                "status_counts": {s: sum(o.status == s for o in outcomes) for s in
                                  ("found", "not found", "not mentioned", "error")},
                "estimated_cost_usd": round(cost, 5)}
