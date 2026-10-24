@@ -1,0 +1,137 @@
+{
+  "rows": [
+    {
+      "set_label": "HD 1397",
+      "sample_label": "",
+      "values": [
+        {
+          "set_label": "",
+          "sample_label": "",
+          "parameter": "sy_snum",
+          "value": 1.0,
+          "unit": "",
+          "text": "",
+          "method": "",
+          "err_plus": 0.0,
+          "err_minus": 0.0,
+          "limit": "",
+          "basis": "stated",
+          "quote": "The target appears to be single, to the limit of the imaging resolution.",
+          "source": "Sect. 2.4, High angular resolution imaging",
+          "confidence": "high",
+          "note": ""
+        },
+        {
+          "set_label": "",
+          "sample_label": "",
+          "parameter": "sy_pnum",
+          "value": 1.0,
+          "unit": "",
+          "text": "",
+          "method": "",
+          "err_plus": 0.0,
+          "err_minus": 0.0,
+          "limit": "",
+          "basis": "stated",
+          "quote": "our data show no significant evidence for the presence of a second planet",
+          "source": "Sect. 4, Discussion & conclusion",
+          "confidence": "medium",
+          "note": "single known planet; no second planet found"
+        },
+        {
+          "set_label": "",
+          "sample_label": "",
+          "parameter": "sy_dist",
+          "value": 79.31,
+          "unit": "pc",
+          "text": "",
+          "method": "",
+          "err_plus": 0.17,
+          "err_minus": -0.17,
+          "limit": "",
+          "basis": "stated",
+          "quote": "Distance (pc) | 79.31 ± 0.17",
+          "source": "Table 1, Astrometric Properties, Distance",
+          "confidence": "high",
+          "note": ""
+        },
+        {
+          "set_label": "",
+          "sample_label": "",
+          "parameter": "sy_plx",
+          "value": 12.609,
+          "unit": "mas",
+          "text": "",
+          "method": "",
+          "err_plus": 0.027,
+          "err_minus": -0.027,
+          "limit": "",
+          "basis": "stated",
+          "quote": "Parallax (mas) | 12.609 ± 0.027",
+          "source": "Table 1, Astrometric Properties, Parallax (Gaia)",
+          "confidence": "high",
+          "note": ""
+        }
+      ]
+    },
+    {
+      "set_label": "HD 1397",
+      "sample_label": "HD 1397 b",
+      "values": [
+        {
+          "set_label": "",
+          "sample_label": "",
+          "parameter": "discoverymethod",
+          "value": 0.0,
+          "unit": "",
+          "text": "Transit",
+          "method": "",
+          "err_plus": 0.0,
+          "err_minus": 0.0,
+          "limit": "",
+          "basis": "stated",
+          "quote": "Two transits of HD 1397b were detected with signal-to-noise ratio of 81.0",
+          "source": "Sect. 2.1, TESS photometry",
+          "confidence": "high",
+          "note": ""
+        },
+        {
+          "set_label": "",
+          "sample_label": "",
+          "parameter": "disc_year",
+          "value": 2019.0,
+          "unit": "",
+          "text": "",
+          "method": "",
+          "err_plus": 0.0,
+          "err_minus": 0.0,
+          "limit": "",
+          "basis": "stated",
+          "quote": "Submitted 5 November 2018 / Accepted 18 February 2019",
+          "source": "Paper header, submission/acceptance dates",
+          "confidence": "medium",
+          "note": "year of publication; TESS detection in 2018"
+        },
+        {
+          "set_label": "",
+          "sample_label": "",
+          "parameter": "disc_facility",
+          "value": 0.0,
+          "unit": "",
+          "text": "Transiting Exoplanet Survey Satellite (TESS)",
+          "method": "",
+          "err_plus": 0.0,
+          "err_minus": 0.0,
+          "limit": "",
+          "basis": "stated",
+          "quote": "Transiting Exoplanet Survey Satellite TESS",
+          "source": "Sect. 1, Introduction",
+          "confidence": "high",
+          "note": ""
+        }
+      ]
+    }
+  ],
+  "notes": "Single planet HD 1397 b discovered via TESS transits and confirmed with CORALIE and MINERVA-Australis RVs. Discovery year is taken from the publication date, which is an inference. No telescope or instrument stated for the discovery detection beyond TESS, so those fields are omitted.",
+  "legacy_parameters": []
+}

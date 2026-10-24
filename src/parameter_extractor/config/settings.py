@@ -32,6 +32,7 @@ except ImportError:
     pass  # python-dotenv not installed; ANTHROPIC_API_KEY must be set some other way
 
 ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY", "")
+ADS_API_TOKEN = os.environ.get("ADS_API_TOKEN", "")     # optional: NASA ADS bibcode lookups
 
 # Model per stage. Cheap/simple stages (metadata lookup, optional triage) can use a
 # smaller/faster model; stages that require careful reading (chemistry,

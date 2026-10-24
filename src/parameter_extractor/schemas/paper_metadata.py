@@ -17,6 +17,7 @@ DoiSource = Literal[
     "manual_fallback",     # resolved by a human (or a research step outside the
                             # automated pipeline, e.g. web search) when CrossRef
                             # wasn't reachable -- see README "Network restrictions"
+    "arxiv",               # from the paper's arXiv record (paper read from arXiv)
     "not_found",           # not on the page and not resolved
 ]
 

@@ -1,0 +1,179 @@
+{
+  "models": [
+    {
+      "label": "Joint EXOFASTv2 fit (two Keplerians: planet + activity)",
+      "rows": [
+        "HD 1397 b"
+      ],
+      "stars": [
+        "HD 1397"
+      ],
+      "datasets": [
+        {
+          "kind": "radial velocity",
+          "facility": "Swiss 1.2 m Euler telescope",
+          "instrument": "CORALIE",
+          "bands": "",
+          "note": "42 measurements, 39 used in RV analysis"
+        },
+        {
+          "kind": "radial velocity",
+          "facility": "MINERVA-Australis",
+          "instrument": "MINERVA-Australis spectrograph",
+          "bands": "",
+          "note": "24 RVs used after excluding 16 Sep night"
+        },
+        {
+          "kind": "transit photometry",
+          "facility": "TESS",
+          "instrument": "TESS camera (SPOC pipeline, PDC light curve)",
+          "bands": "TESS band",
+          "note": "two transits, sector 1, 2-min cadence"
+        },
+        {
+          "kind": "SED photometry",
+          "facility": "archival broadband photometry",
+          "instrument": "Tycho, 2MASS, WISE, Gaia",
+          "bands": "Tycho BT VT; Gaia G; 2MASS J, H, Ks; WISE W1-W4; TESS T",
+          "note": "SED fit with Gaia DR2 parallax and V-band extinction limit"
+        }
+      ],
+      "joint": true,
+      "joint_description": "RV (CORALIE + MINERVA-Australis), TESS transit light curves, SED photometry and Gaia parallax fit simultaneously in EXOFASTv2; stellar Teff and [Fe/H] priors from spectral analysis; stellar activity modelled as second Keplerian",
+      "star_and_planets_joint": true,
+      "software": [
+        {
+          "name": "EXOFASTv2",
+          "version": "",
+          "role": "fitting code"
+        },
+        {
+          "name": "MIST",
+          "version": "",
+          "role": "stellar evolution models"
+        },
+        {
+          "name": "Gelman-Rubin statistic (Ford 2006)",
+          "version": "",
+          "role": "other"
+        }
+      ],
+      "priors": [
+        {
+          "parameter": "st_logg",
+          "target": "HD 1397",
+          "shape": "gaussian",
+          "center": "",
+          "width": "",
+          "lower": "",
+          "upper": "",
+          "unit": "",
+          "as_printed": "Gaussian prior on log g from spectroscopic analysis",
+          "source": "Sect. 3.3, 1st paragraph after 'Gaussian priors'"
+        },
+        {
+          "parameter": "st_met",
+          "target": "HD 1397",
+          "shape": "gaussian",
+          "center": "",
+          "width": "",
+          "lower": "",
+          "upper": "",
+          "unit": "",
+          "as_printed": "Gaussian prior on [Fe/H] from spectroscopic analysis",
+          "source": "Sect. 3.3, 'The parameters log g and [Fe/H] obtained from the spectroscopic analysis were used as Gaussian priors.'"
+        },
+        {
+          "parameter": "st_teff",
+          "target": "HD 1397",
+          "shape": "gaussian",
+          "center": "",
+          "width": "",
+          "lower": "",
+          "upper": "",
+          "unit": "",
+          "as_printed": "Teff from SpecMatch-emp stacked spectrum used as prior",
+          "source": "Sect. 3.1, 'We adopted Teff, and [Fe/H] obtained for the stacked spectrum as priors for the global modelling.'"
+        },
+        {
+          "parameter": "sy_plx",
+          "target": "HD 1397",
+          "shape": "gaussian",
+          "center": "",
+          "width": "",
+          "lower": "",
+          "upper": "",
+          "unit": "mas",
+          "as_printed": "Gaia DR2 parallax used as Gaussian prior, adjusted by +0.07 mas",
+          "source": "Sect. 3.3, 2nd paragraph"
+        },
+        {
+          "parameter": "Prot (stellar rotation Keplerian period)",
+          "target": "HD 1397",
+          "shape": "gaussian",
+          "center": "42.5",
+          "width": "3.4",
+          "lower": "",
+          "upper": "",
+          "unit": "days",
+          "as_printed": "P_rot = 42.5 ± 3.4 days",
+          "source": "Sect. 3.3, 3rd paragraph"
+        },
+        {
+          "parameter": "V-band extinction",
+          "target": "HD 1397",
+          "shape": "other",
+          "center": "",
+          "width": "",
+          "lower": "",
+          "upper": "",
+          "unit": "",
+          "as_printed": "upper limit on V-band extinction from Schlegel et al. (1998) and Schlafly & Finkbeiner (2011)",
+          "source": "Sect. 3.3, 2nd paragraph"
+        }
+      ],
+      "assumptions": [
+        {
+          "text": "Stellar activity signal modelled as an additional Keplerian with period prior from spectral indicators",
+          "parameter": "",
+          "quote": "we model the stellar rotation as an additional Keplerian with a Gaussian prior on the period",
+          "source": "Sect. 3.3, 3rd paragraph"
+        },
+        {
+          "text": "Gaia DR2 parallax offset corrected by +0.07 mas for systematics",
+          "parameter": "sy_plx",
+          "quote": "we adjusted the parallax by $+0.07$ mas based on the systematic offsets",
+          "source": "Sect. 3.3, 2nd paragraph"
+        },
+        {
+          "text": "Transit not grazing / single planet on eccentric orbit; no second planet detected",
+          "parameter": "",
+          "quote": "At the present time, our data show no significant evidence for the presence of a second planet",
+          "source": "Sect. 4, 2nd paragraph"
+        },
+        {
+          "text": "RV jitter included per instrument",
+          "parameter": "",
+          "quote": "RV Jitter (m/s). | 5.9 | 5.1",
+          "source": "Table 3"
+        },
+        {
+          "text": "Star treated as single; no bound stellar companion; no nearby contaminating eclipsing binary from NaCo imaging",
+          "parameter": "",
+          "quote": "The target appears to be single, to the limit of the imaging resolution.",
+          "source": "Sect. 2.4"
+        },
+        {
+          "text": "Model uses MIST isochrones; alternative Torres and YY isochrones gave no significant differences",
+          "parameter": "",
+          "quote": "We compared results using the Torres radius-mass relationship",
+          "source": "Sect. 3.3, 2nd paragraph"
+        }
+      ],
+      "quote": "Simultaneous and self-consistent fitting of the CORALIE and MINERVA-Australis radial velocities, TESS transit light curves and stellar parameters was performed using EXOFASTv2",
+      "source": "Sect. 3.3, 1st paragraph",
+      "confidence": "high"
+    }
+  ],
+  "notes": ""
+}

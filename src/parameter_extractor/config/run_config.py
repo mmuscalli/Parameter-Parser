@@ -59,12 +59,20 @@ class RunConfig:
     # Send every request through the Message Batches API: half price, but each step waits in
     # Anthropic's batch queue (usually seconds to minutes, at most 24 h). Uses the 1-hour cache.
     batch_mode: bool = False
+    # Read a paper's arXiv full text (HTML rendering of the LaTeX source) instead of the local PDF
+    # when the PDF names an arXiv ID or DOI that arXiv has (ingestion/arxiv_source.py): ~40% fewer
+    # tokens, exact table values, but a PREPRINT (the version read is recorded and flagged). Papers
+    # given by identifier instead of a PDF always come from arXiv.
+    prefer_arxiv: bool = False
+    # NASA ADS API token: only needed to look up journal ADS bibcodes (2023PASJ...75.1030T)
+    ads_token: str = ""
 
     @classmethod
     def from_settings(cls, **overrides) -> "RunConfig":
         """Defaults for the command line: key from config/.env or the shell,
         output under runs/. Any field can be overridden by keyword."""
-        values = dict(api_key=settings.ANTHROPIC_API_KEY, output_dir=settings.RUNS_DIR)
+        values = dict(api_key=settings.ANTHROPIC_API_KEY, output_dir=settings.RUNS_DIR,
+                      ads_token=settings.ADS_API_TOKEN)
         values.update(overrides)
         return cls(**values)
 
@@ -80,6 +88,7 @@ class RunConfig:
         """For run_summary.json -- everything except the key."""
         d = asdict(self)
         d.pop("api_key")
+        d["ads_token"] = "(set)" if self.ads_token else ""
         d["output_dir"] = str(self.output_dir)
         d["registry_path"] = str(self.registry_path) if self.registry_path else None
         d["pubchem_cache_path"] = str(self.pubchem_cache_path) if self.pubchem_cache_path else None

@@ -93,3 +93,7 @@ class PdfNotReadableError(PipelineError):
 class RunCancelledError(PipelineError):
     def __init__(self):
         super().__init__("The run was cancelled.")
+
+
+class PaperSourceError(PipelineError):
+    """A paper given by identifier (arXiv ID, DOI, ADS bibcode) couldn't be found or fetched."""

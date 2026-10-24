@@ -1,0 +1,142 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<feed xmlns:opensearch="http://a9.com/-/spec/opensearch/1.1/" xmlns:arxiv="http://arxiv.org/schemas/atom" xmlns="http://www.w3.org/2005/Atom">
+  <id>https://arxiv.org/api/F3uwx3K3JnqTrpEEBaM5BMxwgXk</id>
+  <title>arXiv Query: search_query=&amp;id_list=1811.01882&amp;start=0&amp;max_results=10</title>
+  <updated>2026-10-24T19:19:10Z</updated>
+  <link href="https://arxiv.org/api/query?search_query=&amp;start=0&amp;max_results=10&amp;id_list=1811.01882" type="application/atom+xml"/>
+  <opensearch:itemsPerPage>10</opensearch:itemsPerPage>
+  <opensearch:totalResults>1</opensearch:totalResults>
+  <opensearch:startIndex>0</opensearch:startIndex>
+  <entry>
+    <id>http://arxiv.org/abs/1811.01882v4</id>
+    <title>A Jovian planet in an eccentric 11.5 day orbit around HD1397 discovered by TESS</title>
+    <updated>2019-02-20T12:21:42Z</updated>
+    <link href="https://arxiv.org/abs/1811.01882v4" rel="alternate" type="text/html"/>
+    <link href="https://arxiv.org/pdf/1811.01882v4" rel="related" type="application/pdf" title="pdf"/>
+    <summary>The Transiting Exoplanet Survey Satellite TESS has begun a new age of exoplanet discoveries around bright host stars. We present the discovery of HD 1397b (TOI-120.01), a giant planet in an 11.54day eccentric orbit around a bright (V=7.9) G-type subgiant. We estimate both host star and planetary parameters consistently using EXOFASTv2 based on TESS time-series photometry of transits and CORALIE radial velocity measurements. We find that HD 1397b is a Jovian planet, with a mass of $0.419\pm-0.024$ M$_{\rm Jup}$ and a radius of $1.023^{+0.023}_{-0.026$}$ R$_{\rm Jup}$. Characterising giant planets in short-period eccentric orbits, such as HD 1397b, is important for understanding and testing theories for the formation and migration of giant planets as well as planet-star interactions.</summary>
+    <category term="astro-ph.EP" scheme="http://arxiv.org/schemas/atom"/>
+    <published>2018-11-05T18:00:56Z</published>
+    <arxiv:comment>Accepted for publication in A&amp;A</arxiv:comment>
+    <arxiv:primary_category term="astro-ph.EP"/>
+    <arxiv:journal_ref>A&amp;A 623, A100 (2019)</arxiv:journal_ref>
+    <author>
+      <name>L. D. Nielsen</name>
+    </author>
+    <author>
+      <name>F. Bouchy</name>
+    </author>
+    <author>
+      <name>O. Turner</name>
+    </author>
+    <author>
+      <name>H. Giles</name>
+    </author>
+    <author>
+      <name>A. Suarez Mascareno</name>
+    </author>
+    <author>
+      <name>C. Lovis</name>
+    </author>
+    <author>
+      <name>M. Marmier</name>
+    </author>
+    <author>
+      <name>F. Pepe</name>
+    </author>
+    <author>
+      <name>D. Segransan</name>
+    </author>
+    <author>
+      <name>S. Udry</name>
+    </author>
+    <author>
+      <name>J. F. Otegi</name>
+    </author>
+    <author>
+      <name>G. Ottoni</name>
+    </author>
+    <author>
+      <name>M. Stalport</name>
+    </author>
+    <author>
+      <name>G. Ricker</name>
+    </author>
+    <author>
+      <name>R. Vanderspek</name>
+    </author>
+    <author>
+      <name>D. Latham</name>
+    </author>
+    <author>
+      <name>S. Seager</name>
+    </author>
+    <author>
+      <name>J. N. Winn</name>
+    </author>
+    <author>
+      <name>J. M. Jenkins</name>
+    </author>
+    <author>
+      <name>R. Wittenmyer</name>
+    </author>
+    <author>
+      <name>S. R. Kane</name>
+    </author>
+    <author>
+      <name>S. M. Cartwright</name>
+    </author>
+    <author>
+      <name>K. A. Collins</name>
+    </author>
+    <author>
+      <name>J. Francis</name>
+    </author>
+    <author>
+      <name>N. Guerrero</name>
+    </author>
+    <author>
+      <name>C. X. Huang</name>
+    </author>
+    <author>
+      <name>E. C. Matthews</name>
+    </author>
+    <author>
+      <name>J. Pepper</name>
+    </author>
+    <author>
+      <name>M. Rose</name>
+    </author>
+    <author>
+      <name>J. Villasenor</name>
+    </author>
+    <author>
+      <name>B. Wohler</name>
+    </author>
+    <author>
+      <name>K. Stassun</name>
+    </author>
+    <author>
+      <name>I. Crossfield</name>
+    </author>
+    <author>
+      <name>S. Howell</name>
+    </author>
+    <author>
+      <name>D. Ciardi</name>
+    </author>
+    <author>
+      <name>E. Gonzales</name>
+    </author>
+    <author>
+      <name>R. Matson</name>
+    </author>
+    <author>
+      <name>C. Beighman</name>
+    </author>
+    <author>
+      <name>J. Schlieder</name>
+    </author>
+    <arxiv:doi>10.1051/0004-6361/201834577</arxiv:doi>
+    <link rel="related" href="https://doi.org/10.1051/0004-6361/201834577" title="doi"/>
+  </entry>
+</feed>

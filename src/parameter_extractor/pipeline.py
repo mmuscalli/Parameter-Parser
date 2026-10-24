@@ -42,6 +42,7 @@ from parameter_extractor.calculators.peptide_totals import fill_total_peptide_yi
 from parameter_extractor.calculators.amounts import VOLUME_COLUMN, apply_detection, derive_from_amounts, split_totals
 from parameter_extractor.calculators.mixing import derive_from_ratios, derive_mixture_concentrations
 from parameter_extractor import packs
+from parameter_extractor.paper_source import ResolvedPaper, resolve_paper, run_name
 from parameter_extractor.calculators import exoplanets as exo
 from parameter_extractor.validation import exoplanet_archive
 from parameter_extractor.config import settings
@@ -140,6 +141,24 @@ def _new_run_dir(output_dir: Path, paper_id: str) -> Path:
     return run_dir
 
 
+def _parse_text(source, run_dir: Path) -> ParsedPaper:
+    """A paper read as text (arXiv HTML): no pages, figures or table images."""
+    parsed = ParsedPaper(paper_id=source.name, source_pdf="", page_count=1, has_text_layer=True,
+                         text=source.text, page_texts=[source.text], paged=False, read_from=source.label)
+    (run_dir / "parsed_paper.json").write_text(parsed.to_json())
+    return parsed
+
+
+def _metadata_from_arxiv(record, paper_id: str) -> PaperMetadata:
+    """Bibliographic metadata from the arXiv record (no API call): the journal from its journal
+    reference ('A&A 623, A100 (2019)' -> 'A&A'), else 'arXiv preprint'."""
+    journal = re.split(r"\s*[,(]|\s+\d", record.journal_ref or "")[0].strip() or "arXiv preprint"
+    return PaperMetadata(paper_id=paper_id, paper_doi=record.doi or None,
+                         doi_source="arxiv" if record.doi else "not_found", paper_title=record.title,
+                         authors=list(record.authors), year_published=record.year or 0, journal_published=journal,
+                         source=f"{record.label} (arXiv metadata)")
+
+
 def _parse(pdf_path: Path, run_dir: Path) -> ParsedPaper:
     if not pdf_path.is_file():
         raise PdfNotReadableError(f"PDF not found: {pdf_path}")
@@ -160,7 +179,9 @@ def _start(pdf_path, config: RunConfig, total_steps: int,
     if not config.api_key:  # fail fast, before creating a run folder or parsing anything
         raise ApiKeyMissingError()
     pdf_path = Path(pdf_path)
-    run_dir = _new_run_dir(Path(config.output_dir), pdf_path.stem)
+    # a PDF's stem; a paper named by identifier keeps its dots ('arXiv_2308.05343')
+    run_dir = _new_run_dir(Path(config.output_dir),
+                           pdf_path.stem if pdf_path.suffix.lower() == ".pdf" else pdf_path.name)
     ctx = RunContext(config=config, run_dir=run_dir, total_steps=total_steps,
                      on_progress=on_progress, cancel_event=cancel_event)
     packs.activate(config.pack)           # template, vocabulary, prompts and stages of this domain
@@ -208,12 +229,13 @@ class Extraction:
     # optional stages (the domain pack's stages/*.json) that ran: name -> (spec, result)
     optional: Dict[str, tuple] = field(default_factory=dict)
     equations: List[EquationCandidate] = field(default_factory=list)
+    source: Optional["ResolvedPaper"] = None        # what was read (paper_source)
     structure_ready: threading.Event = field(default_factory=threading.Event)
     failure: Optional[str] = None
 
     @property
     def paper_id(self) -> str:
-        return self.pdf_path.stem
+        return self.source.name if self.source is not None else self.pdf_path.stem
 
     @property
     def wet_dry(self):
@@ -235,7 +257,8 @@ def extract(
     extraction stages. Call finish() afterwards to write the dataset."""
     started = datetime.now()
     terms = [t.strip() for t in config.focus_terms if t.strip()]
-    pdf_path, ctx = _start(pdf_path, config, 0, on_progress, cancel_event)
+    item = pdf_path                             # a PDF, or an arXiv ID / DOI / ADS bibcode (paper_source)
+    pdf_path, ctx = _start(Path(run_name(item)), config, 0, on_progress, cancel_event)
     pack = packs.current()
     # parse, structure, metadata and assembly, plus the pack's built-in stages and the term search
     ctx.total_steps = 4 + pack.uses("methodology") + pack.uses("chemistry") + bool(terms)
@@ -244,24 +267,33 @@ def extract(
                  if spec.trigger.always and config.optional_stages.get(name, "auto") != "off"}
     ctx.total_steps += len(always_on)
 
-    ctx.step("parse", "Reading the PDF")
-    parsed = _parse(pdf_path, ctx.run_dir)
+    ctx.step("parse", "Reading the paper")
+    source = resolve_paper(item, ctx.run_dir, prefer_arxiv=config.prefer_arxiv, ads_token=config.ads_token,
+                           note=lambda m: ctx.note("parse", m))
+    (ctx.run_dir / "source.json").write_text(json.dumps(source.summary(), indent=2, ensure_ascii=False))
     table_images: List[Path] = []
-    if config.rasterize_table_pages and parsed.table_pages:
-        images_by_page = rasterize_table_pages(parsed, ctx.run_dir / "page_images",
-                                               dpi=config.table_raster_dpi)
-        table_images = [path for p in sorted(images_by_page) for path in images_by_page[p]]
-    figures = find_figures(str(pdf_path), ctx.run_dir / "figures")
+    figures, equations = [], []
+    if source.from_arxiv_text:                  # exact text tables; no pages, figures or equation crops
+        parsed = _parse_text(source, ctx.run_dir)
+    else:
+        pdf_path = source.pdf
+        parsed = _parse(pdf_path, ctx.run_dir)
+        parsed.read_from = source.label
+        if config.rasterize_table_pages and parsed.table_pages:
+            images_by_page = rasterize_table_pages(parsed, ctx.run_dir / "page_images",
+                                                   dpi=config.table_raster_dpi)
+            table_images = [path for p in sorted(images_by_page) for path in images_by_page[p]]
+        figures = find_figures(str(pdf_path), ctx.run_dir / "figures")
+        try:
+            equations = find_equations(str(pdf_path), ctx.run_dir / "equations")     # local, no API call
+        finally:
+            close_shared()               # the page layouts were shared by the three steps above
     (ctx.run_dir / "figures_found.json").write_text(
         json.dumps([f.model_dump() for f in figures], indent=2, ensure_ascii=False))
-    try:
-        equations = find_equations(str(pdf_path), ctx.run_dir / "equations")     # local, no API call
-    finally:
-        close_shared()                   # the page layouts were shared by the three steps above
     _write_equations(ctx, equations)
     vocab = packs.current().vocab
     ex = Extraction(ctx=ctx, pdf_path=pdf_path, started=started, parsed=parsed, vocab=vocab,
-                    figures=figures, equations=equations)
+                    figures=figures, equations=equations, source=source)
     if figures and on_figures:
         on_figures(ex)
 
@@ -276,7 +308,11 @@ def extract(
     pool = ThreadPoolExecutor(max_workers=settings.MAX_PARALLEL_STAGES, thread_name_prefix="stage")
     try:
         # metadata needs only page 1: it runs while the experiment structure is planned
-        running = {"metadata": pool.submit(run_metadata_extraction, ctx, parsed.page_texts[0])}
+        if source.record is not None:          # read from arXiv: its record has the metadata
+            arxiv_metadata = _metadata_from_arxiv(source.record, ex.paper_id)
+            running = {"metadata": pool.submit(lambda: arxiv_metadata)}
+        else:
+            running = {"metadata": pool.submit(run_metadata_extraction, ctx, parsed.page_texts[0])}
         if convert_equations:
             running["equations"] = pool.submit(_convert_equations, ctx, equations)
         ctx.step("structure_planner", "Planning the experiment structure")
@@ -319,6 +355,23 @@ def extract(
         raise
     pool.shutdown(wait=False)
     return ex
+
+
+def _source_flags(source) -> List[Flag]:
+    """A paper read from arXiv is a preprint: say which version, and what it was published as
+    (over-flag: the user should know which text the values come from). Fallback notes too."""
+    if source is None:
+        return []
+    flags = []
+    if source.record is not None:
+        r = source.record
+        published = (f" It was published as {r.journal_ref}" + (f" (DOI {r.doi})" if r.doi else "") + "."
+                     if r.journal_ref else " arXiv lists no journal reference for it.")
+        flags.append(Flag("paper_source", f"Read from {source.label}, version {r.version or '?'} of "
+                                          f"{r.updated or r.published}. A preprint can differ from the published "
+                                          f"paper.{published}"))
+    flags += [Flag("paper_source", n) for n in source.notes if "the PDF was read" in n]
+    return flags
 
 
 def _collect_other_parameters(ex: "Extraction") -> None:
@@ -681,7 +734,7 @@ def finish(
     paper_flags = check_extraction(ex.methodology, ex.chemistry, optional=ex.optional_list, **thresholds)
     paper_flags += _cited_data_flags(ex.structure)
     paper_flags += stage_flags
-    paper_flags += _identity_flags(ex.chemistry, ex.parsed.page_texts)
+    paper_flags += _identity_flags(ex.chemistry, ex.parsed.pages_for_lookup)
     paper_flags += [Flag("unit_conversion", n.message, quote=n.quote or None, source=n.source or None)
                     for n in normalization if n.kind == "unit_corrected"]
     if pubchem and pubchem.unavailable_reason:
@@ -804,9 +857,10 @@ def finish(
     row_flags = {r.full_id: f for r in rows if (f := check_row(r, **thresholds))}
     image_tables = image_table_numbers(ex.parsed.table_pages) if config.rasterize_table_pages else set()
     table_pages = table_page_numbers(ex.parsed.table_pages)
+    paper_flags += _source_flags(ex.source)
     check_flag_quotes([*paper_flags, *(f for fs in row_flags.values() for f in fs)], ex.parsed.text, image_tables,
-                      ex.parsed.page_texts, table_pages)
-    check_row_quotes(rows, ex.parsed.text, image_tables, ex.parsed.page_texts, table_pages)
+                      ex.parsed.pages_for_lookup, table_pages)
+    check_row_quotes(rows, ex.parsed.text, image_tables, ex.parsed.pages_for_lookup, table_pages)
     flags_path = None
     if paper_flags or row_flags:
         flags_path = ctx.run_dir / "plausibility_flags.json"
@@ -826,6 +880,7 @@ def finish(
         gold_score = score_paper([r.model_dump() for r in rows], load_gold_standard())
 
     _write_summary(ctx, ex.pdf_path, ex.started, rows=len(rows),
+                   read_from=ex.source.label if ex.source else str(ex.pdf_path),
                    paper_flags=len(paper_flags), rows_flagged=len(row_flags),
                    new_variables_left_out=len(left_out),
                    new_variables_accepted=[a["name"] for a in accepted],

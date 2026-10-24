@@ -62,6 +62,14 @@ class ParsedPaper:
     # pages printed sideways (landscape tables, teng2023): 1-indexed page -> degrees the page was
     # turned to read it (90/270); their text and images are taken upright
     page_rotations: Dict[int, int] = field(default_factory=dict)
+    # False for a text without pages (arXiv HTML full text): no page numbers are given for quotes
+    paged: bool = True
+    read_from: str = ""            # what was read, e.g. "arXiv:2308.05343v1 full text (arXiv HTML; a preprint)"
+
+    @property
+    def pages_for_lookup(self) -> Optional[List[str]]:
+        """page_texts where page numbers mean something, else None."""
+        return self.page_texts if self.paged else None
 
     def to_json(self) -> str:
         return json.dumps(asdict(self), indent=2)

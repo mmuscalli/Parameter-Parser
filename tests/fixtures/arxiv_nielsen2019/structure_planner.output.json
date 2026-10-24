@@ -1,0 +1,22 @@
+{
+  "paper_id": "HD1397b_Nielsen2019",
+  "experiment_sets": [
+    {
+      "set_label": "HD 1397",
+      "set_type": "Independent",
+      "varying_condition_summary": "G-type subgiant host, one transiting hot Jupiter HD 1397 b, joint EXOFASTv2 fit (Table 3)",
+      "source_table_or_section": "Table 1, Table 3, Sect. 3.3",
+      "data_source": "",
+      "samples": [
+        {
+          "sample_label": "HD 1397 b",
+          "duration_hr": null,
+          "source": "Table 3, joint EXOFASTv2 fit with two Keplerians (planet b)"
+        }
+      ]
+    }
+  ],
+  "total_planned_rows": 1,
+  "excluded_data": [],
+  "notes": "Single planet, single solution. The 47-day Keplerian is a stellar activity signal, not a planet, so it gets no row. Stellar parameters belong to the host star set."
+}

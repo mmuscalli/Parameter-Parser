@@ -23,7 +23,12 @@ Rules:
   if it's printed in exactly the parameter's unit. A dimensionless value
   printed as a fraction or in ppm is `u` "fraction" / "ppm" when the
   parameter wants %. The app converts (minutes -> hours, rad -> deg,
-  JD-2450000 -> JD, fraction -> %, ...). Don't convert values yourself.
+  JD-2450000 -> JD, fraction -> %, ...). Don't convert values yourself:
+  a date printed under "BJD - 2450000" is `v` 9662.74 with that `u`, not
+  2459662.74.
+- Values written in LaTeX: in `x_{-a}^{+b}` (or `x^{+b}_{-a}`) the
+  superscript +b is the upper uncertainty `ep` and the subscript -a the
+  lower one `em`, whichever comes first.
 - `n` is at most 15 words of your own -- never a place to repeat the value,
   its method or its mode.
 - Keep every `q` to the shortest span that shows the value (at most 20
