@@ -1090,3 +1090,48 @@ difference (75 Cet b a err sub/sup swapped -- LaTeX lists the minus first), 75 C
 right. Found: the model sometimes adds a printed JD offset itself -> units.convert_printed now
 leaves a value >= offset/2 alone; JD + offset kept at 15 s.f. (was .10g: lost the 4th decimal).
 Caveat: arXiv is a preprint; versions can differ from the published paper.
+
+## arXiv sources, focused search, GUI reorganized (2026-10-24, Mickey's decisions)
+
+Decisions: "Use arXiv text when available" is an OPTION (default off; when on, arXiv text wins
+over the PDF); optional ADS token; focused search defaults to cheap passages-only with a
+"whole paper" toggle; consolidate options so the window doesn't get crowded.
+- `ingestion/arxiv_source.py`: parse_identifier (arXiv ID/URL, DOI/doi.org, ADS bibcode incl.
+  arXiv-style), resolve (arXiv doi: search -> CrossRef title + first author -> arXiv title
+  search, accepted at title similarity >= 0.85; CrossRef also fills journal_ref "Journal (year)"
+  when arXiv has none; journal bibcodes via ADS API with the token), all arXiv requests share a
+  3-second rate limit (`_get`, tests patch it), fetch_html_text / fetch_pdf. `identifier_in_text`
+  finds arXiv's sideways margin stamp (paper_source reads the non-upright chars) or a DOI.
+- `ingestion/html_text.py` (stdlib HTMLParser): LaTeXML span tables (ltx_tr/ltx_td) and <table>s
+  -> "a | b" rows, math -> $alttext$, bibliography/nav dropped.
+- `paper_source.py`: resolve_paper(item, run_dir, prefer_arxiv, ads_token) -> ResolvedPaper
+  (name, pdf | text, record, notes); identifiers always from arXiv (PDF fallback when no HTML);
+  a local PDF only with prefer_arxiv, only if the record's title words are on its first pages,
+  any failure -> the PDF + a note. run_name: PDF stem / "arXiv_<id>" / "doi_<...>" (dots kept:
+  `_start` uses the name, not Path.stem).
+- pipeline.extract(item): writes source.json; text sources: ParsedPaper(paged=False,
+  read_from) -> no figures/equations/table images, quotes get no page (`pages_for_lookup`);
+  metadata from the arXiv record (no metadata call; `_metadata_from_arxiv`, doi_source "arxiv");
+  `paper_source` flags (preprint version, journal_ref; fallback notes) -> GUI group "Where the
+  text came from"; run_summary read_from. RunConfig.prefer_arxiv / ads_token (summary shows "(set)").
+  Prompt rules (optional_stage.md): LaTeX x_{-a}^{+b} -> ep +b / em -a; don't add JD offsets.
+- `focused_search.py`: available_parameters (stage params not switched off + fit-model columns),
+  keywords_for (user words, else description words), passages (head 1500 chars + hits +-3 lines,
+  ' | ' table blocks kept whole, cap 60K chars), 0 hits -> "not mentioned" with no call; one call
+  per paper (`answer_model`: flat, all required, Literal columns, prompt focused_search.md),
+  `_converted` (units/errors via convert_printed; *exofastver -> 1/2), run_focused_search
+  (4 threads; errors per paper don't stop the rest) -> focused_search_<stamp>/ with
+  focused_results.csv, papers.csv, focused_summary.json, papers/<name>/. read_paper_list: first
+  identifier or .pdf cell per CSV line. CLI: --focus COL (repeat), --papers LIST, --search-word,
+  --whole-paper, --list-parameters, --paper ID, --arxiv, --ads-token.
+- GUI: SettingsDialog (gui/settings_dialog.py: API key, ADS token + keychain account
+  `key_store.ADS_ACCOUNT`, output folder, online lookups; Cmd+, / File menu / Settings button;
+  the main window keeps key_edit/out_edit/... as aliases). Main window: Paper (PDF or
+  identifier), Research area, collapsible "Run options" (models, batch, arXiv text, LaTeX,
+  stages, parameters to look for) with a one-line summary; File menu (Open PDF, Focused search,
+  Settings, Quit). `MainWindow.current_config()` is shared with `gui/focused_window.py`
+  (papers list + CSV import, parameter tree with filter, search words, whole-paper box; locks the
+  main window's inputs while searching).
+- Live (economy): focused search on 3 papers $0.0009 (Nielsen EXOFASTv2 -> 2; Teng, aa57186 not
+  mentioned, no call); teng2023 PDF with --arxiv: DOI -> CrossRef -> 2308.05343v1 HTML, $0.059,
+  2219 archive matches, 0 differences on the adopted rows.

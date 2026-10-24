@@ -46,7 +46,7 @@ def run_checks(pdf: Optional[Path] = None, api_key: Optional[str] = None) -> Lis
         # the methodology step became the pack's experimental_conditions stage (2026-10-22): its
         # prompt is the shared optional_stage one
         expected = {"chemistry", "figure_planner", "metadata", "optional_stage", "structure_planner",
-                    "triage"}
+                    "triage", "focused_search"}
         missing = expected - set(prompts)
         if missing:
             raise FileNotFoundError(f"missing prompts: {sorted(missing)} (app and {pack.id} pack)")
@@ -67,6 +67,23 @@ def run_checks(pdf: Optional[Path] = None, api_key: Optional[str] = None) -> Lis
             raise RuntimeError("marker matching gave a wrong result")
         return f"numpy {np.__version__}, marker matching OK"
     checks.append(_run("Digitizer automation", automation))
+
+    def arxiv_and_focused() -> str:
+        """arXiv full text and the focused search are bundled and work (no network needed)."""
+        import ssl
+        from parameter_extractor.focused_search import passages
+        from parameter_extractor.gui import focused_window, settings_dialog  # noqa: F401 (bundled?)
+        from parameter_extractor.ingestion.arxiv_source import parse_identifier
+        from parameter_extractor.ingestion.html_text import html_to_text
+        text = html_to_text('<div class="ltx_document"><span class="ltx_tr"><span class="ltx_td">75 Cet</span>'
+                            '<span class="ltx_td"><math alttext="0.10_{-0.05}^{+0.08}"></math></span></span></div>')
+        if text.strip() != "75 Cet | $0.10_{-0.05}^{+0.08}$" or parse_identifier("10.1093/pasj/psad056") is None:
+            raise RuntimeError(f"arXiv text conversion gave {text!r}")
+        if passages("a\nEXOFASTv2 fit\nb", ["exofast"])[1] != 1:
+            raise RuntimeError("focused-search screening failed")
+        ssl.create_default_context()
+        return "arXiv text conversion, identifiers, focused-search screening OK"
+    checks.append(_run("arXiv text & focused search", arxiv_and_focused))
 
     if pdf is not None:
         def parse_and_render() -> str:

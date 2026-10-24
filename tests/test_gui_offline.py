@@ -45,7 +45,7 @@ from parameter_extractor.schemas.paper_metadata import PaperMetadata
 from test_pipeline_offline import PDF, REPLAY_DIR, _replay_send
 
 
-from PySide6.QtCore import QObject, QTimer, Signal
+from PySide6.QtCore import QObject, Qt, QTimer, Signal
 
 
 class SkipAllFigures(QObject):
@@ -79,11 +79,24 @@ QCoreApplication.setApplicationName("ParameterExtractorTests")
 
 
 class FakeKeyStore:
-    def __init__(self, stored=""):
+    """The API key (default account) plus other secrets by account (the ADS token)."""
+    ACCOUNT, ADS_ACCOUNT = "anthropic-api-key", "ads-api-token"
+    def __init__(self, stored="", ads=""):
         self.stored, self.saved, self.deleted = stored, [], 0
-    def load_key(self): return self.stored
-    def save_key(self, key): self.saved.append(key); return True
-    def delete_key(self): self.deleted += 1
+        self.other = {self.ADS_ACCOUNT: ads} if ads else {}
+    def load_key(self, account=ACCOUNT):
+        return self.stored if account == self.ACCOUNT else self.other.get(account, "")
+    def save_key(self, key, account=ACCOUNT):
+        if account == self.ACCOUNT:
+            self.saved.append(key)
+        else:
+            self.other[account] = key
+        return True
+    def delete_key(self, account=ACCOUNT):
+        if account == self.ACCOUNT:
+            self.deleted += 1
+        else:
+            self.other.pop(account, None)
 
 
 def _window(keys: FakeKeyStore, out: Path):
@@ -611,6 +624,121 @@ def test_stage_toggles():
             assert ("Wet-dry" in summary) == ticked, summary
             w.close()
 
+
+
+def test_settings_and_run_options():
+    """Mickey, 2026-10-24: set-once things in Settings, per-run choices in a collapsible section."""
+    keys = FakeKeyStore(ads="ads-stored")
+    with tempfile.TemporaryDirectory() as tmp, patch.object(main_window, "key_store", keys):
+        w = _window(keys, Path(tmp))
+        w.show()
+        _pump()
+        assert w.key_edit.window() is w.settings_dialog and w.out_edit.window() is w.settings_dialog
+        assert w.ads_edit.text() == "ads-stored" and w.remember_ads_box.isChecked()   # from the keychain
+        assert not w.options_widget.isVisible()                                         # collapsed at first
+        assert "Standard models" in w.options_summary.text() and "stages" in w.options_summary.text()
+        w.options_btn.click()
+        assert w.options_widget.isVisible() and QSettings().value("options_shown", type=bool)
+        w.batch_box.setChecked(True)
+        w.arxiv_box.setChecked(True)
+        assert "batch" in w.options_summary.text() and "arXiv text" in w.options_summary.text()
+        assert w.settings_hint.isVisible() and "API key" in w.settings_hint.text()       # no key yet
+        w.key_edit.setText("k")
+        assert not w.settings_hint.isVisible()
+        w.open_settings()
+        assert w.settings_dialog.isVisible()
+        w.settings_dialog.hide()
+        config = w.current_config()
+        assert config.prefer_arxiv and config.batch_mode and config.ads_token == "ads-stored"
+        w.remember_ads_box.setChecked(False)
+        w._save_preferences()
+        assert keys.other == {}                                            # un-ticked: forgotten
+        # the paper field also takes identifiers
+        for text, expected in (("10.1093/pasj/psad056", "10.1093/pasj/psad056"), ("arXiv:2308.05343", "arXiv:2308.05343"),
+                               (str(Path(tmp) / "missing.pdf"), None)):
+            w.pdf_edit.setText(text)
+            assert w.paper_item() == expected, text
+        _screenshot(w, "settings_main")
+        w.close()
+
+
+def test_a_paper_by_arxiv_id_from_the_window():
+    from parameter_extractor import packs
+    from parameter_extractor.ingestion import arxiv_source as ax
+    from parameter_extractor.validation import exoplanet_archive
+    from test_arxiv_source import FIX, fake_get
+    from test_pipeline_offline import make_replay
+    keys = FakeKeyStore()
+    saved = __import__("json").loads((FIX / "archive_rows.json").read_text())
+    try:
+        with tempfile.TemporaryDirectory() as tmp, patch.object(api_client, "_send", make_replay(FIX)), \
+                patch.object(ax, "_get", fake_get()), patch.object(main_window, "key_store", keys), \
+                patch.object(exoplanet_archive, "fetch_parameter_sets", lambda names, ref: saved):
+            w = _window(keys, Path(tmp))
+            w.pack_combo.setCurrentIndex(w.pack_combo.findData("exoplanets"))
+            w.pdf_edit.setText("arXiv:1811.01882")
+            w.key_edit.setText("replay-not-a-real-key")
+            assert w.run_btn.isEnabled()
+            w.run_btn.click()
+            _wait_until_idle(w)
+            assert "Done: 1 rows" in w.status.text(), w.status.text()
+            groups = [w.flags_tree.topLevelItem(i).text(0) for i in range(w.flags_tree.topLevelItemCount())]
+            assert any(g.startswith("Where the text came from") for g in groups), groups
+            w.close()
+    finally:
+        packs.activate("prebiotic_chemistry")
+
+
+def test_focused_search_window():
+    from parameter_extractor import packs
+    from parameter_extractor.ingestion import arxiv_source as ax
+    from test_arxiv_source import fake_get
+    from test_focused_search import _fake_send
+    keys = FakeKeyStore()
+    calls = []
+    try:
+        with tempfile.TemporaryDirectory() as tmp, patch.object(api_client, "_send", _fake_send(calls)), \
+                patch.object(ax, "_get", fake_get()), patch.object(main_window, "key_store", keys):
+            w = _window(keys, Path(tmp))
+            w.key_edit.setText("x")
+            w.pack_combo.setCurrentIndex(w.pack_combo.findData("exoplanets"))
+            w.focused_action.trigger()
+            f = w._focused_window
+            assert f.isVisible() and not f.run_btn.isEnabled()
+            groups = [f.params_tree.topLevelItem(i).text(0) for i in range(f.params_tree.topLevelItemCount())]
+            assert groups[:3] == ["Planet parameters", "Stellar parameters", "System and discovery"]
+            assert "Fitting models" in groups
+            f.filter_edit.setText("exofast")
+            visible = [f.params_tree.topLevelItem(i) for i in range(f.params_tree.topLevelItemCount())
+                       if not f.params_tree.topLevelItem(i).isHidden()]
+            assert [g.text(0) for g in visible] == ["Fitting models"]
+            fit = visible[0]
+            for j in range(fit.childCount()):
+                if fit.child(j).text(0) in ("pl_fitsoftware", "pl_fitexofastver"):
+                    fit.child(j).setCheckState(0, Qt.CheckState.Checked)
+            assert f.checked_columns() == ["pl_fitsoftware", "pl_fitexofastver"]
+            f.id_edit.setText("arXiv:1811.01882, not-an-id")
+            f._add_typed()
+            assert f.papers_list.count() == 1 and f.id_edit.text() == "not-an-id"
+            f.add_items([PDF])
+            f.words_edit.setText("EXOFAST")
+            assert f.run_btn.isEnabled()
+            f.run_btn.click()
+            assert not w.run_btn.isEnabled() and not w.pack_combo.isEnabled()      # main window locked
+            for _ in range(600):
+                if not f.running:
+                    break
+                _pump()
+            assert not f.running and "Done:" in f.status.text(), f.status.text()
+            assert f.results.rowCount() == 2 and len(calls) == 1
+            results = {f.results.item(r, 1).text(): f.results.item(r, 2).text() for r in range(2)}
+            assert "pl_fitexofastver = 2" in results["Found"] and "Not mentioned (no API call)" in results
+            assert f.open_csv_btn.isEnabled() and w.pack_combo.isEnabled()
+            _screenshot(f, "focused_search")
+            f.close()
+            w.close()
+    finally:
+        packs.activate("prebiotic_chemistry")
 
 if __name__ == "__main__":
     try:

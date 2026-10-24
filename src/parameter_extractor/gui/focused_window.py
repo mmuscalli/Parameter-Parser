@@ -1,0 +1,370 @@
+"""
+Focused search window (File -> Focused search across papers…): choose papers (PDFs, and/or arXiv
+IDs / DOIs / ADS bibcodes typed or loaded from a CSV list), tick a few parameters of the research
+area, optionally give search words (e.g. EXOFAST), and search them all (focused_search.py).
+
+It uses the main window's research area, run options (models, batch, arXiv text, stages) and
+Settings (API key, ADS token, output folder) -- one place for each choice. Runs on a background
+thread like a full run; results: a table here, and focused_results.csv / papers.csv on disk.
+"""
+from __future__ import annotations
+import threading
+import traceback
+from pathlib import Path
+from typing import List, Optional
+
+from PySide6.QtCore import QObject, QSettings, Qt, QThread, QUrl, Signal, Slot
+from PySide6.QtGui import QDesktopServices
+from PySide6.QtWidgets import (QAbstractItemView, QCheckBox, QDialog, QFileDialog, QFormLayout, QGroupBox,
+                               QHBoxLayout, QHeaderView, QLabel, QLineEdit, QListWidget, QMessageBox, QProgressBar,
+                               QPushButton, QSplitter, QTableWidget, QTableWidgetItem, QTreeWidget,
+                               QTreeWidgetItem, QVBoxLayout, QWidget)
+
+from parameter_extractor.errors import PipelineError, RunCancelledError
+from parameter_extractor.pricing import format_usd
+
+STATUS_TEXT = {"found": "Found", "not found": "Not reported", "not mentioned": "Not mentioned (no API call)",
+               "error": "Couldn't search"}
+
+
+class FocusedWorker(QObject):
+    progress = Signal(int, int, str)
+    succeeded = Signal(object)          # focused_search.FocusedRun
+    failed = Signal(str)
+    cancelled = Signal()
+    done = Signal()
+
+    def __init__(self, items, columns, config, search_words, whole_paper):
+        super().__init__()
+        self.args = (items, columns, config, search_words, whole_paper)
+        self._cancel = threading.Event()
+
+    def cancel(self) -> None:
+        self._cancel.set()
+
+    @Slot()
+    def run(self) -> None:
+        from parameter_extractor.focused_search import run_focused_search
+        from parameter_extractor.gui.error_log import record
+        items, columns, config, words, whole = self.args
+        try:
+            run = run_focused_search(items, columns, config, search_words=words, whole_paper=whole,
+                                     on_progress=self.progress.emit, cancel_event=self._cancel)
+        except RunCancelledError:
+            self.cancelled.emit()
+        except PipelineError as e:
+            self.failed.emit(str(e))
+        except Exception as e:
+            path = record(traceback.format_exc(), None)
+            self.failed.emit(f"Unexpected error ({type(e).__name__}): {e}\n\nDetails saved to:\n{path}")
+        else:
+            self.succeeded.emit(run)
+        finally:
+            self.done.emit()
+
+
+class FocusedSearchWindow(QDialog):
+    def __init__(self, main):
+        super().__init__(main)
+        self.main = main
+        self.setWindowTitle("Focused search across papers")
+        self.resize(1000, 720)
+        self._settings = QSettings()
+        self._thread: Optional[QThread] = None
+        self._worker: Optional[FocusedWorker] = None
+        self._run = None
+        self._pack_shown = None
+
+        layout = QVBoxLayout(self)
+        intro = QLabel("Search many papers for a few parameters only. Papers whose text never mentions the "
+                       "search words are skipped without an API call; the rest get one small call each with "
+                       "only the passages around the matches (or the whole paper, if ticked). Uses the main "
+                       "window's research area, run options and Settings.", wordWrap=True)
+        intro.setStyleSheet("color: palette(placeholder-text);")
+        layout.addWidget(intro)
+
+        top = QSplitter(Qt.Orientation.Horizontal)
+        # papers
+        papers_box = QGroupBox("Papers")
+        pl = QVBoxLayout(papers_box)
+        self.papers_list = QListWidget()
+        self.papers_list.setSelectionMode(QAbstractItemView.SelectionMode.ExtendedSelection)
+        pl.addWidget(self.papers_list)
+        self.id_edit = QLineEdit(placeholderText="arXiv ID, DOI or ADS bibcode -- Enter to add")
+        self.id_edit.returnPressed.connect(self._add_typed)
+        pl.addWidget(self.id_edit)
+        row = QHBoxLayout()
+        for text, slot in (("Add PDFs…", self._add_pdfs), ("Add list (CSV)…", self._add_list),
+                           ("Remove", self._remove_selected), ("Clear", self.papers_list.clear)):
+            row.addWidget(QPushButton(text, clicked=slot))
+        pl.addLayout(row)
+        top.addWidget(papers_box)
+        # parameters
+        params_box = QGroupBox("Parameters")
+        ql = QVBoxLayout(params_box)
+        self.filter_edit = QLineEdit(placeholderText="Filter parameters…")
+        self.filter_edit.textChanged.connect(self._filter_parameters)
+        ql.addWidget(self.filter_edit)
+        self.params_tree = QTreeWidget()
+        self.params_tree.setHeaderLabels(["Parameter", "Description"])
+        self.params_tree.header().setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
+        self.params_tree.itemChanged.connect(self._update_ready)
+        ql.addWidget(self.params_tree)
+        self.area_label = QLabel()
+        self.area_label.setStyleSheet("color: palette(placeholder-text);")
+        ql.addWidget(self.area_label)
+        top.addWidget(params_box)
+        top.setSizes([380, 620])
+        layout.addWidget(top, stretch=2)
+
+        form = QFormLayout()
+        self.words_edit = QLineEdit(placeholderText="Optional, comma-separated, e.g. EXOFAST -- default: words from "
+                                                    "the parameters' descriptions")
+        self.words_edit.setToolTip("A paper is searched only if its text contains one of these words (case "
+                                   "doesn't matter); the passages around them are what the model reads.")
+        form.addRow("Search words:", self.words_edit)
+        self.whole_box = QCheckBox("Whole paper -- send each paper in full (finds more, costs more)")
+        form.addRow("", self.whole_box)
+        layout.addLayout(form)
+
+        controls = QHBoxLayout()
+        self.run_btn = QPushButton("Search papers", clicked=self._start, default=True)
+        self.cancel_btn = QPushButton("Cancel", clicked=self._cancel, enabled=False)
+        self.progress = QProgressBar(textVisible=False)
+        controls.addWidget(self.run_btn)
+        controls.addWidget(self.cancel_btn)
+        controls.addWidget(self.progress, stretch=1)
+        layout.addLayout(controls)
+        self.status = QLabel("Add papers and tick at least one parameter.", wordWrap=True)
+        layout.addWidget(self.status)
+
+        self.results = QTableWidget(0, 4)
+        self.results.setHorizontalHeaderLabels(["Paper", "Result", "Values found", "Read from"])
+        self.results.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
+        self.results.horizontalHeader().setSectionResizeMode(2, QHeaderView.ResizeMode.Stretch)
+        layout.addWidget(self.results, stretch=2)
+        buttons = QHBoxLayout()
+        self.open_folder_btn = QPushButton("Open results folder", enabled=False,
+                                           clicked=lambda: self._open(self._run.out_dir))
+        self.open_csv_btn = QPushButton("Open values CSV", enabled=False,
+                                        clicked=lambda: self._open(self._run.results_csv))
+        buttons.addWidget(self.open_folder_btn)
+        buttons.addWidget(self.open_csv_btn)
+        buttons.addStretch(1)
+        layout.addLayout(buttons)
+        self.words_edit.setText(self._settings.value("focused/search_words", ""))
+        self.whole_box.setChecked(self._settings.value("focused/whole_paper", False, type=bool))
+
+    # ---- parameters -------------------------------------------------------------------------------
+    def showEvent(self, event) -> None:
+        self._refresh_parameters()
+        super().showEvent(event)
+
+    def _refresh_parameters(self) -> None:
+        """The research area's parameters (stages switched off in the main window are left out),
+        grouped by stage; ticks are remembered per research area."""
+        from parameter_extractor import packs
+        from parameter_extractor.focused_search import available_parameters
+        pack_id = self.main.pack_combo.currentData() or "prebiotic_chemistry"
+        pack = packs.available().get(pack_id)
+        chosen = set(self._settings.value(f"focused/{pack_id}/columns", []) or [])
+        if self._pack_shown == pack_id and self.params_tree.topLevelItemCount():
+            chosen |= set(self.checked_columns())
+        self._pack_shown = pack_id
+        self.params_tree.blockSignals(True)
+        self.params_tree.clear()
+        groups = {}
+        for p in available_parameters(pack, self.main.optional_stage_choices()):
+            group = groups.get(p.group)
+            if group is None:
+                group = groups[p.group] = QTreeWidgetItem([p.group])
+                group.setFlags(group.flags() & ~Qt.ItemFlag.ItemIsSelectable)
+                self.params_tree.addTopLevelItem(group)
+            item = QTreeWidgetItem([p.column, p.description + (f" [{p.unit}]" if p.unit else "")])
+            item.setFlags(item.flags() | Qt.ItemFlag.ItemIsUserCheckable)
+            item.setCheckState(0, Qt.CheckState.Checked if p.column in chosen else Qt.CheckState.Unchecked)
+            item.setToolTip(1, p.description)
+            item.setData(0, Qt.ItemDataRole.UserRole, p.column)
+            group.addChild(item)
+        for group in groups.values():
+            group.setExpanded(any(group.child(i).checkState(0) == Qt.CheckState.Checked
+                                  for i in range(group.childCount())) or len(groups) == 1)
+        self.params_tree.resizeColumnToContents(0)
+        self.params_tree.blockSignals(False)
+        self.area_label.setText(f"Research area: {pack.label if pack else pack_id} (change it in the main window)")
+        self._filter_parameters(self.filter_edit.text())
+        self._update_ready()
+
+    def _filter_parameters(self, text: str) -> None:
+        t = text.strip().lower()
+        for i in range(self.params_tree.topLevelItemCount()):
+            group = self.params_tree.topLevelItem(i)
+            visible = 0
+            for j in range(group.childCount()):
+                child = group.child(j)
+                hide = bool(t) and t not in child.text(0).lower() and t not in child.text(1).lower()
+                child.setHidden(hide)
+                visible += not hide
+            group.setHidden(visible == 0)
+            if t and visible:
+                group.setExpanded(True)
+
+    def checked_columns(self) -> List[str]:
+        out = []
+        for i in range(self.params_tree.topLevelItemCount()):
+            group = self.params_tree.topLevelItem(i)
+            for j in range(group.childCount()):
+                if group.child(j).checkState(0) == Qt.CheckState.Checked:
+                    out.append(group.child(j).data(0, Qt.ItemDataRole.UserRole))
+        return out
+
+    # ---- papers -----------------------------------------------------------------------------------
+    def items(self) -> list:
+        from parameter_extractor.paper_source import is_identifier
+        out = []
+        for i in range(self.papers_list.count()):
+            text = self.papers_list.item(i).text()
+            out.append(text if is_identifier(text) else Path(text))
+        return out
+
+    def add_items(self, items) -> int:
+        present = {self.papers_list.item(i).text() for i in range(self.papers_list.count())}
+        added = 0
+        for item in items:
+            text = str(item)
+            if text not in present:
+                self.papers_list.addItem(text)
+                present.add(text)
+                added += 1
+        self._update_ready()
+        return added
+
+    def _add_typed(self) -> None:
+        from parameter_extractor.ingestion.arxiv_source import parse_identifier
+        texts = [t.strip() for t in self.id_edit.text().replace(";", ",").split(",") if t.strip()]
+        bad = [t for t in texts if parse_identifier(t) is None]
+        self.add_items([t for t in texts if t not in bad])
+        self.id_edit.setText(", ".join(bad))
+        if bad:
+            self.status.setText(f"Not an arXiv ID, DOI or ADS bibcode: {', '.join(bad)}")
+
+    def _add_pdfs(self) -> None:
+        start = self._settings.value("last_pdf_dir", str(Path.home()))
+        paths, _ = QFileDialog.getOpenFileNames(self, "Add papers", start, "PDF files (*.pdf)")
+        if paths:
+            self._settings.setValue("last_pdf_dir", str(Path(paths[0]).parent))
+            self.add_items(Path(p) for p in paths)
+
+    def _add_list(self) -> None:
+        from parameter_extractor.focused_search import read_paper_list
+        path, _ = QFileDialog.getOpenFileName(self, "Add papers from a list", str(Path.home()),
+                                              "Lists (*.csv *.txt);;All files (*)")
+        if not path:
+            return
+        items = read_paper_list(Path(path))
+        added = self.add_items(items)
+        self.status.setText(f"Added {added} paper(s) from {Path(path).name}"
+                            + ("" if items else " -- no arXiv IDs, DOIs, ADS bibcodes or PDF paths found in it."))
+
+    def _remove_selected(self) -> None:
+        for item in self.papers_list.selectedItems():
+            self.papers_list.takeItem(self.papers_list.row(item))
+        self._update_ready()
+
+    # ---- running ----------------------------------------------------------------------------------
+    @property
+    def running(self) -> bool:
+        return self._thread is not None
+
+    def _update_ready(self, *_args) -> None:
+        main_ready = bool(self.main.key_edit.text().strip() and self.main.out_edit.text().strip())
+        ready = self.papers_list.count() > 0 and bool(self.checked_columns()) and main_ready
+        self.run_btn.setEnabled(ready and not self.running)
+        if not self.running and not main_ready:
+            self.status.setText("Add your Anthropic API key and a results folder in Settings first.")
+
+    def _start(self) -> None:
+        columns, items = self.checked_columns(), self.items()
+        missing = [str(i) for i in items if isinstance(i, Path) and not i.is_file()]
+        if missing:
+            QMessageBox.warning(self, "Papers not found", "No PDF at:\n" + "\n".join(missing[:10]))
+            return
+        pack_id = self.main.pack_combo.currentData() or "prebiotic_chemistry"
+        self._settings.setValue(f"focused/{pack_id}/columns", columns)
+        self._settings.setValue("focused/search_words", self.words_edit.text())
+        self._settings.setValue("focused/whole_paper", self.whole_box.isChecked())
+        words = [w.strip() for w in self.words_edit.text().split(",") if w.strip()]
+        config = self.main.current_config()
+        self._worker = FocusedWorker(items, columns, config, words, self.whole_box.isChecked())
+        self._thread = QThread(self)
+        self._worker.moveToThread(self._thread)
+        self._thread.started.connect(self._worker.run)
+        self._worker.progress.connect(self._on_progress)
+        self._worker.succeeded.connect(self._on_succeeded)
+        self._worker.failed.connect(lambda m: (self.status.setText("Search failed."),
+                                               QMessageBox.critical(self, "Search failed", m)))
+        self._worker.cancelled.connect(lambda: self.status.setText("Cancelled."))
+        self._worker.done.connect(self._on_done)
+        self.results.setRowCount(0)
+        self.progress.setRange(0, len(items))
+        self.progress.setValue(0)
+        self.cancel_btn.setEnabled(True)
+        self.run_btn.setEnabled(False)
+        self.main._set_inputs_enabled(False)   # its settings are in use; no full run meanwhile
+        self.status.setText(f"Searching {len(items)} paper(s) for {', '.join(columns)}…")
+        self._thread.start()
+
+    def _cancel(self) -> None:
+        if self._worker:
+            self._worker.cancel()
+            self.cancel_btn.setEnabled(False)
+            self.status.setText("Cancelling -- papers already being read finish first…")
+
+    def _on_progress(self, done: int, total: int, message: str) -> None:
+        self.progress.setRange(0, max(total, 1))
+        self.progress.setValue(done)
+        self.status.setText(f"{done} of {total}: {message}")
+
+    def _on_succeeded(self, run) -> None:
+        self._run = run
+        self.results.setRowCount(len(run.outcomes))
+        for r, o in enumerate(run.outcomes):
+            values = "; ".join(f"{(v.obj + ': ') if v.obj else ''}{v.parameter} = {v.value}"
+                               + (f" {v.unit}" if v.unit else "") for v in o.values)
+            cells = [o.title or o.paper, STATUS_TEXT.get(o.status, o.status), values or o.message, o.read_from]
+            for c, text in enumerate(cells):
+                item = QTableWidgetItem(str(text))
+                tip = str(text) if c != 0 else f"{o.item}\n{o.title}"
+                if c == 2 and o.values:
+                    tip = "\n".join(f"{v.obj or '(paper)'} · {v.parameter} = {v.value} {v.unit}".strip()
+                                    + f"\n    “{v.quote}” ({v.where})" for v in o.values)
+                item.setToolTip(tip)
+                self.results.setItem(r, c, item)
+        self.results.resizeColumnToContents(1)
+        self.results.setColumnWidth(0, 300)
+        counts = {}
+        for o in run.outcomes:
+            counts[STATUS_TEXT.get(o.status, o.status)] = counts.get(STATUS_TEXT.get(o.status, o.status), 0) + 1
+        self.status.setText(f"Done: {', '.join(f'{n} {s.lower()}' for s, n in counts.items())}. Estimated cost "
+                            f"{format_usd(run.cost_usd)}. Saved to {run.out_dir}")
+        self.open_folder_btn.setEnabled(True)
+        self.open_csv_btn.setEnabled(True)
+
+    def _on_done(self) -> None:
+        self._thread.quit()
+        self._thread.wait()
+        self._thread, self._worker = None, None
+        self.cancel_btn.setEnabled(False)
+        self.main._set_inputs_enabled(True)
+        self._update_ready()
+
+    @staticmethod
+    def _open(path) -> None:
+        QDesktopServices.openUrl(QUrl.fromLocalFile(str(path)))
+
+    def closeEvent(self, event) -> None:
+        if self.running:
+            self.hide()                         # keeps searching; reopen from the File menu
+            event.ignore()
+            return
+        super().closeEvent(event)

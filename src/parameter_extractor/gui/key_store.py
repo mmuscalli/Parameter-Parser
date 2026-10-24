@@ -10,28 +10,29 @@ from __future__ import annotations
 
 SERVICE = "parameter-extractor"
 ACCOUNT = "anthropic-api-key"
+ADS_ACCOUNT = "ads-api-token"          # optional NASA ADS token (ADS bibcode lookups)
 
 
-def load_key() -> str:
+def load_key(account: str = ACCOUNT) -> str:
     try:
         import keyring
-        return keyring.get_password(SERVICE, ACCOUNT) or ""
+        return keyring.get_password(SERVICE, account) or ""
     except Exception:
         return ""
 
 
-def save_key(key: str) -> bool:
+def save_key(key: str, account: str = ACCOUNT) -> bool:
     try:
         import keyring
-        keyring.set_password(SERVICE, ACCOUNT, key)
+        keyring.set_password(SERVICE, account, key)
         return True
     except Exception:
         return False
 
 
-def delete_key() -> None:
+def delete_key(account: str = ACCOUNT) -> None:
     try:
         import keyring
-        keyring.delete_password(SERVICE, ACCOUNT)
+        keyring.delete_password(SERVICE, account)
     except Exception:
         pass  # nothing stored, or no credential store -- either way, nothing to delete

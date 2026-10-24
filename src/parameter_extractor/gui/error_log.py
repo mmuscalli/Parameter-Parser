@@ -40,7 +40,8 @@ def record(text: str, run_dir: Optional[Path] = None) -> Path:
 def latest_run_dir(output_dir: Path, pdf_path: Path, since: float) -> Optional[Path]:
     """The run folder this run created (<pdf stem>_<timestamp>), if any."""
     try:
-        folders = [p for p in Path(output_dir).glob(f"{Path(pdf_path).stem}_*")
+        from parameter_extractor.paper_source import run_name          # a PDF, or an arXiv ID / DOI
+        folders = [p for p in Path(output_dir).glob(f"{run_name(pdf_path)}_*")
                    if p.is_dir() and p.stat().st_mtime >= since - 1]
     except OSError:
         return None

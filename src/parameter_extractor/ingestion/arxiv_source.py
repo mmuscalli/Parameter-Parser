@@ -217,8 +217,8 @@ def by_title(title: str, first_author_surname: str = "") -> Optional[ArxivRecord
     return best if best and _similar(best.title, title) >= TITLE_MATCH else None
 
 
-def _crossref(doi: str) -> Tuple[str, str]:
-    """(title, first author's surname) for a DOI, from CrossRef."""
+def _crossref(doi: str) -> Tuple[str, str, str]:
+    """(title, first author's surname, 'Journal (year)') for a DOI, from CrossRef."""
     try:
         data = json.loads(_get(CROSSREF_URL.format(doi=urllib.parse.quote(doi)), arxiv=False))
     except urllib.error.HTTPError as e:
@@ -230,20 +230,25 @@ def _crossref(doi: str) -> Tuple[str, str]:
     m = data.get("message", {})
     title = " ".join((m.get("title") or [""])[0].split())
     authors = m.get("author") or []
-    return title, (authors[0].get("family") or "") if authors else ""
+    journal = ((m.get("short-container-title") or m.get("container-title") or [""])[0] or "").strip()
+    year = ((m.get("published") or m.get("issued") or {}).get("date-parts") or [[None]])[0][0]
+    published = f"{journal} ({year})" if journal and year else journal
+    return title, (authors[0].get("family") or "") if authors else "", published
 
 
 def by_doi(doi: str) -> ArxivRecord:
     found = [r for r in query(f'doi:"{doi}"', max_results=3) if r.doi.lower() == doi.lower()]
     if found:
         return found[0]
-    title, surname = _crossref(doi)
+    title, surname, published = _crossref(doi)
     record = by_title(title, surname) if title else None
     if record is None:
         raise PaperSourceError(f"DOI {doi} ('{title[:80]}') isn't on arXiv, or arXiv's version has a "
                                f"different title. Use a local PDF for it.")
     if not record.doi:
         record.doi = doi
+    if not record.journal_ref and published:
+        record.journal_ref = published            # where it was published, from the DOI (CrossRef)
     return record
 
 

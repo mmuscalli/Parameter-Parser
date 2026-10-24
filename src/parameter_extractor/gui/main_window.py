@@ -22,7 +22,7 @@ from PySide6.QtGui import QAction, QBrush, QColor, QDesktopServices, QKeySequenc
 from PySide6.QtWidgets import (
     QAbstractItemView, QCheckBox, QComboBox, QFileDialog, QFormLayout, QGroupBox, QHBoxLayout,
     QHeaderView, QLabel, QLineEdit, QMainWindow, QMessageBox, QPlainTextEdit, QProgressBar, QPushButton,
-    QFrame, QScrollArea, QSplitter,
+    QFrame, QScrollArea, QSplitter, QToolButton,
     QTableWidget, QTableWidgetItem, QTabWidget, QTextBrowser, QTreeWidget, QTreeWidgetItem,
     QVBoxLayout, QWidget,
 )
@@ -116,7 +116,7 @@ class MainWindow(QMainWindow):
         self.main_split.setChildrenCollapsible(False)
         self.main_split.setHandleWidth(10)
         self.main_split.setStretchFactor(1, 1)             # a taller window grows the results
-        self.main_split.setSizes([340, 420])
+        self.main_split.setSizes([210, 550])               # the run options start collapsed
         saved = self._settings.value("main_split")
         if saved is not None:
             self.main_split.restoreState(saved)
@@ -129,7 +129,21 @@ class MainWindow(QMainWindow):
 
         quit_action = QAction("Quit", self, shortcut=QKeySequence.StandardKey.Quit,
                               triggered=self.close)
+        quit_action.setMenuRole(QAction.MenuRole.QuitRole)
         self.addAction(quit_action)
+        file_menu = self.menuBar().addMenu("File")
+        file_menu.addAction(QAction("Open PDF…", self, shortcut=QKeySequence.StandardKey.Open,
+                                    triggered=self._choose_pdf))
+        self.focused_action = QAction("Focused search across papers…", self, shortcut="Ctrl+Shift+F",
+                                      triggered=self.open_focused_search)
+        file_menu.addAction(self.focused_action)
+        file_menu.addSeparator()
+        self.settings_action = QAction("Settings…", self, shortcut=QKeySequence.StandardKey.Preferences,
+                                       triggered=self.open_settings)
+        self.settings_action.setMenuRole(QAction.MenuRole.PreferencesRole)   # macOS: in the app menu
+        file_menu.addAction(self.settings_action)
+        file_menu.addAction(quit_action)
+        self._focused_window = None
         variables_menu = self.menuBar().addMenu("Variables")
         self.registry_action = QAction("Remembered variables…", self, triggered=self.open_registry)
         variables_menu.addAction(self.registry_action)
@@ -140,35 +154,27 @@ class MainWindow(QMainWindow):
     # ---- layout ---------------------------------------------------------------
 
     def _build_inputs(self) -> QWidget:
-        box = QGroupBox("Paper and settings")
-        form = QFormLayout(box)
+        """The paper, the research area and the run options (collapsible; Mickey, 2026-10-24: keep the
+        window uncluttered). Set-once things (API key, ADS token, output folder, online lookups) are
+        in Settings (gui/settings_dialog.py); their widgets keep their names here."""
+        from parameter_extractor.gui.settings_dialog import SettingsDialog
+        self.settings_dialog = SettingsDialog(self)
+        d = self.settings_dialog
+        self.key_edit, self.show_key_box, self.remember_key_box = d.key_edit, d.show_key_box, d.remember_key_box
+        self.ads_edit, self.remember_ads_box = d.ads_edit, d.remember_ads_box
+        self.out_edit, self.pubchem_box = d.out_edit, d.pubchem_box
+        for edit in (self.key_edit, self.out_edit):
+            edit.textChanged.connect(self._update_run_enabled)
 
-        self.pdf_edit = QLineEdit(placeholderText="Choose a PDF, or drop one onto this window")
+        box = QGroupBox()
+        form = QFormLayout(box)
+        self.pdf_edit = QLineEdit(placeholderText="Choose a PDF or drop one here -- or type an arXiv ID, DOI "
+                                                  "or ADS bibcode")
+        self.pdf_edit.setToolTip("A local PDF, or a paper to read from arXiv: an arXiv ID (2308.05343), a DOI "
+                                 "(10.1093/pasj/psad056) or an ADS bibcode (needs an ADS token in Settings).")
         self.pdf_edit.textChanged.connect(self._update_run_enabled)
         pdf_btn = QPushButton("Choose…", clicked=self._choose_pdf)
-        form.addRow("Paper (PDF):", self._row(self.pdf_edit, pdf_btn))
-
-        self.key_edit = QLineEdit(placeholderText="sk-ant-…", echoMode=QLineEdit.EchoMode.Password)
-        self.key_edit.textChanged.connect(self._update_run_enabled)
-        self.show_key_box = QCheckBox("Show")
-        self.show_key_box.toggled.connect(lambda on: self.key_edit.setEchoMode(
-            QLineEdit.EchoMode.Normal if on else QLineEdit.EchoMode.Password))
-        self.remember_key_box = QCheckBox("Remember on this computer (system keychain)")
-        form.addRow("Anthropic API key:", self._row(self.key_edit, self.show_key_box))
-        form.addRow("", self.remember_key_box)
-
-        self.out_edit = QLineEdit()
-        self.out_edit.textChanged.connect(self._update_run_enabled)
-        out_btn = QPushButton("Choose…", clicked=self._choose_output_dir)
-        form.addRow("Save results to:", self._row(self.out_edit, out_btn))
-
-        self.terms_edit = QPlainTextEdit()
-        self.terms_edit.setPlaceholderText("Optional: parameters you especially want found, one per line "
-                                           "(e.g. extraction solvent volume, flowthrough recirculation time)")
-        self.terms_edit.setFixedHeight(54)
-        self.terms_edit.setToolTip("Each term gets an explicit answer from a targeted search -- its value, "
-                                   "or 'not stated in the paper'. One extra API call when used.")
-        form.addRow("Parameters to look for:", self.terms_edit)
+        form.addRow("Paper:", self._row(self.pdf_edit, pdf_btn))
         from parameter_extractor import packs
         self.pack_combo = QComboBox()
         for pack_id, pack in sorted(packs.available().items(), key=lambda kv: kv[1].label):
@@ -179,13 +185,18 @@ class MainWindow(QMainWindow):
                                    "extraction stages are used (domain packs).")
         self.pack_combo.currentIndexChanged.connect(self._on_pack_changed)
         form.addRow("Research area:", self.pack_combo)
-        # the area's switchable extraction stages (stages/optional.toggleable_stages), rebuilt on change
-        self.stages_widget = QWidget()
-        self.stages_layout = QVBoxLayout(self.stages_widget)
-        self.stages_layout.setContentsMargins(0, 0, 0, 0)
-        self.stages_layout.setSpacing(2)
-        self.stage_boxes: dict = {}
-        form.addRow("Extraction stages:", self.stages_widget)
+
+        # run options: a toggle with a one-line summary; the options themselves below it
+        self.options_btn = QToolButton(text="Run options", checkable=True)
+        self.options_btn.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
+        self.options_btn.setArrowType(Qt.ArrowType.RightArrow)
+        self.options_btn.setStyleSheet("QToolButton { border: none; font-weight: 600; }")
+        self.options_summary = QLabel()
+        self.options_summary.setStyleSheet("color: palette(placeholder-text);")
+        form.addRow(self._row(self.options_btn, self.options_summary))
+        self.options_widget = QWidget()
+        options = QFormLayout(self.options_widget)
+        options.setContentsMargins(18, 0, 0, 0)
         self.profile_combo = QComboBox()
         for key, label, tip in MODEL_PROFILE_CHOICES:
             self.profile_combo.addItem(label, key)
@@ -194,34 +205,80 @@ class MainWindow(QMainWindow):
                                       + "<br><br>".join(tip for _, _, tip in MODEL_PROFILE_CHOICES)
                                       + "<br><br>Figure-digitizing suggestions and LaTeX conversion (when you ask "
                                         "for them) always use Sonnet 5.5.")
-        form.addRow("Models:", self.profile_combo)
+        options.addRow("Models:", self.profile_combo)
         self.batch_box = QCheckBox("Batch mode -- half price, slower")
         self.batch_box.setToolTip("Sends every request through Anthropic's Message Batches API at half the price. "
                                   "Each step then waits in Anthropic's batch queue: usually a few minutes, at "
                                   "most 24 hours, so a paper can take much longer. Results are the same. Best for "
                                   "papers you don't need right away.")
-        form.addRow("", self.batch_box)
-        self._inputs_form = form
-        self.pubchem_box = QCheckBox("Use online lookups (PubChem names, NASA Exoplanet Archive check)")
-        self.pubchem_box.setToolTip("PubChem: recognises different names for the same compound (e.g. 2'-CMP and "
-                                    "cytidine 2'-monophosphate). Exoplanet Archive: compares exoplanet values with "
-                                    "the archive's parameter set for the same paper. Only species or planet names "
-                                    "are sent; results are kept on this computer.")
-        form.addRow("", self.pubchem_box)
+        options.addRow("", self.batch_box)
+        self.arxiv_box = QCheckBox("Use arXiv text when available")
+        self.arxiv_box.setToolTip("When the PDF names its arXiv ID or DOI and arXiv has the paper's full text, read "
+                                  "that instead of the PDF: about 40% fewer tokens and exact table values. It is "
+                                  "the arXiv preprint (the version read is named in the flags), and figures "
+                                  "can't be digitized from it. Papers typed as an ID always come from arXiv.")
+        options.addRow("", self.arxiv_box)
         self.equations_box = QCheckBox("Convert labelled equations to LaTeX")
         self.equations_box.setToolTip("Equations the authors number or name ('(1)', 'Eq. 2') are always found and "
                                       "shown in the Equations tab. Ticked, they're also transcribed to LaTeX: "
                                       "one small API call (about 2 cents for a dozen equations).")
-        form.addRow("", self.equations_box)
+        options.addRow("", self.equations_box)
+        # the area's switchable extraction stages (stages/optional.toggleable_stages), rebuilt on change
+        self.stages_widget = QWidget()
+        self.stages_layout = QVBoxLayout(self.stages_widget)
+        self.stages_layout.setContentsMargins(0, 0, 0, 0)
+        self.stages_layout.setSpacing(2)
+        self.stage_boxes: dict = {}
+        options.addRow("Extraction stages:", self.stages_widget)
+        self.terms_edit = QPlainTextEdit()
+        self.terms_edit.setPlaceholderText("Optional: parameters you especially want found, one per line "
+                                           "(e.g. extraction solvent volume, flowthrough recirculation time)")
+        self.terms_edit.setFixedHeight(54)
+        self.terms_edit.setToolTip("Each term gets an explicit answer from a targeted search -- its value, "
+                                   "or 'not stated in the paper'. One extra API call when used.")
+        options.addRow("Parameters to look for:", self.terms_edit)
+        self._inputs_form = options
+        form.addRow(self.options_widget)
+        self.options_btn.toggled.connect(self._show_options)
+        for w in (self.profile_combo,):
+            w.currentIndexChanged.connect(self._update_options_summary)
+        for w in (self.batch_box, self.arxiv_box, self.equations_box):
+            w.toggled.connect(self._update_options_summary)
+        self.terms_edit.textChanged.connect(self._update_options_summary)
 
+        self.settings_hint = QLabel(wordWrap=True)
+        self.settings_hint.linkActivated.connect(lambda _: self.open_settings())
+        form.addRow("", self.settings_hint)
         note = QLabel(PRIVACY_NOTE, wordWrap=True)
         note.setStyleSheet("color: palette(placeholder-text);")
         form.addRow("", note)
         return box
 
+    def _show_options(self, shown: bool) -> None:
+        self.options_widget.setVisible(shown)
+        self.options_btn.setArrowType(Qt.ArrowType.DownArrow if shown else Qt.ArrowType.RightArrow)
+        self._settings.setValue("options_shown", shown)
+
+    def _update_options_summary(self, *_args) -> None:
+        """One line for the collapsed run options: what this run will do."""
+        stages = [b for b in self.stage_boxes.values()]
+        parts = [self.profile_combo.currentText().split(" (")[0] + " models",
+                 "batch" if self.batch_box.isChecked() else "",
+                 "arXiv text when available" if self.arxiv_box.isChecked() else "",
+                 "equations to LaTeX" if self.equations_box.isChecked() else "",
+                 f"{sum(b.isChecked() for b in stages)} of {len(stages)} stages" if stages else "",
+                 f"{len(self.focus_terms())} parameter(s) to look for" if self.focus_terms() else ""]
+        self.options_summary.setText(" · ".join(p for p in parts if p))
+
+    def open_settings(self) -> None:
+        self.settings_dialog.show()
+        self.settings_dialog.raise_()
+        self.settings_dialog.activateWindow()
+
     def _build_run_controls(self) -> QVBoxLayout:
         self.run_btn = QPushButton("Extract data", clicked=self._start_run, default=True)
         self.cancel_btn = QPushButton("Cancel", clicked=self._cancel_run, enabled=False)
+        self.settings_btn = QPushButton("Settings…", clicked=self.open_settings)
         self.progress = QProgressBar(minimum=0, maximum=6, value=0, textVisible=False)
         self.status = QLabel("Choose a paper and enter an API key to begin.")
 
@@ -229,6 +286,7 @@ class MainWindow(QMainWindow):
         buttons.addWidget(self.run_btn)
         buttons.addWidget(self.cancel_btn)
         buttons.addWidget(self.progress, stretch=1)
+        buttons.addWidget(self.settings_btn)
         col = QVBoxLayout()
         col.addLayout(buttons)
         col.addWidget(self.status)
@@ -311,6 +369,16 @@ class MainWindow(QMainWindow):
         index = self.profile_combo.findData(self._settings.value("model_profile", "standard"))
         self.profile_combo.setCurrentIndex(max(index, 0))
         self.batch_box.setChecked(self._settings.value("batch_mode", False, type=bool))
+        self.arxiv_box.setChecked(self._settings.value("prefer_arxiv", False, type=bool))
+        shown = self._settings.value("options_shown", False, type=bool)
+        self.options_btn.setChecked(shown)
+        self._show_options(shown)
+        stored_ads = key_store.load_key(key_store.ADS_ACCOUNT)
+        self._ads_was_stored = bool(stored_ads)
+        if stored_ads:
+            self.ads_edit.setText(stored_ads)
+            self.remember_ads_box.setChecked(True)
+        self._update_options_summary()
         stored_key = key_store.load_key()
         self._key_was_stored = bool(stored_key)
         if stored_key:
@@ -343,9 +411,11 @@ class MainWindow(QMainWindow):
             box.setToolTip(t.description)
             box.setChecked(self._settings.value(f"stages/{pack_id}/{t.name}", True, type=bool))
             box.toggled.connect(lambda on, key=f"stages/{pack_id}/{t.name}": self._settings.setValue(key, on))
+            box.toggled.connect(self._update_options_summary)
             self.stages_layout.addWidget(box)
             self.stage_boxes[t.name] = box
         self._inputs_form.setRowVisible(self.stages_widget, bool(toggles))
+        self._update_options_summary()
 
     def optional_stage_choices(self) -> dict:
         """RunConfig.optional_stages: unticked stages are 'off'; ticked ones run as usual."""
@@ -363,6 +433,14 @@ class MainWindow(QMainWindow):
         self._settings.setValue("equations_to_latex", self.equations_box.isChecked())
         self._settings.setValue("model_profile", self.profile_combo.currentData())
         self._settings.setValue("batch_mode", self.batch_box.isChecked())
+        self._settings.setValue("prefer_arxiv", self.arxiv_box.isChecked())
+        ads = self.ads_edit.text().strip()
+        if self.remember_ads_box.isChecked() and ads:
+            key_store.save_key(ads, key_store.ADS_ACCOUNT)
+            self._ads_was_stored = True
+        elif self._ads_was_stored and not self.remember_ads_box.isChecked():
+            key_store.delete_key(key_store.ADS_ACCOUNT)
+            self._ads_was_stored = False
         key = self.key_edit.text().strip()
         if self.remember_key_box.isChecked():
             if not key_store.save_key(key):
@@ -412,13 +490,19 @@ class MainWindow(QMainWindow):
 
     @property
     def _busy(self) -> bool:
-        """A run is in progress: extracting, and/or the figure review is open."""
-        return self._running or self._review is not None
+        """A run is in progress: extracting, and/or the figure review is open -- or a focused search."""
+        return (self._running or self._review is not None
+                or bool(self._focused_window is not None and self._focused_window.running))
 
     def _update_run_enabled(self) -> None:
         ready = bool(self.pdf_edit.text().strip() and self.key_edit.text().strip()
                      and self.out_edit.text().strip())
         self.run_btn.setEnabled(ready and not self._busy)
+        missing = [what for what, edit in (("your Anthropic API key", self.key_edit),
+                                           ("a folder for the results", self.out_edit)) if not edit.text().strip()]
+        self.settings_hint.setText(f"Add {' and '.join(missing)} in <a href='settings'>Settings…</a>"
+                                   if missing else "")
+        self.settings_hint.setVisible(bool(missing))
 
     # ---- running ---------------------------------------------------------------
     #
@@ -427,24 +511,51 @@ class MainWindow(QMainWindow):
     # opened as soon as the PDF has been read. The dataset is built
     # (pipeline.finish) when BOTH are done, whichever finishes last.
 
+    def current_config(self) -> RunConfig:
+        """The run configuration the window's settings and run options describe (also used by the
+        focused-search window)."""
+        return RunConfig(api_key=self.key_edit.text().strip(),
+                         output_dir=Path(self.out_edit.text().strip()).expanduser(),
+                         registry_path=self.registry_path, focus_terms=self.focus_terms(),
+                         use_pubchem=self.pubchem_box.isChecked(),
+                         equations_to_latex=self.equations_box.isChecked(),
+                         pack=self.pack_combo.currentData() or "prebiotic_chemistry",
+                         online_checks=self.pubchem_box.isChecked(),
+                         optional_stages=self.optional_stage_choices(),
+                         model_profile=self.profile_combo.currentData() or "standard",
+                         batch_mode=self.batch_box.isChecked(),
+                         prefer_arxiv=self.arxiv_box.isChecked(), ads_token=self.ads_edit.text().strip(),
+                         pubchem_cache_path=default_pubchem_cache_path())
+
+    def open_focused_search(self) -> None:
+        from parameter_extractor.gui.focused_window import FocusedSearchWindow
+        if self._focused_window is None:
+            self._focused_window = FocusedSearchWindow(self)
+        self._focused_window.show()
+        self._focused_window.raise_()
+        self._focused_window.activateWindow()
+
+    def paper_item(self):
+        """The paper field: a PDF path, or an arXiv ID / DOI / ADS bibcode (paper_source); None if
+        it's neither."""
+        from parameter_extractor.paper_source import is_identifier
+        text = self.pdf_edit.text().strip()
+        if is_identifier(text):
+            return text
+        pdf = Path(text).expanduser()
+        return pdf if pdf.is_file() else None
+
     def _start_run(self) -> None:
-        pdf = Path(self.pdf_edit.text().strip())
-        if not pdf.is_file():
-            QMessageBox.warning(self, "Paper not found", f"There's no file at:\n{pdf}")
+        pdf = self.paper_item()
+        if pdf is None:
+            QMessageBox.warning(self, "Paper not found",
+                                f"There's no PDF at:\n{self.pdf_edit.text().strip()}\n\nand it isn't an arXiv "
+                                f"ID, DOI or ADS bibcode either.")
             return
         out_dir = Path(self.out_edit.text().strip()).expanduser()
         self._save_preferences()
 
-        config = RunConfig(api_key=self.key_edit.text().strip(), output_dir=out_dir,
-                           registry_path=self.registry_path, focus_terms=self.focus_terms(),
-                           use_pubchem=self.pubchem_box.isChecked(),
-                           equations_to_latex=self.equations_box.isChecked(),
-                           pack=self.pack_combo.currentData() or "prebiotic_chemistry",
-                           online_checks=self.pubchem_box.isChecked(),
-                           optional_stages=self.optional_stage_choices(),
-                           model_profile=self.profile_combo.currentData() or "standard",
-                           batch_mode=self.batch_box.isChecked(),
-                           pubchem_cache_path=default_pubchem_cache_path())
+        config = self.current_config()
         self._extraction, self._extraction_ok, self._review = None, False, None
         self._worker = PipelineWorker(pdf, config)
         self._thread = QThread(self)
@@ -460,7 +571,7 @@ class MainWindow(QMainWindow):
         self._set_inputs_enabled(False)
         self.cancel_btn.setEnabled(True)
         self.progress.setValue(0)
-        self.status.setText(f"Starting on {pdf.name}…")
+        self.status.setText(f"Starting on {pdf.name if isinstance(pdf, Path) else pdf}…")
         self._thread.start()
 
     def _cancel_run(self) -> None:
@@ -577,11 +688,13 @@ class MainWindow(QMainWindow):
         RegistryDialog(self.registry_path, parent=self).exec()
 
     def _set_inputs_enabled(self, enabled: bool) -> None:
-        for w in (self.pdf_edit, self.key_edit, self.out_edit, self.remember_key_box,
-                  self.show_key_box, self.terms_edit, self.registry_action, self.pack_combo,
-                  self.stages_widget, self.pubchem_box, self.equations_box, self.profile_combo,
-                  self.batch_box):   # the pack is active during a run
+        for w in (self.pdf_edit, self.terms_edit, self.registry_action, self.pack_combo,
+                  self.stages_widget, self.equations_box, self.profile_combo,
+                  self.batch_box, self.arxiv_box):   # the pack is active during a run
             w.setEnabled(enabled)
+        self.settings_dialog.lock(not enabled)
+        if not (self._focused_window is not None and self._focused_window.running):
+            self.focused_action.setEnabled(enabled)      # one thing at a time
         self._update_run_enabled()
 
     # ---- results ---------------------------------------------------------------
@@ -741,10 +854,14 @@ class MainWindow(QMainWindow):
         repeat_flags = [f for f in result.paper_flags if f.kind == "duplicate_removed"]
         fit_flags = [f for f in result.paper_flags if f.kind in ("fit_model", "multimodal", "other_estimates")]
         identity_flags = [f for f in result.paper_flags if f.kind == "identity_not_quoted"]
+        source_flags = [f for f in result.paper_flags if f.kind == "paper_source"]
         other_paper_flags = [f for f in result.paper_flags
                              if f.kind not in ("new_variable", "cited_data", "derived_value", "duplicate_removed",
                                                "archive_check", "archive_match", "fit_model",
-                                               "multimodal", "other_estimates", "identity_not_quoted")]
+                                               "multimodal", "other_estimates", "identity_not_quoted",
+                                               "paper_source")]
+        if source_flags:
+            add_group("Where the text came from", source_flags)
         if cited_flags:
             add_group("Data reproduced from other publications", cited_flags)
         if new_var_flags:
