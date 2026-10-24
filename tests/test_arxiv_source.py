@@ -94,7 +94,7 @@ def test_feed_and_lookups():
         try:
             ax.resolve("2019A&A...623A.100N")
         except errors.PaperSourceError as e:
-            assert "ADS API token" in str(e)
+            assert "without an ADS token" in str(e)          # tried CrossRef: nothing matched
         else:
             raise AssertionError("a journal bibcode needs an ADS token")
 
@@ -156,6 +156,55 @@ def test_a_paper_given_by_arxiv_id_runs_end_to_end():
     finally:
         packs.activate("prebiotic_chemistry")
 
+
+
+def test_exoplanet_archive_reference_links():
+    """Mickey's list (2026-10-24): the Exoplanet Archive's pl_refname cells -- HTML links to ADS
+    abstracts (one with the '&' URL-encoded as %26, labels with &amp;) -- are read as bibcodes with
+    their labels; journal bibcodes resolve without an ADS token: volume + page -> CrossRef -> DOI."""
+    from parameter_extractor.focused_search import read_paper_list
+    items = read_paper_list(ROOT / "tests" / "fixtures" / "archive_refnames.csv")
+    assert [str(i) for i in items] == ["2020A&A...644A...1T", "2018PASJ...70...59T", "2022MNRAS.512..583G",
+                                       "2024MNRAS.527.3183M", "2013A&A...555A..87M"]       # the header '0' skipped
+    assert [i.label for i in items][3:] == ["Michel & Mugrauer 2024", "Mitchell et al. 2013"]
+    assert [i.first_author for i in items] == ["Tala Pinto", "Takarada", "Gaidos", "Michel", "Mitchell"]
+    assert str(ax.identifier_in_cell("see https://arxiv.org/abs/2308.05343v1")) == "arXiv:2308.05343v1"
+    assert str(ax.identifier_in_cell("https://doi.org/10.1093/pasj/psad056")) == "10.1093/pasj/psad056"
+    assert ax.identifier_in_cell("Teng et al. 2023") is None
+    b = ax.Bibcode.parse("2020A&A...644A...1T")
+    assert (b.year, b.journal, b.volume, b.page) == (2020, "A&A", "644", "A1")
+    assert (ax.Bibcode.parse("2013A&A...553L...5D").page, ax.Bibcode.parse("2022NatAs...6..751C").volume) == ("L5", "6")
+    assert ax.Bibcode.parse("2013ApJ...774...55B").page == "55" and ax.Bibcode.parse("2013ApJ...774L..55B").journal == "ApJL"
+    items_found = [{"DOI": "10.1051/0004-6361:20078819", "volume": "484", "page": "17-28"},
+                   {"DOI": "10.1051/0004-6361/202038285", "volume": "644", "article-number": "A1"}]
+    seen = []
+    def get(url, params=None, headers=None, arxiv=True):
+        seen.append(params)
+        return json.dumps({"message": {"items": items_found}}).encode()
+    with patch.object(ax, "_get", get):
+        assert ax.doi_from_bibcode("2020A&A...644A...1T", "Tala Pinto") == "10.1051/0004-6361/202038285"
+        assert "issn:0004-6361" in seen[0]["filter"] and seen[0]["query.author"] == "Tala Pinto"
+        try:
+            ax.doi_from_bibcode("2020A&A...645A...1T")
+        except errors.PaperSourceError as e:
+            assert "no matching article" in str(e) and "ADS token" in str(e)
+        else:
+            raise AssertionError("a volume that doesn't match must not be accepted")
+
+
+def test_title_search_tolerates_spelling():
+    """Moutou 2026: the journal's 'Characterising' vs the preprint's 'Characterizing' -- a query with
+    other title words still finds it; the close-title rule still decides."""
+    preprint = ax.ArxivRecord("2510.11523", "v1", "Characterizing planetary systems with SPIRou: questions about "
+                              "the magnetic cycle of 55 Cnc A and two new planets around B")
+    queries = []
+    def fake_query(q, max_results=5):
+        queries.append(q)
+        return [preprint] if "Characterising" not in q else []
+    with patch.object(ax, "query", fake_query):
+        found = ax.by_title("Characterising planetary systems with SPIRou: Questions about the magnetic cycle of "
+                            "55 Cnc A and two new planets around B", "Moutou")
+    assert found is preprint and queries[0].startswith("au:Moutou")
 
 if __name__ == "__main__":
     for name, fn in list(globals().items()):

@@ -16,7 +16,8 @@ from typing import List, Optional
 from PySide6.QtCore import QObject, QSettings, Qt, QThread, QUrl, Signal, Slot
 from PySide6.QtGui import QDesktopServices
 from PySide6.QtWidgets import (QAbstractItemView, QCheckBox, QDialog, QFileDialog, QFormLayout, QGroupBox,
-                               QHBoxLayout, QHeaderView, QLabel, QLineEdit, QListWidget, QMessageBox, QProgressBar,
+                               QHBoxLayout, QHeaderView, QLabel, QLineEdit, QListWidget, QListWidgetItem, QMessageBox,
+                               QProgressBar,
                                QPushButton, QSplitter, QTableWidget, QTableWidgetItem, QTreeWidget,
                                QTreeWidgetItem, QVBoxLayout, QWidget)
 
@@ -90,7 +91,7 @@ class FocusedSearchWindow(QDialog):
         self.papers_list = QListWidget()
         self.papers_list.setSelectionMode(QAbstractItemView.SelectionMode.ExtendedSelection)
         pl.addWidget(self.papers_list)
-        self.id_edit = QLineEdit(placeholderText="arXiv ID, DOI or ADS bibcode -- Enter to add")
+        self.id_edit = QLineEdit(placeholderText="arXiv ID, DOI, ADS bibcode or reference link -- Enter to add")
         self.id_edit.returnPressed.connect(self._add_typed)
         pl.addWidget(self.id_edit)
         row = QHBoxLayout()
@@ -220,30 +221,34 @@ class FocusedSearchWindow(QDialog):
 
     # ---- papers -----------------------------------------------------------------------------------
     def items(self) -> list:
-        from parameter_extractor.paper_source import is_identifier
-        out = []
-        for i in range(self.papers_list.count()):
-            text = self.papers_list.item(i).text()
-            out.append(text if is_identifier(text) else Path(text))
-        return out
+        """The papers as added: PDF paths, or identifiers (PaperRef, with any reference label)."""
+        return [self.papers_list.item(i).data(Qt.ItemDataRole.UserRole) for i in range(self.papers_list.count())]
 
     def add_items(self, items) -> int:
-        present = {self.papers_list.item(i).text() for i in range(self.papers_list.count())}
+        from parameter_extractor.ingestion.arxiv_source import PaperRef
+        present = {str(x) for x in self.items()}
         added = 0
         for item in items:
-            text = str(item)
-            if text not in present:
-                self.papers_list.addItem(text)
-                present.add(text)
-                added += 1
+            if str(item) in present:
+                continue
+            if not isinstance(item, (Path, PaperRef)):
+                item = Path(item) if str(item).lower().endswith(".pdf") else PaperRef(str(item))
+            label = getattr(item, "label", "")
+            entry = QListWidgetItem(f"{label}  ({item})" if label else str(item))
+            entry.setData(Qt.ItemDataRole.UserRole, item)
+            entry.setToolTip(str(item))
+            self.papers_list.addItem(entry)
+            present.add(str(item))
+            added += 1
         self._update_ready()
         return added
 
     def _add_typed(self) -> None:
-        from parameter_extractor.ingestion.arxiv_source import parse_identifier
+        from parameter_extractor.ingestion.arxiv_source import identifier_in_cell
         texts = [t.strip() for t in self.id_edit.text().replace(";", ",").split(",") if t.strip()]
-        bad = [t for t in texts if parse_identifier(t) is None]
-        self.add_items([t for t in texts if t not in bad])
+        refs = {t: identifier_in_cell(t) for t in texts}      # also pasted reference links
+        bad = [t for t, ref in refs.items() if ref is None]
+        self.add_items([ref for ref in refs.values() if ref is not None])
         self.id_edit.setText(", ".join(bad))
         if bad:
             self.status.setText(f"Not an arXiv ID, DOI or ADS bibcode: {', '.join(bad)}")
@@ -331,10 +336,11 @@ class FocusedSearchWindow(QDialog):
         for r, o in enumerate(run.outcomes):
             values = "; ".join(f"{(v.obj + ': ') if v.obj else ''}{v.parameter} = {v.value}"
                                + (f" {v.unit}" if v.unit else "") for v in o.values)
-            cells = [o.title or o.paper, STATUS_TEXT.get(o.status, o.status), values or o.message, o.read_from]
+            cells = [o.reference or o.title or o.paper, STATUS_TEXT.get(o.status, o.status), values or o.message,
+                     o.read_from]
             for c, text in enumerate(cells):
                 item = QTableWidgetItem(str(text))
-                tip = str(text) if c != 0 else f"{o.item}\n{o.title}"
+                tip = str(text) if c != 0 else "\n".join(x for x in (o.reference, o.item, o.title) if x)
                 if c == 2 and o.values:
                     tip = "\n".join(f"{v.obj or '(paper)'} · {v.parameter} = {v.value} {v.unit}".strip()
                                     + f"\n    “{v.quote}” ({v.where})" for v in o.values)

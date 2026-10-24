@@ -86,7 +86,7 @@ def resolve_paper(item: PaperItem, run_dir: Path, prefer_arxiv: bool = False, ad
     name = run_name(item)
     if is_identifier(item):                    # named by identifier: arXiv is the only source
         note(f"Looking up {ax.parse_identifier(str(item))} on arXiv")
-        record = ax.resolve(str(item), ads_token)
+        record = ax.resolve(item, ads_token)          # a PaperRef keeps its label's first author
         note(f"Downloading {record.label} from arXiv")
         text = ax.fetch_html_text(record, save_to=run_dir / "arxiv.html")
         if text:

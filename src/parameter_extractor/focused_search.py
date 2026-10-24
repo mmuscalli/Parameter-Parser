@@ -164,6 +164,7 @@ class FocusedValue:
 @dataclass
 class PaperOutcome:
     item: str                     # as given (PDF path or identifier)
+    reference: str = ""           # the list's label for it, e.g. 'Tala Pinto et al. 2020' 
     paper: str = ""               # run name
     read_from: str = ""
     title: str = ""
@@ -236,7 +237,7 @@ def search_paper(item: PaperItem, params: Sequence[FocusParameter], config: RunC
                  cancel_event: Optional[threading.Event] = None) -> PaperOutcome:
     from parameter_extractor.api_client import call_structured
     from parameter_extractor.stages.prompt_loader import load_prompt
-    outcome = PaperOutcome(item=str(item), paper=run_name(item))
+    outcome = PaperOutcome(item=str(item), paper=run_name(item), reference=getattr(item, "label", ""))
     run_dir.mkdir(parents=True, exist_ok=True)
     ctx = RunContext(config=config, run_dir=run_dir, total_steps=1, cancel_event=cancel_event)
     ctx.check_cancelled()
@@ -295,14 +296,14 @@ class FocusedRun:
 
 RESULT_COLUMNS = ["paper", "obj", "parameter", "value", "unit", "err_plus", "err_minus", "printed", "quote", "where",
                   "confidence", "note"]
-PAPER_COLUMNS = ["item", "paper", "read_from", "title", "status", "found", "hits", "cost_usd", "input_tokens",
+PAPER_COLUMNS = ["item", "reference", "paper", "read_from", "title", "status", "found", "hits", "cost_usd", "input_tokens",
                  "output_tokens", "message"]
 
 
 def read_paper_list(path: Path) -> List[PaperItem]:
     """A CSV (or plain list) of papers: in each line, the first cell that's an arXiv ID, a DOI, an ADS
     bibcode or a .pdf path (relative paths are next to the list). Header lines are skipped."""
-    from parameter_extractor.ingestion.arxiv_source import parse_identifier
+    from parameter_extractor.ingestion.arxiv_source import identifier_in_cell
     path = Path(path)
     items: List[PaperItem] = []
     with open(path, newline="", encoding="utf-8-sig") as f:
@@ -312,8 +313,9 @@ def read_paper_list(path: Path) -> List[PaperItem]:
                     pdf = Path(cell).expanduser()
                     items.append(pdf if pdf.is_absolute() else path.parent / pdf)
                     break
-                if parse_identifier(cell):
-                    items.append(cell)
+                ref = identifier_in_cell(cell)      # also reference links (Exoplanet Archive export)
+                if ref:
+                    items.append(ref)
                     break
     return list(dict.fromkeys(items))
 
@@ -365,10 +367,11 @@ def run_focused_search(items: Sequence[PaperItem], columns: Sequence[str], confi
                 except RunCancelledError:
                     raise
                 except PipelineError as e:
-                    outcome = PaperOutcome(item=str(item), paper=run_dir.name, status="error", message=str(e))
+                    outcome = PaperOutcome(item=str(item), paper=run_dir.name, status="error", message=str(e),
+                                           reference=getattr(item, "label", ""))
                 except Exception as e:                      # one bad paper doesn't stop the others
                     outcome = PaperOutcome(item=str(item), paper=run_dir.name, status="error",
-                                           message=f"{type(e).__name__}: {e}")
+                                           message=f"{type(e).__name__}: {e}", reference=getattr(item, "label", ""))
                 outcomes.append(outcome)
                 done += 1
                 report(done, len(jobs), f"{outcome.paper}: {outcome.status}"

@@ -106,7 +106,7 @@ def test_a_search_over_several_papers():
             assert nielsen.status == "found" and nielsen.found == ["pl_fitsoftware", "pl_fitexofastver"]
             assert "full text (arXiv HTML" in nielsen.read_from and nielsen.title.startswith("A Jovian planet")
             assert by_item[str(EDER_PDF)].status == "not mentioned"                  # screened out locally
-            assert by_item["2023PASJ...75.1030T"].status == "error" and "ADS API token" in \
+            assert by_item["2023PASJ...75.1030T"].status == "error" and "without an ADS token" in \
                 by_item["2023PASJ...75.1030T"].message
             assert len(calls) == 1 and calls[0]["model"] == "claude-haiku-5-5"        # one small call in all
             sent = calls[0]["content"]
@@ -115,7 +115,7 @@ def test_a_search_over_several_papers():
             rows = run.results_csv.read_text().splitlines()
             assert len(rows) == 3 and ",pl_fitexofastver,2," in rows[2]
             papers = run.papers_csv.read_text()
-            assert "not mentioned" in papers and "ADS API token" in papers
+            assert "not mentioned" in papers and "without an ADS token" in papers
             summary = json.loads((run.out_dir / "focused_summary.json").read_text())
             assert summary["status_counts"] == {"found": 1, "not found": 0, "not mentioned": 1, "error": 1}
             assert progress[-1][0] == progress[-1][1] == 3

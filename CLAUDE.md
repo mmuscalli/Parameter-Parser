@@ -1135,3 +1135,23 @@ over the PDF); optional ADS token; focused search defaults to cheap passages-onl
 - Live (economy): focused search on 3 papers $0.0009 (Nielsen EXOFASTv2 -> 2; Teng, aa57186 not
   mentioned, no call); teng2023 PDF with --arxiv: DOI -> CrossRef -> 2308.05343v1 HTML, $0.059,
   2219 archive matches, 0 differences on the adopted rows.
+
+## Exoplanet Archive reference lists (2026-10-24, Mickey's disc_papers_trim_20.csv)
+
+The file is NOT an arXiv export: one cell per line, the archive's pl_refname HTML links
+(`<a refstr=... href=https://ui.adsabs.harvard.edu/abs/2020A&A...644A...1T/abstract ...>Tala Pinto
+et al. 2020</a>`; one with %26 for '&', labels with &amp;), header "0". `arxiv_source.identifier_in_cell`
+(html.unescape + URL-unquote; ADS abs link -> bibcode; arxiv.org / doi.org links; bare forms) ->
+`PaperRef` (str subclass + `.label`, `.first_author`); read_paper_list, the focused window (list
+item data keeps the PaperRef, shown as "label  (bibcode)") and the main Paper field accept it.
+Journal bibcodes WITHOUT an ADS token: `Bibcode.parse` (A&A 'A1', letters 'L5', ApJ+L -> ApJL) ->
+`doi_from_bibcode`: CrossRef filtered by the journal's ISSNs (`JOURNAL_ISSNS`, common astronomy
+journals; else query.bibliographic) + year +-1 + query.author = first author, accepted only when
+volume AND first page/article number match -> by_doi. by_title: CrossRef title + subtitle, tags
+stripped; several arXiv queries (au:<last surname word> + 3 title words; 5 words; au + other words)
+so spelling differences ('Characterising'/'Characterizing') don't block it; close-title rule kept.
+CrossRef requests spaced 1 s and every service retries 429/503 (Retry-After, else 5/10/20 s) --
+the first live run of 19 papers got 429s with 4 parallel lookups.
+Live: 16/19 resolved without a token (13 arXiv HTML, 3 arXiv PDF); Tala Pinto 2020, Michel &
+Mugrauer 2024, Baran 2015 aren't on arXiv (broad searches confirm). EXOFAST search: none of the
+16 mention it -> $0.00 (screened locally). papers.csv has a `reference` column (the label).

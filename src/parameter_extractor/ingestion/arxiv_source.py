@@ -38,6 +38,8 @@ CROSSREF_URL = "https://api.crossref.org/works/{doi}"
 ADS_URL = "https://api.adsabs.harvard.edu/v1/search/query"
 USER_AGENT = "ParameterExtractor/0.1 (desktop research tool; reads papers the user names)"
 MIN_INTERVAL_SEC = 3.0            # arXiv's API terms: no more than one request every three seconds
+CROSSREF_INTERVAL_SEC = 1.0       # CrossRef's public pool answers 429 to bursts (a focused search of 19 papers)
+RETRIES = 3                       # on 429 / 503: wait (Retry-After, else 5, 10, 20 s) and try again
 TIMEOUT_SEC = 60
 TITLE_MATCH = 0.85                # title similarity needed to accept an arXiv search result
 
@@ -45,6 +47,8 @@ _ATOM = "{http://www.w3.org/2005/Atom}"
 _ARXIV = "{http://arxiv.org/schemas/atom}"
 _lock = threading.Lock()
 _last_request = [0.0]
+_crossref_lock = threading.Lock()
+_crossref_last = [0.0]
 
 # identifiers -------------------------------------------------------------------------------------
 _NEW_ID = r"\d{4}\.\d{4,5}"
@@ -82,6 +86,45 @@ def parse_identifier(text: str) -> Optional[Identifier]:
     if _ARXIV_BIBCODE.match(t) or _BIBCODE.match(t):
         return Identifier("bibcode", t)
     return None
+
+
+class PaperRef(str):
+    """A paper identifier as text (what lists and the GUI pass around), plus the reference label it came
+    with, e.g. 'Tala Pinto et al. 2020' from an Exoplanet Archive reference link."""
+    label: str = ""
+
+    def __new__(cls, value: str, label: str = ""):
+        obj = super().__new__(cls, value)
+        obj.label = label
+        return obj
+
+    @property
+    def first_author(self) -> str:
+        """'Tala Pinto et al. 2020' -> 'Tala Pinto'; 'Michel & Mugrauer 2024' -> 'Michel'."""
+        m = re.match(r"\s*(.+?)(?:\s+et\s+al\.?|\s*&|\s+and\s+|,|\s+\(?\d{4})", self.label or "")
+        return m.group(1).strip() if m else ""
+
+
+_ADS_URL = re.compile(r"adsabs\.harvard\.edu/(?:abs|cgi-bin/nph-bib_query\?bibcode=)/?(?P<bib>[^/\s\"'<>&?]{19})")
+
+
+def identifier_in_cell(cell: str) -> Optional[PaperRef]:
+    """One cell of a paper list -> its identifier: a bare arXiv ID / DOI / bibcode, or one inside a link --
+    the NASA Exoplanet Archive's reference cells ('<a refstr=... href=https://ui.adsabs.harvard.edu/abs/
+    2020A&A...644A...1T/abstract ...>Tala Pinto et al. 2020</a>'), an arxiv.org or doi.org link."""
+    import html as _html
+    text = urllib.parse.unquote(_html.unescape(cell or "")).strip()
+    if not text:
+        return None
+    label = re.sub(r"\s+", " ", re.sub(r"<[^>]+>", " ", text)).strip() if "<" in text else ""
+    m = re.search(r"adsabs\.harvard\.edu/abs/(?P<bib>\d{4}[^/\s\"'<>]{15})", text)
+    if m:
+        return PaperRef(m.group("bib"), label)
+    found = parse_identifier(text)
+    if found is None:
+        m = _ARXIV_URL.search(text) or _DOI.search(text)
+        found = parse_identifier(m.group(0)) if m else None
+    return PaperRef(found.value if found.kind != "arxiv" else f"arXiv:{found.value}", label) if found else None
 
 
 def identifier_in_text(text: str) -> Optional[Identifier]:
@@ -127,20 +170,36 @@ class ArxivRecord:
         return asdict(self)
 
 
-def _get(url: str, params: Optional[dict] = None, headers: Optional[dict] = None, arxiv: bool = True) -> bytes:
-    if params:
-        url += "?" + urllib.parse.urlencode(params)
-    req = urllib.request.Request(url, headers={"User-Agent": USER_AGENT, **(headers or {})})
-    if arxiv:
-        with _lock:                                   # one arXiv request at a time, 3 s apart
-            wait = _last_request[0] + MIN_INTERVAL_SEC - time.monotonic()
+def _spaced(lock: threading.Lock, last: list, interval: float, req) -> bytes:
+    """One request at a time per service, `interval` apart; a busy answer (429 / 503) is retried after
+    the wait the service asks for (Retry-After), else 5, 10, 20 s."""
+    for attempt in range(RETRIES + 1):
+        with lock:
+            wait = last[0] + interval - time.monotonic()
             if wait > 0:
                 time.sleep(wait)
             try:
                 with urllib.request.urlopen(req, timeout=TIMEOUT_SEC) as resp:
                     return resp.read()
+            except urllib.error.HTTPError as e:
+                if e.code not in (429, 503) or attempt == RETRIES:
+                    raise
+                retry_after = e.headers.get("Retry-After", "") if e.headers else ""
+                pause = float(retry_after) if retry_after.isdigit() else 5.0 * 2 ** attempt
             finally:
-                _last_request[0] = time.monotonic()
+                last[0] = time.monotonic()
+        time.sleep(min(pause, 60.0))
+    raise RuntimeError("unreachable")
+
+
+def _get(url: str, params: Optional[dict] = None, headers: Optional[dict] = None, arxiv: bool = True) -> bytes:
+    if params:
+        url += "?" + urllib.parse.urlencode(params)
+    req = urllib.request.Request(url, headers={"User-Agent": USER_AGENT, **(headers or {})})
+    if arxiv:                                         # one arXiv request at a time, 3 s apart
+        return _spaced(_lock, _last_request, MIN_INTERVAL_SEC, req)
+    if "crossref.org" in url:
+        return _spaced(_crossref_lock, _crossref_last, CROSSREF_INTERVAL_SEC, req)
     with urllib.request.urlopen(req, timeout=TIMEOUT_SEC) as resp:
         return resp.read()
 
@@ -207,14 +266,29 @@ def _title_words(title: str, n: int = 6) -> List[str]:
 
 
 def by_title(title: str, first_author_surname: str = "") -> Optional[ArxivRecord]:
-    """An arXiv search by title words (+ first author), accepted only on a close title match."""
-    words = _title_words(title)
+    """An arXiv search by title words (+ first author), accepted only on a close title match. A few
+    queries with different words: a journal's spelling can differ from the preprint's
+    ('Characterising' / 'Characterizing', Moutou 2026), and arXiv's author search wants one surname
+    word ('Tala Pinto' -> Pinto)."""
+    words = _title_words(title, 8)
     if not words:
         return None
-    terms = [f"ti:{w}" for w in words] + ([f"au:{first_author_surname}"] if first_author_surname else [])
-    candidates = query(" AND ".join(terms), max_results=5)
-    best = max(candidates, key=lambda r: _similar(r.title, title), default=None)
-    return best if best and _similar(best.title, title) >= TITLE_MATCH else None
+    author = re.sub(r"[^A-Za-z\-]", "", (first_author_surname or "").split()[-1]) if first_author_surname else ""
+    au = [f"au:{author}"] if author else []
+    queries = [au + [f"ti:{w}" for w in words[:3]], [f"ti:{w}" for w in words[:5]]]
+    if author and len(words) > 3:
+        queries.append(au + [f"ti:{w}" for w in words[3:6]])
+    seen = set()
+    for terms in queries:
+        key = " AND ".join(terms)
+        if key in seen or not terms:
+            continue
+        seen.add(key)
+        candidates = query(key, max_results=5)
+        best = max(candidates, key=lambda r: _similar(r.title, title), default=None)
+        if best and _similar(best.title, title) >= TITLE_MATCH:
+            return best
+    return None
 
 
 def _crossref(doi: str) -> Tuple[str, str, str]:
@@ -228,7 +302,8 @@ def _crossref(doi: str) -> Tuple[str, str, str]:
     except (urllib.error.URLError, TimeoutError, OSError, ValueError) as e:
         raise _network_error("CrossRef", e) from e
     m = data.get("message", {})
-    title = " ".join((m.get("title") or [""])[0].split())
+    title = (m.get("title") or [""])[0] + "".join(f". {t}" for t in (m.get("subtitle") or []) if t)
+    title = " ".join(re.sub(r"<[^>]+>", "", title).split())     # '<i>Gaia</i> search ...' -> plain
     authors = m.get("author") or []
     journal = ((m.get("short-container-title") or m.get("container-title") or [""])[0] or "").strip()
     year = ((m.get("published") or m.get("issued") or {}).get("date-parts") or [[None]])[0][0]
@@ -252,13 +327,88 @@ def by_doi(doi: str) -> ArxivRecord:
     return record
 
 
-def by_bibcode(bibcode: str, ads_token: str = "") -> ArxivRecord:
+# journal bibcodes without an ADS token (Mickey's Exoplanet Archive export, 2026-10-24): a bibcode
+# spells out year, journal, volume and first page; CrossRef, filtered by the journal's ISSN, the year
+# and (if known) the first author, finds the article whose volume and page match -> its DOI.
+JOURNAL_ISSNS = {
+    "A&A": ["0004-6361", "1432-0746"], "ApJ": ["0004-637X", "1538-4357"], "ApJL": ["2041-8205", "2041-8213"],
+    "ApJS": ["0067-0049", "1538-4365"], "AJ": ["0004-6256", "1538-3881"], "MNRAS": ["0035-8711", "1365-2966"],
+    "PASJ": ["0004-6264", "2053-051X"], "PASP": ["0004-6280", "1538-3873"], "Sci": ["0036-8075", "1095-9203"],
+    "Natur": ["0028-0836", "1476-4687"], "NatAs": ["2397-3366"], "AN": ["0004-6337", "1521-3994"],
+    "Icar": ["0019-1035", "1090-2643"], "PSJ": ["2632-3338"], "RNAAS": ["2515-5172"],
+    "A&ARv": ["0935-4956", "1432-0754"], "ARA&A": ["0066-4146", "1545-4282"], "NatCo": ["2041-1723"],
+    "PNAS": ["0027-8424", "1091-6490"], "SSRv": ["0038-6308", "1572-9672"], "EM&P": ["0167-9295", "1573-0794"],
+}
+
+
+@dataclass
+class Bibcode:
+    year: int
+    journal: str                  # 'A&A', 'ApJ', 'MNRAS', ...
+    volume: str
+    page: str                     # 'A1', 'L5', '583' (letter qualifiers kept: A&A article numbers, letters)
+    initial: str
+
+    @classmethod
+    def parse(cls, bibcode: str) -> Optional["Bibcode"]:
+        if len(bibcode) != 19 or not bibcode[:4].isdigit():
+            return None
+        journal, volume, qualifier = bibcode[4:9].strip("."), bibcode[9:13].strip("."), bibcode[13]
+        page = bibcode[14:18].strip(".")
+        if qualifier.isalpha():
+            page = qualifier + page
+        if journal == "ApJ" and qualifier == "L":
+            journal = "ApJL"
+        return cls(int(bibcode[:4]), journal, volume, page, bibcode[18])
+
+
+def _first_page(item: dict) -> str:
+    page = (item.get("page") or "").split("-")[0].strip()
+    return (item.get("article-number") or page or "").strip()
+
+
+def _same_page(bib: Bibcode, item: dict) -> bool:
+    found = _first_page(item).upper()
+    want = bib.page.upper()
+    digits = lambda t: re.sub(r"\D", "", t).lstrip("0")
+    return bool(found) and (found == want or (digits(found) == digits(want) and digits(want) != ""))
+
+
+def doi_from_bibcode(bibcode: str, surname: str = "") -> str:
+    """A journal bibcode's DOI via CrossRef (no ADS token): the article with the bibcode's volume and
+    first page in that journal and year. PaperSourceError when it can't be pinned down."""
+    bib = Bibcode.parse(bibcode)
+    if bib is None:
+        raise PaperSourceError(f"'{bibcode}' isn't a valid ADS bibcode.")
+    issns = JOURNAL_ISSNS.get(bib.journal)
+    params = {"rows": 40, "select": "DOI,volume,page,article-number,issued,title,author",
+              "filter": f"from-pub-date:{bib.year - 1},until-pub-date:{bib.year + 1}"}
+    if issns:
+        params["filter"] += "," + ",".join(f"issn:{i}" for i in issns)
+        if surname:
+            params["query.author"] = surname
+        else:
+            params["query.bibliographic"] = f"{bib.volume} {bib.page}"
+    else:
+        params["query.bibliographic"] = f"{bib.journal} {bib.volume} {bib.page} {bib.year} {surname}".strip()
+    try:
+        data = json.loads(_get(CROSSREF_URL.format(doi="").rstrip("/"), params, arxiv=False))
+    except (urllib.error.URLError, TimeoutError, OSError, ValueError) as e:
+        raise _network_error("CrossRef", e) from e
+    for item in data.get("message", {}).get("items", []):
+        if (item.get("volume") or "").strip() == bib.volume and _same_page(bib, item):
+            return item["DOI"]
+    raise PaperSourceError(f"ADS bibcode {bibcode} ({bib.journal} {bib.volume}, {bib.page}, {bib.year}): no "
+                           f"matching article found without an ADS token. Add an ADS token in Settings, or give "
+                           f"its DOI or arXiv ID.")
+
+
+def by_bibcode(bibcode: str, ads_token: str = "", surname: str = "") -> ArxivRecord:
     m = _ARXIV_BIBCODE.match(bibcode)
     if m:
         return by_arxiv_id(f"{m.group(1)}.{m.group(2)}")
-    if not ads_token:
-        raise PaperSourceError(f"ADS bibcode {bibcode}: looking it up needs an ADS API token (Settings). "
-                               f"Or give its DOI or arXiv ID instead.")
+    if not ads_token:                                  # no token: journal, volume, page -> CrossRef -> DOI
+        return by_doi(doi_from_bibcode(bibcode, surname))
     try:
         data = json.loads(_get(ADS_URL, {"q": f'bibcode:"{bibcode}"', "fl": "identifier,doi,title"},
                                headers={"Authorization": f"Bearer {ads_token}"}, arxiv=False))
@@ -284,7 +434,7 @@ def by_bibcode(bibcode: str, ads_token: str = "") -> ArxivRecord:
     raise PaperSourceError(f"ADS lists no arXiv version of {bibcode}. Use a local PDF for it.")
 
 
-def resolve(identifier, ads_token: str = "") -> ArxivRecord:
+def resolve(identifier, ads_token: str = "", surname: str = "") -> ArxivRecord:
     """An Identifier (or text) -> its arXiv record. PaperSourceError says why not."""
     ident = identifier if isinstance(identifier, Identifier) else parse_identifier(str(identifier))
     if ident is None:
@@ -293,7 +443,7 @@ def resolve(identifier, ads_token: str = "") -> ArxivRecord:
         return by_arxiv_id(ident.value)
     if ident.kind == "doi":
         return by_doi(ident.value)
-    return by_bibcode(ident.value, ads_token)
+    return by_bibcode(ident.value, ads_token, surname or getattr(identifier, "first_author", ""))
 
 
 # full text ---------------------------------------------------------------------------------------

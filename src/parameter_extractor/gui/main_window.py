@@ -543,10 +543,13 @@ class MainWindow(QMainWindow):
     def paper_item(self):
         """The paper field: a PDF path, or an arXiv ID / DOI / ADS bibcode (paper_source); None if
         it's neither."""
+        from parameter_extractor.ingestion.arxiv_source import identifier_in_cell
         from parameter_extractor.paper_source import is_identifier
         text = self.pdf_edit.text().strip()
         if is_identifier(text):
             return text
+        if not text.lower().endswith(".pdf") and (ref := identifier_in_cell(text)):
+            return ref                                    # a pasted reference link (Exoplanet Archive, ADS)
         pdf = Path(text).expanduser()
         return pdf if pdf.is_file() else None
 
