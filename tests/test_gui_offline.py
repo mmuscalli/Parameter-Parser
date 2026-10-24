@@ -702,7 +702,7 @@ def test_focused_search_window():
             w = _window(keys, Path(tmp))
             w.key_edit.setText("x")
             w.pack_combo.setCurrentIndex(w.pack_combo.findData("exoplanets"))
-            w.focused_action.trigger()
+            w.focused_btn.click()                                  # the button and File menu both open it
             f = w._focused_window
             assert f.isVisible() and not f.run_btn.isEnabled()
             groups = [f.params_tree.topLevelItem(i).text(0) for i in range(f.params_tree.topLevelItemCount())]

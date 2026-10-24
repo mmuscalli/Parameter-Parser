@@ -1129,7 +1129,7 @@ over the PDF); optional ADS token; focused search defaults to cheap passages-onl
   the main window keeps key_edit/out_edit/... as aliases). Main window: Paper (PDF or
   identifier), Research area, collapsible "Run options" (models, batch, arXiv text, LaTeX,
   stages, parameters to look for) with a one-line summary; File menu (Open PDF, Focused search,
-  Settings, Quit). `MainWindow.current_config()` is shared with `gui/focused_window.py`
+  Settings, Quit) + a "Focused search…" button beside Settings. `MainWindow.current_config()` is shared with `gui/focused_window.py`
   (papers list + CSV import, parameter tree with filter, search words, whole-paper box; locks the
   main window's inputs while searching).
 - Live (economy): focused search on 3 papers $0.0009 (Nielsen EXOFASTv2 -> 2; Teng, aa57186 not

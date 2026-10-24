@@ -279,6 +279,10 @@ class MainWindow(QMainWindow):
         self.run_btn = QPushButton("Extract data", clicked=self._start_run, default=True)
         self.cancel_btn = QPushButton("Cancel", clicked=self._cancel_run, enabled=False)
         self.settings_btn = QPushButton("Settings…", clicked=self.open_settings)
+        # the focused search is its own mode: a few parameters across many papers (gui/focused_window.py)
+        self.focused_btn = QPushButton("Focused search…", clicked=self.open_focused_search)
+        self.focused_btn.setToolTip("Search many papers for a few chosen parameters only (e.g. which papers used "
+                                    "EXOFAST): a separate, much cheaper search with its own window.")
         self.progress = QProgressBar(minimum=0, maximum=6, value=0, textVisible=False)
         self.status = QLabel("Choose a paper and enter an API key to begin.")
 
@@ -286,6 +290,7 @@ class MainWindow(QMainWindow):
         buttons.addWidget(self.run_btn)
         buttons.addWidget(self.cancel_btn)
         buttons.addWidget(self.progress, stretch=1)
+        buttons.addWidget(self.focused_btn)
         buttons.addWidget(self.settings_btn)
         col = QVBoxLayout()
         col.addLayout(buttons)
@@ -695,6 +700,7 @@ class MainWindow(QMainWindow):
         self.settings_dialog.lock(not enabled)
         if not (self._focused_window is not None and self._focused_window.running):
             self.focused_action.setEnabled(enabled)      # one thing at a time
+            self.focused_btn.setEnabled(enabled)
         self._update_run_enabled()
 
     # ---- results ---------------------------------------------------------------
