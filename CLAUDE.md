@@ -1072,3 +1072,21 @@ pack from the locked combo, not packs.current()). Values on green rows that diff
 archive (`differs`, not `minor`) are orange cells (`ARCHIVE_DIFF_COLOR`) with extracted vs
 archive in the hover (`MainWindow._archive_marks`). Internal names (pl_fitlabel,
 `solution`/`archive_solution` keys) unchanged.
+
+## arXiv full text evaluated (2026-10-24, for multi-paper queues; not built into the app yet)
+
+export.arxiv.org/api/query = METADATA only (title, abstract, authors, links, journal_ref,
+arxiv:doi; `search_query=doi:<doi>` works only when authors entered the DOI -- Teng's 2308.05343
+has none; fallback CrossRef title + first author -> `au:X AND ti:w1 AND ti:w2...` found it).
+Full text: arxiv.org/html/<id> (LaTeXML; existed for all three test papers incl. 2018),
+/e-print/<id> (LaTeX source; aa57186-25's is the journal-corrected version), /pdf/<id>.
+OpenAlex / Semantic Scholar had no arXiv link for Teng; ADS needs a personal token.
+Converter prototype (scratchpad, not in repo): LaTeXML tables are span.ltx_tr/ltx_td, math
+from alttext, drop .ltx_bibliography. Paper tokens (text + table images now -> arXiv HTML):
+nielsen 29.4K -> 17.6K, teng 99.2K -> 62.4K, aa57186 66.4K -> 34.0K. Live economy runs (same
+code): nielsen $0.014 -> $0.011, 118/0 both; aa57186 $0.027 -> $0.020, 149 -> 180 matches,
+47 -> 9 not extracted; teng $0.065 (PDF batch run $0.19 at half price), 2219 matches, 1 real
+difference (75 Cet b a err sub/sup swapped -- LaTeX lists the minus first), 75 Cet [Fe/H] now
+right. Found: the model sometimes adds a printed JD offset itself -> units.convert_printed now
+leaves a value >= offset/2 alone; JD + offset kept at 15 s.f. (was .10g: lost the 4th decimal).
+Caveat: arXiv is a preprint; versions can differ from the published paper.

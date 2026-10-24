@@ -250,7 +250,10 @@ def convert_printed(value: float, printed: str, target: str, is_error: bool = Fa
     if m and _JD_PLAIN.match(t):
         if is_error:
             return value, ""
-        return float(f"{value + float(m.group(1).replace(',', '')):.10g}"), f"{value:g} {p} -> {t}"
+        offset = float(m.group(1).replace(',', ''))
+        if offset >= 1e6 and value >= offset / 2:       # already a full Julian date: the offset was added
+            return value, f"{value:g} is already a full Julian date (unit given as '{p}')"   # by the reader
+        return float(f"{value + offset:.15g}"), f"{value:g} {p} -> {t}"   # .10g would cut 4th decimal
     m = _LOG_OF.match(t)
     if m and not _LOG_OF.match(p):
         inner = m.group(1)

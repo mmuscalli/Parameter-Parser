@@ -294,6 +294,9 @@ def test_what_the_archive_has_that_a_row_lacks():
     assert abs(convert_printed(8.12, "L_sun", "log(L_sun)", is_error=True, about=58.59)[0] - 0.05637) < 5e-5
     assert abs(convert_printed(-6.43, "L_sun", "log(L_sun)", True, 58.59)[0] + 0.05049) < 5e-5
     assert convert_printed(8.12, "L_sun", "log(L_sun)", is_error=True)[0] is None        # needs the value
+    # a value that already includes the printed offset isn't shifted again (arXiv run of aa57186-25)
+    assert convert_printed(2459662.7387, "BJD - 2,450,000", "JD")[0] == 2459662.7387
+    assert convert_printed(9662.7387, "BJD - 2,450,000", "JD")[0] == 2459662.7387
     from parameter_extractor.stages.optional import time_system
     assert [time_system(u) for u in ("JD-2450000", "BJD_TDB - 2,450,000", "HJD", "d", "")] == \
         ["JD", "BJD_TDB", "HJD", "", ""]
