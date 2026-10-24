@@ -42,6 +42,26 @@ def main() -> int:
 
     parser = argparse.ArgumentParser(description="Extract experimental data from a paper PDF.")
     parser.add_argument("--pdf", help="Path to the paper PDF")
+    parser.add_argument("--paper", metavar="ID",
+                        help="A paper by arXiv ID, DOI or ADS bibcode instead of --pdf: read from arXiv")
+    parser.add_argument("--arxiv", action="store_true",
+                        help="Read the PDF's arXiv full text instead when arXiv has it (a preprint; ~40%% "
+                             "fewer tokens, exact tables)")
+    parser.add_argument("--ads-token", default=None,
+                        help="NASA ADS API token, for journal ADS bibcodes (default: ADS_API_TOKEN in config/.env)")
+    focused = parser.add_argument_group(
+        "focused search", "A few parameters across many papers, cheaply: --focus with --papers and/or --paper/--pdf")
+    focused.add_argument("--focus", action="append", default=[], metavar="COLUMN",
+                         help="A parameter (column) to search for (repeatable); --list-parameters shows them")
+    focused.add_argument("--papers", type=Path, metavar="LIST",
+                         help="A CSV or text file of papers: arXiv IDs, DOIs, ADS bibcodes or PDF paths")
+    focused.add_argument("--search-word", action="append", default=[], metavar="WORD",
+                         help="Screen papers for this word (repeatable), e.g. EXOFAST; default: words from "
+                              "the parameters' descriptions")
+    focused.add_argument("--whole-paper", action="store_true",
+                         help="Send the whole paper, not only the passages around the search words")
+    focused.add_argument("--list-parameters", action="store_true",
+                         help="List the parameters a focused search can look for (with --pack) and exit")
     parser.add_argument("--out", type=Path, help="Folder for run outputs (default: runs/)")
     parser.add_argument("--prefix", default="001", help="3-digit-ish paper prefix for full_id/set_id")
     parser.add_argument("--look-for", action="append", default=[], metavar="TERM",
@@ -85,8 +105,20 @@ def main() -> int:
     for name in args.skip_stage:
         if name not in known:
             parser.error(f"'{name}' isn't an optional stage of {args.pack}: {', '.join(known) or 'none'}")
-    if not args.pdf:
-        parser.error("--pdf is required")
+    if args.list_parameters:
+        from parameter_extractor.focused_search import available_parameters
+        group = None
+        for p in available_parameters(packs.available()[args.pack],
+                                      {name: "off" for name in args.skip_stage}):
+            if p.group != group:
+                print(p.group)
+                group = p.group
+            print(f"    {p.column:26} {p.description[:90]}" + (f" [{p.unit}]" if p.unit else ""))
+        return 0
+    if args.focus:
+        return _focused(args, parser)
+    if not args.pdf and not args.paper:
+        parser.error("--pdf or --paper is required")
 
     from parameter_extractor.registry import default_pubchem_cache_path, default_registry_path
     overrides = {"paper_prefix": args.prefix, "registry_path": default_registry_path(),
@@ -95,8 +127,10 @@ def main() -> int:
                  "online_checks": not args.no_pubchem,
                  "optional_stages": {name: "off" for name in args.skip_stage},
                  "model_profile": args.models, "prompt_caching": not args.no_cache,
-                 "batch_mode": args.batch,
+                 "batch_mode": args.batch, "prefer_arxiv": args.arxiv,
                  "pubchem_cache_path": default_pubchem_cache_path()}
+    if args.ads_token is not None:
+        overrides["ads_token"] = args.ads_token
     if args.out:
         overrides["output_dir"] = args.out
     config = RunConfig.from_settings(**overrides)
@@ -109,7 +143,7 @@ def main() -> int:
                 print(f"Excluded-experiment note: {triage.excluded_experiment_note}")
             return 0
 
-        result = run_pipeline(args.pdf, config, on_progress=print_progress)
+        result = run_pipeline(args.paper or args.pdf, config, on_progress=print_progress)
     except PipelineError as e:
         print(f"\nError: {e}", file=sys.stderr)
         run_dir = getattr(e, "run_dir", None)          # e.g. out of credits: say so in the run folder too
@@ -139,6 +173,39 @@ def main() -> int:
                 print(f"  ({e.label})  {e.latex}")
     print(f"Tokens: {result.input_tokens:,} in ({result.cached_tokens:,} from cache) / {result.output_tokens:,} out "
           f"(estimated cost {format_usd(result.cost_usd)})")
+    return 0
+
+
+def _focused(args, parser) -> int:
+    from parameter_extractor.focused_search import read_paper_list, run_focused_search
+    items = list(read_paper_list(args.papers)) if args.papers else []
+    items += [Path(args.pdf)] if args.pdf else []
+    items += [args.paper] if args.paper else []
+    if not items:
+        parser.error("a focused search needs papers: --papers LIST, --paper ID or --pdf")
+    overrides = {"pack": args.pack, "model_profile": args.models, "batch_mode": args.batch,
+                 "prefer_arxiv": args.arxiv, "optional_stages": {name: "off" for name in args.skip_stage}}
+    if args.ads_token is not None:
+        overrides["ads_token"] = args.ads_token
+    if args.out:
+        overrides["output_dir"] = args.out
+    config = RunConfig.from_settings(**overrides)
+    try:
+        run = run_focused_search(items, args.focus, config, search_words=args.search_word,
+                                 whole_paper=args.whole_paper,
+                                 on_progress=lambda done, total, message: print(f"[{done}/{total}] {message}"))
+    except PipelineError as e:
+        print(f"\nError: {e}", file=sys.stderr)
+        return 1
+    except KeyboardInterrupt:
+        print("\nCancelled.", file=sys.stderr)
+        return 130
+    counts = {}
+    for o in run.outcomes:
+        counts[o.status] = counts.get(o.status, 0) + 1
+    print(f"\n{len(run.outcomes)} paper(s): " + ", ".join(f"{n} {s}" for s, n in counts.items()))
+    print(f"Values -> {run.results_csv}\nPapers -> {run.papers_csv}")
+    print(f"Estimated cost {format_usd(run.cost_usd)}")
     return 0
 
 
