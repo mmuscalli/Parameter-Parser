@@ -75,6 +75,32 @@ def test_answer_conversion_and_paper_lists():
                          Path(tmp) / "local" / "teng2023.pdf"]
 
 
+def test_results_one_row_per_object_and_a_column_per_parameter():
+    """Mickey, 2026-10-24: each parameter is its own column holding its value (not parameter/value
+    pairs); a paper-wide value (the software) goes on each object's row; uncertainty columns, in the
+    pack's naming, only when some value has one."""
+    period = fs.FocusParameter("pl_orbper", "Planet", "orbital period", "d", "number",
+                               ("pl_orbpererr1", "pl_orbpererr2"))
+    software = fs.FocusParameter("pl_fitsoftware", "Fits", "software", "", "text")
+    v = lambda obj, col, value, unit="", ep="", em="": fs.FocusedValue("p", obj, col, value, unit, ep, em,
+                                                                         quote="q", where="Table 2")
+    found = fs.PaperOutcome(item="x", paper="p", status="found", values=[
+        v("", "pl_fitsoftware", "EXOFASTv2"), v("b", "pl_orbper", 11.535, "d", 0.001, -0.002),
+        v("c", "pl_orbper", 4.2, "yr"), v("c", "pl_orbper", 1534.0, "d")])
+    none = fs.PaperOutcome(item="y", paper="q", status="not mentioned")
+    rows = fs.wide_rows([found, none])
+    assert [(r.outcome.paper, r.obj) for r in rows] == [("p", "b"), ("p", "c"), ("q", "")]
+    columns = fs.result_columns([period, software], [found, none])
+    assert [c for c, _, _ in columns] == ["pl_orbper", "pl_orbpererr1", "pl_orbpererr2", "pl_fitsoftware"]
+    b, c, q = rows
+    assert fs.cell_text(b.cells["pl_orbper"], period) == "11.535"
+    assert fs.cell_text(b.cells["pl_orbper"], period, "err_minus") == "-0.002"
+    assert fs.cell_text(c.cells["pl_orbper"], period) == "4.2 yr; 1534"        # unconverted keeps its unit
+    assert fs.cell_text(b.cells["pl_fitsoftware"], software) == fs.cell_text(c.cells["pl_fitsoftware"]) == "EXOFASTv2"
+    assert q.cells == {} and "Table 2" in fs.value_tip(b.cells["pl_orbper"])
+    assert [c for c, _, _ in fs.result_columns([period], [none])] == ["pl_orbper"]   # no errors: no columns
+
+
 def _fake_send(calls):
     def send(ctx, *, model, system_prompt, content, response_model, stop_reason="end_turn"):
         calls.append({"model": model, "content": content})
@@ -112,8 +138,14 @@ def test_a_search_over_several_papers():
             sent = calls[0]["content"]
             sent = sent if isinstance(sent, str) else json.dumps(sent)
             assert "PAPER PASSAGES" in sent and len(sent) < 30_000                     # passages, not the paper
-            rows = run.results_csv.read_text().splitlines()
-            assert len(rows) == 3 and ",pl_fitexofastver,2," in rows[2]
+            import csv as _csv
+            rows = list(_csv.DictReader(open(run.results_csv)))
+            assert list(rows[0])[:6] == ["reference", "paper", "obj", "status", "pl_fitsoftware", "pl_fitexofastver"]
+            nielsen_row = next(r for r in rows if r["paper"] == "arXiv_1811.01882")
+            assert (nielsen_row["pl_fitsoftware"], nielsen_row["pl_fitexofastver"]) == ("EXOFASTv2", "2")
+            assert len(rows) == 3 and {r["status"] for r in rows} == {"found", "not mentioned", "error"}
+            quotes = run.quotes_csv.read_text().splitlines()                       # the quotes are kept
+            assert len(quotes) == 3 and "using EXOFASTv2" in quotes[1]
             papers = run.papers_csv.read_text()
             assert "not mentioned" in papers and "without an ADS token" in papers
             summary = json.loads((run.out_dir / "focused_summary.json").read_text())

@@ -731,8 +731,13 @@ def test_focused_search_window():
                 _pump()
             assert not f.running and "Done:" in f.status.text(), f.status.text()
             assert f.results.rowCount() == 2 and len(calls) == 1
-            results = {f.results.item(r, 1).text(): f.results.item(r, 2).text() for r in range(2)}
-            assert "pl_fitexofastver = 2" in results["Found"] and "Not mentioned (no API call)" in results
+            headers = [f.results.horizontalHeaderItem(c).text() for c in range(f.results.columnCount())]
+            assert headers == ["Paper", "Object", "Result", "pl_fitsoftware", "pl_fitexofastver", "Read from"]
+            by_result = {f.results.item(r, 2).text(): r for r in range(2)}
+            found = by_result["Found"]
+            assert (f.results.item(found, 3).text(), f.results.item(found, 4).text()) == ("EXOFASTv2", "2")
+            assert "using EXOFASTv2" in f.results.item(found, 4).toolTip()          # the quote on hover
+            assert "Not mentioned (no API call)" in by_result
             assert f.open_csv_btn.isEnabled() and w.pack_combo.isEnabled()
             _screenshot(f, "focused_search")
             f.close()

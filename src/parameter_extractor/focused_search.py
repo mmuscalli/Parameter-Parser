@@ -52,6 +52,9 @@ class FocusParameter:
     description: str
     unit: str = ""
     kind: str = "number"          # "number" | "text"
+    # columns for its upper / lower uncertainty, in the pack's naming (pl_orbpererr1 / pl_orbpererr2,
+    # initial_temperature_C_err_plus ...); empty when the parameter has none
+    error_columns: tuple = ()
 
 
 def available_parameters(pack=None, optional_stages: Optional[Dict[str, str]] = None) -> List[FocusParameter]:
@@ -64,7 +67,9 @@ def available_parameters(pack=None, optional_stages: Optional[Dict[str, str]] = 
     for spec in _specs_in(pack.stages_dir).values():
         if spec.name in off:
             continue
-        out += [FocusParameter(p.column, spec.label, p.description, p.unit, p.kind) for p in spec.parameters]
+        out += [FocusParameter(p.column, spec.label, p.description, p.unit, p.kind,
+                               tuple(p.column + x for x in spec.suffixes_for(p)[:2]) if p.uncertainties else ())
+                for p in spec.parameters]
     if pack.uses("fit_models") and "fit_models" not in off:
         from parameter_extractor.calculators.exoplanet_fits import PLANET_COLUMNS, STELLAR_COLUMNS
         out += [FocusParameter(c, "Fitting models", d, "", "text") for c, d in PLANET_COLUMNS + STELLAR_COLUMNS
@@ -288,10 +293,62 @@ def search_paper(item: PaperItem, params: Sequence[FocusParameter], config: RunC
 @dataclass
 class FocusedRun:
     out_dir: Path
-    results_csv: Path
+    results_csv: Path             # one row per paper (and object), a column per parameter
     papers_csv: Path
     outcomes: List[PaperOutcome]
     cost_usd: float
+    params: List[FocusParameter] = field(default_factory=list)
+    quotes_csv: Optional[Path] = None   # one line per value, with its quote and where it is
+
+
+@dataclass
+class WideRow:
+    """One row of the results: a paper, or one object (planet, sample) in it, with its values by
+    parameter. Values about the paper as a whole (obj '') go on each of the paper's object rows."""
+    outcome: PaperOutcome
+    obj: str
+    cells: Dict[str, List[FocusedValue]] = field(default_factory=dict)
+
+
+def wide_rows(outcomes: Sequence[PaperOutcome]) -> List[WideRow]:
+    rows = []
+    for o in outcomes:
+        paper_wide = [v for v in o.values if not v.obj]
+        objects = list(dict.fromkeys(v.obj for v in o.values if v.obj))
+        for obj in objects or [""]:
+            row = WideRow(o, obj)
+            for v in paper_wide + [v for v in o.values if v.obj == obj and obj]:
+                row.cells.setdefault(v.parameter, []).append(v)
+            rows.append(row)
+    return rows
+
+
+def _shown(v: FocusedValue, param: Optional[FocusParameter]) -> str:
+    """A value as the results show it: in the column's unit, else with the unit it was printed in."""
+    value = f"{v.value:g}" if isinstance(v.value, float) else str(v.value)
+    return value if not v.unit or (param and v.unit == param.unit) else f"{value} {v.unit}"
+
+
+def cell_text(values: Sequence[FocusedValue], param: Optional[FocusParameter] = None, part: str = "value") -> str:
+    """The text of one results cell: the value(s) -- several distinct ones joined by '; ' -- or their
+    upper / lower uncertainty (part 'err_plus' / 'err_minus')."""
+    if part == "value":
+        texts = [_shown(v, param) for v in values]
+    else:
+        texts = [f"{getattr(v, part):g}" if isinstance(getattr(v, part), float) else str(getattr(v, part))
+                 for v in values if getattr(v, part) not in ("", None)]
+    return "; ".join(dict.fromkeys(t for t in texts if t))
+
+
+def value_tip(values: Sequence[FocusedValue]) -> str:
+    """Hover text for a results cell: each value as printed, its quote and where it is."""
+    lines = []
+    for v in values:
+        errs = (f" (+{v.err_plus} / {v.err_minus})" if v.err_plus not in ("", None) else "")
+        lines.append(f"{v.printed}{errs}" + (f" -> {_shown(v, None)}" if v.note and "->" not in v.note else "")
+                     + f"\n    \u201c{v.quote}\u201d ({v.where}, {v.confidence} confidence)"
+                     + (f"\n    {v.note}" if v.note else ""))
+    return "\n".join(lines)
 
 
 RESULT_COLUMNS = ["paper", "obj", "parameter", "value", "unit", "err_plus", "err_minus", "printed", "quote", "where",
@@ -384,9 +441,33 @@ def run_focused_search(items: Sequence[PaperItem], columns: Sequence[str], confi
     return _write(out_dir, outcomes, params, config, search_words, whole_paper)
 
 
+def result_columns(params: Sequence[FocusParameter], outcomes: Sequence[PaperOutcome]) -> List[tuple]:
+    """(column name, parameter, part) for the results: each parameter's value column, then its
+    uncertainty columns when any value has an uncertainty."""
+    with_errors = {v.parameter for o in outcomes for v in o.values if v.err_plus not in ("", None)
+                   or v.err_minus not in ("", None)}
+    out = []
+    for p in params:
+        out.append((p.column, p, "value"))
+        if p.column in with_errors:
+            plus, minus = p.error_columns or (p.column + "_err_plus", p.column + "_err_minus")
+            out += [(plus, p, "err_plus"), (minus, p, "err_minus")]
+    return out
+
+
 def _write(out_dir: Path, outcomes: List[PaperOutcome], params, config: RunConfig, search_words, whole_paper) -> FocusedRun:
     results_csv, papers_csv = out_dir / "focused_results.csv", out_dir / "papers.csv"
+    quotes_csv = out_dir / "focused_values_with_quotes.csv"
+    columns = result_columns(params, outcomes)
     with open(results_csv, "w", newline="", encoding="utf-8") as f:
+        w = csv.writer(f)
+        w.writerow(["reference", "paper", "obj", "status"] + [c for c, _, _ in columns] + ["read_from", "title"])
+        for row in wide_rows(outcomes):
+            o = row.outcome
+            w.writerow([o.reference, o.paper, row.obj, o.status]
+                       + [cell_text(row.cells.get(p.column, []), p, part) for _, p, part in columns]
+                       + [o.read_from, o.title])
+    with open(quotes_csv, "w", newline="", encoding="utf-8") as f:
         w = csv.DictWriter(f, fieldnames=RESULT_COLUMNS)
         w.writeheader()
         for o in outcomes:
@@ -408,4 +489,4 @@ def _write(out_dir: Path, outcomes: List[PaperOutcome], params, config: RunConfi
                                  ("found", "not found", "not mentioned", "error")},
                "estimated_cost_usd": round(cost, 5)}
     (out_dir / "focused_summary.json").write_text(json.dumps(summary, indent=2, ensure_ascii=False))
-    return FocusedRun(out_dir, results_csv, papers_csv, outcomes, cost)
+    return FocusedRun(out_dir, results_csv, papers_csv, outcomes, cost, list(params), quotes_csv)

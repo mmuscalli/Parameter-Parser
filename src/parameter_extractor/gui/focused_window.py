@@ -139,10 +139,10 @@ class FocusedSearchWindow(QDialog):
         self.status = QLabel("Add papers and tick at least one parameter.", wordWrap=True)
         layout.addWidget(self.status)
 
+        # one row per paper (and object), a column per parameter -- as in focused_results.csv
         self.results = QTableWidget(0, 4)
-        self.results.setHorizontalHeaderLabels(["Paper", "Result", "Values found", "Read from"])
+        self.results.setHorizontalHeaderLabels(["Paper", "Object", "Result", "Read from"])
         self.results.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
-        self.results.horizontalHeader().setSectionResizeMode(2, QHeaderView.ResizeMode.Stretch)
         layout.addWidget(self.results, stretch=2)
         buttons = QHBoxLayout()
         self.open_folder_btn = QPushButton("Open results folder", enabled=False,
@@ -331,23 +331,39 @@ class FocusedSearchWindow(QDialog):
         self.status.setText(f"{done} of {total}: {message}")
 
     def _on_succeeded(self, run) -> None:
+        from parameter_extractor.focused_search import cell_text, result_columns, value_tip, wide_rows
         self._run = run
-        self.results.setRowCount(len(run.outcomes))
-        for r, o in enumerate(run.outcomes):
-            values = "; ".join(f"{(v.obj + ': ') if v.obj else ''}{v.parameter} = {v.value}"
-                               + (f" {v.unit}" if v.unit else "") for v in o.values)
-            cells = [o.reference or o.title or o.paper, STATUS_TEXT.get(o.status, o.status), values or o.message,
-                     o.read_from]
-            for c, text in enumerate(cells):
+        columns = result_columns(run.params, run.outcomes)
+        rows = wide_rows(run.outcomes)
+        headers = ["Paper", "Object", "Result"] + [
+            name + (f" [{p.unit}]" if part == "value" and p.unit else "") for name, p, part in columns] + ["Read from"]
+        self.results.clear()
+        self.results.setColumnCount(len(headers))
+        self.results.setHorizontalHeaderLabels(headers)
+        for c, (name, p, part) in enumerate(columns, start=3):
+            self.results.horizontalHeaderItem(c).setToolTip(p.description)
+        self.results.setRowCount(len(rows))
+        for r, row in enumerate(rows):
+            o = row.outcome
+            result = STATUS_TEXT.get(o.status, o.status)
+            fixed = [(o.reference or o.title or o.paper, "\n".join(x for x in (o.reference, o.item, o.title) if x)),
+                     (row.obj, row.obj), (result, o.message or result)]
+            for c, (text, tip) in enumerate(fixed):
                 item = QTableWidgetItem(str(text))
-                tip = str(text) if c != 0 else "\n".join(x for x in (o.reference, o.item, o.title) if x)
-                if c == 2 and o.values:
-                    tip = "\n".join(f"{v.obj or '(paper)'} · {v.parameter} = {v.value} {v.unit}".strip()
-                                    + f"\n    “{v.quote}” ({v.where})" for v in o.values)
                 item.setToolTip(tip)
                 self.results.setItem(r, c, item)
-        self.results.resizeColumnToContents(1)
-        self.results.setColumnWidth(0, 300)
+            for c, (name, p, part) in enumerate(columns, start=3):
+                values = row.cells.get(p.column, [])
+                item = QTableWidgetItem(cell_text(values, p, part))
+                if values:
+                    item.setToolTip(value_tip(values))
+                self.results.setItem(r, c, item)
+            item = QTableWidgetItem(o.read_from)
+            item.setToolTip(o.read_from)
+            self.results.setItem(r, len(headers) - 1, item)
+        self.results.resizeColumnsToContents()
+        for c in range(self.results.columnCount()):
+            self.results.setColumnWidth(c, min(self.results.columnWidth(c), 260))
         counts = {}
         for o in run.outcomes:
             counts[STATUS_TEXT.get(o.status, o.status)] = counts.get(STATUS_TEXT.get(o.status, o.status), 0) + 1

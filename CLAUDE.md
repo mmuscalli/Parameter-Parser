@@ -1155,3 +1155,12 @@ the first live run of 19 papers got 429s with 4 parallel lookups.
 Live: 16/19 resolved without a token (13 arXiv HTML, 3 arXiv PDF); Tala Pinto 2020, Michel &
 Mugrauer 2024, Baran 2015 aren't on arXiv (broad searches confirm). EXOFAST search: none of the
 16 mention it -> $0.00 (screened locally). papers.csv has a `reference` column (the label).
+Focused-search results layout (Mickey, 2026-10-24): focused_results.csv = one row per paper and
+object (`wide_rows`; paper-wide values -- obj '' -- go on every object row of the paper), a column
+per parameter holding its value (`cell_text`: in the column unit, else "value unit"; distinct
+values '; '-joined), then its uncertainty columns in the pack's naming (`FocusParameter.error_columns`
+from the spec suffixes: pl_orbpererr1/2) only when a value has one (`result_columns`); columns
+reference, paper, obj, status, <params...>, read_from, title. The old line-per-value file (with
+quotes) is focused_values_with_quotes.csv. The window's table has the same columns (hover = quote,
+where, as printed). Live teng passages-only gave 14 objects, not every planet: Table 3's rows hold
+no search words -- use "Whole paper" for table-wide parameters.
