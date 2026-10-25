@@ -1173,3 +1173,31 @@ lines above teng's Table 3). Measured (count_tokens, 3 papers x 3 searches): +10
 (default on; GUI "Keep whole tables", disabled under Whole paper; CLI --rows-only). Live teng
 period+e: 42 objects (all) vs 17 rows-only; $0.0095 vs $0.0069 (mostly extra output). Answer budget
 raised to 6000 + 4000/parameter (3000 + 500 broke off on teng's ~40 objects).
+
+## Many-paper speed + robustness (2026-10-25, Mickey's 1,389-paper run: 14 h, 76 errors)
+
+Measured: batch mode sent each paper as its OWN one-request batch (median 164 s queue wait), 4 at a
+time -> ~12.4 of the 14 h; arXiv (2-4 requests/paper at 3 s) was second. Errors: 44 arXiv 429/503/
+timeouts, 27 not on arXiv, 3 bibcodes with 5-digit pages (qualifier slot holds a digit:
+2024MNRAS.52710955B) treated as PDF paths, 2 lookups failed.
+- `api_client.BatchCollector` (on RunContext.batch_collector): threads' requests pooled into shared
+  batches (sent after 20 s quiet / 120 s since the first / 2000 requests), each batch polled on its
+  own thread; submit() blocks like a direct call (retries, usage, audits unchanged). Focused search
+  uses it in batch mode with 64 paper threads (8 when direct); one shared Anthropic client.
+- `arxiv_source.resolve_many`: arXiv IDs 50 per id_list query, DOIs 20 per `doi:"a" OR doi:"b"`
+  query (verified live), misses -> by_doi(title_search_only=True); bibcodes -> DOIs first.
+  `LookupCache` (<app data>/arxiv_cache: lookups.json + texts/*.txt.gz, ".none" = no HTML; "not on
+  arXiv" re-asked after 30 days; network errors never cached) used by focused search and full runs
+  (RunConfig.arxiv_cache_dir; GUI/CLI default `registry.default_arxiv_cache_dir()`).
+- `_spaced`: 6 retries (5/10/20/40/60/60 s or Retry-After) on 429/503 AND timeouts/connection
+  errors; a busy answer doubles that service's spacing (<= 15 s), easing 10% per success.
+- Bibcode regex/parse accept a digit qualifier; more journal ISSNs (NatSR, PASA, RAA, ...).
+- Retry failed: read_paper_list(papers.csv, only_failed=True) keeps labels; CLI --only-failed; GUI
+  "Retry failed papers (n)" button re-runs the error rows.
+Live retry of the 76 failures (batch, economy): 11.5 min (all 31 model calls in ONE batch; the old
+way ~46 min), $0.015; 34 resolved. Of the rest: title-word bug (hyphen fragments 'low-density',
+'CoRoT-' -> arXiv 400) fixed (`_title_words` letters only, a rejected query skipped); papers like
+CoRoT XXIV, GJ 463 b, beta Pic c confirmed NOT on arXiv. Label-less journal bibcodes: search by
+volume + page + initial (rows 100), then `_iop_doi` (older ApJ/ApJL/ApJS/AJ: 10.1088|10.3847/<issn>/
+<vol>/<issue>/<page>), then `_listing_doi` (cursor listing of the journal-year, <= 20 x 1000, kept
+in `_listings` for the run): 19 of 22 (left: 2 MNRAS, Sci. Rep. too large). MNRAS Letters ISSNs.

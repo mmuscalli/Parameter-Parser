@@ -67,6 +67,8 @@ class RunContext:
     paper: Optional["PaperContext"] = None
     _step: int = 0
     _client: object = None
+    # api_client.BatchCollector shared by many papers' contexts (focused search in batch mode)
+    batch_collector: object = None
     # stages run in parallel (pipeline.extract): progress, usage and the client are shared
     _lock: threading.Lock = field(default_factory=threading.Lock, repr=False)
 

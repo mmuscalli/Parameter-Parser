@@ -151,12 +151,129 @@ def _send(ctx: RunContext, *, model: str, system_prompt: str, content, response_
 BATCH_POLL_SECONDS = (5, 60)          # first wait, longest wait between status checks
 
 
+class BatchCollector:
+    """Requests from many threads pooled into shared Message Batches (focused search, 2026-10-25: 1,389
+    papers sent as 1,389 one-request batches, each waiting ~2.5 min in the queue, 4 at a time -> 14 h).
+    A batch is sent once no request has joined it for `quiet_sec`, `max_wait_sec` after its first
+    request, or at `max_size` requests; each batch is polled on its own thread, and every caller gets
+    its own result back (submit() blocks like a direct call, so retries, usage records and audits stay
+    as they are). `flush()` sends what's waiting now (when no more requests will come)."""
+    def __init__(self, client, quiet_sec: float = 20.0, max_wait_sec: float = 120.0, max_size: int = 2000):
+        import uuid
+        self._uuid = uuid
+        self.client, self.quiet, self.max_wait, self.max_size = client, quiet_sec, max_wait_sec, max_size
+        self._cv = threading.Condition()
+        self._pending: list = []
+        self._first = self._last = 0.0
+        self._flush_now = False
+        self._thread = None
+        self.batches: list = []                   # ids of the batches sent (for the summary)
+
+    def submit(self, request: dict, stage: str, cancel_event=None):
+        """(message, batch id) for one request, once its batch has ended."""
+        from types import SimpleNamespace
+        entry = SimpleNamespace(custom_id=f"{stage}-{self._uuid.uuid4().hex[:16]}", params=request,
+                                done=threading.Event(), result=None, error=None, batch_id=None, cancel=cancel_event)
+        with self._cv:
+            if not self._pending:
+                self._first = time.monotonic()
+            self._last = time.monotonic()
+            self._pending.append(entry)
+            if self._thread is None:
+                self._thread = threading.Thread(target=self._sender, daemon=True, name="batch-sender")
+                self._thread.start()
+            self._cv.notify_all()
+        while not entry.done.wait(1.0):
+            if cancel_event is not None and cancel_event.is_set():
+                raise errors.RunCancelledError()
+        if entry.error is not None:
+            raise entry.error
+        return _batch_message(entry.result, stage), entry.batch_id
+
+    def flush(self) -> None:
+        with self._cv:
+            self._flush_now = True
+            self._cv.notify_all()
+
+    def _sender(self) -> None:
+        while True:
+            with self._cv:
+                while not self._pending:
+                    self._flush_now = False
+                    self._cv.wait()
+                now = time.monotonic()
+                due = (self._flush_now or len(self._pending) >= self.max_size or now - self._last >= self.quiet
+                       or now - self._first >= self.max_wait)
+                if not due:
+                    self._cv.wait(timeout=1.0)
+                    continue
+                group, self._pending = self._pending[:self.max_size], self._pending[self.max_size:]
+                self._first = self._last = time.monotonic()
+            try:
+                batch = self.client.messages.batches.create(
+                    requests=[{"custom_id": e.custom_id, "params": e.params} for e in group])
+            except Exception as exc:              # the API refused the batch: each caller gets the error
+                for e in group:
+                    e.error = exc
+                    e.done.set()
+                continue
+            self.batches.append(batch.id)
+            for e in group:
+                e.batch_id = batch.id
+            threading.Thread(target=self._poll, args=(batch, group), daemon=True, name="batch-poll").start()
+
+    def _poll(self, batch, group) -> None:
+        delay = BATCH_POLL_SECONDS[0]
+        try:
+            while batch.processing_status != "ended":
+                time.sleep(delay)
+                if all(e.cancel is not None and e.cancel.is_set() for e in group):
+                    self.client.messages.batches.cancel(batch.id)
+                    for e in group:
+                        e.error = errors.RunCancelledError()
+                    return
+                delay = min(delay * 1.5, BATCH_POLL_SECONDS[1])
+                batch = self.client.messages.batches.retrieve(batch.id)
+            by_id = {e.custom_id: e for e in group}
+            for item in self.client.messages.batches.results(batch.id):
+                if item.custom_id in by_id:
+                    by_id[item.custom_id].result = item.result
+            for e in group:
+                if e.result is None and e.error is None:
+                    e.error = errors.ApiRequestError("The batch ended without an answer for this request.")
+        except Exception as exc:
+            for e in group:
+                if e.result is None:
+                    e.error = exc
+        finally:
+            for e in group:
+                e.done.set()
+
+
+def _batch_message(result, stage: str):
+    """A batch request's result -> its message, or the error it stands for."""
+    if result.type == "succeeded":
+        return result.message
+    if result.type == "errored":
+        error = getattr(result.error, "error", result.error)
+        kind, text = getattr(error, "type", ""), getattr(error, "message", str(error))
+        raise _BatchRequestError(kind, text)
+    if result.type == "expired":
+        raise errors.BatchExpiredError(stage)
+    raise errors.RunCancelledError()
+
+
 def _send_batch(ctx: RunContext, request: dict):
     """One request through the Message Batches API (half price; usually done in seconds to minutes,
     at most 24 h): submit, poll until it has ended, return its message. Cancelling the run cancels
-    the batch. Errors come back per request and are mapped like direct-call errors."""
+    the batch. Errors come back per request and are mapped like direct-call errors. With a shared
+    collector on the context (ctx.batch_collector), the request joins other threads' requests."""
     import uuid
     stage = getattr(_streamed, "stage", "step")
+    collector = getattr(ctx, "batch_collector", None)
+    if collector is not None:
+        message, _streamed.batch_id = collector.submit(request, stage, ctx.cancel_event)
+        return message
     batch = ctx.client.messages.batches.create(
         requests=[{"custom_id": f"{stage}-{uuid.uuid4().hex[:12]}", "params": request}])
     _streamed.batch_id = batch.id
@@ -177,16 +294,7 @@ def _send_batch(ctx: RunContext, request: dict):
         if time.time() - last_note > 60:
             ctx.note(stage, f"{stage}: batch request still queued ({(time.time() - started) / 60:.0f} min)")
             last_note = time.time()
-    result = next(iter(ctx.client.messages.batches.results(batch.id))).result
-    if result.type == "succeeded":
-        return result.message
-    if result.type == "errored":
-        error = getattr(result.error, "error", result.error)
-        kind, text = getattr(error, "type", ""), getattr(error, "message", str(error))
-        raise _BatchRequestError(kind, text)
-    if result.type == "expired":
-        raise errors.BatchExpiredError(stage)
-    raise errors.RunCancelledError()
+    return _batch_message(next(iter(ctx.client.messages.batches.results(batch.id))).result, stage)
 
 
 class _BatchRequestError(Exception):

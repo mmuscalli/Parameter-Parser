@@ -66,6 +66,8 @@ class RunConfig:
     prefer_arxiv: bool = False
     # NASA ADS API token: only needed to look up journal ADS bibcodes (2023PASJ...75.1030T)
     ads_token: str = ""
+    # arXiv lookups and full texts kept between runs (ingestion/arxiv_source.LookupCache); None = none
+    arxiv_cache_dir: Optional[Path] = None
 
     @classmethod
     def from_settings(cls, **overrides) -> "RunConfig":
@@ -92,4 +94,5 @@ class RunConfig:
         d["output_dir"] = str(self.output_dir)
         d["registry_path"] = str(self.registry_path) if self.registry_path else None
         d["pubchem_cache_path"] = str(self.pubchem_cache_path) if self.pubchem_cache_path else None
+        d["arxiv_cache_dir"] = str(self.arxiv_cache_dir) if self.arxiv_cache_dir else None
         return d

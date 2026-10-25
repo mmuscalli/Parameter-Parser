@@ -81,14 +81,18 @@ def _first_pages_text(pdf: Path, pages: int = 2) -> str:
 
 
 def resolve_paper(item: PaperItem, run_dir: Path, prefer_arxiv: bool = False, ads_token: str = "",
-                  note=lambda message: None) -> ResolvedPaper:
-    """`note(message)` reports progress ('Looking for the paper on arXiv')."""
+                  note=lambda message: None, record: Optional[ax.ArxivRecord] = None,
+                  cache: Optional[ax.LookupCache] = None) -> ResolvedPaper:
+    """`note(message)` reports progress ('Looking for the paper on arXiv'). `record`: the identifier's
+    arXiv record when it was already looked up (focused search: ax.resolve_many); `cache`: arXiv full
+    texts read before aren't downloaded again."""
     name = run_name(item)
     if is_identifier(item):                    # named by identifier: arXiv is the only source
-        note(f"Looking up {ax.parse_identifier(str(item))} on arXiv")
-        record = ax.resolve(item, ads_token)          # a PaperRef keeps its label's first author
+        if record is None:
+            note(f"Looking up {ax.parse_identifier(str(item))} on arXiv")
+            record = ax.resolve(item, ads_token)      # a PaperRef keeps its label's first author
         note(f"Downloading {record.label} from arXiv")
-        text = ax.fetch_html_text(record, save_to=run_dir / "arxiv.html")
+        text = ax.fetch_html_text(record, save_to=None if cache else run_dir / "arxiv.html", cache=cache)
         if text:
             return ResolvedPaper(name=name, text=text, record=record)
         pdf = ax.fetch_pdf(record, run_dir / f"{record.versioned_id.replace('/', '_')}.pdf")
@@ -114,7 +118,7 @@ def resolve_paper(item: PaperItem, run_dir: Path, prefer_arxiv: bool = False, ad
             return ResolvedPaper(name=name, pdf=pdf, notes=[
                 f"{ident} found on arXiv as '{record.title[:90]}', which doesn't look like this PDF: the PDF was read."])
         note(f"Downloading {record.label} from arXiv")
-        text = ax.fetch_html_text(record, save_to=run_dir / "arxiv.html")
+        text = ax.fetch_html_text(record, save_to=None if cache else run_dir / "arxiv.html", cache=cache)
     except PaperSourceError as e:
         return ResolvedPaper(name=name, pdf=pdf, notes=[f"arXiv text not used: {e} The PDF was read."])
     if not text:

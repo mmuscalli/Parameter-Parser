@@ -155,8 +155,12 @@ class FocusedSearchWindow(QDialog):
                                            clicked=lambda: self._open(self._run.out_dir))
         self.open_csv_btn = QPushButton("Open values CSV", enabled=False,
                                         clicked=lambda: self._open(self._run.results_csv))
+        self.retry_btn = QPushButton("Retry failed papers", enabled=False, clicked=self._retry_failed)
+        self.retry_btn.setToolTip("Search again only the papers whose result was 'Couldn't search' (e.g. arXiv was "
+                                  "busy), with the same parameters. Papers already read come from the cache.")
         buttons.addWidget(self.open_folder_btn)
         buttons.addWidget(self.open_csv_btn)
+        buttons.addWidget(self.retry_btn)
         buttons.addStretch(1)
         layout.addLayout(buttons)
         self.words_edit.setText(self._settings.value("focused/search_words", ""))
@@ -320,6 +324,7 @@ class FocusedSearchWindow(QDialog):
         self._worker.cancelled.connect(lambda: self.status.setText("Cancelled."))
         self._worker.done.connect(self._on_done)
         self.results.setRowCount(0)
+        self.retry_btn.setEnabled(False)
         self.progress.setRange(0, len(items))
         self.progress.setValue(0)
         self.cancel_btn.setEnabled(True)
@@ -380,6 +385,9 @@ class FocusedSearchWindow(QDialog):
                             f"{format_usd(run.cost_usd)}. Saved to {run.out_dir}")
         self.open_folder_btn.setEnabled(True)
         self.open_csv_btn.setEnabled(True)
+        failed = [o for o in run.outcomes if o.status == "error"]
+        self.retry_btn.setText(f"Retry failed papers ({len(failed)})" if failed else "Retry failed papers")
+        self.retry_btn.setEnabled(bool(failed))
 
     def _on_done(self) -> None:
         self._thread.quit()
@@ -388,6 +396,17 @@ class FocusedSearchWindow(QDialog):
         self.cancel_btn.setEnabled(False)
         self.main._set_inputs_enabled(True)
         self._update_ready()
+
+    def _retry_failed(self) -> None:
+        """The paper list becomes the papers that failed (labels kept), and the search runs again."""
+        from parameter_extractor.ingestion.arxiv_source import PaperRef
+        failed = [o for o in self._run.outcomes if o.status == "error"] if self._run else []
+        if not failed:
+            return
+        self.papers_list.clear()
+        self.add_items([Path(o.item) if o.item.lower().endswith(".pdf") else PaperRef(o.item, o.reference)
+                        for o in failed])
+        self._start()
 
     @staticmethod
     def _open(path) -> None:

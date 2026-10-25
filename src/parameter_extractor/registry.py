@@ -84,6 +84,11 @@ def is_peptide_column(column: str) -> bool:
     return len(set(m.group("seq").split("-"))) > 1
 
 
+def default_arxiv_cache_dir() -> Path:
+    """arXiv lookups and full texts kept between runs (ingestion/arxiv_source.LookupCache)."""
+    return default_registry_path().parent / "arxiv_cache"
+
+
 def default_pubchem_cache_path() -> Path:
     """Next to the registry: names already looked up on PubChem."""
     return default_registry_path().parent / "pubchem_cache.json"

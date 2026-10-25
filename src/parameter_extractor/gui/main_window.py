@@ -36,7 +36,7 @@ from parameter_extractor.gui.figure_dialog import FigureReviewDialog, PlanBridge
 from parameter_extractor.gui.variable_review import VariableReviewDialog
 from parameter_extractor.gui.worker import PipelineWorker
 from parameter_extractor.pricing import PRICES_CHECKED, format_usd
-from parameter_extractor.registry import default_pubchem_cache_path, default_registry_path
+from parameter_extractor.registry import default_arxiv_cache_dir, default_pubchem_cache_path, default_registry_path
 from parameter_extractor.pipeline import Extraction, finish, plan_figure, stage_label
 
 DEFAULT_OUTPUT_DIR = Path.home() / "Documents" / "Parameter Extractor"
@@ -530,7 +530,7 @@ class MainWindow(QMainWindow):
                          model_profile=self.profile_combo.currentData() or "standard",
                          batch_mode=self.batch_box.isChecked(),
                          prefer_arxiv=self.arxiv_box.isChecked(), ads_token=self.ads_edit.text().strip(),
-                         pubchem_cache_path=default_pubchem_cache_path())
+                         pubchem_cache_path=default_pubchem_cache_path(), arxiv_cache_dir=default_arxiv_cache_dir())
 
     def open_focused_search(self) -> None:
         from parameter_extractor.gui.focused_window import FocusedSearchWindow

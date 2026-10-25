@@ -60,6 +60,9 @@ def main() -> int:
                               "the parameters' descriptions")
     focused.add_argument("--whole-paper", action="store_true",
                          help="Send the whole paper, not only the passages around the search words")
+    focused.add_argument("--only-failed", action="store_true",
+                         help="With --papers pointing at an earlier search's papers.csv: search only the papers "
+                              "whose status was 'error' (e.g. arXiv was busy)")
     focused.add_argument("--rows-only", action="store_true",
                          help="In passages mode, send only the table rows near the search words instead of "
                               "whole tables (a little cheaper; misses table values whose rows lack the words)")
@@ -123,7 +126,7 @@ def main() -> int:
     if not args.pdf and not args.paper:
         parser.error("--pdf or --paper is required")
 
-    from parameter_extractor.registry import default_pubchem_cache_path, default_registry_path
+    from parameter_extractor.registry import default_arxiv_cache_dir, default_pubchem_cache_path, default_registry_path
     overrides = {"paper_prefix": args.prefix, "registry_path": default_registry_path(),
                  "focus_terms": args.look_for, "use_pubchem": not args.no_pubchem,
                  "equations_to_latex": args.equations_latex, "pack": args.pack,
@@ -131,7 +134,7 @@ def main() -> int:
                  "optional_stages": {name: "off" for name in args.skip_stage},
                  "model_profile": args.models, "prompt_caching": not args.no_cache,
                  "batch_mode": args.batch, "prefer_arxiv": args.arxiv,
-                 "pubchem_cache_path": default_pubchem_cache_path()}
+                 "pubchem_cache_path": default_pubchem_cache_path(), "arxiv_cache_dir": default_arxiv_cache_dir()}
     if args.ads_token is not None:
         overrides["ads_token"] = args.ads_token
     if args.out:
@@ -181,13 +184,15 @@ def main() -> int:
 
 def _focused(args, parser) -> int:
     from parameter_extractor.focused_search import read_paper_list, run_focused_search
-    items = list(read_paper_list(args.papers)) if args.papers else []
+    items = list(read_paper_list(args.papers, only_failed=args.only_failed)) if args.papers else []
     items += [Path(args.pdf)] if args.pdf else []
     items += [args.paper] if args.paper else []
     if not items:
         parser.error("a focused search needs papers: --papers LIST, --paper ID or --pdf")
+    from parameter_extractor.registry import default_arxiv_cache_dir
     overrides = {"pack": args.pack, "model_profile": args.models, "batch_mode": args.batch,
-                 "prefer_arxiv": args.arxiv, "optional_stages": {name: "off" for name in args.skip_stage}}
+                 "prefer_arxiv": args.arxiv, "optional_stages": {name: "off" for name in args.skip_stage},
+                 "arxiv_cache_dir": default_arxiv_cache_dir()}
     if args.ads_token is not None:
         overrides["ads_token"] = args.ads_token
     if args.out:

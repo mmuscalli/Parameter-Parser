@@ -42,6 +42,9 @@ TABLE_LOOKBACK = 10
 # answer budget: a table of ~40 planets x 2 parameters is ~8K output tokens (teng2023 broke off at
 # 3000 + 500 per parameter). Only generated tokens are billed; the budget just stops a runaway answer.
 OUTPUT_BASE, OUTPUT_PER_PARAMETER = 6000, 4000
+# papers handled at once: direct calls (each a model call in flight), or batch mode (each waiting in a
+# shared batch -- cheap threads; arXiv downloads stay one at a time either way)
+DIRECT_WORKERS, BATCH_WORKERS = 8, 64
 HEAD_CHARS = 1500                 # the start of the paper (title, authors, abstract) always goes along
 MAX_PASSAGE_CHARS = 60_000
 QUOTE_WORDS = 12
@@ -266,14 +269,22 @@ def _paper_text(source, run_dir: Path, whole_paper: bool, rasterize: bool, dpi: 
 
 def search_paper(item: PaperItem, params: Sequence[FocusParameter], config: RunConfig, run_dir: Path,
                  search_words: Sequence[str] = (), whole_paper: bool = False,
-                 cancel_event: Optional[threading.Event] = None, whole_tables: bool = True) -> PaperOutcome:
+                 cancel_event: Optional[threading.Event] = None, whole_tables: bool = True,
+                 record=None, cache=None, client=None, collector=None) -> PaperOutcome:
+    """`record`: the identifier's arXiv record (or the PaperSourceError) from the batched lookup;
+    `cache`: arXiv texts kept between runs; `client` / `collector`: shared by all papers (one
+    Anthropic client; in batch mode, requests pooled into shared batches)."""
     from parameter_extractor.api_client import call_structured
     from parameter_extractor.stages.prompt_loader import load_prompt
     outcome = PaperOutcome(item=str(item), paper=run_name(item), reference=getattr(item, "label", ""))
     run_dir.mkdir(parents=True, exist_ok=True)
     ctx = RunContext(config=config, run_dir=run_dir, total_steps=1, cancel_event=cancel_event)
+    ctx._client, ctx.batch_collector = client, collector
     ctx.check_cancelled()
-    source = resolve_paper(item, run_dir, prefer_arxiv=config.prefer_arxiv, ads_token=config.ads_token)
+    if isinstance(record, PipelineError):
+        raise record
+    source = resolve_paper(item, run_dir, prefer_arxiv=config.prefer_arxiv, ads_token=config.ads_token,
+                           record=record, cache=cache)
     (run_dir / "source.json").write_text(json.dumps(source.summary(), indent=2, ensure_ascii=False))
     outcome.read_from = source.label
     text, images = _paper_text(source, run_dir, whole_paper, config.rasterize_table_pages, config.table_raster_dpi)
@@ -385,23 +396,38 @@ PAPER_COLUMNS = ["item", "reference", "paper", "read_from", "title", "status", "
                  "output_tokens", "message"]
 
 
-def read_paper_list(path: Path) -> List[PaperItem]:
+def read_paper_list(path: Path, only_failed: bool = False) -> List[PaperItem]:
     """A CSV (or plain list) of papers: in each line, the first cell that's an arXiv ID, a DOI, an ADS
-    bibcode or a .pdf path (relative paths are next to the list). Header lines are skipped."""
-    from parameter_extractor.ingestion.arxiv_source import identifier_in_cell
+    bibcode or a .pdf path (relative paths are next to the list). Header lines are skipped. An earlier
+    search's papers.csv works too (its labels are kept); `only_failed`: just its 'error' rows."""
+    from parameter_extractor.ingestion.arxiv_source import PaperRef, identifier_in_cell
     path = Path(path)
     items: List[PaperItem] = []
     with open(path, newline="", encoding="utf-8-sig") as f:
-        for row in csv.reader(f):
-            for cell in (c.strip() for c in row):
-                if cell.lower().endswith(".pdf"):
-                    pdf = Path(cell).expanduser()
-                    items.append(pdf if pdf.is_absolute() else path.parent / pdf)
-                    break
-                ref = identifier_in_cell(cell)      # also reference links (Exoplanet Archive export)
-                if ref:
-                    items.append(ref)
-                    break
+        rows = list(csv.reader(f))
+    header = [c.strip().lower() for c in rows[0]] if rows else []
+    if "item" in header and "status" in header:          # an earlier focused search's papers.csv
+        at = {name: header.index(name) for name in ("item", "status", "reference") if name in header}
+        for row in rows[1:]:
+            if len(row) <= at["item"] or (only_failed and row[at["status"]] != "error"):
+                continue
+            label = row[at["reference"]] if "reference" in at and len(row) > at["reference"] else ""
+            cell = row[at["item"]].strip()
+            if cell.lower().endswith(".pdf"):
+                items.append(Path(cell))
+            elif identifier_in_cell(cell):
+                items.append(PaperRef(str(identifier_in_cell(cell)), label))
+        return list(dict.fromkeys(items))
+    for row in rows:
+        for cell in (c.strip() for c in row):
+            if cell.lower().endswith(".pdf"):
+                pdf = Path(cell).expanduser()
+                items.append(pdf if pdf.is_absolute() else path.parent / pdf)
+                break
+            ref = identifier_in_cell(cell)      # also reference links (Exoplanet Archive export)
+            if ref:
+                items.append(ref)
+                break
     return list(dict.fromkeys(items))
 
 
@@ -417,7 +443,7 @@ def _new_dir(output_dir: Path) -> Path:
 def run_focused_search(items: Sequence[PaperItem], columns: Sequence[str], config: RunConfig,
                        search_words: Sequence[str] = (), whole_paper: bool = False,
                        on_progress: Optional[Callable[[int, int, str], None]] = None,
-                       cancel_event: Optional[threading.Event] = None, max_workers: int = 4,
+                       cancel_event: Optional[threading.Event] = None, max_workers: int = 0,
                        whole_tables: bool = True) -> FocusedRun:
     """Search every paper for `columns` only. on_progress(done, total, message). `whole_tables`
     (passages mode): a match in or just above a table sends the whole table (measured 2026-10-24:
@@ -435,6 +461,22 @@ def run_focused_search(items: Sequence[PaperItem], columns: Sequence[str], confi
     params = [known[c] for c in dict.fromkeys(columns)]
     items = list(dict.fromkeys(items))
     out_dir = _new_dir(Path(config.output_dir))
+    report = on_progress or (lambda *a: None)
+    # 1. every identifier looked up at once (batched arXiv queries; cached lookups reused)
+    from parameter_extractor.ingestion import arxiv_source as ax
+    from parameter_extractor.paper_source import is_identifier
+    cache = ax.LookupCache(config.arxiv_cache_dir)
+    identifiers = [item for item in items if is_identifier(item)]
+    report(0, len(items), f"Looking up {len(identifiers)} paper(s) on arXiv")
+    records = ax.resolve_many(identifiers, config.ads_token, cache,
+                              note=lambda m: report(0, len(items), m)) if identifiers else {}
+    # 2. one client for all papers; in batch mode their requests share batches, and many papers can
+    #    wait in the queue at once (the arXiv downloads stay one at a time: arxiv_source's rate limit)
+    from parameter_extractor.api_client import BatchCollector
+    import anthropic
+    client = anthropic.Anthropic(api_key=config.api_key, max_retries=5)
+    collector = BatchCollector(client) if config.batch_mode else None
+    workers = max_workers if max_workers else (BATCH_WORKERS if config.batch_mode else DIRECT_WORKERS)
     names: Dict[str, int] = {}
     jobs = []
     for item in items:
@@ -443,11 +485,11 @@ def run_focused_search(items: Sequence[PaperItem], columns: Sequence[str], confi
         jobs.append((item, out_dir / "papers" / (name if names[name] == 1 else f"{name}_{names[name]}")))
     outcomes: List[PaperOutcome] = []
     done = 0
-    report = on_progress or (lambda *a: None)
     report(0, len(jobs), f"Searching {len(jobs)} paper(s) for {', '.join(c for c in columns)}")
-    with ThreadPoolExecutor(max_workers=max_workers, thread_name_prefix="focused") as pool:
+    with ThreadPoolExecutor(max_workers=workers, thread_name_prefix="focused") as pool:
         futures = {pool.submit(search_paper, item, params, config, run_dir, search_words, whole_paper,
-                               cancel_event, whole_tables): (item, run_dir) for item, run_dir in jobs}
+                               cancel_event, whole_tables, records.get(str(item)), cache, client, collector):
+                   (item, run_dir) for item, run_dir in jobs}
         try:
             for future in as_completed(futures):
                 item, run_dir = futures[future]
@@ -463,11 +505,14 @@ def run_focused_search(items: Sequence[PaperItem], columns: Sequence[str], confi
                                            message=f"{type(e).__name__}: {e}", reference=getattr(item, "label", ""))
                 outcomes.append(outcome)
                 done += 1
+                if done % 50 == 0:
+                    cache.save()
                 report(done, len(jobs), f"{outcome.paper}: {outcome.status}"
                                         + (f" ({', '.join(outcome.found)})" if outcome.found else ""))
         except RunCancelledError:
             pool.shutdown(wait=False, cancel_futures=True)
             raise
+    cache.save()
     order = {str(item): i for i, (item, _) in enumerate(jobs)}
     outcomes.sort(key=lambda o: order.get(o.item, len(order)))
     return _write(out_dir, outcomes, params, config, search_words, whole_paper, whole_tables)

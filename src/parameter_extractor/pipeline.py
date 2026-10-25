@@ -268,8 +268,10 @@ def extract(
     ctx.total_steps += len(always_on)
 
     ctx.step("parse", "Reading the paper")
+    from parameter_extractor.ingestion.arxiv_source import LookupCache
     source = resolve_paper(item, ctx.run_dir, prefer_arxiv=config.prefer_arxiv, ads_token=config.ads_token,
-                           note=lambda m: ctx.note("parse", m))
+                           note=lambda m: ctx.note("parse", m),
+                           cache=LookupCache(config.arxiv_cache_dir) if config.arxiv_cache_dir else None)
     (ctx.run_dir / "source.json").write_text(json.dumps(source.summary(), indent=2, ensure_ascii=False))
     table_images: List[Path] = []
     figures, equations = [], []

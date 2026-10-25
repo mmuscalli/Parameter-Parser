@@ -743,6 +743,7 @@ def test_focused_search_window():
             assert "using EXOFASTv2" in f.results.item(found, 4).toolTip()          # the quote on hover
             assert "Not mentioned (no API call)" in by_result
             assert f.open_csv_btn.isEnabled() and w.pack_combo.isEnabled()
+            assert not f.retry_btn.isEnabled()                                   # nothing failed
             _screenshot(f, "focused_search")
             f.close()
             w.close()
