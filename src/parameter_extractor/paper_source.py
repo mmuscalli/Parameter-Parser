@@ -94,9 +94,17 @@ def resolve_paper(item: PaperItem, run_dir: Path, prefer_arxiv: bool = False, ad
     texts read before aren't downloaded again."""
     name = run_name(item)
     if is_identifier(item):                    # named by identifier: arXiv is the only source
+        if record is None and cache is not None:      # looked up before (any run)
+            cached = cache.record(str(item))
+            if isinstance(cached, PaperSourceError):
+                raise cached
+            record = cached
         if record is None:
             note(f"Looking up {ax.parse_identifier(str(item))} on arXiv")
             record = ax.resolve(item, ads_token)      # a PaperRef keeps its label's first author
+            if cache is not None:
+                cache.put(str(item), record)
+                cache.save()
         note(f"Downloading {record.label} from arXiv")
         text = ax.fetch_html_text(record, save_to=None if cache else run_dir / "arxiv.html", cache=cache)
         if text:

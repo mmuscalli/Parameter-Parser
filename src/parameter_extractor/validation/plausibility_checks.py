@@ -152,12 +152,17 @@ def check_extraction(
                 f"(applies to every row){_drop_suffix(f.confidence, drop_below)}.",
                 quote=f.quote or None, source=f.source or None))
 
+    def _as_printed(value, unit):
+        return f"{value:g} {unit}".strip() if isinstance(value, (int, float)) and unit else value
+
     # per-set and cycling values (assumed ones are reported separately: never written)
     # (name, value, where -- "set 'a'", "'HD 1397 b'" for one sample/planet, "every ... set", ...)
     per_set = [(o.field_name, o.value, f"set '{o.set_label}'", o.confidence, o.basis, o.quote, o.source, o.note)
                for o in methodology.per_set_overrides]
     from parameter_extractor.stages.optional import optional_results
-    per_set += [(c.parameter, getattr(c, "text", "") or c.value,         # text parameters: their text
+    # numbers with the unit they were printed in ('20 MPa', faisal2005): the flag shows the paper's
+    # value, which the CSV holds converted ('200' bar) -- a bare '20' read as wrong
+    per_set += [(c.parameter, getattr(c, "text", "") or _as_printed(c.value, getattr(c, "unit", "")),
                  f"'{c.sample_label}'" if getattr(c, "sample_label", "") else
                  f"set '{c.set_label}'" if c.set_label else f"every {spec.set_word} set",
                  c.confidence, c.basis, c.quote, c.source, c.note)

@@ -42,7 +42,10 @@ For each species:
   instead list, in `added_solutions`, EVERY solution and solvent that was
   combined (including plain water or buffer), each with its volume exactly
   as printed and a quote; the pipeline does the arithmetic. Use `set_label`
-  on an added solution only when that set's volumes differ from the others.
+  on an added solution only when that set's VOLUMES differ from the others:
+  a solution added at the same volume in every set is listed once with
+  `set_label` '' -- even when its concentration differs between sets (that
+  goes on the species entries).
   If the paper states the concentration in the mixture itself, record that
   without `b` -- and if it gives both, record both.
 - Molar ratios: when the paper gives a ratio between species (e.g. "3 :

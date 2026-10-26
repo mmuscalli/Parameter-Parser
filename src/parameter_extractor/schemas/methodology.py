@@ -71,7 +71,7 @@ class Methodology(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
     paper_id: SkipJsonSchema[str] = ""
     experiment_type: Extracted[ExperimentType]
-    solution_type: Extracted[Literal["Wet", "Dry"]]
+    solution_type: Extracted[Literal["Wet", "Dry", "Wet-Dry", "Drydown"]]
     vessel_material: Extracted[str]
     solvent_name: Extracted[str]
     analysis_method: Extracted[str] = Field(

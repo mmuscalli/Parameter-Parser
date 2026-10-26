@@ -1218,3 +1218,32 @@ in `_listings` for the run): 19 of 22 (left: 2 MNRAS, Sci. Rep. too large). MNRA
   own, minus template columns (prebiotic keeps the template's places; exoplanets' standard_columns
   .json is now empty, same order -> references unchanged). `paper_arxiv_id` is filled (versioned ID)
   when the values come from arXiv's text or its downloaded PDF (`ResolvedPaper.read_arxiv`).
+
+## Reference runs refreshed + rules refined from live runs (2026-10-26)
+
+Framework: `runs/reference/<name>/` = recorded answers (<step>.output/.audit.json), reference.json
+(pack, pdf relative to "Paper Files" OR arxiv ID, online_checks, models, cost), archive_rows.json
+(exoplanets), arxiv_cache/ seed (record + text: replay needs no network), expected_extracted.csv /
+expected_observations.csv / archive_validation.json -- written by REPLAY (registry None, no PubChem),
+so the user's local accepted variables never leak in. `scripts/record_reference.py RUN_DIR NAME
+--pdf ... | --arxiv ID --pack ...`; `tests/test_reference_runs.py` replays every folder (PDF missing ->
+SKIP). Old fixtures (runs/eder1994_auto, kim2019_auto, truman2024_auto, teng/nielsen) are kept: 14
+test files depend on eder1994_auto's specifics, and they test old-format answers loading.
+Recorded (Standard, live 2026-10-26, $1.47 + $0.71 re-runs): eder1994 (42 rows, = old reference but
+wording), faisal2005 (25, flowthrough 240-300 C / 20 MPa), kim2019 (13), truman2024 (8),
+aa57186-25_arxiv (2; arXiv 2601.10450v1, 109/110 archive matches on the adopted fit).
+Rules refined from these runs:
+- kim2019: the nucleobase solution (20 uL) was set-labelled because its CONCENTRATION was stated for
+  1:1 -> 1:2/1:3 mixtures 13 uL (CaCl2 9.23 instead of 3.64 mM). Chemistry prompt: set_label on an
+  added solution only when its VOLUMES differ; mixing `_missing_solutions` refuses a set whose list
+  lacks a solution listed for other sets (not_calculated) instead of a wrong total.
+- solution_type: the curated dataset uses Wet / Dry / Wet-Dry (all 61 Evaporation Cycle rows) /
+  Drydown (68 rows) -- the conditions spec offered Wet/Dry only. Choices + descriptions updated
+  (Methodology Literal too); experiment_type: wet-dry cycling / dry-downs = Batch. kim -> Drydown,
+  truman -> Wet-Dry, both Batch.
+- aa57186: TESS TOI confirmed in the paper -> discoverymethod/disc_facility were "assumed" (held back).
+  system_and_discovery rule: a survey candidate takes the survey's method/facility, b derived,
+  disc_year = publication year (archive credits this paper: Transit, TESS). disc_year, sy_snum,
+  sy_pnum `integer`.
+- Confidence flags show numbers with the unit as printed ('20 MPa', not '= 20' beside a bar column).
+- paper_source: single-paper runs look the identifier up in the arXiv LookupCache first.

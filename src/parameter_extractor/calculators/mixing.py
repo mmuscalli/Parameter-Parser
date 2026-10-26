@@ -91,6 +91,18 @@ def _mixture(entry: SoluteEntry, solutions: List[AddedSolution]) -> Tuple[Option
                    f"x {own_volume:g} µL / {total:g} µL total ({parts})")
 
 
+def _missing_solutions(chemistry: ChemistryExtraction, set_label: Optional[str]) -> List[str]:
+    """Solutions listed for some other set but not for this one: the total volume would be short.
+    (kim2019 live run, 2026-10-26: the 20 µL nucleobase solution listed only for the 1:1 sets -- its
+    concentration was stated for 1:1 -- made the 1:2 / 1:3 mixtures 13 µL instead of 33 µL.)"""
+    present = {_key(s.solution) for s in solutions_for(chemistry, set_label)}
+    elsewhere = {}
+    for sol in chemistry.added_solutions:
+        if sol.set_label and sol.set_label != set_label and _key(sol.solution) not in present:
+            elsewhere.setdefault(_key(sol.solution), sol.solution)
+    return sorted(elsewhere.values())
+
+
 def derive_mixture_concentrations(chemistry: ChemistryExtraction, set_labels: List[str]) -> List[MixingNote]:
     """Adds a derived mixture entry for each stock concentration that can be
     calculated. `set_labels`: the structure plan's sets, for a paper-wide stock
@@ -110,7 +122,12 @@ def derive_mixture_concentrations(chemistry: ChemistryExtraction, set_labels: Li
         for label in targets:
             if (label, entry.sample_label, entry.name) in stated or (None, entry.sample_label, entry.name) in stated:
                 continue                       # the paper gives the mixture value itself
-            value, how = _mixture(entry, solutions_for(chemistry, label))
+            missing = _missing_solutions(chemistry, label)
+            if missing:
+                value, how = None, (f"{', '.join(missing)} is listed for other sets but not for this one, so "
+                                    f"the total volume isn't known")
+            else:
+                value, how = _mixture(entry, solutions_for(chemistry, label))
             where = f" (set '{label}')" if label else ""
             if value is None:
                 notes.append(MixingNote("not_derived", f"{entry.name}{where}: mixture concentration not "
@@ -201,6 +218,8 @@ def _stock_from_mixture(chemistry, r: MolarRatio, label: str, mixture_mM: float,
                      and _key(s.name) == _key(r.species) and s.stock_solution), "")
     if not solution:
         return []
+    if _missing_solutions(chemistry, label):
+        return []                                   # the total volume isn't known for this set
     solutions = solutions_for(chemistry, label)
     volumes = {_key(s.solution): _volume_uL(s.volume) for s in solutions}
     own = volumes.get(_key(solution))
