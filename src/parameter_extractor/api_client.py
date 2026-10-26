@@ -148,7 +148,11 @@ def _send(ctx: RunContext, *, model: str, system_prompt: str, content, response_
     return _from_tool_call(message, tool[0], response_model) if tool else message
 
 
-BATCH_POLL_SECONDS = (5, 60)          # first wait, longest wait between status checks
+# first wait, longest wait between status checks. Checks are free; a long interval only delays
+# noticing a finished batch -- at 60 s, waits landed on 165 / 349 s marks (2026-10-27 A/B), up to a
+# minute after the batch had ended. (Pooling one run's parallel steps into one batch was tried too:
+# 2-request batches waited ~350 s per phase vs ~165 s for 1-request ones -> not used for single runs.)
+BATCH_POLL_SECONDS = (5, 15)
 
 
 class BatchCollector:

@@ -1271,3 +1271,14 @@ figure suggestions. Table cells were most of the chemistry answer, each repeatin
   `<<<this figure>>>`; `call_structured(cached_prefix=...)` sends it with cache_control, then the
   image + figure text. eder live: 18K-token prefix; Fig. 1 $0.076 (write), Fig. 3 $0.026 (read).
   Audit keeps `cached_prefix`.
+
+## Batch mode for single runs (2026-10-27, Mickey asked whether pooling would help)
+
+A run has two dependent phases (structure planner [+ metadata], then the extraction steps), so >= 2
+queue waits. A/B on kim2019 (Standard, 4 runs started together): pooling each phase's parallel steps
+into ONE batch (BatchCollector, 2 s window) took 700 s (~350 s per phase) vs 333 s for separate
+one-request batches (~165 s per phase) -> NOT used for single runs (kept for focused searches, where
+it replaced one wait PER PAPER). The waits sat on the poll schedule (5 s x1.5 up to 60 s: 165 / 349 s
+marks), i.e. up to a minute after a batch ended -> BATCH_POLL_SECONDS = (5, 15) (checks are free):
+same paper 287 s. The real lever for many full runs would be a multi-paper full-extraction queue
+(phases of all papers share batches) -- not built.
