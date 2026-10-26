@@ -2,7 +2,24 @@ Extract every chemical species and its concentration mentioned as part of the
 INITIAL reaction composition or as a SAMPLED/measured product, for every
 experiment set in the structure plan below.
 
-Answer format: `groups` -- one entry per set (and sample) that has species:
+Answer format -- two parts:
+
+`tables`: every TABLE of values (measured products, and starting
+concentrations that a table lists per row), in the table's own layout:
+`src` the table ("Table 1"), `c` your confidence, `cols` one entry per
+species column (`nm` name, `r` role, `ph` phase, `u` the column's unit as
+printed, `lbl` the header as printed, `how` only when the header doesn't
+name the species), and `rows` one entry per table row that is a sample in
+the structure plan: `set` and `sample` (exact structure-plan labels), `row`
+the row's label as printed, and `v` its values, one per column in column
+order, exactly as printed -- "nd" for a product the paper reports as not
+detected, "detected" for one present without an amount, "" for an empty or
+not-measured cell. A table whose rows belong to several sets lists each
+row with its own `set`. Don't repeat table values in `groups`.
+
+`groups`: everything NOT in a table -- values stated in the text, and the
+starting composition when it's given in the text (as it usually is): one
+entry per set (and sample) that has species:
 `set` (the set_label; '' for values constant across the whole paper),
 `sample` when needed (below), and its `species`. Each species: `nm` name,
 `r` role, `ph` phase, `v` value and `u` unit as printed, `q` quote, `src`

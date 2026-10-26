@@ -1247,3 +1247,27 @@ Rules refined from these runs:
   sy_pnum `integer`.
 - Confidence flags show numbers with the unit as printed ('20 MPa', not '= 20' beside a bar column).
 - paper_source: single-paper runs look the identifier up in the arXiv LookupCache first.
+
+## Prebiotic token pass (2026-10-27, Mickey: Sonnet must stay; cheaper without losing accuracy)
+
+Measured (eder $0.31): output 60% (chemistry 11K tok; faisal 27K = $0.29 of $0.45), the one cache
+write of the paper 26%, uncached step instructions 13%, cache reads 2% -- caching already worked
+within a run; the dashboard's low cache share comes from focused searches (one call per paper) and
+figure suggestions. Table cells were most of the chemistry answer, each repeating nm/r/ph/u/q/src/c
+(the number ~7%).
+- `schemas/chemistry.TableResults` (compact `tables`: src, c, cols [nm r ph u lbl how], rows [set
+  sample row v[]]) -> `entries()` expands into the same SoluteEntry list (quote "<row> <value>",
+  source "<table>, row <row>, column <lbl>", 'nd' -> not detected, 'detected'; `_cell_number`: plain,
+  footnote marks, a x 10^n, +-err (value kept), refuses ranges, limits, '10-4' lost exponents).
+  Prompt: tables in `tables`, text values in `groups`. Live Standard (same 4 papers): chemistry out
+  eder 11.1K->5.7K, faisal 27.1K->5.4K, kim 5.5K->3.7K, truman 6.7K->2.0K; runs $0.31->0.26,
+  0.45->0.24, 0.19->0.17, 0.20->0.16; every table value identical to the references (other diffs =
+  run-to-run variance outside tables). References eder1994 + truman2024 re-recorded in the table
+  format; kim2019 + faisal2005 stay in the groups format (old recordings must keep loading).
+- Not worth it (measured): compact_text for prebiotic (1-3%), caching the structure plan as a 2nd
+  breakpoint (<2%). Table images are ~half the cached paper -- kept (accuracy).
+- Figure suggestions: figure_planner.md puts the paper-wide part first (instructions, plan,
+  vocabulary, columns, composition passages -- no longer minus the figure's lines) and splits at
+  `<<<this figure>>>`; `call_structured(cached_prefix=...)` sends it with cache_control, then the
+  image + figure text. eder live: 18K-token prefix; Fig. 1 $0.076 (write), Fig. 3 $0.026 (read).
+  Audit keeps `cached_prefix`.

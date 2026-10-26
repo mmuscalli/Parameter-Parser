@@ -83,16 +83,26 @@ def run_figure_planner(
         STRUCTURE_PLAN_JSON=structure_plan.model_dump_json(indent=2),
         CONTROLLED_VOCAB_JSON=json.dumps(controlled_vocab),
         TEMPLATE_COLUMNS_JSON=json.dumps(template_columns),
-        FIGURE_PASSAGES=(passages := figure_passages(page_texts, figure.number)),
-        COMPOSITION_PASSAGES=composition_passages(page_texts, exclude=passages),
+        FIGURE_PASSAGES=figure_passages(page_texts, figure.number),
+        # the same for every figure of the paper (no lines left out per figure): part of the cached prefix
+        COMPOSITION_PASSAGES=composition_passages(page_texts),
+        THIS_FIGURE=FIGURE_SPLIT,
     )
+    # everything before the split is the same for every figure of a paper (instructions, structure
+    # plan, vocabulary, columns, concentration passages): sent first and cached, so the paper's other
+    # figures read it at a tenth of the price (2026-10-27); this figure's image and text follow
+    shared, this_figure = prompt.split(FIGURE_SPLIT, 1)
     return call_structured(
         ctx,
         stage="figure_planner",
         audit_name=f"figure_planner.fig{figure.number}",
         system_prompt="You help a scientist digitize plots from a paper. Describe only what "
                       "the figure and text support; never invent series or conditions.",
-        user_content=prompt,
+        user_content=this_figure,
         response_model=FigurePlan,
         image_paths=[Path(figure.crop_image)],
+        cached_prefix=shared,
     )
+
+
+FIGURE_SPLIT = "\n<<<this figure>>>\n"

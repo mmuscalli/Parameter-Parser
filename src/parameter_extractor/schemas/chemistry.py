@@ -11,6 +11,7 @@ separate flattening step, keeps the schema handed to the model small
 regardless of how many species the full template happens to track.
 """
 from __future__ import annotations
+import re
 from typing import List, Literal, Optional
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 from parameter_extractor.schemas.common import QUOTE_DESC, SOURCE_DESC
@@ -169,11 +170,94 @@ class SoluteGroup(BaseModel):
     species: List[SoluteEntry]
 
 
+_CELL = re.compile(r"^\s*([-+]?\d+(?:\.\d+)?|[-+]?\.\d+)\s*(?:[x×*·]\s*10\s*\^?\s*([-+]?\d+))?"
+                   r"\s*[a-zA-Z*†‡§#]{0,2}\s*(?:(?:±|\+/-|\+-)\s*\d+(?:\.\d+)?\s*[a-zA-Z*]{0,2})?\s*$")
+
+
+def _cell_number(text: str):
+    """A table cell as printed -> its number: '2.77', '2.77a' (footnote mark), '1.2 × 10−3', '−0.5'.
+    None for anything else -- never guessed: ranges, limits ('<0.1'), OCR-lost exponents ('10−4')."""
+    t = text.replace("\u2212", "-").replace("\u2013", "-").replace(",", "").replace("\u00a0", " ")
+    m = _CELL.match(t)
+    if not m:
+        return None
+    if re.fullmatch(r"10-\d+", t.strip()):              # '10−4': an exponent whose superscript was lost
+        return None
+    value = float(m.group(1))
+    return value * 10 ** int(m.group(2)) if m.group(2) else value
+
+
+class TableColumn(BaseModel):
+    """One species column of a results table (TableResults)."""
+    model_config = ConfigDict(populate_by_name=True, json_schema_extra=_required(["nm", "r", "ph", "u", "lbl"]))
+    name: str = Field(alias="nm", description="Species name, as for a species entry's `nm`.")
+    role: Role = Field(alias="r")
+    phase: Phase = Field(alias="ph")
+    unit: str = Field(alias="u", description="The column's unit exactly as printed, e.g. '%', 'mmol/L'.")
+    label: str = Field(alias="lbl", description="The column header as printed, e.g. '% (Gly)2'.")
+    identified_by: str = Field(default="", alias="how",
+                               description="Only when the header doesn't name the species: how you identified "
+                                           "it, at most 15 words.")
+
+
+class TableRow(BaseModel):
+    model_config = ConfigDict(populate_by_name=True, json_schema_extra=_required(["set", "sample", "row", "v"]))
+    set_label: str = Field(alias="set", description="Exact structure-plan set_label of this row.")
+    sample_label: str = Field(alias="sample", description="Exact structure-plan sample_label of this row.")
+    label: str = Field(alias="row", description="The row's label as printed, e.g. '97.3' (a time), 'Entry 3'.")
+    values: List[str] = Field(alias="v", description="One per column, in column order, exactly as printed "
+                                                     "('2.77'); 'nd' where the paper reports the product as "
+                                                     "not detected, 'detected' where it's present without an "
+                                                     "amount, '' for an empty or not-measured cell.")
+
+
+class TableResults(BaseModel):
+    """A table's values in its own layout (2026-10-27): the columns once, then one row per sample with
+    just its values -- not one species entry per cell repeating the name, role, unit, quote and source
+    (most of the chemistry answer: faisal2005's 225 cells were 27K output tokens). Expanded into the
+    same species entries (`ChemistryExtraction.solutes`) with a quote from the row label and value and
+    the source table, row and column."""
+    model_config = ConfigDict(populate_by_name=True, json_schema_extra=_required(["src", "cols", "rows", "c"]))
+    source: str = Field(alias="src", description="The table, e.g. 'Table 1' (or 'Table 2, upper part').")
+    columns: List[TableColumn] = Field(alias="cols")
+    rows: List[TableRow]
+    confidence: Literal["high", "medium", "low"] = Field(alias="c")
+
+    _ND = {"nd", "n.d.", "n.d", "not detected", "<lod", "bdl", "b.d.l."}
+    _DETECTED = {"detected", "+", "present", "yes"}
+
+    def entries(self) -> List["SoluteEntry"]:
+        out = []
+        for row in self.rows:
+            for col, raw in zip(self.columns, row.values):
+                text = (raw or "").strip()
+                if not text or text in ("-", "\u2013", "\u2014", "n.m.", "nm"):
+                    continue
+                low = text.lower()
+                detection = "not detected" if low in self._ND else "detected" if low in self._DETECTED else ""
+                number = None
+                if not detection:
+                    number = _cell_number(text)
+                    if number is None:
+                        continue                         # not a single value (a range, '<0.1', '10-4') -- skipped
+                out.append(SoluteEntry(
+                    name=col.name, role=col.role, phase=col.phase, set_label=row.set_label or None,
+                    sample_label=row.sample_label or None, concentration_value=number,
+                    concentration_unit_raw=col.unit or None, detection=detection if col.role == "sampled" else "",
+                    quote=f"{row.label} {text}".strip(),
+                    source=f"{self.source}, row {row.label}, column {col.label}",
+                    confidence=self.confidence, identified_by=col.identified_by))
+        return out
+
+
 class ChemistryExtraction(BaseModel):
     model_config = ConfigDict(populate_by_name=True,
-                              json_schema_extra=_required(["groups", "unmapped_species", "added_solutions",
-                                                           "molar_ratios", "mixture_totals"]))
+                              json_schema_extra=_required(["tables", "groups", "unmapped_species",
+                                                           "added_solutions", "molar_ratios", "mixture_totals"]))
     paper_id: SkipJsonSchema[str] = ""
+    tables: List[TableResults] = Field(default_factory=list,
+                                       description="Every table of values, in its own layout: columns once, "
+                                                   "one row per sample.")
     groups: List[SoluteGroup] = Field(default_factory=list,
                                       description="Species grouped by set (and sample): one entry per set/sample "
                                                   "that has species.")
@@ -210,7 +294,9 @@ class ChemistryExtraction(BaseModel):
                 entry.set_label = group.set_label or None
                 entry.sample_label = group.sample_label or None
                 self.solutes.append(entry)
-        self.groups = []                 # kept once, in `solutes` (what's saved and replayed)
+        for table in self.tables:
+            self.solutes.extend(table.entries())
+        self.groups, self.tables = [], []    # kept once, in `solutes` (what's saved and replayed)
         return self
 
     def conflicting_set_species(self) -> set:

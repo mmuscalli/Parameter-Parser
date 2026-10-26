@@ -410,6 +410,7 @@ def call_structured(
     audit_name: Optional[str] = None,
     max_tokens: Optional[int] = None,
     paper_text: Optional[str] = None,
+    cached_prefix: Optional[str] = None,
 ) -> T:
     """
     Calls the model, constrains its response to `response_model`'s schema via
@@ -440,10 +441,16 @@ def call_structured(
         image_paths = ctx.paper.images
         if stage in ctx.paper.tools:
             _streamed.tool = (stage, ctx.paper.tool_definitions())
+    elif cached_prefix and ctx.config.prompt_caching:
+        # a prefix shared by several requests of a run (figure_planner: the same for every figure),
+        # marked for caching; then this request's images and text
+        cache = {"type": "ephemeral", "ttl": "1h"} if ctx.config.batch_mode else {"type": "ephemeral"}
+        content = ([{"type": "text", "text": cached_prefix, "cache_control": cache}]
+                   + (_image_blocks(image_paths) if image_paths else []) + [{"type": "text", "text": user_content}])
     elif image_paths:
-        content = _image_blocks(image_paths) + [{"type": "text", "text": user_content}]
+        content = _image_blocks(image_paths) + [{"type": "text", "text": (cached_prefix or "") + user_content}]
     else:
-        content = user_content
+        content = (cached_prefix or "") + user_content
 
     # `max_tokens`: the stage's output budget (a runaway answer -- the model repeating itself
     # inside a field, aa57186-25 -- then stops in seconds, not after 64K tokens / 7 minutes).
@@ -493,6 +500,7 @@ def call_structured(
         "images_attached": [str(p) for p in (image_paths or [])],
         "system_prompt": system_prompt,
         "user_content": user_content,
+        "cached_prefix": cached_prefix,
         "stop_reason": response.stop_reason,
         "message_id": response.id,
         "raw_response": json.loads(raw_text) if raw_text else None,

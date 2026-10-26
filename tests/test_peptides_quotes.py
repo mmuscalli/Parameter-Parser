@@ -188,6 +188,42 @@ def test_quotes_must_name_the_species():
     from parameter_extractor.ingestion.flatten_to_template import _from_solute
     assert "[identified from: structure drawing, Table 2 entry 1]" in _from_solute(chem.solutes[0]).source
 
+
+def test_table_results_expand_to_species_entries():
+    """Chemistry tables in their own layout (2026-10-27, ~50-80% fewer output tokens): columns once,
+    rows of values as printed -> the same species entries, quoted from the row label and value."""
+    from parameter_extractor.schemas.chemistry import ChemistryExtraction
+    chem = ChemistryExtraction.model_validate({"tables": [{"src": "Table 1", "c": "medium", "cols": [
+        {"nm": "Gly", "r": "initial", "ph": "aq", "u": "M", "lbl": "[Gly]start"},
+        {"nm": "2peptide_Gly", "r": "sampled", "ph": "aq", "u": "%", "lbl": "% (Gly)2"},
+        {"nm": "cyclo_Gly-Gly", "r": "sampled", "ph": "aq", "u": "%", "lbl": "DKP", "how": "DKP = cyclo(Gly-Gly)"}],
+        "rows": [{"set": "S", "sample": "a", "row": "1", "v": ["10\u22124", "2.77a", "nd"]},
+                 {"set": "S", "sample": "b", "row": "2", "v": ["0.1", "\u22120.5", "detected"]},
+                 {"set": "S", "sample": "c", "row": "3", "v": ["", "-", "n.d."]}]}],
+        "groups": [{"set": "S", "species": [{"nm": "NaCl", "r": "initial", "ph": "aq", "v": 0.25, "u": "M",
+                                             "q": "0.25 M NaCl", "src": "Methods", "c": "high"}]}],
+        "unmapped_species": [], "added_solutions": [], "molar_ratios": [], "mixture_totals": []})
+    by = {(s.name, s.sample_label): s for s in chem.solutes}
+    assert by[("NaCl", None)].concentration_value == 0.25                          # groups still work
+    gly2 = by[("2peptide_Gly", "a")]
+    assert (gly2.concentration_value, gly2.concentration_unit_raw) == (2.77, "%")   # footnote letter dropped
+    assert gly2.quote == "1 2.77a" and gly2.source == "Table 1, row 1, column % (Gly)2"
+    assert gly2.confidence == "medium" and gly2.set_label == "S"
+    assert by[("2peptide_Gly", "b")].concentration_value == -0.5                   # unicode minus
+    dkp = by[("cyclo_Gly-Gly", "a")]
+    assert dkp.concentration_value is None and dkp.detection == "not detected" and dkp.identified_by
+    assert by[("cyclo_Gly-Gly", "b")].detection == "detected" and by[("cyclo_Gly-Gly", "c")].detection == "not detected"
+    assert ("2peptide_Gly", "c") not in by and ("Gly", "c") not in by               # '-' and '' are no values
+    assert by[("Gly", "b")].role == "initial" and by[("Gly", "b")].detection == ""   # per-sample start
+    assert chem.tables == [] and chem.groups == []                                  # kept once, in solutes
+    from parameter_extractor.schemas.chemistry import _cell_number
+    assert _cell_number("1.2 \u00d7 10\u22123") == 1.2e-3 and _cell_number("3.5 x 10^2") == 350
+    assert _cell_number("2.77a") == 2.77 and _cell_number("0.10*") == 0.1 and _cell_number(".5") == 0.5
+    assert _cell_number("2.1 \u00b1 0.3") == 2.1                                    # the value; its error dropped
+    for unclear in ("10\u22124", "<0.1", "1-4", "trace", ""):
+        assert _cell_number(unclear) is None, unclear
+    assert ("Gly", "a") not in by                                                    # '10−4': not guessed
+
 if __name__ == "__main__":
     for name, fn in list(globals().items()):
         if name.startswith("test_") and callable(fn):

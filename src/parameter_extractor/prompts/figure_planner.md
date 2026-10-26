@@ -55,12 +55,6 @@ Return a FigurePlan:
   prefer to skip the figure). Explain in `duplicate_note`.
 {{PACK_RULES}}
 ---
-FIGURE: {{FIGURE_ID}} (page {{PAGE}})
-
-CAPTION (extracted text):
-{{CAPTION}}
-
----
 STRUCTURE PLAN (sets and rows already planned from text and tables):
 
 {{STRUCTURE_PLAN_JSON}}
@@ -76,12 +70,18 @@ COLUMNS (choose axis and condition columns from these):
 {{TEMPLATE_COLUMNS_JSON}}
 
 ---
+PASSAGES THAT STATE AMOUNTS OR CONCENTRATIONS, from anywhere in the paper:
+
+{{COMPOSITION_PASSAGES}}
+{{THIS_FIGURE}}
+---
+THE FIGURE TO DESCRIBE: {{FIGURE_ID}} (page {{PAGE}}) -- its image is attached above.
+
+CAPTION (extracted text):
+{{CAPTION}}
+
+---
 PASSAGES THAT MENTION THIS FIGURE (extracted text; two-column pages may run
 side by side on one line):
 
 {{FIGURE_PASSAGES}}
-
----
-PASSAGES THAT STATE AMOUNTS OR CONCENTRATIONS, from anywhere in the paper:
-
-{{COMPOSITION_PASSAGES}}
