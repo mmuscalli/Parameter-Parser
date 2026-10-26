@@ -31,6 +31,7 @@ COLUMNS:
 
 {{COLUMNS_JSON}}
 
+{{PACK_RULES}}
 ---
 PAPER TEXT:
 

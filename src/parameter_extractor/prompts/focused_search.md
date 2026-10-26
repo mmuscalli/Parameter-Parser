@@ -25,3 +25,4 @@ Rules:
 - Values written in LaTeX: in `x_{-a}^{+b}` the superscript +b is `ep` and
   the subscript -a is `em`.
 - Keep quotes short. No notes or explanations.
+{{PACK_RULES}}

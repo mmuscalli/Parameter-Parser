@@ -207,7 +207,8 @@ def test_standard_columns_file():
     cols = standard_columns()
     assert cols[-7:] == ["cycle_number", "cycle_duration_hr", "wet_phase_temperature_C", "wet_phase_duration_hr",
                          "wet_phase_relative_humidity_pct", "dry_phase_temperature_C", "dry_phase_duration_hr"]
-    assert cols[:2] == ["initial_pressure_bar_err_plus", "initial_pressure_bar_err_minus"]
+    # the shared columns every pack gets come first (the metadata ones are in this pack's template)
+    assert cols[:3] == ["paper_arxiv_id", "initial_pressure_bar_err_plus", "initial_pressure_bar_err_minus"]
     assert "initial_temperature_C_alt1_method" in cols and "solvent_name" not in cols     # template columns aren't
 
 

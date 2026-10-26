@@ -148,6 +148,9 @@ def test_a_paper_given_by_arxiv_id_runs_end_to_end():
             [row] = result.rows
             assert row.paper_title.startswith("A Jovian planet") and row.year_published == 2019
             assert row.journal_published == "A&A"
+            import csv as _csv
+            written = next(_csv.DictReader(open(result.csv_path)))
+            assert written["paper_arxiv_id"] == "1811.01882v4" and written["paper_title"].startswith("A Jovian")
             assert all(src.page is None for src in row.provenance.values())             # no pages in HTML
             flag = next(f for f in result.paper_flags if f.kind == "paper_source")
             assert "version v4" in flag.message and "A&A 623, A100 (2019)" in flag.message

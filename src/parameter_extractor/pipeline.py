@@ -860,6 +860,12 @@ def finish(
     image_tables = image_table_numbers(ex.parsed.table_pages) if config.rasterize_table_pages else set()
     table_pages = table_page_numbers(ex.parsed.table_pages)
     paper_flags += _source_flags(ex.source)
+    if ex.source is not None and ex.source.read_arxiv:          # common column: which arXiv version
+        from parameter_extractor.ingestion.flatten_to_template import set_row_value
+        from parameter_extractor.schemas.row_schema import CellSource
+        arxiv_src = CellSource(origin="arXiv record", source=ex.source.label)
+        for r in rows:
+            set_row_value(r, "paper_arxiv_id", ex.source.record.versioned_id, arxiv_src)
     check_flag_quotes([*paper_flags, *(f for fs in row_flags.values() for f in fs)], ex.parsed.text, image_tables,
                       ex.parsed.pages_for_lookup, table_pages)
     check_row_quotes(rows, ex.parsed.text, image_tables, ex.parsed.pages_for_lookup, table_pages)

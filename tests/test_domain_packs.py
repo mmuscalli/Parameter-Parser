@@ -131,6 +131,29 @@ def test_unknown_pack_is_a_clear_error():
     packs.activate("prebiotic_chemistry")
 
 
+
+def test_shared_columns_and_prompt_rules():
+    """2026-10-26: every pack gets packs/common_columns.json's columns (unless its template has them),
+    and a pack adds rules to a shared prompt with prompts/<name>.rules.md instead of copying it."""
+    from parameter_extractor.registry import standard_columns
+    from parameter_extractor.stages.prompt_loader import load_prompt
+    common = [c["column"] for c in packs.common_columns()]
+    assert common[:5] == ["paper_title", "paper_DOI", "author_list", "year_published", "journal_published"]
+    try:
+        exo = packs.activate("exoplanets")
+        assert standard_columns()[:6] == common                       # none in the archive's layout
+        assert "Rules for this research area" not in load_prompt("figure_planner")     # no extra rules
+        assert "row of the exoplanets dataset" in " ".join(load_prompt("figure_planner").split())
+        packs.activate("prebiotic_chemistry")
+        assert standard_columns()[0] == "paper_arxiv_id"               # the rest are template columns
+        prompt = load_prompt("figure_planner", FIGURE_ID="Fig. 2")
+        assert "Rules for this research area (Prebiotic chemistry):" in prompt
+        assert "COMPLETE initial composition" in prompt and "FIGURE: Fig. 2" in prompt
+        assert not (packs.current().folder / "prompts" / "figure_planner.md").exists()   # no copy
+        assert "{{PACK_RULES}}" not in load_prompt("metadata", PAPER_TEXT="x")
+    finally:
+        packs.activate("prebiotic_chemistry")
+
 if __name__ == "__main__":
     for name, fn in list(globals().items()):
         if name.startswith("test_") and callable(fn):

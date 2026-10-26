@@ -8,6 +8,7 @@ it up from title+authors via CrossRef instead of risking a fabricated DOI.
 
 Return a PaperMetadata object.
 
+{{PACK_RULES}}
 ---
 PAPER TEXT (title page / header):
 

@@ -25,6 +25,12 @@ class ResolvedPaper:
     text: str = ""                              # arXiv HTML full text
     record: Optional[ax.ArxivRecord] = None
     notes: List[str] = field(default_factory=list)   # what was tried, for the summary / a flag
+    pdf_from_arxiv: bool = False                # `pdf` was downloaded from arXiv (no HTML for it)
+
+    @property
+    def read_arxiv(self) -> bool:
+        """The values come from arXiv's version (its text, or its PDF) -> paper_arxiv_id."""
+        return self.record is not None and (bool(self.text) or self.pdf_from_arxiv)
 
     @property
     def from_arxiv_text(self) -> bool:
@@ -96,7 +102,7 @@ def resolve_paper(item: PaperItem, run_dir: Path, prefer_arxiv: bool = False, ad
         if text:
             return ResolvedPaper(name=name, text=text, record=record)
         pdf = ax.fetch_pdf(record, run_dir / f"{record.versioned_id.replace('/', '_')}.pdf")
-        return ResolvedPaper(name=name, pdf=pdf, record=record,
+        return ResolvedPaper(name=name, pdf=pdf, record=record, pdf_from_arxiv=True,
                              notes=[f"arXiv has no HTML full text for {record.label}: its PDF was read."])
     pdf = Path(item)
     if not pdf.is_file():

@@ -7,8 +7,10 @@ A pack is a folder with a pack.json manifest:
   id, label, description, version
   template          JSON with "all_columns" (the dataset's columns, in order) and
                     "species_names" (the species vocabulary, if any)
-  standard_columns  JSON {"columns": [{"column", "description"}]}: columns the app
-                    adds beyond the template (optional)
+  standard_columns  JSON {"columns": [{"column", "description"}]}: columns the pack
+                    adds beyond its template (optional). Every pack also gets the shared
+                    columns of packs/common_columns.json (paper title, DOI, authors, year,
+                    journal, arXiv version) unless its template has them
   species_cids      PubChem CIDs of the template's species (optional; pubchem.py)
   builtin_stages    code stages the pack uses: "methodology", "chemistry" (the rest
                     of a pack's extraction is its optional-stage specs)
@@ -20,8 +22,10 @@ A pack is a folder with a pack.json manifest:
   compact_text      collapse long runs of layout spaces in the text sent to the model
 
 and, next to it:
-  prompts/*.md      the pack's prompts (structure_planner, figure_planner, ...); a
-                    prompt the pack doesn't have comes from the app's own prompts/
+  prompts/*.md      the pack's prompts (structure_planner, ...); a prompt the pack
+                    doesn't have comes from the app's own prompts/
+  prompts/*.rules.md  extra rules for a shared prompt (figure_planner.rules.md): they
+                    fill its {{PACK_RULES}} slot, so the pack needs no copy of it
   stages/*.json     its optional stages (stages/optional.py)
 
 Packs are found in the app's own packs/ folder and in the user's
@@ -93,10 +97,17 @@ class Pack:
 
     @cached_property
     def standard_column_entries(self) -> List[dict]:
-        if not self.manifest.standard_columns:
-            return []
-        path = self.folder / self.manifest.standard_columns
-        return json.loads(path.read_text())["columns"] if path.is_file() else []
+        """The columns every pack gets (packs/common_columns.json: which paper a row comes from),
+        then the pack's own standard columns -- leaving out any its template already has."""
+        own = []
+        if self.manifest.standard_columns:
+            path = self.folder / self.manifest.standard_columns
+            own = json.loads(path.read_text())["columns"] if path.is_file() else []
+        template, out = set(self.template_columns), []
+        for entry in common_columns() + own:
+            if entry["column"] not in template and entry["column"] not in {e["column"] for e in out}:
+                out.append(entry)
+        return out
 
     @property
     def species_cids_path(self) -> Optional[Path]:
@@ -105,6 +116,11 @@ class Pack:
     @property
     def stages_dir(self) -> Path:
         return self.folder / "stages"
+
+    def prompt_rules(self, name: str) -> str:
+        """The pack's extra rules for a shared prompt (prompts/<name>.rules.md), or ''."""
+        path = self.folder / "prompts" / f"{name}.rules.md"
+        return path.read_text() if path.is_file() else ""
 
     def prompt_path(self, name: str) -> Path:
         """The pack's own prompt, else the app's generic one."""
@@ -118,6 +134,14 @@ class Pack:
 def row_word(pack: Optional["Pack"] = None) -> str:
     """What the active pack calls one row in messages ('object model instance' for exoplanets)."""
     return (pack or current()).manifest.units.get("row", "row")
+
+
+COMMON_COLUMNS = BUILTIN_DIR / "common_columns.json"
+
+
+def common_columns() -> List[dict]:
+    """[{column, description}] every pack gets (bibliographic metadata, the arXiv version read)."""
+    return json.loads(COMMON_COLUMNS.read_text())["columns"]
 
 
 def user_packs_dir() -> Path:

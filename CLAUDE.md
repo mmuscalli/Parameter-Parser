@@ -1201,3 +1201,20 @@ CoRoT XXIV, GJ 463 b, beta Pic c confirmed NOT on arXiv. Label-less journal bibc
 volume + page + initial (rows 100), then `_iop_doi` (older ApJ/ApJL/ApJS/AJ: 10.1088|10.3847/<issn>/
 <vol>/<issue>/<page>), then `_listing_doi` (cursor listing of the journal-year, <= 20 x 1000, kept
 in `_listings` for the run): 19 of 22 (left: 2 MNRAS, Sci. Rep. too large). MNRAS Letters ISSNs.
+
+## Shared prompts with pack rules; columns every pack gets (2026-10-26, Mickey)
+
+- `stages/prompt_loader.load_prompt`: a pack's `prompts/<name>.rules.md` fills the shared prompt's
+  `{{PACK_RULES}}` slot ("Rules for this research area (<label>):"; empty when none) and
+  `{{RESEARCH_AREA}}` = the pack's label (lower case). A pack's full `prompts/<name>.md` still
+  overrides (structure_planner, chemistry, ...). Slots in figure_planner, metadata, term_search,
+  focused_search. The generic figure_planner.md took over everything general from the prebiotic
+  copy (tick labels, multiplier, conditions as printed, y_column, points-as-series, data_source,
+  duplicates); the prebiotic pack keeps only `figure_planner.rules.md` (compositions, indirect
+  concentrations, `concentrations` list, Batch/Flowthrough) -- its own figure_planner.md is gone.
+  Exoplanets: no rules (Mickey: tables carry the data; the generic is enough).
+- `packs/common_columns.json`: columns every pack gets (paper_title, paper_DOI, author_list,
+  year_published, journal_published, paper_arxiv_id), `Pack.standard_column_entries` = common +
+  own, minus template columns (prebiotic keeps the template's places; exoplanets' standard_columns
+  .json is now empty, same order -> references unchanged). `paper_arxiv_id` is filled (versioned ID)
+  when the values come from arXiv's text or its downloaded PDF (`ResolvedPaper.read_arxiv`).
