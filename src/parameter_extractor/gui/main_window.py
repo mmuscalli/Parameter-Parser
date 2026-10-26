@@ -137,6 +137,9 @@ class MainWindow(QMainWindow):
         self.focused_action = QAction("Focused search across papers…", self, shortcut="Ctrl+Shift+F",
                                       triggered=self.open_focused_search)
         file_menu.addAction(self.focused_action)
+        self.queue_action = QAction("Paper queue (full extraction)…", self, shortcut="Ctrl+Shift+Q",
+                                    triggered=self.open_queue)
+        file_menu.addAction(self.queue_action)
         file_menu.addSeparator()
         self.settings_action = QAction("Settings…", self, shortcut=QKeySequence.StandardKey.Preferences,
                                        triggered=self.open_settings)
@@ -144,6 +147,7 @@ class MainWindow(QMainWindow):
         file_menu.addAction(self.settings_action)
         file_menu.addAction(quit_action)
         self._focused_window = None
+        self._queue_window = None
         variables_menu = self.menuBar().addMenu("Variables")
         self.registry_action = QAction("Remembered variables…", self, triggered=self.open_registry)
         variables_menu.addAction(self.registry_action)
@@ -281,6 +285,9 @@ class MainWindow(QMainWindow):
         self.settings_btn = QPushButton("Settings…", clicked=self.open_settings)
         # the focused search is its own mode: a few parameters across many papers (gui/focused_window.py)
         self.focused_btn = QPushButton("Focused search…", clicked=self.open_focused_search)
+        self.queue_btn = QPushButton("Paper queue…", clicked=self.open_queue)
+        self.queue_btn.setToolTip("The full extraction over many papers: review every paper's figures first, "
+                                  "then the rest runs without you until the end (one combined CSV).")
         self.focused_btn.setToolTip("Search many papers for a few chosen parameters only (e.g. which papers used "
                                     "EXOFAST): a separate, much cheaper search with its own window.")
         self.progress = QProgressBar(minimum=0, maximum=6, value=0, textVisible=False)
@@ -290,6 +297,7 @@ class MainWindow(QMainWindow):
         buttons.addWidget(self.run_btn)
         buttons.addWidget(self.cancel_btn)
         buttons.addWidget(self.progress, stretch=1)
+        buttons.addWidget(self.queue_btn)
         buttons.addWidget(self.focused_btn)
         buttons.addWidget(self.settings_btn)
         col = QVBoxLayout()
@@ -497,7 +505,8 @@ class MainWindow(QMainWindow):
     def _busy(self) -> bool:
         """A run is in progress: extracting, and/or the figure review is open -- or a focused search."""
         return (self._running or self._review is not None
-                or bool(self._focused_window is not None and self._focused_window.running))
+                or bool(self._focused_window is not None and self._focused_window.running)
+                or bool(self._queue_window is not None and self._queue_window.running))
 
     def _update_run_enabled(self) -> None:
         ready = bool(self.pdf_edit.text().strip() and self.key_edit.text().strip()
@@ -531,6 +540,15 @@ class MainWindow(QMainWindow):
                          batch_mode=self.batch_box.isChecked(),
                          prefer_arxiv=self.arxiv_box.isChecked(), ads_token=self.ads_edit.text().strip(),
                          pubchem_cache_path=default_pubchem_cache_path(), arxiv_cache_dir=default_arxiv_cache_dir())
+
+    def open_queue(self) -> None:
+        from parameter_extractor.gui.queue_window import QueueWindow
+        if self._queue_window is None:
+            self._queue_window = QueueWindow(self)
+        self._queue_window._update_ready()
+        self._queue_window.show()
+        self._queue_window.raise_()
+        self._queue_window.activateWindow()
 
     def open_focused_search(self) -> None:
         from parameter_extractor.gui.focused_window import FocusedSearchWindow
@@ -701,9 +719,10 @@ class MainWindow(QMainWindow):
                   self.batch_box, self.arxiv_box):   # the pack is active during a run
             w.setEnabled(enabled)
         self.settings_dialog.lock(not enabled)
-        if not (self._focused_window is not None and self._focused_window.running):
-            self.focused_action.setEnabled(enabled)      # one thing at a time
-            self.focused_btn.setEnabled(enabled)
+        others_running = ((self._focused_window is not None and self._focused_window.running)
+                          or (self._queue_window is not None and self._queue_window.running))
+        for w in (self.focused_action, self.focused_btn, self.queue_action, self.queue_btn):
+            w.setEnabled(enabled and not others_running)  # one thing at a time
         self._update_run_enabled()
 
     # ---- results ---------------------------------------------------------------

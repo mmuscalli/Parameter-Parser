@@ -86,19 +86,12 @@ class FocusedSearchWindow(QDialog):
 
         top = QSplitter(Qt.Orientation.Horizontal)
         # papers
-        papers_box = QGroupBox("Papers")
-        pl = QVBoxLayout(papers_box)
-        self.papers_list = QListWidget()
-        self.papers_list.setSelectionMode(QAbstractItemView.SelectionMode.ExtendedSelection)
-        pl.addWidget(self.papers_list)
-        self.id_edit = QLineEdit(placeholderText="arXiv ID, DOI, ADS bibcode or reference link -- Enter to add")
-        self.id_edit.returnPressed.connect(self._add_typed)
-        pl.addWidget(self.id_edit)
-        row = QHBoxLayout()
-        for text, slot in (("Add PDFs…", self._add_pdfs), ("Add list (CSV)…", self._add_list),
-                           ("Remove", self._remove_selected), ("Clear", self.papers_list.clear)):
-            row.addWidget(QPushButton(text, clicked=slot))
-        pl.addLayout(row)
+        from parameter_extractor.gui.paper_list import PaperListPanel
+        self.paper_panel = PaperListPanel("Papers")
+        self.paper_panel.changed.connect(self._update_ready)
+        self.paper_panel.message.connect(lambda m: self.status.setText(m))
+        self.papers_list, self.id_edit = self.paper_panel.list, self.paper_panel.id_edit
+        papers_box = self.paper_panel
         top.addWidget(papers_box)
         # parameters
         params_box = QGroupBox("Parameters")
@@ -230,62 +223,15 @@ class FocusedSearchWindow(QDialog):
                     out.append(group.child(j).data(0, Qt.ItemDataRole.UserRole))
         return out
 
-    # ---- papers -----------------------------------------------------------------------------------
+    # ---- papers (gui/paper_list.PaperListPanel) ------------------------------------------------------
     def items(self) -> list:
-        """The papers as added: PDF paths, or identifiers (PaperRef, with any reference label)."""
-        return [self.papers_list.item(i).data(Qt.ItemDataRole.UserRole) for i in range(self.papers_list.count())]
+        return self.paper_panel.items()
 
     def add_items(self, items) -> int:
-        from parameter_extractor.ingestion.arxiv_source import PaperRef
-        present = {str(x) for x in self.items()}
-        added = 0
-        for item in items:
-            if str(item) in present:
-                continue
-            if not isinstance(item, (Path, PaperRef)):
-                item = Path(item) if str(item).lower().endswith(".pdf") else PaperRef(str(item))
-            label = getattr(item, "label", "")
-            entry = QListWidgetItem(f"{label}  ({item})" if label else str(item))
-            entry.setData(Qt.ItemDataRole.UserRole, item)
-            entry.setToolTip(str(item))
-            self.papers_list.addItem(entry)
-            present.add(str(item))
-            added += 1
-        self._update_ready()
-        return added
+        return self.paper_panel.add_items(items)
 
     def _add_typed(self) -> None:
-        from parameter_extractor.ingestion.arxiv_source import identifier_in_cell
-        texts = [t.strip() for t in self.id_edit.text().replace(";", ",").split(",") if t.strip()]
-        refs = {t: identifier_in_cell(t) for t in texts}      # also pasted reference links
-        bad = [t for t, ref in refs.items() if ref is None]
-        self.add_items([ref for ref in refs.values() if ref is not None])
-        self.id_edit.setText(", ".join(bad))
-        if bad:
-            self.status.setText(f"Not an arXiv ID, DOI or ADS bibcode: {', '.join(bad)}")
-
-    def _add_pdfs(self) -> None:
-        start = self._settings.value("last_pdf_dir", str(Path.home()))
-        paths, _ = QFileDialog.getOpenFileNames(self, "Add papers", start, "PDF files (*.pdf)")
-        if paths:
-            self._settings.setValue("last_pdf_dir", str(Path(paths[0]).parent))
-            self.add_items(Path(p) for p in paths)
-
-    def _add_list(self) -> None:
-        from parameter_extractor.focused_search import read_paper_list
-        path, _ = QFileDialog.getOpenFileName(self, "Add papers from a list", str(Path.home()),
-                                              "Lists (*.csv *.txt);;All files (*)")
-        if not path:
-            return
-        items = read_paper_list(Path(path))
-        added = self.add_items(items)
-        self.status.setText(f"Added {added} paper(s) from {Path(path).name}"
-                            + ("" if items else " -- no arXiv IDs, DOIs, ADS bibcodes or PDF paths found in it."))
-
-    def _remove_selected(self) -> None:
-        for item in self.papers_list.selectedItems():
-            self.papers_list.takeItem(self.papers_list.row(item))
-        self._update_ready()
+        self.paper_panel.add_typed()
 
     # ---- running ----------------------------------------------------------------------------------
     @property

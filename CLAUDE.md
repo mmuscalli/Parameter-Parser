@@ -1282,3 +1282,31 @@ it replaced one wait PER PAPER). The waits sat on the poll schedule (5 s x1.5 up
 marks), i.e. up to a minute after a batch ended -> BATCH_POLL_SECONDS = (5, 15) (checks are free):
 same paper 287 s. The real lever for many full runs would be a multi-paper full-extraction queue
 (phases of all papers share batches) -- not built.
+
+## Open-ended capture cost; full-extraction paper queue (2026-10-27, Mickey)
+
+- Measured (4 prebiotic live runs): the conditions stage's `other` list + chemistry's
+  `unmapped_species` = 92-622 + 0-50 output tokens = 0.8-2.8% of a run (1.5% avg). Species outside
+  the vocabulary are extracted anyway (their values are data) -> no toggle built (not worth it for
+  cost; could still be added to cut review clutter if Mickey wants).
+- `pipeline.extract` = `read_paper` (local: run folder, source, parse, table images, figures,
+  equations -> Extraction with table_images / terms / always_on) + `extract_steps(ex)` (API).
+  Single runs unchanged (replays + references identical).
+- `paper_queue.PaperQueue(items, config, on_change, cancel_event, parallel)`: queue folder
+  <output>/queue_<stamp>/ holds each paper's normal run folder; papers get paper_prefix 001, 002, ...
+  (full_ids unique in the combined CSV); ONE reader thread reads papers in list order (pdf_parser
+  keeps one shared document open -> no parallel parsing), each read paper is submitted to a pool for
+  extract_steps (3 at once, 12 in batch mode); QueuedPaper status waiting/reading/extracting/
+  extracted/finished/failed/cancelled, figures_reviewed (True when none), digitized/skipped;
+  finish_paper(paper, review) on the caller's thread; write_combined -> combined_extracted.csv
+  (write_csv over all rows), combined_observations.csv, papers.csv, queue_summary.json.
+  `run_queue` = unattended (figures skipped, review None). CLI `--queue LIST [--parallel N]`.
+- GUI `gui/queue_window.QueueWindow` (File > Paper queue (full extraction)… / "Paper queue…" button):
+  shared `gui/paper_list.PaperListPanel` (also the focused window's), status table, ticks "Review
+  figures as the papers are read" / "Review new variables at the end"; a 0.7 s timer opens the next
+  paper's FigureReviewDialog in list order (PlanBridge -> plan_figure waits for that paper's
+  structure), "Skip figures of the remaining papers"; when all are extracted and reviewed it finishes
+  each paper (VariableReviewDialog per paper, registry choices carry over), saves digitized work of
+  failed papers, writes the combined files. Main window inputs and the focused / queue buttons are
+  locked while either window runs (`_set_inputs_enabled`: enabled and nothing else running).
+- Live CLI (economy, kim + truman + eder): 58 s, $0.041, 63 rows, ids 001001001..003013003.

@@ -49,6 +49,12 @@ def main() -> int:
                              "fewer tokens, exact tables)")
     parser.add_argument("--ads-token", default=None,
                         help="NASA ADS API token, for journal ADS bibcodes (default: ADS_API_TOKEN in config/.env)")
+    parser.add_argument("--queue", type=Path, metavar="LIST",
+                        help="Full extraction of every paper in a list (CSV/text of PDF paths, arXiv IDs, DOIs, ADS "
+                             "bibcodes or reference links): figures skipped and new variables left out of the CSV "
+                             "(use the app's Paper queue to review them); one combined CSV")
+    parser.add_argument("--parallel", type=int, default=0, metavar="N",
+                        help="With --queue: papers extracted at once (default 3, or 12 in batch mode)")
     focused = parser.add_argument_group(
         "focused search", "A few parameters across many papers, cheaply: --focus with --papers and/or --paper/--pdf")
     focused.add_argument("--focus", action="append", default=[], metavar="COLUMN",
@@ -123,8 +129,8 @@ def main() -> int:
         return 0
     if args.focus:
         return _focused(args, parser)
-    if not args.pdf and not args.paper:
-        parser.error("--pdf or --paper is required")
+    if not args.pdf and not args.paper and not args.queue:
+        parser.error("--pdf, --paper or --queue is required")
 
     from parameter_extractor.registry import default_arxiv_cache_dir, default_pubchem_cache_path, default_registry_path
     overrides = {"paper_prefix": args.prefix, "registry_path": default_registry_path(),
@@ -141,6 +147,8 @@ def main() -> int:
         overrides["output_dir"] = args.out
     config = RunConfig.from_settings(**overrides)
 
+    if args.queue:
+        return _queue(args, config)
     try:
         if args.triage_only:
             triage = run_triage_only(args.pdf, config, on_progress=print_progress)
@@ -180,6 +188,31 @@ def main() -> int:
     print(f"Tokens: {result.input_tokens:,} in ({result.cached_tokens:,} from cache) / {result.output_tokens:,} out "
           f"(estimated cost {format_usd(result.cost_usd)})")
     return 0
+
+
+def _queue(args, config) -> int:
+    from parameter_extractor.focused_search import read_paper_list
+    from parameter_extractor.paper_queue import run_queue
+    items = read_paper_list(args.queue)
+    if not items:
+        print(f"No papers found in {args.queue}.", file=sys.stderr)
+        return 1
+    shown = {}
+    def changed(paper):
+        line = f"[{paper.prefix}] {paper.label}: {paper.status}" + (f" -- {paper.error}" if paper.error else "")
+        if shown.get(paper.prefix) != line:
+            shown[paper.prefix] = line
+            print(line)
+    try:
+        queue = run_queue(items, config, on_change=changed, parallel=args.parallel)
+    except KeyboardInterrupt:
+        print("\nCancelled.", file=sys.stderr)
+        return 130
+    finished = [p for p in queue.papers if p.result is not None]
+    print(f"\n{len(finished)} of {len(queue.papers)} paper(s) assembled, {sum(len(p.result.rows) for p in finished)} rows "
+          f"-> {queue.out_dir}")
+    print(f"Combined CSV: {queue.out_dir / 'combined_extracted.csv'}\nPapers: {queue.out_dir / 'papers.csv'}")
+    return 0 if finished else 1
 
 
 def _focused(args, parser) -> int:

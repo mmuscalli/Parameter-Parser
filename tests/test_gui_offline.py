@@ -750,6 +750,55 @@ def test_focused_search_window():
     finally:
         packs.activate("prebiotic_chemistry")
 
+
+class SkipReview(QObject):
+    """Stands in for FigureReviewDialog in the queue: opens, then skips every figure."""
+    finished = Signal(int)
+    opened = []
+    def __init__(self, figures, columns, plan_bridge=None, parent=None):
+        super().__init__()
+        self.figures, self.digitized, self.skipped = figures, [], [f.figure_id for f in figures]
+    def setWindowTitle(self, title): SkipReview.opened.append(title)
+    def set_background_status(self, text): pass
+    def show(self): QTimer.singleShot(50, lambda: self.finished.emit(0))
+
+
+def test_paper_queue_window():
+    """File > Paper queue: papers read first, each paper's figures reviewed as it's read, the rest
+    without the user, then a combined CSV."""
+    from parameter_extractor.gui import figure_dialog
+    from test_paper_queue import EDER, TRUMAN, routed_send
+    if not (EDER.is_file() and TRUMAN.is_file()):
+        print("SKIP: needs eder1994.pdf and truman2024.pdf"); return
+    keys = FakeKeyStore()
+    SkipReview.opened = []
+    with tempfile.TemporaryDirectory() as tmp, patch.object(api_client, "_send", routed_send), \
+            patch.object(main_window, "key_store", keys), patch.object(figure_dialog, "FigureReviewDialog", SkipReview):
+        w = _window(keys, Path(tmp))
+        w.key_edit.setText("x")
+        w.queue_btn.click()
+        q = w._queue_window
+        assert q.isVisible() and not q.run_btn.isEnabled()
+        q.paper_panel.add_items([EDER, TRUMAN])
+        q.variables_box.setChecked(False)                     # unattended to the end
+        q.run_btn.click()
+        assert q.running and not w.run_btn.isEnabled() and not w.focused_btn.isEnabled()
+        for _ in range(1200):
+            if q._summary:
+                break
+            _pump()
+        assert q._summary, q.status.text()
+        assert SkipReview.opened == ["Figures -- eder1994 (001)", "Figures -- truman2024 (002)"]   # in list order
+        statuses = [q.table.item(r, 1).text() for r in range(q.table.rowCount())]
+        assert statuses == ["Done", "Done"], statuses
+        assert q.table.item(0, 2).text() == "0 digitized / 5" and q.table.item(0, 4).text() == "42"
+        assert q._summary["rows"] == 42 + int(q.table.item(1, 4).text())
+        assert Path(q._summary["csv"]).is_file() and q.open_csv_btn.isEnabled()
+        assert w.queue_btn.isEnabled() and w.pack_combo.isEnabled()        # the main window is free again
+        _screenshot(q, "paper_queue")
+        q.close()
+        w.close()
+
 if __name__ == "__main__":
     try:
         for name, fn in list(globals().items()):

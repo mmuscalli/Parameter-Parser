@@ -230,6 +230,9 @@ class Extraction:
     optional: Dict[str, tuple] = field(default_factory=dict)
     equations: List[EquationCandidate] = field(default_factory=list)
     source: Optional["ResolvedPaper"] = None        # what was read (paper_source)
+    table_images: List[Path] = field(default_factory=list)   # rendered table pages sent with the paper
+    terms: List[str] = field(default_factory=list)           # parameters to look for (focus terms)
+    always_on: set = field(default_factory=set)              # optional stages that always run
     structure_ready: threading.Event = field(default_factory=threading.Event)
     failure: Optional[str] = None
 
@@ -255,6 +258,21 @@ def extract(
 ) -> Extraction:
     """Steps 1-5: read the PDF (finding figures on the way) and run the automatic
     extraction stages. Call finish() afterwards to write the dataset."""
+    ex = read_paper(pdf_path, config, on_progress, cancel_event)
+    if ex.figures and on_figures:
+        on_figures(ex)
+    return extract_steps(ex)
+
+
+def read_paper(
+    pdf_path,
+    config: RunConfig,
+    on_progress: Optional[ProgressCallback] = None,
+    cancel_event: Optional[threading.Event] = None,
+) -> Extraction:
+    """Step 1 only, no API calls: the run folder, what is read (paper_source), the PDF parsed, its table
+    pages rendered, figures and labelled equations found. A paper queue reads every paper first, so
+    their figures can be reviewed before the extraction steps (extract_steps) are done."""
     started = datetime.now()
     terms = [t.strip() for t in config.focus_terms if t.strip()]
     item = pdf_path                             # a PDF, or an arXiv ID / DOI / ADS bibcode (paper_source)
@@ -295,9 +313,18 @@ def extract(
     _write_equations(ctx, equations)
     vocab = packs.current().vocab
     ex = Extraction(ctx=ctx, pdf_path=pdf_path, started=started, parsed=parsed, vocab=vocab,
-                    figures=figures, equations=equations, source=source)
-    if figures and on_figures:
-        on_figures(ex)
+                    figures=figures, equations=equations, source=source, table_images=table_images,
+                    terms=terms, always_on=always_on)
+    return ex
+
+
+def extract_steps(ex: "Extraction") -> "Extraction":
+    """Steps 2-5 for a paper read_paper() has read: the API extraction steps, in parallel after the
+    structure planner. Call finish() afterwards to write the dataset."""
+    ctx, config, parsed, source = ex.ctx, ex.ctx.config, ex.parsed, ex.source
+    table_images, terms, always_on, equations = ex.table_images, ex.terms, ex.always_on, ex.equations
+    pack = packs.current()
+    vocab = ex.vocab
 
     # the text sent to the model: long runs of layout spaces collapsed if the pack asks
     text = compact_text(parsed.text) if packs.current().manifest.compact_text else parsed.text
