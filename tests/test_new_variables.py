@@ -106,7 +106,7 @@ def test_review_decisions_and_registry_memory():
         reg_path = Path(tmp) / "registry.json"
         result = _run(Path(tmp), reg_path, review=review)
         assert ("species", "initial RbCl", "initial_RbCl_aq_mM", 1) in seen["groups"]
-        assert ("parameter", "stirring rate", "stirring_rate", 1) in seen["groups"]
+        assert ("parameter", "stirring rate", "stirring_rate_rpm", 1) in seen["groups"]   # unit suffix (category format)
 
         header, rows = _csv(result)
         assert header.index("initial_RbCl_aq_mM") > header.index("sampled_DKP_Gly_%yield")   # after template block
@@ -176,8 +176,8 @@ def test_figure_columns_and_species_outside_the_template():
     assert "initial_Foo_aq_mM" not in rows[0].species_mM and rows[0].species_mM["initial_NaCl_aq_mM"] == 3000
     groups = group_new_variables(new_vars)
     assert [(g.kind, g.name, len(g.values)) for g in groups] == [
-        ("figure_axis", "my_custom_rate_per_h", 2), ("species", "Foo", 1)]
-    assert groups[0].values[0].row_ids == ["001014001"] and groups[1].values[0].row_ids == ["001014001", "001014002"]
+        ("species", "Foo", 1), ("figure_axis", "my_custom_rate_per_h", 2)]           # sorted by category
+    assert groups[1].values[0].row_ids == ["001014001"] and groups[0].values[0].row_ids == ["001014001", "001014002"]
 
     # once accepted, the same hand-typed column is recognised
     with tempfile.TemporaryDirectory() as tmp:

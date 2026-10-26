@@ -97,6 +97,9 @@ def main() -> int:
     parser.add_argument("--batch", action="store_true",
                         help="Batch mode: every request at half price through Anthropic's Message Batches API; "
                              "each step waits in the batch queue (usually minutes, at most 24 h)")
+    parser.add_argument("--no-suggestions", action="store_true",
+                        help="Don't suggest new variables: no open-ended capture of conditions without a column "
+                             "(new variables are listed in one flag and new_variables.json, never added)")
     parser.add_argument("--no-cache", action="store_true",
                         help="Don't share the cached paper between steps (costs more; for comparison)")
     parser.add_argument("--skip-stage", action="append", default=[], metavar="STAGE",
@@ -140,6 +143,7 @@ def main() -> int:
                  "optional_stages": {name: "off" for name in args.skip_stage},
                  "model_profile": args.models, "prompt_caching": not args.no_cache,
                  "batch_mode": args.batch, "prefer_arxiv": args.arxiv,
+                 "suggest_new_variables": not args.no_suggestions,
                  "pubchem_cache_path": default_pubchem_cache_path(), "arxiv_cache_dir": default_arxiv_cache_dir()}
     if args.ads_token is not None:
         overrides["ads_token"] = args.ads_token

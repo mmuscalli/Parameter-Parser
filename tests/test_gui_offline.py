@@ -287,8 +287,12 @@ def test_variable_review_window():
         groups = group_new_variables(collect_new_variables(ex.methodology, ex.chemistry))
         dlg = VariableReviewDialog(groups, ["flowthrough recirculation time"], VariableRegistry(Path(tmp) / "r.json"))
         dlg.show(); _pump()
-        names = [dlg.table.item(r, 0).text() for r in range(dlg.table.rowCount())]
+        names = [dlg.table.item(dlg._table_row[i], 0).text() for i in range(len(groups))]
         assert names == ["RbCl", "Foo", "stirring rate"], names
+        headers = dlg.category_headers()                                      # grouped by category
+        assert [h.split("  (")[0] for h in headers] == ["Chemical Species", "Reaction Conditions"], headers
+        assert "format: one number with its unit" in headers[1]
+        assert groups[2].proposed_column == "stirring_rate_rpm"               # unit suffix from the format
         assert [d.action for d in dlg.decisions()] == ["ignore"] * 3          # nothing added by default
 
         dlg.set_action(0, "new_column")                                       # proposed name pre-filled
@@ -639,9 +643,15 @@ def test_settings_and_run_options():
         assert "Standard models" in w.options_summary.text() and "stages" in w.options_summary.text()
         w.options_btn.click()
         assert w.options_widget.isVisible() and QSettings().value("options_shown", type=bool)
+        assert w.suggest_box.isChecked() and w.current_config().suggest_new_variables   # on by default
+        assert w.toggles_btn.text().startswith("Variable suggestions")                # the dropdown says what's on
         w.batch_box.setChecked(True)
         w.arxiv_box.setChecked(True)
+        w.suggest_box.setChecked(False)
         assert "batch" in w.options_summary.text() and "arXiv text" in w.options_summary.text()
+        assert "no new-variable suggestions" in w.options_summary.text()
+        assert w.toggles_btn.text().startswith("Batch, arXiv text")
+        assert len(w.toggles_btn.menu().actions()) == 4
         assert w.settings_hint.isVisible() and "API key" in w.settings_hint.text()       # no key yet
         w.key_edit.setText("k")
         assert not w.settings_hint.isVisible()
@@ -650,6 +660,9 @@ def test_settings_and_run_options():
         w.settings_dialog.hide()
         config = w.current_config()
         assert config.prefer_arxiv and config.batch_mode and config.ads_token == "ads-stored"
+        assert not config.suggest_new_variables
+        w._save_preferences()
+        assert QSettings().value("suggest_new_variables", type=bool) is False
         w.remember_ads_box.setChecked(False)
         w._save_preferences()
         assert keys.other == {}                                            # un-ticked: forgotten

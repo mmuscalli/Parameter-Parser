@@ -64,6 +64,11 @@ class RunConfig:
     # tokens, exact table values, but a PREPRINT (the version read is recorded and flagged). Papers
     # given by identifier instead of a PDF always come from arXiv.
     prefer_arxiv: bool = False
+    # Suggest new variables (Mickey, 2026-10-26; on by default): open-ended stages also list conditions
+    # that have no column, and values with no column are offered in the review. Off: no open-ended
+    # capture (~1.5% of a run's tokens), and only assumed values and the user's own search terms are
+    # reviewed -- the rest stays out of the CSV (new_variables.json, one summary flag).
+    suggest_new_variables: bool = True
     # NASA ADS API token: only needed to look up journal ADS bibcodes (2023PASJ...75.1030T)
     ads_token: str = ""
     # arXiv lookups and full texts kept between runs (ingestion/arxiv_source.LookupCache); None = none

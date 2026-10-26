@@ -197,7 +197,8 @@ def test_review_window_never_auto_includes_assumed_values():
     dlg._accept_suggestions()
     assert dlg.decisions()[0].action == "ignore"
     assert not dlg.remember_boxes[0].isChecked()
-    assert dlg.table.item(0, 1).text().startswith("ASSUMED")
+    assert dlg.table.item(dlg._table_row[0], 1).text().startswith("ASSUMED")
+    assert dlg.category_headers()[0].startswith("Assumed values")
 
 
 def test_standard_columns_file():

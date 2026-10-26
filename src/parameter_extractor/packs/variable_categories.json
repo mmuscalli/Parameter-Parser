@@ -1,0 +1,19 @@
+{
+  "_comment": "Categories of suggested new variables that every pack gets (variable_categories.py). A pack adds its own, or replaces one of these by id, with \"variable_categories\" in its pack.json. value_type: number (one number with a unit; the column gets the unit's suffix and values are converted), text (words, at most max_words), any (a number if it is one, else short text). sources: where values come from without the model choosing (species, species:initial, species:sampled, added_solution); a category without sources (or with \"model_assigns\": true) is one the model can assign. Pack categories are listed first.",
+  "categories": [
+    {
+      "id": "metadata",
+      "label": "Metadata",
+      "description": "about the study or its materials rather than one experiment's conditions: chemical suppliers and purities, sample or material origin, data or code availability",
+      "value_type": "text",
+      "max_words": 12
+    },
+    {
+      "id": "methodology",
+      "label": "Experimental Methodology",
+      "description": "how the experiment was set up and run, in words: apparatus, heating or mixing method, sealing, atmosphere handling, sterilisation, sampling procedure",
+      "value_type": "any",
+      "max_words": 10
+    }
+  ]
+}

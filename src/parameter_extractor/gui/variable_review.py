@@ -13,6 +13,12 @@ With "Remember" ticked, the choice is saved to the local registry and the
 variable is recognised automatically on later papers. Individual values can
 be edited first (e.g. "300 rpm" -> 300). PaperDataTemplate itself is never
 modified.
+
+Variables are listed under their category (variable_categories.py: the pack's own, e.g. Chemical
+Species, then Metadata / Experimental Methodology, then figure columns and assumed values), each
+with a header line saying what belongs there and in what format; a value that doesn't follow its
+category's format is marked with ⚠. Methods taking `row` mean the variable's index in `groups`;
+the table has the header lines in between (`_table_row`, `_group_at`).
 """
 from __future__ import annotations
 from typing import List
@@ -25,6 +31,7 @@ from PySide6.QtWidgets import (QAbstractItemView, QCheckBox, QComboBox, QComplet
 from parameter_extractor.ingestion.new_variables import VariableDecision, VariableGroup, stored_value
 from parameter_extractor.names import closest_names, vocabulary
 from parameter_extractor.registry import VariableRegistry
+from parameter_extractor.variable_categories import by_id
 
 ACTIONS = [("ignore", "Don't add"), ("new_column", "New column"), ("existing_column", "Existing column")]
 KIND_LABELS = {"species": "Species", "parameter": "Experimental parameter", "figure_axis": "Figure axis",
@@ -67,7 +74,14 @@ class VariableReviewDialog(QDialog):
             nf.setStyleSheet("background: palette(alternate-base); padding: 6px;")
             layout.addWidget(nf)
 
-        self.table = QTableWidget(len(groups), len(COLS))
+        headers = []                       # (table row, category id) of each category's header line
+        self._table_row, self._group_at = [], {}
+        for i, g in enumerate(groups):
+            if not headers or headers[-1][1] != g.category:
+                headers.append((i + len(headers), g.category))
+            self._table_row.append(i + len(headers))
+            self._group_at[self._table_row[-1]] = i
+        self.table = QTableWidget(len(groups) + len(headers), len(COLS))
         self.table.setHorizontalHeaderLabels(COLS)
         self.table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
         self.table.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
@@ -75,15 +89,18 @@ class VariableReviewDialog(QDialog):
         self.table.horizontalHeader().setSectionResizeMode(3, QHeaderView.ResizeMode.Stretch)
         self.action_boxes, self.column_boxes, self.remember_boxes = [], [], []
         for r, g in enumerate(groups):
+            t = self._table_row[r]
             example = next((_value_text(v) for v in g.values if _value_text(v)), "")
+            notes = sorted({v.format_note for v in g.values if v.format_note})
             similar = self._similar(g)
             identity = next((v for v in g.values if v.pubchem_cid), None)
-            for c, text in enumerate([g.name, KIND_LABELS[g.kind], str(len(g.values)), example, similar]):
+            for c, text in enumerate([g.name, KIND_LABELS[g.kind], str(len(g.values)),
+                                      ("⚠ " if notes else "") + example, similar]):
                 item = QTableWidgetItem(text)
-                item.setToolTip(text)
+                item.setToolTip(text + ("\n\nFormat: " + "; ".join(notes) if c == 3 and notes else ""))
                 if c == 0 and identity:
                     item.setToolTip(f"{text}\nPubChem: {identity.pubchem_title} (CID {identity.pubchem_cid})")
-                self.table.setItem(r, c, item)
+                self.table.setItem(t, c, item)
             action = QComboBox()
             for _, label in ACTIONS:
                 action.addItem(label)
@@ -101,24 +118,28 @@ class VariableReviewDialog(QDialog):
             if g.kind == "assumed_value":     # a guess is decided per paper: never remembered
                 remember.setToolTip("Assumed values are never remembered for later papers.")
                 for c in range(4):
-                    self.table.item(r, c).setForeground(Qt.GlobalColor.darkRed)
+                    self.table.item(t, c).setForeground(Qt.GlobalColor.darkRed)
             action.currentIndexChanged.connect(lambda i, row=r: self._on_action(row, i))
             column.currentTextChanged.connect(lambda _t, row=r: self._refresh_preview(row))
-            self.table.setCellWidget(r, ACTION_COL, action)
-            self.table.setCellWidget(r, COLUMN_COL, column)
-            self.table.setCellWidget(r, REMEMBER_COL, self._centered(remember))
+            self.table.setCellWidget(t, ACTION_COL, action)
+            self.table.setCellWidget(t, COLUMN_COL, column)
+            self.table.setCellWidget(t, REMEMBER_COL, self._centered(remember))
             self.action_boxes.append(action)
             self.column_boxes.append(column)
             self.remember_boxes.append(remember)
         self.table.resizeColumnsToContents()
+        self.table.setColumnWidth(0, min(self.table.columnWidth(0), 320))
         self.table.setColumnWidth(COLUMN_COL, 260)
+        self.table.verticalHeader().setVisible(False)       # numbers would count the header lines
+        for row, category_id in headers:                    # after sizing: spanned text doesn't widen column 0
+            self._add_header(row, category_id, sum(1 for g in groups if g.category == category_id))
 
         self._shown = -1
         self.values_table = QTableWidget(0, 5)
         self.values_table.setHorizontalHeaderLabels(["Applies to", "Value (editable)", "Stored as", "Quote", "From"])
         self.values_table.horizontalHeader().setSectionResizeMode(3, QHeaderView.ResizeMode.Stretch)
         self.values_table.itemChanged.connect(self._on_value_edited)
-        self.table.currentCellChanged.connect(lambda row, *_: self._show_values(row))
+        self.table.currentCellChanged.connect(self._on_current_cell)
 
         split = QSplitter(Qt.Orientation.Vertical)
         split.addWidget(self.table)
@@ -134,8 +155,35 @@ class VariableReviewDialog(QDialog):
         buttons.addWidget(self.build_btn)
         layout.addLayout(buttons)
         if groups:
-            self.table.selectRow(0)
+            self.table.selectRow(self._table_row[0])
             self._show_values(0)
+
+    def _add_header(self, row: int, category_id: str, count: int) -> None:
+        """A category's header line across the table: its name, what belongs there, its format."""
+        category = by_id(category_id)
+        label = category.label if category else "Other"
+        text = f"{label}  ({count})"
+        if category and category.id not in ("figure", "assumed"):
+            text += f"   ·   format: {category.format_rule()}"
+        if category and category.description:
+            text += f"   ·   {category.description}"
+        item = QTableWidgetItem(text)
+        item.setFlags(Qt.ItemFlag.ItemIsEnabled)            # not selectable
+        font = item.font()
+        font.setBold(True)
+        item.setFont(font)
+        item.setBackground(self.palette().alternateBase())
+        item.setToolTip(text)
+        self.table.setItem(row, 0, item)
+        self.table.setSpan(row, 0, 1, len(COLS))
+
+    def category_headers(self) -> List[str]:
+        """The header lines' texts, in order (tests)."""
+        return [self.table.item(r, 0).text() for r in range(self.table.rowCount()) if r not in self._group_at]
+
+    def _on_current_cell(self, table_row: int, *_):
+        if table_row in self._group_at:
+            self._show_values(self._group_at[table_row])
 
     @staticmethod
     def _centered(widget) -> QWidget:
@@ -215,9 +263,9 @@ class VariableReviewDialog(QDialog):
         try:
             v.value, v.value_text = float(text), None
         except ValueError:
-            v.value, v.value_text = None, text
+            v.value, v.value_text, v.unit = None, text, None     # the unit is in the text now
         if item.row() == 0:     # keep the summary line's example in step with the edit
-            self.table.item(self._shown, 3).setText(_value_text(v))
+            self.table.item(self._table_row[self._shown], 3).setText(_value_text(v))
 
     # ---- result --------------------------------------------------------------------
 

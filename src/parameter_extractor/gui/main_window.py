@@ -13,7 +13,7 @@ from __future__ import annotations
 import csv
 import json
 from pathlib import Path
-from typing import Optional
+from typing import List, Optional
 
 import html
 
@@ -22,7 +22,7 @@ from PySide6.QtGui import QAction, QBrush, QColor, QDesktopServices, QKeySequenc
 from PySide6.QtWidgets import (
     QAbstractItemView, QCheckBox, QComboBox, QFileDialog, QFormLayout, QGroupBox, QHBoxLayout,
     QHeaderView, QLabel, QLineEdit, QMainWindow, QMessageBox, QPlainTextEdit, QProgressBar, QPushButton,
-    QFrame, QScrollArea, QSplitter, QToolButton,
+    QFrame, QMenu, QScrollArea, QSplitter, QToolButton, QWidgetAction,
     QTableWidget, QTableWidgetItem, QTabWidget, QTextBrowser, QTreeWidget, QTreeWidgetItem,
     QVBoxLayout, QWidget,
 )
@@ -215,18 +215,41 @@ class MainWindow(QMainWindow):
                                   "Each step then waits in Anthropic's batch queue: usually a few minutes, at "
                                   "most 24 hours, so a paper can take much longer. Results are the same. Best for "
                                   "papers you don't need right away.")
-        options.addRow("", self.batch_box)
         self.arxiv_box = QCheckBox("Use arXiv text when available")
         self.arxiv_box.setToolTip("When the PDF names its arXiv ID or DOI and arXiv has the paper's full text, read "
                                   "that instead of the PDF: about 40% fewer tokens and exact table values. It is "
                                   "the arXiv preprint (the version read is named in the flags), and figures "
                                   "can't be digitized from it. Papers typed as an ID always come from arXiv.")
-        options.addRow("", self.arxiv_box)
         self.equations_box = QCheckBox("Convert labelled equations to LaTeX")
         self.equations_box.setToolTip("Equations the authors number or name ('(1)', 'Eq. 2') are always found and "
                                       "shown in the Equations tab. Ticked, they're also transcribed to LaTeX: "
                                       "one small API call (about 2 cents for a dozen equations).")
-        options.addRow("", self.equations_box)
+        self.suggest_box = QCheckBox("Suggest new variables")
+        self.suggest_box.setChecked(True)
+        self.suggest_box.setToolTip("Also lists conditions and species the dataset has no column for (e.g. a "
+                                    "reaction time, a stirring rate) and offers them at the end, grouped by "
+                                    "category, to add as new columns. Unticked: no suggestions and a shorter "
+                                    "review (about 1.5% fewer tokens); parameters you ask to look for and "
+                                    "assumed values are still reviewed, and what was left out is listed in "
+                                    "one flag.")
+        # the on/off options in one dropdown (it will grow); checkboxes inside keep the menu open
+        self.toggles_btn = QToolButton()
+        self.toggles_btn.setPopupMode(QToolButton.ToolButtonPopupMode.InstantPopup)
+        self.toggles_btn.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextOnly)
+        self.toggles_btn.setToolTip("Switch run options on or off: batch mode, arXiv text, LaTeX equations, "
+                                    "new-variable suggestions.")
+        menu = QMenu(self.toggles_btn)
+        menu.setToolTipsVisible(True)
+        for toggle in self.option_toggles():
+            holder = QWidget()
+            row = QHBoxLayout(holder)
+            row.setContentsMargins(10, 3, 12, 3)
+            row.addWidget(toggle)
+            action = QWidgetAction(menu)
+            action.setDefaultWidget(holder)
+            menu.addAction(action)
+        self.toggles_btn.setMenu(menu)
+        options.addRow("Options:", self.toggles_btn)
         # the area's switchable extraction stages (stages/optional.toggleable_stages), rebuilt on change
         self.stages_widget = QWidget()
         self.stages_layout = QVBoxLayout(self.stages_widget)
@@ -246,7 +269,7 @@ class MainWindow(QMainWindow):
         self.options_btn.toggled.connect(self._show_options)
         for w in (self.profile_combo,):
             w.currentIndexChanged.connect(self._update_options_summary)
-        for w in (self.batch_box, self.arxiv_box, self.equations_box):
+        for w in self.option_toggles():
             w.toggled.connect(self._update_options_summary)
         self.terms_edit.textChanged.connect(self._update_options_summary)
 
@@ -263,13 +286,23 @@ class MainWindow(QMainWindow):
         self.options_btn.setArrowType(Qt.ArrowType.DownArrow if shown else Qt.ArrowType.RightArrow)
         self._settings.setValue("options_shown", shown)
 
+    def option_toggles(self) -> List[QCheckBox]:
+        """The on/off run options in the Options dropdown, in menu order."""
+        return [self.batch_box, self.arxiv_box, self.equations_box, self.suggest_box]
+
     def _update_options_summary(self, *_args) -> None:
-        """One line for the collapsed run options: what this run will do."""
+        """One line for the collapsed run options: what this run will do (and the dropdown's
+        own text: the options that are on)."""
+        short = {self.batch_box: "Batch", self.arxiv_box: "arXiv text", self.equations_box: "LaTeX",
+                 self.suggest_box: "Variable suggestions"}
+        on = [short[b] for b in self.option_toggles() if b.isChecked()]
+        self.toggles_btn.setText(", ".join(on) if on else "None on")
         stages = [b for b in self.stage_boxes.values()]
         parts = [self.profile_combo.currentText().split(" (")[0] + " models",
                  "batch" if self.batch_box.isChecked() else "",
                  "arXiv text when available" if self.arxiv_box.isChecked() else "",
                  "equations to LaTeX" if self.equations_box.isChecked() else "",
+                 "" if self.suggest_box.isChecked() else "no new-variable suggestions",
                  f"{sum(b.isChecked() for b in stages)} of {len(stages)} stages" if stages else "",
                  f"{len(self.focus_terms())} parameter(s) to look for" if self.focus_terms() else ""]
         self.options_summary.setText(" · ".join(p for p in parts if p))
@@ -383,6 +416,7 @@ class MainWindow(QMainWindow):
         self.profile_combo.setCurrentIndex(max(index, 0))
         self.batch_box.setChecked(self._settings.value("batch_mode", False, type=bool))
         self.arxiv_box.setChecked(self._settings.value("prefer_arxiv", False, type=bool))
+        self.suggest_box.setChecked(self._settings.value("suggest_new_variables", True, type=bool))
         shown = self._settings.value("options_shown", False, type=bool)
         self.options_btn.setChecked(shown)
         self._show_options(shown)
@@ -447,6 +481,7 @@ class MainWindow(QMainWindow):
         self._settings.setValue("model_profile", self.profile_combo.currentData())
         self._settings.setValue("batch_mode", self.batch_box.isChecked())
         self._settings.setValue("prefer_arxiv", self.arxiv_box.isChecked())
+        self._settings.setValue("suggest_new_variables", self.suggest_box.isChecked())
         ads = self.ads_edit.text().strip()
         if self.remember_ads_box.isChecked() and ads:
             key_store.save_key(ads, key_store.ADS_ACCOUNT)
@@ -539,6 +574,7 @@ class MainWindow(QMainWindow):
                          model_profile=self.profile_combo.currentData() or "standard",
                          batch_mode=self.batch_box.isChecked(),
                          prefer_arxiv=self.arxiv_box.isChecked(), ads_token=self.ads_edit.text().strip(),
+                         suggest_new_variables=self.suggest_box.isChecked(),
                          pubchem_cache_path=default_pubchem_cache_path(), arxiv_cache_dir=default_arxiv_cache_dir())
 
     def open_queue(self) -> None:
@@ -715,8 +751,8 @@ class MainWindow(QMainWindow):
 
     def _set_inputs_enabled(self, enabled: bool) -> None:
         for w in (self.pdf_edit, self.terms_edit, self.registry_action, self.pack_combo,
-                  self.stages_widget, self.equations_box, self.profile_combo,
-                  self.batch_box, self.arxiv_box):   # the pack is active during a run
+                  self.stages_widget, self.profile_combo, self.toggles_btn,
+                  *self.option_toggles()):   # the pack is active during a run
             w.setEnabled(enabled)
         self.settings_dialog.lock(not enabled)
         others_running = ((self._focused_window is not None and self._focused_window.running)

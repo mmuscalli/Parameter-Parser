@@ -84,7 +84,8 @@ from parameter_extractor.stages.methodology_extractor import run_methodology_ext
 from parameter_extractor.stages.structure_planner import run_structure_planner
 from parameter_extractor.stages.term_search import run_term_search
 from parameter_extractor.api_client import PaperContext
-from parameter_extractor.stages.optional import StageSpec, load_specs, run_optional_stage, triggered_specs
+from parameter_extractor.stages.optional import (
+    StageSpec, for_run, load_specs, run_optional_stage, triggered_specs)
 from parameter_extractor.stages.fit_models import LABEL as FIT_MODELS_LABEL, run_fit_models
 from parameter_extractor.schemas.fit_models import FitModels
 from parameter_extractor.calculators import exoplanet_fits
@@ -362,7 +363,7 @@ def extract_steps(ex: "Extraction") -> "Extraction":
             columns = VariableRegistry(config.registry_path).known_columns()
             running["term_search"] = pool.submit(run_term_search, ctx, terms, text, ex.structure, columns)
         # optional stages whose trigger matches this paper (decided locally, no API call)
-        specs = triggered_specs(ex.structure, parsed.text, config.optional_stages)
+        specs = triggered_specs(ex.structure, parsed.text, config.optional_stages, config.suggest_new_variables)
         for spec in specs:
             if spec.name not in always_on:
                 ctx.total_steps += 1
@@ -411,7 +412,8 @@ def _collect_other_parameters(ex: "Extraction") -> None:
         for o in getattr(result, "other", []) or []:
             ex.methodology.other_parameters.append(OtherParameter(
                 name=o.name, value=o.value, set_label=o.set_label or None, quote=o.quote, source=o.source,
-                confidence=o.confidence))
+                confidence=o.confidence, sample_label=getattr(o, "sample_label", "") or "",
+                category=getattr(o, "category", "") or ""))
 
 
 def _paper_wide_methodology(ex: "Extraction"):
@@ -462,7 +464,7 @@ def _paper_tools(pack, config: RunConfig, terms) -> dict:
         tools["fit_models"] = FitModels
     for name, spec in load_specs().items():
         if config.optional_stages.get(name, "auto") != "off":
-            tools[name] = spec.models()[1]
+            tools[name] = for_run(spec, config.suggest_new_variables).models()[1]
     return tools
 
 
@@ -837,7 +839,10 @@ def finish(
                          "how": "recognised from an earlier review"})
     groups = group_new_variables(pending)
     unfound = _unfound_terms(ex.term_search)
-    decisions = review(groups, unfound, registry) if (review and (groups or unfound)) else []
+    # suggestions off: only what the user asked about (search terms) and assumed values are reviewed
+    unsuggested = [] if config.suggest_new_variables else [g for g in groups if not _always_reviewed(g)]
+    shown = [g for g in groups if g not in unsuggested]
+    decisions = review(shown, unfound, registry) if (review and (shown or unfound)) else []
     left_out = apply_decisions(rows, groups, decisions, registry)
     conversion_problems += apply_decisions.problems
     paper_flags += [Flag("unit_conversion", p) for p in conversion_problems]
@@ -857,7 +862,9 @@ def finish(
     if decisions:
         registry.save()
     held_out = [v for g in left_out for v in g.values]
-    paper_flags += _new_variable_flags(left_out)
+    paper_flags += _new_variable_flags([g for g in left_out if g not in unsuggested])
+    if unsuggested:
+        paper_flags.append(_unsuggested_flag(unsuggested))
     paper_flags += [Flag("term_not_found", f"You asked for '{t}': the paper doesn't state it "
                                            f"(targeted search found nothing).") for t in unfound]
     if new_vars:
@@ -953,8 +960,29 @@ def _unfound_terms(term_search: Optional[TermSearch]) -> List[str]:
     return out
 
 
+def _always_reviewed(g: VariableGroup) -> bool:
+    """Reviewed even with suggestions off: assumed values and findings for the user's own terms."""
+    return g.kind == "assumed_value" or any(v.origin.startswith("search: ") for v in g.values)
+
+
+def _unsuggested_flag(groups: List[VariableGroup]) -> Flag:
+    """With suggestions off: one flag listing what was left out, by category (nothing dropped
+    silently -- the values are in new_variables.json)."""
+    from parameter_extractor.variable_categories import by_id
+    by_category: Dict[str, List[str]] = {}
+    for g in groups:
+        category = by_id(g.category)
+        by_category.setdefault(category.label if category else "Other", []).append(g.name)
+    listing = "; ".join(f"{label}: {', '.join(names)}" for label, names in by_category.items())
+    return Flag("new_variable",
+                f"New-variable suggestions are off: {len(groups)} variable(s) with no column were left out "
+                f"of the CSV without review ({listing}). Their values are in new_variables.json; turn "
+                f"suggestions on to review them.")
+
+
 def _new_variable_flags(groups: List[VariableGroup]) -> List[Flag]:
     """One flag per variable left out of the CSV, with an example quote."""
+    from parameter_extractor.variable_categories import by_id
     flags = []
     for g in groups:
         if g.kind == "assumed_value":
@@ -969,12 +997,15 @@ def _new_variable_flags(groups: List[VariableGroup]) -> List[Flag]:
                 "figure_axis": "figure axis column"}[g.kind]
         first = g.values[0]
         role = f", {first.role}" if first.role else ""
+        category = by_id(g.category)
+        role += f" ({category.label})" if category else ""
         example = next((v for v in g.values if v.quote), first)
         flags.append(Flag(
             "new_variable",
             f"New {what} '{g.name}'{role}: no column for it, so its {len(g.values)} value(s) were "
             f"left out of the CSV (not accepted in review)"
-            + (f"; it would become '{g.proposed_column}'" if g.proposed_column else "") + ".",
+            + (f"; it would become '{g.proposed_column}'" if g.proposed_column else "") + "."
+            + "".join(sorted({f" Format: {v.format_note}." for v in g.values if v.format_note})),
             quote=example.quote, source=example.source or first.origin))
     return flags
 

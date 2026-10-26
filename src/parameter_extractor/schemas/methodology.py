@@ -65,6 +65,10 @@ class OtherParameter(BaseModel):
     quote: str = Field(alias="q", description=QUOTE_DESC)
     source: str = Field(alias="src", description=SOURCE_DESC)
     confidence: Literal["high", "medium", "low"] = Field(alias="c")
+    # filled from an open-ended stage's item (not asked of the methodology step): the sample it's
+    # for, and its new-variable category (variable_categories.py; '' = not categorised)
+    sample_label: SkipJsonSchema[str] = ""
+    category: SkipJsonSchema[str] = ""
 
 
 class Methodology(BaseModel):

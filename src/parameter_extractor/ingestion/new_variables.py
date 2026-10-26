@@ -26,6 +26,7 @@ from parameter_extractor.schemas.methodology import Methodology
 from parameter_extractor.schemas.row_schema import CellSource, ExtractedRow
 from parameter_extractor.schemas.structure_plan import StructurePlan
 from parameter_extractor.schemas.variables import NewVariable, TermSearch
+from parameter_extractor import variable_categories as categories
 
 Action = Literal["ignore", "new_column", "existing_column"]
 
@@ -38,6 +39,10 @@ class VariableGroup:
     alias_name: str
     proposed_column: str
     values: List[NewVariable]
+    category: str = ""             # variable_categories.py id: the review groups lines by it
+
+    def __post_init__(self):
+        self.category = self.category or _kind_category(self.kind)
 
 
 @dataclass
@@ -96,7 +101,7 @@ def collect_new_variables(
             set_label=s.set_label, sample_label=s.sample_label, quote=s.quote, source=_from_solute(s).source,
             confidence=s.confidence, origin="calculated" if s.derived else "chemistry",
             row_ids=rows_for(s.set_label, s.sample_label), pubchem_cid=s.pubchem_cid,
-            pubchem_title=s.pubchem_title))
+            pubchem_title=s.pubchem_title, category=categories.for_source("species", s.role) or ""))
     for sol in chemistry.added_solutions:
         # the one variable for each solution volume (methodology repeats are dropped,
         # see ingestion/duplicates.py); the mixture calculations use the same records
@@ -105,13 +110,15 @@ def collect_new_variables(
             kind="parameter", name=name, alias_name=name,
             proposed_column=f"added_{column_safe_name(sol.solution)}_volume_uL", value_text=sol.volume,
             set_label=sol.set_label or None, quote=sol.quote, source=sol.source, confidence="high",
-            origin="chemistry", row_ids=rows_for(sol.set_label or None, None)))
+            origin="chemistry", row_ids=rows_for(sol.set_label or None, None),
+            category=categories.for_source("added_solution") or ""))
     for p in methodology.other_parameters:
-        found.append(NewVariable(
+        found.append(_categorised(NewVariable(
             kind="parameter", name=p.name, alias_name=p.name,
             proposed_column=suggest_column_name("parameter", p.name), value_text=p.value,
-            set_label=p.set_label or None, quote=p.quote, source=p.source, confidence=p.confidence,
-            origin="methodology", row_ids=rows_for(p.set_label or None, None)))
+            set_label=p.set_label or None, sample_label=p.sample_label or None, quote=p.quote,
+            source=p.source, confidence=p.confidence, origin="methodology",
+            row_ids=rows_for(p.set_label or None, p.sample_label or None)), p.category))
     # values the model marked "assumed" (not stated in the paper): never written
     # automatically -- offered in the review, where the user decides
     for o in methodology.per_set_overrides:
@@ -134,19 +141,38 @@ def collect_new_variables(
         if not f.found:
             continue
         name = f.name or f.term
-        found.append(NewVariable(
+        known = registry.is_known_column(f.column)
+        found.append(_categorised(NewVariable(
             kind="parameter", name=name, alias_name=name,
-            proposed_column=f.column if registry.is_known_column(f.column) else suggest_column_name("parameter", name),
+            proposed_column=f.column if known else suggest_column_name("parameter", name),
             value_text=f.value, set_label=f.set_label or None, quote=f.quote, source=f.source,
-            confidence=f.confidence, origin=f"search: {f.term}", row_ids=rows_for(f.set_label or None, None)))
+            confidence=f.confidence, origin=f"search: {f.term}", row_ids=rows_for(f.set_label or None, None)),
+            "", keep_column=known))
     return found
+
+
+def _categorised(v: NewVariable, category: str, keep_column: bool = False) -> NewVariable:
+    """A parameter's category (the model's choice if it's one the model may assign, else a guess
+    from its value) and its value in that category's format: a quantity is parsed into number +
+    unit, and the proposed column gets the unit's suffix ('reaction time' -> reaction_time_hr);
+    a value that doesn't fit gets a format note. Nothing is dropped or shortened."""
+    ids = {c.id for c in categories.assignable()}
+    v.category = category if category in ids else categories.guess(v.value_text or "")
+    number, unit, v.format_note = categories.check_format(categories.by_id(v.category), v.value_text)
+    if number is not None:
+        v.value, v.unit = number, unit
+        suffix = categories.unit_suffix(unit)
+        if suffix and not keep_column and v.proposed_column and not v.proposed_column.endswith(suffix):
+            v.proposed_column += suffix
+    return v
 
 
 def _assumed(column, value, set_label, quote, source, confidence, origin, rows_for,
              sample_label=None) -> NewVariable:
     numeric = isinstance(value, (int, float)) and not isinstance(value, bool)
     return NewVariable(
-        kind="assumed_value", name=column, alias_name=f"{column} @ {sample_label or set_label}",
+        kind="assumed_value", category=categories.ASSUMED.id, name=column,
+        alias_name=f"{column} @ {sample_label or set_label}",
         proposed_column=column, value=value if numeric else None, value_text=None if numeric else str(value),
         set_label=set_label, sample_label=sample_label, quote=quote, source=source, confidence=confidence,
         origin=f"{origin} (assumed)", row_ids=rows_for(set_label, sample_label))
@@ -167,15 +193,24 @@ def split_known(new_vars: List[NewVariable], registry: VariableRegistry):
 
 
 def group_new_variables(new_vars: List[NewVariable]) -> List[VariableGroup]:
-    """One group per variable (kind + alias name), in first-seen order."""
+    """One group per variable (kind + alias name), sorted by category (the pack's order), first-seen
+    order within one."""
     groups: Dict[Tuple[str, str], VariableGroup] = {}
     for v in new_vars:
         key = (v.kind, v.alias_name or v.name)
         if key not in groups:
             groups[key] = VariableGroup(kind=v.kind, name=v.name, alias_name=key[1],
-                                        proposed_column=v.proposed_column or "", values=[])
+                                        proposed_column=v.proposed_column or "", values=[],
+                                        category=v.category)
         groups[key].values.append(v)
-    return list(groups.values())
+    order = {c.id: i for i, c in enumerate(categories.categories())}
+    return sorted(groups.values(), key=lambda g: order.get(g.category, len(order)))
+
+
+def _kind_category(kind: str) -> str:
+    """For values collected without a category (figure columns, older records)."""
+    return {"figure_axis": categories.FIGURE.id, "assumed_value": categories.ASSUMED.id}.get(kind, "") \
+        or categories.for_source(kind) or ""
 
 
 def stored_value(v: NewVariable, column: str):
@@ -185,7 +220,11 @@ def stored_value(v: NewVariable, column: str):
     from parameter_extractor.ingestion.observations import unit_for_column
     from parameter_extractor.units import to_column_unit
     raw = v.value if v.value is not None else v.value_text
+    if v.value is not None and v.unit and v.value_text:
+        raw = v.value_text                   # parsed from the printed text: convert that (the note says so)
     column_unit = unit_for_column(column)
+    if not column_unit and v.value is not None and v.unit and v.value_text:
+        return v.value_text, ""              # a column with no unit keeps the unit with the value
     if raw in (None, "", DETECTED) or not column_unit or column_unit == "pH":
         return raw, ""                       # 'detected' is meant as text
     conversion = to_column_unit(raw, v.unit, column_unit)

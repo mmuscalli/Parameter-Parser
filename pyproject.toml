@@ -45,4 +45,4 @@ where = ["src"]
 
 [tool.setuptools.package-data]
 parameter_extractor = ["prompts/*.md", "schemas/*.json", "gui/resources/*.png",
-                       "packs/*/*.json", "packs/*/prompts/*.md", "packs/*/stages/*.json"]
+                       "packs/*.json", "packs/*/*.json", "packs/*/prompts/*.md", "packs/*/stages/*.json"]

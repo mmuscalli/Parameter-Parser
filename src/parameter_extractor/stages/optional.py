@@ -130,9 +130,12 @@ class StageSpec(BaseModel):
         if self.open_ended:
             rules.append("Also list in `other` any OTHER condition or parameter that could affect the outcome but "
                          "has no parameter above" + (f" -- {self.open_ended_hint}" if self.open_ended_hint else "")
-                         + ". Each: `nm` a short name, `v` the value as stated with its unit, `set` (and "
-                         "`sample`) only if it applies to one set (sample), `q`, `src`, `c`. Leave `other` empty "
-                         "if there's nothing else.")
+                         + ". Each: `nm` a short noun phrase naming it (the same name each time it recurs), "
+                         + (f"`cat` its category -- {_category_listing()} -- " if _category_listing() else "")
+                         + "`v` the value as stated with its unit, in its category's format, `set` (and "
+                         "`sample`) only if it applies to one set (sample), `q`, `src`, `c`. A value with "
+                         "several quantities (a tube's volume, diameter and length) is one entry per quantity. "
+                         "Leave `other` empty if there's nothing else.")
         if self.table_images:
             rules.append("Page images, if attached, are renders of the pages with tables (sideways ones shown "
                          "upright). Read table values and their uncertainties from the images; the text layer "
@@ -240,7 +243,11 @@ class StageSpec(BaseModel):
     # ---- schema and prompt ---------------------------------------------------------
 
     def models(self) -> Tuple[type, type]:
-        return _models(self.model_dump_json())
+        categories = ()
+        if self.open_ended:
+            from parameter_extractor.variable_categories import assignable
+            categories = tuple(c.id for c in assignable())
+        return _models(self.model_dump_json(), categories)
 
     def prompt(self, structure: StructurePlan, paper_text: str) -> str:
         from parameter_extractor.stages.prompt_loader import load_prompt
@@ -324,8 +331,9 @@ class _CompactResult(BaseModel):
 
 
 @lru_cache(maxsize=None)
-def _models(spec_json: str) -> Tuple[type, type]:
-    """(item model, result model) for a spec -- the same classes for the same spec."""
+def _models(spec_json: str, categories: Tuple[str, ...] = ()) -> Tuple[type, type]:
+    """(item model, result model) for a spec -- the same classes for the same spec (and the active
+    pack's new-variable categories, for an open-ended stage's `other` items)."""
     spec = StageSpec.model_validate_json(spec_json)
     name = spec.model_name
     hidden_sample = {} if spec.per == "set" else {"sample_label": (SkipJsonSchema[str], "")}
@@ -376,8 +384,15 @@ def _models(spec_json: str) -> Tuple[type, type]:
     )
     Other = create_model(
         f"{name}Other",
-        __config__=ConfigDict(populate_by_name=True, json_schema_extra=_required(["nm", "v", "q", "src", "c"])),
-        name=(str, Field(alias="nm", description="Short descriptive name, e.g. 'stirring rate', 'reaction volume'.")),
+        __config__=ConfigDict(populate_by_name=True, json_schema_extra=_required(
+            ["nm", "cat", "v", "q", "src", "c"] if categories else ["nm", "v", "q", "src", "c"])),
+        name=(str, Field(alias="nm", description="Short noun phrase naming the quantity or property, e.g. "
+                                                 "'stirring rate', 'reaction volume' -- not a sentence.")),
+        **({"category": (Literal[categories], Field(default="", alias="cat",   # "" = recorded before categories
+                                                    description="Its category (see the rules); the value follows "
+                                                                "that category's format.",
+                                                    json_schema_extra=lambda schema: schema.pop("default", None)))}
+           if categories else {"category": (SkipJsonSchema[str], "")}),
         value=(str, Field(alias="v", description="As stated, with its unit, e.g. '300 rpm', '254 nm'.")),
         set_label=(str, Field(default="", alias="set", description="Exact set_label if for one set only.")),
         sample_label=(str, Field(default="", alias="sample", description="Exact sample_label if for one sample.")),
@@ -399,6 +414,11 @@ def _models(spec_json: str) -> Tuple[type, type]:
     )
     Result._columns = frozenset(spec.columns)
     return Item, Result
+
+
+def _category_listing() -> str:
+    from parameter_extractor.variable_categories import prompt_listing
+    return prompt_listing()
 
 
 def load_specs() -> Dict[str, StageSpec]:
@@ -661,16 +681,22 @@ def optional_results(optional=None, wet_dry=None) -> List[Tuple[StageSpec, objec
 
 
 def triggered_specs(structure: StructurePlan, paper_text: str,
-                    choices: Optional[Dict[str, str]] = None) -> List[StageSpec]:
+                    choices: Optional[Dict[str, str]] = None, suggest: bool = True) -> List[StageSpec]:
     """The stages to run: triggered ones, unless the user turned them off ('off'), plus
-    any forced on ('on')."""
+    any forced on ('on'). `suggest` False: without their open-ended part (see for_run)."""
     choices = choices or {}
     out = []
     for name, spec in load_specs().items():
         choice = choices.get(name, "auto")
         if choice == "on" or (choice == "auto" and spec.triggered(structure, paper_text)):
-            out.append(spec)
+            out.append(for_run(spec, suggest))
     return out
+
+
+def for_run(spec: StageSpec, suggest: bool = True) -> StageSpec:
+    """The spec as a run uses it: with new-variable suggestions off (RunConfig.suggest_new_variables),
+    an open-ended stage doesn't ask for `other` conditions."""
+    return spec if suggest or not spec.open_ended else spec.model_copy(update={"open_ended": False})
 
 
 @dataclass

@@ -1310,3 +1310,42 @@ same paper 287 s. The real lever for many full runs would be a multi-paper full-
   failed papers, writes the combined files. Main window inputs and the focused / queue buttons are
   locked while either window runs (`_set_inputs_enabled`: enabled and nothing else running).
 - Live CLI (economy, kim + truman + eder): 58 s, $0.041, 63 rows, ids 001001001..003013003.
+
+## New-variable categories + "Suggest new variables" switch (2026-10-27, Mickey)
+
+- **Categories** (`variable_categories.py`): a suggested variable's KIND and how its values are
+  reported. `value_type` number (one number + unit: parsed, proposed column gets the unit's suffix --
+  time `_hr`, volume `_mL`, temperature `_C`, concentration `_mM`, ... -- and values convert to it),
+  text (`max_words`; longer -> note), any. Shared `packs/variable_categories.json`: Metadata (text, 12
+  words), Experimental Methodology (any, 10 words). Pack's own in pack.json `variable_categories`
+  (listed FIRST; same id replaces a shared one). Prebiotic: Chemical Species (sources species),
+  Solution Preparation (sources added_solution + model_assigns), Reaction Conditions (number).
+  Built-in groups last: Figure columns, Assumed values. `sources` = filled by origin; categories
+  without sources (or `model_assigns`) are the model's choices.
+- Open-ended spec stages: `other` items get a REQUIRED `cat` (enum of assignable ids; default ""
+  hidden from the schema so old recordings load -> `guess()` from the value) and the rule lists
+  each category with description + format; names must be short noun phrases; a value with several
+  quantities = one entry each (faisal: tube volume / diameter / length now separate).
+  `_models(spec_json, categories)` caches per category set. OtherParameter now carries
+  `sample_label` (was dropped) and `category`.
+- `new_variables._categorised` assigns + formats; NewVariable.category / format_note;
+  `group_new_variables` sorts by category order. `stored_value`: a column with no unit keeps the
+  printed text ("45 min"), not a bare number. Bare lowercase "m" is refused in formatting (units.py
+  reads it as molar; faisal's "20 m" tube length had become 20 M -> `_mM`).
+- Review window: header line per category (label, count, format, description), ⚠ on values with a
+  format note; methods taking `row` mean the group index (`_table_row` / `_group_at` map).
+  Flags: "New experimental parameter 'x' (Reaction Conditions) ... Format: ...".
+- **Switch** `RunConfig.suggest_new_variables` (default True; GUI "Suggest new variables" in the new
+  Options dropdown, QSettings `suggest_new_variables`; CLI `--no-suggestions`). Off: open-ended
+  stages run without `other` (`optional.for_run`, also in `_paper_tools` so the cached tool list
+  matches); the review shows only assumed values and the user's search-term findings; everything
+  else -> one `new_variable` flag listing names by category; new_variables.json unchanged.
+- GUI: Batch / arXiv text / LaTeX / Suggest new variables moved into one "Options:" QToolButton
+  dropdown (QMenu of QWidgetAction checkboxes -- menu stays open while ticking; attribute names
+  batch_box/arxiv_box/equations_box/suggest_box unchanged; `option_toggles()` lists them; the button
+  text names what's on).
+- Live faisal2005 (standard, $0.22): 20 suggestions -- 4 species, 3 solution prep (mixing ratio,
+  degassing, Gly-Gly stock 30 mM), 7 conditions (residence time "10-200 s" -> format note; tube
+  volumes in mL), 1 metadata (supplier + purity), 5 methodology (quenching, pumping, back-pressure
+  regulator, ...). Exoplanets have no open-ended stage, so only the shared categories (for search
+  findings); candidate categories if one is added: Observations & Data, Stellar Activity.
