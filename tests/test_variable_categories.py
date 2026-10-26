@@ -35,13 +35,19 @@ def _other(name, value, category=""):
 def test_categories_per_pack():
     packs.activate("prebiotic_chemistry")
     ids = [c.id for c in vc.categories()]
-    assert ids == ["species", "solution_prep", "conditions", "metadata", "methodology", "figure", "assumed"]
-    assert [c.id for c in vc.assignable()] == ["solution_prep", "conditions", "metadata", "methodology"]
-    assert vc.for_source("species", "sampled") == "species" and vc.for_source("added_solution") == "solution_prep"
+    assert ids == ["starting_species", "products", "solution_prep", "conditions", "analysis", "metadata",
+                   "methodology", "figure", "assumed"]
+    assert [c.id for c in vc.assignable()] == ["solution_prep", "conditions", "analysis", "metadata", "methodology"]
+    assert vc.for_source("species", "sampled") == "products" and vc.for_source("species", "initial") == "starting_species"
+    assert vc.for_source("species") == "starting_species" and vc.for_source("added_solution") == "solution_prep"
     try:
-        packs.activate("exoplanets")                     # only the shared ones (+ built-in groups)
-        assert [c.id for c in vc.categories()] == ["metadata", "methodology", "figure", "assumed"]
+        packs.activate("exoplanets")
+        assert [c.id for c in vc.categories()] == ["observations", "stellar_activity", "data_reduction", "metadata",
+                                                   "methodology", "figure", "assumed"]
         assert vc.guess("45 min") == "methodology"       # no number category there
+        spec = load_specs()["system_and_discovery"]      # the step that collects them
+        rule = next(r for r in spec._field_rules() if "`cat` its category" in r)
+        assert "`data_reduction` (" in rule and "`stellar_activity` (" in rule and "not priors" in rule
     finally:
         packs.activate("prebiotic_chemistry")
 
@@ -66,7 +72,7 @@ def test_open_ended_items_carry_a_category_unless_suggestions_are_off():
     spec = load_specs()["experimental_conditions"]
     _, result = spec.models()
     other = next(d for name, d in result.model_json_schema()["$defs"].items() if name.endswith("Other"))
-    assert other["properties"]["cat"]["enum"] == ["solution_prep", "conditions", "metadata", "methodology"]
+    assert other["properties"]["cat"]["enum"] == ["solution_prep", "conditions", "analysis", "metadata", "methodology"]
     assert "cat" in other["required"] and "default" not in other["properties"]["cat"]
     rule = next(r for r in spec._field_rules() if "`cat` its category" in r)
     assert "`conditions` (" in rule and "one number with its unit" in rule
@@ -100,7 +106,7 @@ def test_values_follow_their_category_format():
     length = found["reactor tube length"]
     assert length.value is None and "metres or molar" in length.format_note and length.proposed_column == "reactor_tube_length"
     order = [g.category for g in group_new_variables(list(found.values()))]
-    assert order == sorted(order, key=["species", "solution_prep", "conditions", "metadata", "methodology"].index)
+    assert order == sorted(order, key=["solution_prep", "conditions", "analysis", "metadata", "methodology"].index)
 
 
 def _run(tmp: Path, suggest: bool, review):
@@ -128,15 +134,54 @@ def test_suggestions_off_reviews_only_what_was_asked_for():
             flags = [f for f in result.paper_flags if f.kind == "new_variable"]
             if suggest:
                 assert names == ["RbCl", "Foo", "stirring rate", "reaction volume"], names     # first seen within one
-                assert [g.category for g in seen] == ["species", "species", "conditions", "conditions"]
+                assert [g.category for g in seen] == ["starting_species", "products", "conditions", "conditions"]
                 assert len(flags) == 4 and "(Reaction Conditions):" in flags[2].message
             else:
                 assert names == ["reaction volume"], names               # the user's own search term
                 assert len(flags) == 2 and "'reaction volume'" in flags[0].message   # reviewed, not added
                 flag = flags[1]                                          # everything else in one flag
-                assert "suggestions are off" in flag.message and "Chemical Species: RbCl, Foo" in flag.message
+                assert "suggestions are off" in flag.message and "Starting Species: RbCl; Products: Foo" in flag.message
                 assert "Reaction Conditions: stirring rate" in flag.message
                 assert {v["name"] for v in record["left_out"]} == {"RbCl", "Foo", "stirring rate", "reaction volume"}
+
+
+def test_software_already_in_the_fit_models_is_not_suggested_again():
+    from parameter_extractor.ingestion.duplicates import drop_recorded_software
+    from parameter_extractor.schemas.fit_models import FitModels
+    fits = FitModels.model_validate({"models": [{
+        "label": "RV fit", "rows": [], "stars": [], "datasets": [], "joint": False, "joint_description": "",
+        "star_and_planets_joint": False, "priors": [], "assumptions": [], "quote": "", "source": "",
+        "confidence": "high", "software": [{"name": "RadVel", "version": "", "role": "fitting code"},
+                                           {"name": "emcee", "version": "3", "role": "sampler"}]}]})
+    method = empty_methodology("p")
+    method.other_parameters += [_other("fitting software", "RadVel package with the emcee sampler (v3.0)", "data_reduction"),
+                                _other("RV extraction", "SERVAL pipeline, then RadVel", "data_reduction"),
+                                _other("outlier removal", "3-sigma clipping", "data_reduction")]
+    dropped = drop_recorded_software(method, fits)
+    assert [d.parameter.name for d in dropped] == ["fitting software"] and "radvel" in dropped[0].matches
+    assert [p.name for p in method.other_parameters] == ["RV extraction", "outlier removal"]
+    assert drop_recorded_software(method, None) == []                    # fitting-models step off: all kept
+
+
+def test_suggestions_repeating_dataset_values_are_dropped():
+    from parameter_extractor.ingestion.duplicates import drop_repeated_values
+    from parameter_extractor.schemas.row_schema import ExtractedRow
+    row = ExtractedRow(full_id="001001001", set_id="001001", sample_id="001", set_type="text", entry_number=1,
+                       paper_title="t", authors=["A"], year_published=2020, journal_published="j",
+                       experiment_type="Batch", solution_type="Wet",
+                       initial_temperature_C=42.5, extra={"st_rotpalt1": 42.5, "st_rotpalt1err1": 3.4, "x": 0.49})
+    method = empty_methodology("p")
+    method.other_parameters += [_other("rotation from activity", "42.5 ± 3.4 days", "stellar_activity"),
+                                _other("correlation", "r ~ 0.49", "stellar_activity"),          # one short number
+                                _other("observing run", "Sector 1, 2018", "observations"),     # nothing distinctive
+                                _other("cadence", "42.5 s and 7 min", "observations"),         # 7 isn't a value
+                                _other("activity model", "extra Keplerian with a prior on 42.5 ± 3.4 d", "stellar_activity"),
+                                _other("spread", "42.5 to 0.49 s", "observations")]            # two parameters
+    dropped = drop_repeated_values(method, [row], lambda s, smp: ["001001001"])
+    assert [d.parameter.name for d in dropped] == ["rotation from activity"], dropped
+    assert dropped[0].matches == "st_rotpalt1 = 42.5, st_rotpalt1err1 = 3.4"
+    assert [p.name for p in method.other_parameters] == ["correlation", "observing run", "cadence", "activity model",
+                                                         "spread"]
 
 
 if __name__ == "__main__":

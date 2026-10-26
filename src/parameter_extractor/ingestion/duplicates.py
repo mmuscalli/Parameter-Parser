@@ -101,3 +101,99 @@ def drop_repeated_amounts(methodology: Methodology, chemistry: ChemistryExtracti
             kept.append(p)
     methodology.other_parameters = kept
     return dropped
+
+
+# words that describe software rather than name it ('the RadVel package', 'emcee sampler v3.0')
+_SOFTWARE_WORDS = {"the", "a", "an", "and", "with", "using", "via", "by", "of", "for", "in", "code", "codes", "package",
+                   "packages", "software", "sampler", "samplers", "fitting", "fit", "fits", "tool", "toolkit", "python",
+                   "library", "modelling", "modeling", "model", "models", "mcmc", "version", "algorithm", "routine"}
+
+
+def drop_recorded_software(methodology: Methodology, fit_models) -> List[DroppedParameter]:
+    """Exoplanets (2026-10-27): the fitting-models step writes the modelling software into its own
+    columns (pl_fitsoftware, st_fitsoftware, ...). A suggested data-reduction item that ONLY names
+    software recorded there (+ descriptive words and versions) is a repeat and is dropped; one naming
+    anything else (a reduction pipeline, a step like sigma clipping) is kept."""
+    names = {s.name.strip().lower() for m in (fit_models.models if fit_models else []) for s in m.software
+             if s.name.strip()}
+    if not names:
+        return []
+    kept, dropped = [], []
+    for p in methodology.other_parameters:
+        text = f" {p.value.lower()} "
+        hits = [n for n in sorted(names, key=len, reverse=True) if re.search(rf"(?<![\w-]){re.escape(n)}(?![\w-])", text)]
+        for n in hits:
+            text = re.sub(rf"(?<![\w-]){re.escape(n)}(?![\w-])", " ", text)
+        rest = [w for w in re.findall(r"[a-z][a-z'-]*", text) if w not in _SOFTWARE_WORDS and not re.fullmatch(r"v", w)]
+        if p.category == "data_reduction" and hits and not rest:
+            dropped.append(DroppedParameter(p, ", ".join(hits)))
+        else:
+            kept.append(p)
+    methodology.other_parameters = kept
+    return dropped
+
+
+_NUMBER_IN_TEXT = re.compile(r"(?<![\w.])[-+−]?\d+(?:[.,]\d+)?(?![\w.]*\d)")
+
+
+def _numbers(text: str) -> List[float]:
+    out = []
+    for m in _NUMBER_IN_TEXT.finditer(text or ""):
+        try:
+            out.append(abs(float(m.group().replace("−", "-").replace(",", "."))))
+        except ValueError:
+            pass
+    return out
+
+
+_SUFFIX_PARTS = re.compile(r"(?:_?(?:alt|mode)\d+)?(?:_?(?:err1|err2|err_plus|err_minus|lim|method|desc))?$")
+_UNIT_WORDS = {"d", "day", "days", "h", "hr", "hrs", "hour", "hours", "min", "s", "sec", "yr", "yrs", "year", "years",
+               "k", "c", "m", "km", "ms", "s-1", "mm", "ml", "ul", "bar", "mpa", "dex", "deg", "ppm", "ppt", "au",
+               "r_sun", "m_sun", "r_e", "m_e", "r_j", "m_j", "pc", "mag", "kms", "about", "approximately", "of", "and"}
+
+
+def _parameter(column: str) -> str:
+    """The parameter a column belongs to: st_rotpalt1err1 -> st_rotp, initial_pressure_bar_err_plus -> ..."""
+    return _SUFFIX_PARTS.sub("", column)
+
+
+def drop_repeated_values(methodology: Methodology, rows, rows_for) -> List[DroppedParameter]:
+    """One quantity, one variable (2026-10-27, nielsen2019: a suggested 'rotation period from activity
+    indicators = 42.5 ± 3.4 days' next to st_rotpalt1 = 42.5, err 3.4 from the stellar step). A
+    suggestion is dropped only when its value is just numbers (+ units, at most 2 other words) that
+    are ALL values of ONE parameter on its rows (the value and its uncertainties / other estimates),
+    with at least one distinctive number (not a whole number below 10, not a year; a lone number needs
+    3 significant digits). A value that also says how ('additional Keplerian with a prior on 42.5 d')
+    or numbers spread over unrelated columns (faisal's '10-200 s' vs 10 mM and 200 bar) are kept.
+    `rows_for(set_label, sample_label)` -> row ids."""
+    from parameter_extractor.ingestion.flatten_to_template import row_to_template_dict
+    from parameter_extractor.ingestion.observations import ROW_KEYS
+    by_id = {r.full_id: r for r in rows}
+    kept, dropped = [], []
+    for p in methodology.other_parameters:
+        numbers = _numbers(p.value)
+        words = [w for w in re.findall(r"[A-Za-z][A-Za-z_'-]*", p.value) if w.lower() not in _UNIT_WORDS]
+        distinctive = [n for n in numbers if not (n == int(n) and (n < 10 or 1900 <= n <= 2100))]
+        if len(numbers) == 1 and len(f"{numbers[0]:g}".replace(".", "").lstrip("0")) < 3:
+            distinctive = []                 # one short number ('r ~ 0.49') could match by chance
+        match = ""
+        if numbers and distinctive and len(words) <= 2:
+            columns = {}                     # value -> columns holding it on the item's rows
+            for rid in rows_for(p.set_label or None, p.sample_label or None):
+                if rid in by_id:
+                    for column, v in row_to_template_dict(by_id[rid]).items():
+                        if column not in ROW_KEYS and isinstance(v, (int, float)) and not isinstance(v, bool):
+                            columns.setdefault(abs(float(v)), set()).add(column)
+            per_number = [{c for v, cs in columns.items() if abs(v - n) <= 1e-6 * max(1.0, n) for c in cs}
+                          for n in numbers]
+            shared = set.intersection(*[{_parameter(c) for c in cs} for cs in per_number]) if all(per_number) else set()
+            if shared:
+                base = sorted(shared)[0]
+                match = ", ".join(f"{min(c for c in cs if _parameter(c) == base)} = {n:g}"
+                                  for n, cs in zip(numbers, per_number))
+        if match:
+            dropped.append(DroppedParameter(p, match))
+        else:
+            kept.append(p)
+    methodology.other_parameters = kept
+    return dropped

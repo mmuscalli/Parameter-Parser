@@ -290,8 +290,8 @@ def test_variable_review_window():
         names = [dlg.table.item(dlg._table_row[i], 0).text() for i in range(len(groups))]
         assert names == ["RbCl", "Foo", "stirring rate"], names
         headers = dlg.category_headers()                                      # grouped by category
-        assert [h.split("  (")[0] for h in headers] == ["Chemical Species", "Reaction Conditions"], headers
-        assert "format: one number with its unit" in headers[1]
+        assert [h.split("  (")[0] for h in headers] == ["Starting Species", "Products", "Reaction Conditions"], headers
+        assert "format: one number with its unit" in headers[2]
         assert groups[2].proposed_column == "stirring_rate_rpm"               # unit suffix from the format
         assert [d.action for d in dlg.decisions()] == ["ignore"] * 3          # nothing added by default
 

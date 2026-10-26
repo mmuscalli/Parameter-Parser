@@ -10,11 +10,15 @@
   "postprocess": ["normalize_species", "mixing", "molar_ratios", "amounts", "peptide_totals", "water_type", "results_check"],
   "units": {"set": "experiment set", "sample": "sample"},
   "variable_categories": [
-    {"id": "species", "label": "Chemical Species", "sources": ["species"], "value_type": "number",
-     "description": "dissolved species (reactants, products, salts, catalysts) with no column of their own; concentrations in mM, yields in %"},
+    {"id": "starting_species", "label": "Starting Species", "sources": ["species:initial", "species"], "value_type": "number",
+     "description": "species in the starting solution (reactants, salts, catalysts, buffers; stock and mixture concentrations) with no column of their own, in mM"},
+    {"id": "products", "label": "Products", "sources": ["species:sampled"], "value_type": "number",
+     "description": "measured products with no column of their own: concentrations in mM, yields in %, or 'detected'"},
     {"id": "solution_prep", "label": "Solution Preparation", "sources": ["added_solution"], "model_assigns": true, "value_type": "any", "max_words": 10,
      "description": "how the starting solutions were made and combined: volumes added, stock solutions, buffers, degassing"},
     {"id": "conditions", "label": "Reaction Conditions", "value_type": "number",
-     "description": "a quantity the reaction ran under that has no column: reaction time, reactor or headspace volume, residence time, stirring rate, irradiation wavelength or power"}
+     "description": "a quantity the reaction ran under that has no column: reaction time, reactor or headspace volume, residence time, stirring rate, irradiation wavelength or power"},
+    {"id": "analysis", "label": "Analysis", "value_type": "any", "max_words": 12,
+     "description": "how the products were identified and measured, beyond analysis_method: instrument, column, mobile phase or eluent, detection wavelength, standards and calibration, detection limit, sample preparation for analysis"}
   ]
 }

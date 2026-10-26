@@ -49,7 +49,7 @@ from parameter_extractor.config import settings
 from parameter_extractor.config.run_config import RunConfig
 from parameter_extractor.errors import ApiKeyMissingError, PdfNotReadableError, PipelineError
 from parameter_extractor.digitizing.annotate import save_digitized
-from parameter_extractor.ingestion.duplicates import drop_repeated_amounts
+from parameter_extractor.ingestion.duplicates import drop_recorded_software, drop_repeated_amounts, drop_repeated_values
 from parameter_extractor.ingestion.equation_finder import find_equations
 from parameter_extractor.ingestion.figure_finder import find_figures
 from parameter_extractor.ingestion.figure_rows import build_figure_rows
@@ -58,7 +58,7 @@ from parameter_extractor.ingestion.normalize import normalize_chemistry
 from parameter_extractor.ingestion.observations import (
     observations_to_records, rows_to_observations, write_observations_csv)
 from parameter_extractor.ingestion.new_variables import (
-    VariableDecision, VariableGroup, apply_decisions, collect_new_variables, group_new_variables, row_index,
+    VariableDecision, VariableGroup, _rows_for, apply_decisions, collect_new_variables, group_new_variables, row_index,
     split_known, write_values)
 from parameter_extractor.registry import VariableRegistry
 from parameter_extractor.ingestion.pdf_parser import ParsedPaper, close_shared, parse_pdf, rasterize_table_pages
@@ -825,6 +825,18 @@ def finish(
                          f"already recorded with the solution chemistry. Keeping both could read as twice "
                          f"the amount.", quote=d.parameter.quote or None, source=d.parameter.source or None)
                     for d in repeats]
+    software = drop_recorded_software(ex.methodology, ex.fit_models)
+    paper_flags += [Flag("duplicate_removed",
+                         f"'{d.parameter.name}' ({d.parameter.value}) was left out: {d.matches} is already "
+                         f"recorded by the fitting-models step (the *_fitsoftware columns).",
+                         quote=d.parameter.quote or None, source=d.parameter.source or None) for d in software]
+    repeats += software
+    values = drop_repeated_values(ex.methodology, rows, lambda s, smp: _rows_for(s, smp, index))
+    paper_flags += [Flag("duplicate_removed",
+                         f"'{d.parameter.name}' ({d.parameter.value}) was left out: its numbers are already in "
+                         f"the dataset ({d.matches}).", quote=d.parameter.quote or None,
+                         source=d.parameter.source or None) for d in values]
+    repeats += values
     new_vars = collect_new_variables(ex.methodology, ex.chemistry, registry, index, ex.term_search,
                                      optional=ex.optional_list, structure=ex.structure)
     new_vars += fig_new_vars

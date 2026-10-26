@@ -8,5 +8,13 @@
   "builtin_stages": ["fit_models"],
   "postprocess": ["row_labels", "exoplanet_masses", "reference_names", "archive_validation"],
   "units": {"set": "planetary system", "sample": "planet", "row": "object model instance"},
-  "compact_text": true
+  "compact_text": true,
+  "variable_categories": [
+    {"id": "observations", "label": "Observations & Data", "value_type": "any", "max_words": 12,
+     "description": "the data behind the results: facilities and instruments, observing campaigns and dates, number of RVs / transits / epochs, time baseline, cadence, exposure times, signal-to-noise"},
+    {"id": "stellar_activity", "label": "Stellar Activity", "value_type": "any", "max_words": 12,
+     "description": "the host star's activity as measured: activity indices (log R'HK, S-index, H-alpha), rotation or spot signals, flares, activity cycles, and whether they correlate with the planet signal"},
+    {"id": "data_reduction", "label": "Data Reduction and Software", "value_type": "text", "max_words": 15,
+     "description": "how the data were prepared before fitting and the software used: reduction pipelines, outlier removal or sigma clipping, detrending, removing stellar activity (GP, linear decorrelation), jitter terms, binning; software for reduction and modelling"}
+  ]
 }

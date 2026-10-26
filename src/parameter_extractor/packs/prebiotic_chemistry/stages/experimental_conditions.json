@@ -14,7 +14,7 @@
   "alternatives": true,
   "table_images": true,
   "open_ended": true,
-  "open_ended_hint": "e.g. stirring or agitation, light / UV irradiation, buffers, heating method, sealing or atmosphere details. Not wet-dry cycling details (cycle number, durations, phase temperatures, humidity: a separate step records those), not dissolved species or their concentrations (a separate step extracts those, including catalysts and reactants), and not analysis details beyond analysis_method (columns, mobile phases, wavelengths, standards)",
+  "open_ended_hint": "e.g. stirring or agitation, light / UV irradiation, buffers, heating method, sealing or atmosphere details. Not wet-dry cycling details (cycle number, durations, phase temperatures, humidity: a separate step records those), not dissolved species or their concentrations (a separate step extracts those, including catalysts and reactants). Analysis details beyond analysis_method DO belong here (instrument, column, mobile phase, detection wavelength, standards, detection limit): one entry each, category analysis",
   "set_word": "experiment",
   "intro": "For every experiment set (and sample) in the structure plan below, extract the experimental conditions the paper reports. Conditions that are the same for every set go in ONE row with `set` ''; a condition that differs between sets goes in each set's row; one that differs between the samples of a set goes in each sample's row.",
   "parameters": [

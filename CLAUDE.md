@@ -1349,3 +1349,17 @@ same paper 287 s. The real lever for many full runs would be a multi-paper full-
   volumes in mL), 1 metadata (supplier + purity), 5 methodology (quenching, pumping, back-pressure
   regulator, ...). Exoplanets have no open-ended stage, so only the shared categories (for search
   findings); candidate categories if one is added: Observations & Data, Stellar Activity.
+- **Round 2 (2026-10-27, Mickey + exoplanet specialist):** prebiotic Chemical Species split into
+  Starting Species (sources species:initial, species) and Products (species:sampled); new assignable
+  Analysis category (instrument, column, eluent, wavelength, standards, detection limit) and the
+  conditions step's open_ended_hint no longer EXCLUDES analysis details (it asks for them, one entry
+  each). Exoplanets: categories Observations & Data, Stellar Activity, Data Reduction and Software
+  (text, 15 words), filled by `system_and_discovery` (now open_ended, hint excludes parameters other
+  steps record -- incl. rotation period / v sin i -- and priors/assumptions). Repeat checks
+  (ingestion/duplicates.py, duplicate_removed flags, repeats_left_out): `drop_recorded_software`
+  (a data_reduction item naming ONLY software the fit_models step recorded) and
+  `drop_repeated_values` (value = just numbers + units, <= 2 other words, ALL numbers are values of
+  ONE parameter -- column minus alt/mode/err/lim suffixes -- on its rows; a distinctive number needed).
+  Live (Standard): nielsen2019 $0.24, 19 suggestions (7 observations, 4 activity, 8 reduction/software;
+  the 42.5 +- 3.4 d rotation repeat of st_rotpalt1 now dropped); faisal2005 $0.25, 4 analysis items
+  (amino acid / organic acid / ion chromatography columns + detectors, TOC/TN analyzers).

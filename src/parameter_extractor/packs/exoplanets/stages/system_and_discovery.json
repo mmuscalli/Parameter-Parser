@@ -1,7 +1,7 @@
 {
  "name": "system_and_discovery",
  "label": "System and discovery",
- "description": "System distance, parallax and number of stars/planets, and discovery details for planets this paper announces.",
+ "description": "System distance, parallax and number of stars/planets, discovery details for planets this paper announces, and (with new-variable suggestions on) the observations, stellar activity and data reduction behind the results.",
  "origin": "system and discovery",
  "system_prompt": "Extract planetary-system and discovery details from an astronomy paper, exactly as stated.",
  "trigger": {
@@ -9,17 +9,21 @@
  },
  "table_images": true,
  "alternatives": true,
+ "open_ended": true,
+ "open_ended_hint": "the observations behind the results (instruments, campaigns, number of RVs or transits, baseline, cadence), the host star's activity (activity indices, rotation or spot signals, flares), and how the data were reduced and prepared before fitting (pipelines, outlier removal, detrending, removing stellar activity, jitter, binning) with the software used, also for modelling. Not planet or stellar parameters other steps record (orbits, masses, radii, Teff, log g, metallicity, age, rotation period, v sin i, luminosity, ...) even when measured from activity or by another method, and not priors or fit assumptions",
  "per": "sample",
  "set_word": "planetary system",
  "intro": "For the planetary systems in the structure plan below, extract system details (whole set: no `sample`) and, ONLY for planets this paper itself reports as newly discovered or confirmed, the discovery details (per planet).",
  "parameters": [
   {
-   "column": "sy_snum", "integer": true,
+   "column": "sy_snum",
+   "integer": true,
    "unit": "",
    "description": "number of stars in the system"
   },
   {
-   "column": "sy_pnum", "integer": true,
+   "column": "sy_pnum",
+   "integer": true,
    "unit": "",
    "description": "number of planets in the system"
   },
@@ -50,7 +54,8 @@
    "kind": "text"
   },
   {
-   "column": "disc_year", "integer": true,
+   "column": "disc_year",
+   "integer": true,
    "unit": "",
    "description": "discovery year"
   },
@@ -77,7 +82,7 @@
   "Report the values THIS paper gives for each planet -- its own fit, or the values it adopts and uses (then say in `n` where they come from, e.g. 'adopted from Takeda et al. 2008'). Don't fill in values from other papers that this paper only mentions in passing.",
   "When a value is given in several places (abstract, text, table), use the table value with its uncertainties.",
   "Discovery details belong only to planets this paper announces or confirms as new; leave them out for planets discovered earlier.",
-    "A survey candidate this paper confirms (a TESS TOI, a Kepler KOI, a K2 candidate) was discovered by that survey's signal: discoverymethod 'Transit', disc_facility the survey ('Transiting Exoplanet Survey Satellite (TESS)', 'Kepler', 'K2'), with `b` 'derived' and the sentence that names the survey as `q` -- not 'assumed'. disc_year is this paper's publication year.",
+  "A survey candidate this paper confirms (a TESS TOI, a Kepler KOI, a K2 candidate) was discovered by that survey's signal: discoverymethod 'Transit', disc_facility the survey ('Transiting Exoplanet Survey Satellite (TESS)', 'Kepler', 'K2'), with `b` 'derived' and the sentence that names the survey as `q` -- not 'assumed'. disc_year is this paper's publication year.",
   "A planet with several samples (one per solution, the solution in [brackets] in its sample_label) gets each solution's values in its own row -- never mix values from different solutions on one row."
  ]
 }
