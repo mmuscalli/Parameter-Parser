@@ -7,3 +7,8 @@ dist/
 *.egg-info/
 .DS_Store
 scripts/.pubchem_build_cache.json
+
+# paper data stays local (recorded runs, full paper texts)
+runs/
+tests/fixtures/arxiv_nielsen2019/*.html.gz
+.claude/
