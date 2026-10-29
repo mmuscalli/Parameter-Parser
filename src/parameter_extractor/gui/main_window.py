@@ -170,6 +170,9 @@ class MainWindow(QMainWindow):
         self.out_edit, self.pubchem_box = d.out_edit, d.pubchem_box
         for edit in (self.key_edit, self.out_edit):
             edit.textChanged.connect(self._update_run_enabled)
+        if d.handoff_box is not None:          # developer builds only
+            d.handoff_box.toggled.connect(self._update_run_enabled)
+            d.handoff_edit.textChanged.connect(self._update_run_enabled)
 
         box = QGroupBox()
         form = QFormLayout(box)
@@ -418,6 +421,9 @@ class MainWindow(QMainWindow):
         self.batch_box.setChecked(self._settings.value("batch_mode", False, type=bool))
         self.arxiv_box.setChecked(self._settings.value("prefer_arxiv", False, type=bool))
         self.suggest_box.setChecked(self._settings.value("suggest_new_variables", True, type=bool))
+        if self.settings_dialog.handoff_box is not None:
+            self.settings_dialog.handoff_edit.setText(self._settings.value("dev/handoff_dir", ""))
+            self.settings_dialog.handoff_box.setChecked(self._settings.value("dev/handoff", False, type=bool))
         shown = self._settings.value("options_shown", False, type=bool)
         self.options_btn.setChecked(shown)
         self._show_options(shown)
@@ -483,6 +489,9 @@ class MainWindow(QMainWindow):
         self._settings.setValue("batch_mode", self.batch_box.isChecked())
         self._settings.setValue("prefer_arxiv", self.arxiv_box.isChecked())
         self._settings.setValue("suggest_new_variables", self.suggest_box.isChecked())
+        if self.settings_dialog.handoff_box is not None:
+            self._settings.setValue("dev/handoff", self.settings_dialog.handoff_box.isChecked())
+            self._settings.setValue("dev/handoff_dir", self.settings_dialog.handoff_edit.text().strip())
         # keys: saved when "remember" is ticked; forgotten when it's un-ticked or the field is emptied
         ads = self.ads_edit.text().strip()
         if self.remember_ads_box.isChecked() and ads:
@@ -547,11 +556,13 @@ class MainWindow(QMainWindow):
                 or bool(self._queue_window is not None and self._queue_window.running))
 
     def _update_run_enabled(self) -> None:
-        ready = bool(self.pdf_edit.text().strip() and self.key_edit.text().strip()
+        handoff = self.settings_dialog.handoff_dir() is not None      # developer mode: no key needed
+        ready = bool(self.pdf_edit.text().strip() and (handoff or self.key_edit.text().strip())
                      and self.out_edit.text().strip())
         self.run_btn.setEnabled(ready and not self._busy)
         missing = [what for what, edit in (("your Anthropic API key", self.key_edit),
-                                           ("a folder for the results", self.out_edit)) if not edit.text().strip()]
+                                           ("a folder for the results", self.out_edit))
+                   if not edit.text().strip() and not (handoff and edit is self.key_edit)]
         self.settings_hint.setText(f"Add {' and '.join(missing)} in <a href='settings'>Settings…</a>"
                                    if missing else "")
         self.settings_hint.setVisible(bool(missing))
@@ -578,6 +589,7 @@ class MainWindow(QMainWindow):
                          batch_mode=self.batch_box.isChecked(),
                          prefer_arxiv=self.arxiv_box.isChecked(), ads_token=self.ads_edit.text().strip(),
                          suggest_new_variables=self.suggest_box.isChecked(),
+                         handoff_dir=self.settings_dialog.handoff_dir(),
                          pubchem_cache_path=default_pubchem_cache_path(), arxiv_cache_dir=default_arxiv_cache_dir())
 
     def open_queue(self) -> None:

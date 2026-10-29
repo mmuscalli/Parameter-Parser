@@ -109,6 +109,26 @@ def run_checks(pdf: Optional[Path] = None, api_key: Optional[str] = None) -> Lis
         return name
     checks.append(_run("System keychain", keychain))
 
+    def developer_features() -> str:
+        """The developer-only handoff mode must be absent from public builds (dev_features.py)."""
+        import sys
+        from parameter_extractor import dev_features
+        try:
+            import parameter_extractor.handoff  # noqa: F401
+            has_module = True
+        except ImportError:
+            has_module = False
+        if getattr(sys, "frozen", False):
+            base = Path(getattr(sys, "_MEIPASS", Path(sys.executable).parent))
+            marker = (base / "parameter_extractor" / dev_features.MARKER).is_file()
+            if not marker:
+                if has_module:
+                    raise RuntimeError("public build contains the developer handoff module")
+                return "not included (public build)"
+            return "included (developer build -- not for distribution)"
+        return "available (developer switch on)" if dev_features.enabled() else "off (running from source)"
+    checks.append(_run("Developer handoff", developer_features))
+
     if api_key:
         def api() -> str:
             import anthropic

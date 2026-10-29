@@ -1363,3 +1363,28 @@ same paper 287 s. The real lever for many full runs would be a multi-paper full-
   Live (Standard): nielsen2019 $0.24, 19 suggestions (7 observations, 4 activity, 8 reduction/software;
   the 42.5 +- 3.4 d rotation repeat of st_rotpalt1 now dropped); faisal2005 $0.25, 4 analysis items
   (amino acid / organic acid / ion chromatography columns + detectors, TOC/TN analyzers).
+
+## Developer handoff; Economy consistency (2026-10-29, Mickey)
+
+- **Handoff (developer only)**: `handoff.py` + `dev_features.py`. RunConfig.handoff_dir -> api_client
+  `_send_mapping_errors` writes each request to `<dir>/<paper>/requests/<step>-<sha8 of task>.md` (instructions,
+  inputs: paper.txt + images/, task, answer JSON Schema by alias) and raises `AnswersNeededError`; answers in
+  `answers/<key>.json` are validated (bad -> `.error.txt`, `invalid`). pipeline `_all_requests` gathers a
+  whole round (structure+metadata, then the parallel steps). No API key needed; cost recorded as none
+  (model "claude-code-handoff"). Gate: source runs need PARAMETER_EXTRACTOR_DEV=1; built apps need the
+  DEV_BUILD marker -- only `packaging/build_macos.sh --dev` ("Parameter Extractor Dev.app", no .dmg) adds it
+  and handoff.py; the public spec EXCLUDES parameter_extractor.handoff; `--self-check` fails a public build
+  that contains it. Why: Anthropic doesn't allow third-party products to offer claude.ai login /
+  subscription limits (Agent SDK docs). GUI: Settings "Developer" group (only when enabled), QSettings
+  dev/handoff(_dir); CLI `--handoff DIR` (hidden otherwise). Figure suggestions in handoff mode also
+  write requests (answer, then ask for the suggestion again). tests/test_handoff.py: 3 rounds from
+  eder1994's reference answers reproduce its CSV byte for byte.
+- **Economy errors are mostly consistent, not random** (eder x5, faisal x3 live, $0.009-0.018 a pass; later
+  passes read the first one's cache). eder: every miss was systematic -- duration_hr never filled (Haiku
+  labels "t = 97.3 h" but leaves the field null) -> `structure_planner.fill_durations` reads it from the
+  label; solvent "distilled" -> water.py now names bare types. After: 5/5 passes = reference except
+  analysis_method wording. faisal: 74-84% per pass (wording forgiven), majority of the non-empty values
+  over 2-3 passes 89.5% (random dropped blocks: T/pH in one pass, the NH4+ column in another); the rest
+  consistent: sampled_pressure_bar (spec said "if different" -- now a rule like sampled temperature) and
+  the Gly-Gly 30 mM STOCK concentration (goes to suggestions instead of stock_ -- Standard too in new runs).
+  Voting not built (Mickey to decide).

@@ -26,7 +26,7 @@
     {"column": "analysis_method", "kind": "text", "description": "how the products were analysed, briefly, e.g. 'HPLC (UV detection)', 'LC-MS'."},
     {"column": "headspace_gas_name", "kind": "text", "description": "gas above the solution / atmosphere, e.g. 'N2', 'air', 'Ar'."},
     {"column": "initial_pressure_bar", "unit": "bar", "uncertainties": true, "description": "pressure at the start of the reaction."},
-    {"column": "sampled_pressure_bar", "unit": "bar", "uncertainties": true, "description": "pressure when the sample was taken, if different or stated separately."},
+    {"column": "sampled_pressure_bar", "unit": "bar", "uncertainties": true, "description": "pressure at which the samples were taken; for a pressurised reactor normally the reaction pressure (b 'derived' if the paper states it once)."},
     {"column": "initial_temperature_C", "unit": "°C", "uncertainties": true, "description": "reaction temperature (at the start)."},
     {"column": "sampled_temperature_C", "unit": "°C", "uncertainties": true, "description": "temperature at which the samples were taken. When samples are taken at the reaction temperature, give it too (b 'derived' if the paper states the temperature only once per set) -- not just a note saying it's the same."},
     {"column": "initial_pH", "unit": "", "uncertainties": true, "description": "pH at the start."},
@@ -41,7 +41,7 @@
     {"column": "solid_material_preheat_hr", "unit": "h", "description": "duration of that pre-heating."}
   ],
   "rules": [
-    "sampled_temperature_C: whenever the samples were taken from the running (heated) reaction, give sampled_temperature_C for each set too -- normally the same value as initial_temperature_C, with b 'derived' if the paper states the temperature only once. Don't leave it out just because it equals the reaction temperature.",
+    "sampled_temperature_C: whenever the samples were taken from the running (heated) reaction, give sampled_temperature_C for each set too -- normally the same value as initial_temperature_C, with b 'derived' if the paper states the temperature only once. Don't leave it out just because it equals the reaction temperature. The same for sampled_pressure_bar when the reactor is pressurised (flow-through, autoclave): normally the reaction pressure, b 'derived' if stated once.",
     "Leave out any condition the paper doesn't state -- never a typical or default value (e.g. don't assume 1 atm or room temperature).",
     "A value that needed a judgment call (e.g. a vessel material inferred from a device model) gets c 'medium' and the reason in `n`; if the paper states a condition twice with different values, give the one it uses and the other in `n`."
   ]

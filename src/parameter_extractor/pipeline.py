@@ -47,7 +47,7 @@ from parameter_extractor.calculators import exoplanets as exo
 from parameter_extractor.validation import exoplanet_archive
 from parameter_extractor.config import settings
 from parameter_extractor.config.run_config import RunConfig
-from parameter_extractor.errors import ApiKeyMissingError, PdfNotReadableError, PipelineError
+from parameter_extractor.errors import AnswersNeededError, ApiKeyMissingError, PdfNotReadableError, PipelineError
 from parameter_extractor.digitizing.annotate import save_digitized
 from parameter_extractor.ingestion.duplicates import drop_recorded_software, drop_repeated_amounts, drop_repeated_values
 from parameter_extractor.ingestion.equation_finder import find_equations
@@ -177,7 +177,12 @@ def _parse(pdf_path: Path, run_dir: Path) -> ParsedPaper:
 def _start(pdf_path, config: RunConfig, total_steps: int,
            on_progress: Optional[ProgressCallback],
            cancel_event: Optional[threading.Event]) -> tuple[Path, RunContext]:
-    if not config.api_key:  # fail fast, before creating a run folder or parsing anything
+    if config.handoff_dir:
+        from parameter_extractor import dev_features
+        if not dev_features.enabled():
+            raise PipelineError("Answering steps in Claude Code (handoff) is a developer-only option and isn't "
+                                "available in this version of the app.")
+    elif not config.api_key:  # fail fast, before creating a run folder or parsing anything
         raise ApiKeyMissingError()
     pdf_path = Path(pdf_path)
     # a PDF's stem; a paper named by identifier keeps its dots ('arXiv_2308.05343')
@@ -185,6 +190,10 @@ def _start(pdf_path, config: RunConfig, total_steps: int,
                            pdf_path.stem if pdf_path.suffix.lower() == ".pdf" else pdf_path.name)
     ctx = RunContext(config=config, run_dir=run_dir, total_steps=total_steps,
                      on_progress=on_progress, cancel_event=cancel_event)
+    if config.handoff_dir:                # one folder per paper, the same on every re-run
+        from parameter_extractor.handoff import paper_dir
+        ctx.handoff_paper_dir = paper_dir(config.handoff_dir,
+                                          pdf_path.stem if pdf_path.suffix.lower() == ".pdf" else pdf_path.name)
     packs.activate(config.pack)           # template, vocabulary, prompts and stages of this domain
     return pdf_path, ctx
 
@@ -346,7 +355,10 @@ def extract_steps(ex: "Extraction") -> "Extraction":
         if convert_equations:
             running["equations"] = pool.submit(_convert_equations, ctx, equations)
         ctx.step("structure_planner", "Planning the experiment structure")
-        ex.structure = run_structure_planner(ctx, text, table_images=table_images)
+        try:
+            ex.structure = run_structure_planner(ctx, text, table_images=table_images)
+        except AnswersNeededError as e:       # handoff: the parallel requests are written out too
+            raise _all_requests(running, e) from None
         ex.structure_ready.set()
 
         # everything else depends only on the structure: run it all at once
@@ -494,11 +506,26 @@ def _collect(ctx: RunContext, running: dict) -> dict:
     results = {}
     for future in as_completed(by_future):
         name = by_future[future]
-        results[name] = future.result()          # re-raises the stage's error here
+        try:
+            results[name] = future.result()      # re-raises the stage's error here
+        except AnswersNeededError as e:          # handoff: every step of this round writes its request
+            raise _all_requests(running, e) from None
         pending.discard(name)
         ctx.step(name, f"{stage_label(name)} done"
                        + (f" -- still running: {_names(pending)}" if pending else ""))
     return results
+
+
+def _all_requests(running: dict, first: AnswersNeededError) -> AnswersNeededError:
+    """Developer handoff: wait for the other steps of the round and gather every request they wrote."""
+    for future in running.values():
+        try:
+            future.result()
+        except AnswersNeededError as e:
+            first.merge(e)
+        except Exception:                        # noqa: BLE001 -- the round stops anyway
+            pass
+    return first
 
 
 def _names(stages) -> str:

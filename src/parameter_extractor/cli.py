@@ -100,6 +100,11 @@ def main() -> int:
     parser.add_argument("--no-suggestions", action="store_true",
                         help="Don't suggest new variables: no open-ended capture of conditions without a column "
                              "(new variables are listed in one flag and new_variables.json, never added)")
+    from parameter_extractor import dev_features
+    parser.add_argument("--handoff", metavar="DIR", default=None,
+                        help=("Developer only: write the model requests to DIR for answers from a Claude Code "
+                              "session instead of calling the API; run again once they're answered")
+                        if dev_features.enabled() else argparse.SUPPRESS)
     parser.add_argument("--no-cache", action="store_true",
                         help="Don't share the cached paper between steps (costs more; for comparison)")
     parser.add_argument("--skip-stage", action="append", default=[], metavar="STAGE",
@@ -149,6 +154,11 @@ def main() -> int:
         overrides["ads_token"] = args.ads_token
     if args.out:
         overrides["output_dir"] = args.out
+    if args.handoff:
+        if not dev_features.enabled():
+            parser.error("--handoff is a developer-only option (set PARAMETER_EXTRACTOR_DEV=1 when running "
+                         "from source)")
+        overrides.update(handoff_dir=Path(args.handoff), batch_mode=False)
     config = RunConfig.from_settings(**overrides)
 
     if args.queue:
@@ -234,6 +244,11 @@ def _focused(args, parser) -> int:
         overrides["ads_token"] = args.ads_token
     if args.out:
         overrides["output_dir"] = args.out
+    if args.handoff:
+        if not dev_features.enabled():
+            parser.error("--handoff is a developer-only option (set PARAMETER_EXTRACTOR_DEV=1 when running "
+                         "from source)")
+        overrides.update(handoff_dir=Path(args.handoff), batch_mode=False)
     config = RunConfig.from_settings(**overrides)
     try:
         run = run_focused_search(items, args.focus, config, search_words=args.search_word,

@@ -69,6 +69,9 @@ class RunConfig:
     # capture (~1.5% of a run's tokens), and only assumed values and the user's own search terms are
     # reviewed -- the rest stays out of the CSV (new_variables.json, one summary flag).
     suggest_new_variables: bool = True
+    # Developer only (dev_features.py, never in public builds): write model requests to this folder for
+    # answers from a Claude Code session instead of calling the API (handoff.py); no API key needed
+    handoff_dir: Optional[Path] = None
     # NASA ADS API token: only needed to look up journal ADS bibcodes (2023PASJ...75.1030T)
     ads_token: str = ""
     # arXiv lookups and full texts kept between runs (ingestion/arxiv_source.LookupCache); None = none
@@ -100,4 +103,5 @@ class RunConfig:
         d["registry_path"] = str(self.registry_path) if self.registry_path else None
         d["pubchem_cache_path"] = str(self.pubchem_cache_path) if self.pubchem_cache_path else None
         d["arxiv_cache_dir"] = str(self.arxiv_cache_dir) if self.arxiv_cache_dir else None
+        d["handoff_dir"] = str(self.handoff_dir) if self.handoff_dir else None
         return d

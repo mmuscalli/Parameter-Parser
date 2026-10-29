@@ -370,6 +370,12 @@ def _finished_steps(ctx: RunContext) -> list:
 def _send_mapping_errors(ctx: RunContext, stage: str, model: str, **kwargs):
     import anthropic
     _streamed.stage = stage
+    if ctx.config.handoff_dir:                 # developer only (dev_features.py): answered in Claude Code
+        try:
+            from parameter_extractor import handoff
+        except ImportError:
+            raise errors.PipelineError("Developer handoff mode isn't part of this build.") from None
+        return handoff.answer(ctx, stage, kwargs["system_prompt"], kwargs["content"], kwargs["response_model"])
     credits = lambda detail: errors.OutOfCreditsError(stage, detail, _finished_steps(ctx), getattr(ctx, "run_dir", None))
     try:
         return _send(ctx, model=model, **kwargs)
@@ -429,7 +435,7 @@ def call_structured(
     ingestion/pdf_parser.py:rasterize_table_pages -- so the model has the
     actual page layout available, not just the OCR'd/column-garbled text.
     """
-    model = ctx.config.model_for(stage)
+    model = "claude-code-handoff" if ctx.config.handoff_dir else ctx.config.model_for(stage)
     shared = (paper_text is not None and ctx.paper is not None and ctx.config.prompt_caching
               and paper_text in user_content)
     _streamed.tool = None

@@ -11,6 +11,27 @@ class PipelineError(Exception):
     """Base class: anything that stops a run for a reason the user can act on."""
 
 
+class AnswersNeededError(PipelineError):
+    """Developer handoff mode (handoff.py): requests were written for answers from a Claude Code
+    session; the run stops until they're answered."""
+    def __init__(self, folder, keys, invalid=()):
+        self.folder, self.keys, self.invalid = folder, list(keys), list(invalid)
+        super().__init__(self._message())
+
+    def merge(self, other: "AnswersNeededError") -> "AnswersNeededError":
+        self.keys += [k for k in other.keys if k not in self.keys]
+        self.invalid += [k for k in other.invalid if k not in self.invalid]
+        self.args = (self._message(),)
+        return self
+
+    def _message(self) -> str:
+        bad = (f" {len(self.invalid)} answer(s) didn't fit their schema (see answers/*.error.txt)."
+               if self.invalid else "")
+        return (f"Answers needed (developer handoff): {len(self.keys)} request(s) written to {self.folder}/requests "
+                f"({', '.join(self.keys)}).{bad} Answer them in Claude Code (see README.md there), then run "
+                f"this paper again.")
+
+
 class ApiKeyMissingError(PipelineError):
     def __init__(self):
         super().__init__(

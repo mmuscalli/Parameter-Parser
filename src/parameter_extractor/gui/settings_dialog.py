@@ -72,6 +72,23 @@ class SettingsDialog(QDialog):
         form.addRow("", self.pubchem_box)
         layout.addWidget(files)
 
+        # developer only (dev_features.py): never shown in public builds
+        self.handoff_box, self.handoff_edit = None, None
+        from parameter_extractor import dev_features
+        if dev_features.enabled():
+            dev = QGroupBox("Developer")
+            form = QFormLayout(dev)
+            self.handoff_box = QCheckBox("Answer the model steps in Claude Code instead of the API (handoff)")
+            self.handoff_box.setToolTip(
+                "Each model request is written to the folder below; answer them in a Claude Code session "
+                "(see README.md there) and run the paper again, round by round. No API key or charge. "
+                "Developer builds only.")
+            self.handoff_edit = QLineEdit()
+            handoff_btn = QPushButton("Choose…", clicked=self._choose_handoff_dir)
+            form.addRow("", self.handoff_box)
+            form.addRow("Handoff folder:", _row(self.handoff_edit, handoff_btn))
+            layout.addWidget(dev)
+
         buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Close)
         buttons.rejected.connect(self.hide)
         buttons.accepted.connect(self.hide)
@@ -82,6 +99,18 @@ class SettingsDialog(QDialog):
         if path:
             self.out_edit.setText(path)
 
+    def _choose_handoff_dir(self) -> None:
+        path = QFileDialog.getExistingDirectory(self, "Handoff folder", self.handoff_edit.text())
+        if path:
+            self.handoff_edit.setText(path)
+
+    def handoff_dir(self):
+        """The developer handoff folder when that mode is on, else None."""
+        from pathlib import Path
+        if self.handoff_box is not None and self.handoff_box.isChecked() and self.handoff_edit.text().strip():
+            return Path(self.handoff_edit.text().strip()).expanduser()
+        return None
+
     def hideEvent(self, event) -> None:
         super().hideEvent(event)
         self.closed.emit()
@@ -89,5 +118,7 @@ class SettingsDialog(QDialog):
     def lock(self, locked: bool) -> None:
         """Read-only while a run uses these settings."""
         for w in (self.key_edit, self.remember_key_box, self.ads_edit, self.remember_ads_box, self.out_edit,
-                  self.pubchem_box):
+                  self.pubchem_box, self.handoff_box, self.handoff_edit):
+            if w is None:
+                continue
             w.setEnabled(not locked)

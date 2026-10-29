@@ -30,9 +30,14 @@ _WATER = re.compile(r"\b(?:water|h2o|h₂o)\b|^aq(?:ueous)?\.?$", re.IGNORECASE)
 def water_type(text: str) -> Tuple[Optional[str], bool]:
     """(canonical name, assumed) for a solvent that is water; (None, False) otherwise."""
     t = (text or "").strip()
+    low = t.lower()
+    if t and not _WATER.search(t) and len(t.split()) <= 2:
+        # the type alone ('distilled', 'Milli-Q'): Economy runs on eder1994 gave 'distilled' 2 of 5 times
+        for pattern, name in _TYPES:
+            if re.fullmatch(rf"(?:{pattern})\.?", low):
+                return name, False
     if not t or not _WATER.search(t):
         return None, False
-    low = t.lower()
     for pattern, name in _TYPES:
         if re.search(pattern, low):
             return name, False
