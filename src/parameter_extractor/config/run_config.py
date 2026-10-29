@@ -64,6 +64,10 @@ class RunConfig:
     # tokens, exact table values, but a PREPRINT (the version read is recorded and flagged). Papers
     # given by identifier instead of a PDF always come from arXiv.
     prefer_arxiv: bool = False
+    # Run the extraction steps after the structure plan this many times (1-3) and keep each value by vote
+    # (voting.py): another lever for cheap runs -- Economy with 2-3 passes recovers values a single pass
+    # drops at random. Each extra pass adds the cost of those steps again (the paper is read from cache).
+    passes: int = 1
     # Suggest new variables (Mickey, 2026-10-26; on by default): open-ended stages also list conditions
     # that have no column, and values with no column are offered in the review. Off: no open-ended
     # capture (~1.5% of a run's tokens), and only assumed values and the user's own search terms are

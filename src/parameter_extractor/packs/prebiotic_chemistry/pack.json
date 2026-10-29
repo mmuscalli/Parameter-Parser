@@ -7,7 +7,7 @@
   "standard_columns": "standard_columns.json",
   "species_cids": "species_cids.json",
   "builtin_stages": ["chemistry"],
-  "postprocess": ["normalize_species", "mixing", "molar_ratios", "amounts", "peptide_totals", "water_type", "results_check"],
+  "postprocess": ["normalize_species", "mixing", "molar_ratios", "amounts", "peptide_totals", "water_type", "atmospheric_start", "results_check"],
   "units": {"set": "experiment set", "sample": "sample"},
   "variable_categories": [
     {"id": "starting_species", "label": "Starting Species", "sources": ["species:initial", "species"], "value_type": "number",

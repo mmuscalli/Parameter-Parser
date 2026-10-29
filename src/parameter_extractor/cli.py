@@ -94,6 +94,9 @@ def main() -> int:
     parser.add_argument("--models", choices=["standard", "economy"], default="standard",
                         help="standard: Claude Sonnet 5.5 for every step (most accurate); economy: Claude Haiku "
                              "5.5 for every step (roughly 4-20x cheaper; misses more on complex papers)")
+    parser.add_argument("--passes", type=int, default=1, choices=[1, 2, 3],
+                        help="Run the extraction steps 2 or 3 times and keep each value by vote (cheap runs: "
+                             "use with --models economy); disagreements are flagged")
     parser.add_argument("--batch", action="store_true",
                         help="Batch mode: every request at half price through Anthropic's Message Batches API; "
                              "each step waits in the batch queue (usually minutes, at most 24 h)")
@@ -148,7 +151,7 @@ def main() -> int:
                  "optional_stages": {name: "off" for name in args.skip_stage},
                  "model_profile": args.models, "prompt_caching": not args.no_cache,
                  "batch_mode": args.batch, "prefer_arxiv": args.arxiv,
-                 "suggest_new_variables": not args.no_suggestions,
+                 "suggest_new_variables": not args.no_suggestions, "passes": args.passes,
                  "pubchem_cache_path": default_pubchem_cache_path(), "arxiv_cache_dir": default_arxiv_cache_dir()}
     if args.ads_token is not None:
         overrides["ads_token"] = args.ads_token

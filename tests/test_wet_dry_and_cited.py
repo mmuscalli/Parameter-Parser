@@ -77,8 +77,8 @@ def test_cycling_fields_and_cited_data():
             header, rows = reader.fieldnames, list(reader)
         n_template = 208
         # standard columns straight after the template block, then provenance; only filled ones
-        assert header[n_template:n_template + 3] == ["wet_phase_duration_hr", "wet_phase_relative_humidity_pct",
-                                                     "dry_phase_temperature_C"]
+        assert header[n_template:n_template + 4] == ["data_location", "wet_phase_duration_hr",
+                                                     "wet_phase_relative_humidity_pct", "dry_phase_temperature_C"]
         assert "cycle_number" not in header and "cycle_duration_hr" not in header
         assert header[-1] == "original_data_reference"
         set1 = [r for r in rows if r["set_id"] == "001001"]
@@ -209,8 +209,9 @@ def test_standard_columns_file():
     assert cols[-7:] == ["cycle_number", "cycle_duration_hr", "wet_phase_temperature_C", "wet_phase_duration_hr",
                          "wet_phase_relative_humidity_pct", "dry_phase_temperature_C", "dry_phase_duration_hr"]
     # the shared columns every pack gets come first (the metadata ones are in this pack's template)
-    assert cols[:3] == ["paper_arxiv_id", "initial_pressure_bar_err_plus", "initial_pressure_bar_err_minus"]
-    assert "initial_temperature_C_alt1_method" in cols and "solvent_name" not in cols     # template columns aren't
+    assert cols[:5] == ["data_location", "paper_arxiv_id", "vessel_sealed", "initial_pressure_bar_err_plus",
+                        "initial_pressure_bar_err_minus"]
+    assert "vessel_sealed" in cols and "initial_temperature_C_alt1_method" in cols and "solvent_name" not in cols     # template columns aren't
 
 
 if __name__ == "__main__":

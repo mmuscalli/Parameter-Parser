@@ -128,7 +128,7 @@ def test_rows_from_a_digitized_figure():
     assert (r1.duration_hr, r1.sampled_2peptide_Gly_pct_yield) == (15.0, 0.6)
     assert (r2.duration_hr, r2.sampled_2peptide_Gly_pct_yield) == (30.0, 1.0)
     assert r1.species_mM == {"initial_NaCl_aq_mM": 3000, "initial_Gly_mM": 1000}
-    assert r1.extra == {"initial_pH": 2.6} and r1.initial_temperature_C == 80.0
+    assert r1.extra == {"initial_pH": 2.6, "data_location": "Figure. 5"} and r1.initial_temperature_C == 80.0
     assert r1.extraction_confidence == "digitized" and "Fig. 5" in r1.source_notes
     assert r1.paper_title == meta.paper_title
 

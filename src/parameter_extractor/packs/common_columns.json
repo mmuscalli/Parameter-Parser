@@ -6,6 +6,7 @@
     {"column": "author_list", "description": "All authors, '; '-separated"},
     {"column": "year_published", "description": "Publication year"},
     {"column": "journal_published", "description": "Journal"},
+    {"column": "data_location", "description": "Where in the paper the row's data point was found: 'Figure. 1', 'Figure. 3b', 'Table. 2', 'Table. S1' (supplementary), or 'Text: <section>'"},
     {"column": "paper_arxiv_id", "description": "arXiv ID and version of the text that was read, when the paper was read from arXiv (a preprint)"}
   ]
 }

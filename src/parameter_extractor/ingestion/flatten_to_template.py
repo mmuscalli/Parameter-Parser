@@ -15,6 +15,7 @@ import re
 from pathlib import Path
 from typing import List, Optional
 
+from parameter_extractor.ingestion.data_location import COLUMN as DATA_LOCATION, location
 from parameter_extractor.config import settings
 from parameter_extractor.schemas.chemistry import ChemistryExtraction
 from parameter_extractor.schemas.common import CONFIDENCE_ORDER, confidence_below
@@ -344,6 +345,8 @@ def build_rows(
                             origin=spec.origin_label + (", derived" if v.basis == "derived" else ""),
                             quote=v.quote, confidence=v.confidence,
                             source=v.source + (f" [{v.note}]" if v.note else "")))
+            extra[DATA_LOCATION] = location(sample.source, pset.source_table_or_section)
+            prov[DATA_LOCATION] = CellSource(origin="structure", source=sample.source or pset.source_table_or_section)
             if pset.data_source:
                 prov["original_data_reference"] = CellSource(
                     origin="structure (data reproduced from another publication)",

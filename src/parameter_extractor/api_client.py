@@ -515,7 +515,7 @@ def call_structured(
         "message_id": response.id,
         "raw_response": json.loads(raw_text) if raw_text else None,
     }
-    name = audit_name or stage
+    name = (audit_name or stage) + (getattr(_streamed, "pass_suffix", "") or "")   # '.pass2' with several passes
     (run_dir / f"{name}.audit.json").write_text(json.dumps(audit, indent=2))
     (run_dir / f"{name}.output.json").write_text(parsed.model_dump_json(indent=2))
 

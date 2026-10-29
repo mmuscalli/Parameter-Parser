@@ -47,7 +47,8 @@ from parameter_extractor.calculators import exoplanets as exo
 from parameter_extractor.validation import exoplanet_archive
 from parameter_extractor.config import settings
 from parameter_extractor.config.run_config import RunConfig
-from parameter_extractor.errors import AnswersNeededError, ApiKeyMissingError, PdfNotReadableError, PipelineError
+from parameter_extractor.errors import (
+    AnswersNeededError, ApiKeyMissingError, PdfNotReadableError, PipelineError, RunCancelledError)
 from parameter_extractor.digitizing.annotate import save_digitized
 from parameter_extractor.ingestion.duplicates import drop_recorded_software, drop_repeated_amounts, drop_repeated_values
 from parameter_extractor.ingestion.equation_finder import find_equations
@@ -90,6 +91,7 @@ from parameter_extractor.stages.fit_models import LABEL as FIT_MODELS_LABEL, run
 from parameter_extractor.schemas.fit_models import FitModels
 from parameter_extractor.calculators import exoplanet_fits
 from parameter_extractor.calculators.water import normalize_water
+from parameter_extractor.voting import MAX_PASSES, disagreement_flags, vote_chemistry, vote_stage
 from parameter_extractor.stages.triage import run_triage
 from parameter_extractor.validation.plausibility_checks import Flag, check_extraction, check_row, flags_to_json
 
@@ -365,9 +367,13 @@ def extract_steps(ex: "Extraction") -> "Extraction":
         pack = packs.current()
         if pack.uses("methodology"):
             running["methodology"] = pool.submit(run_methodology_extraction, ctx, text, ex.structure)
+        passes = 1 if config.handoff_dir else max(1, min(MAX_PASSES, config.passes or 1))
+        if passes > 1:
+            ctx.note("passes", f"{passes} passes of each extraction step, values kept by vote")
         if pack.uses("chemistry"):
-            running["chemistry"] = pool.submit(run_chemistry_extraction, ctx, text, ex.structure,
-                                               vocab["species_names"], table_images=table_images)
+            running["chemistry"] = pool.submit(
+                _voted, ctx, "chemistry", passes, run_chemistry_extraction,
+                (ctx, text, ex.structure, vocab["species_names"]), {"table_images": table_images}, vote_chemistry)
         if pack.uses("fit_models") and config.optional_stages.get("fit_models", "auto") != "off":
             ctx.total_steps += 1
             running["fit_models"] = pool.submit(run_fit_models, ctx, text, ex.structure, table_images)
@@ -379,7 +385,9 @@ def extract_steps(ex: "Extraction") -> "Extraction":
         for spec in specs:
             if spec.name not in always_on:
                 ctx.total_steps += 1
-            running[spec.name] = pool.submit(run_optional_stage, ctx, spec, text, ex.structure, table_images)
+            running[spec.name] = pool.submit(
+                _voted, ctx, spec.name, passes, run_optional_stage, (ctx, spec, text, ex.structure, table_images),
+                {}, lambda results, spec=spec: vote_stage(spec, results))
         results = _collect(ctx, running)
         # a domain pack without these stages gets empty stand-ins, so the rest works unchanged
         ex.metadata = results["metadata"]
@@ -514,6 +522,47 @@ def _collect(ctx: RunContext, running: dict) -> dict:
         ctx.step(name, f"{stage_label(name)} done"
                        + (f" -- still running: {_names(pending)}" if pending else ""))
     return results
+
+
+def _voted(ctx: RunContext, stage: str, passes: int, fn, args: tuple, kwargs: dict, vote):
+    """One extraction step, run `passes` times at once on the same structure and decided by vote
+    (voting.py). Each pass's answer is kept as <stage>.passN.output.json; the voted one is saved as
+    <stage>.output.json, so a replay of the run gives the voted result. A pass that fails is left out
+    (noted) as long as one succeeds."""
+    if passes <= 1:
+        return fn(*args, **kwargs)
+    from parameter_extractor import api_client
+
+    def one(i):
+        api_client._streamed.pass_suffix = f".pass{i}"
+        try:
+            return fn(*args, **kwargs)
+        finally:
+            api_client._streamed.pass_suffix = ""
+    with ThreadPoolExecutor(max_workers=passes, thread_name_prefix=f"{stage}-pass") as inner:
+        futures = [inner.submit(one, i) for i in range(1, passes + 1)]
+        results, failed = [], []
+        for i, f in enumerate(futures, start=1):
+            try:
+                results.append(f.result())
+            except RunCancelledError:
+                raise
+            except PipelineError as e:
+                failed.append((i, e))
+    if not results:
+        raise failed[0][1]
+    for i, e in failed:
+        ctx.note(stage, f"{stage_label(stage)}: pass {i} failed ({e}) -- voting on the other passes")
+    voted, data, notes = vote(results)
+    run_dir = Path(ctx.run_dir)
+    (run_dir / f"{stage}.output.json").write_text(json.dumps(data, indent=2, ensure_ascii=False))
+    first = run_dir / f"{stage}.pass1.audit.json"
+    audit = json.loads(first.read_text()) if first.is_file() else {"stage": stage, "input_tokens": 0, "output_tokens": 0}
+    audit.update(raw_response=data, voted_from=len(results), passes_failed=[i for i, _ in failed])
+    (run_dir / f"{stage}.audit.json").write_text(json.dumps(audit, indent=2))
+    with ctx._lock:
+        ctx.vote_notes += notes
+    return voted
 
 
 def _all_requests(running: dict, first: AnswersNeededError) -> AnswersNeededError:
@@ -842,6 +891,12 @@ def finish(
 
     if pack.uses("water_type"):                 # "water" -> which water (assumed distilled, flagged)
         paper_flags += [Flag("assumed_default", m) for m in normalize_water(rows)]
+    if pack.uses("atmospheric_start"):          # sealed batch, no pressure stated -> 1 bar (one flag)
+        from parameter_extractor.calculators.pressure import assume_atmospheric_start
+        paper_wide = next((getattr(v, "text", "") or "" for _, result in ex.optional_list for v in result.parameters
+                           if v.parameter == "vessel_sealed" and not v.set_label and not getattr(v, "sample_label", "")
+                           and v.basis != "assumed"), "")
+        paper_flags += [Flag("assumed_default", m) for m in assume_atmospheric_start(rows, paper_wide)]
 
     # ---- variables without a column: registry first, then the user's review ----
     index = row_index(ex.structure, rows, config.paper_prefix)
@@ -901,6 +956,7 @@ def finish(
     if decisions:
         registry.save()
     held_out = [v for g in left_out for v in g.values]
+    paper_flags += [Flag("pass_disagreement", m) for m in disagreement_flags(ctx.vote_notes)]
     paper_flags += _new_variable_flags([g for g in left_out if g not in unsuggested])
     if unsuggested:
         paper_flags.append(_unsuggested_flag(unsuggested))

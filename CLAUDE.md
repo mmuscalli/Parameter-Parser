@@ -1388,3 +1388,32 @@ same paper 287 s. The real lever for many full runs would be a multi-paper full-
   consistent: sampled_pressure_bar (spec said "if different" -- now a rule like sampled temperature) and
   the Gly-Gly 30 mM STOCK concentration (goes to suggestions instead of stock_ -- Standard too in new runs).
   Voting not built (Mickey to decide).
+
+## Passes + vote, data_location, sealed-batch pressure (2026-10-29, Mickey)
+
+- **Passes** (`voting.py`, RunConfig.passes 1-3, GUI Run options "Passes", CLI `--passes`, QSettings
+  `passes`; forced 1 in handoff): chemistry and the pack's spec stages run N times at once on ONE
+  structure plan (pipeline `_voted`, inner thread pool; `api_client._streamed.pass_suffix` -> files
+  `<stage>.passN.output/audit.json`; the voted answer is saved as `<stage>.output.json` + an audit with
+  `voted_from`, so replays reproduce the voted run). Vote: items keyed by what they are (set, sample,
+  column/species via names.match_species, role, basis, mode, method), compared by converted value (spec
+  stages) or the printed number (chemistry -- a pass that dropped the unit still agrees; the copy WITH a
+  unit is kept); the most common value among passes that GIVE one wins (dropouts don't vote), ties ->
+  earliest pass; a winning pass's extra items for the key are kept (normal conflict flags). Disagreements
+  -> `pass_disagreement` flags grouped per step + column/species (GUI group "Passes disagreed").
+  Structure, metadata, term search, fit_models run once. A failed pass is skipped if one succeeds.
+  Live Economy x3 (eder1994 $0.039, faisal2005 $0.037; Standard ~$0.24): both 100% of the references'
+  values with wording forgiven (scratch scorer counts analysis_method/vessel/headspace/solvent as
+  present/absent). Single Economy passes on faisal were 74-84%.
+- **data_location** (`ingestion/data_location.py`, packs/common_columns.json -> every pack): "Figure. 1",
+  "Figure. 3b", "Table. 2", "Table. S1", "Text: <section>" / "Text" -- format from Mickey's example
+  ("Figure. 1"), constants FIGURE/TABLE/TEXT. build_rows: first source naming a table/figure (sample's,
+  then set's); text rows use the SET's source (one value per passage), leading "Main text"/"Text"
+  dropped. figure_rows: the figure id. All stored replay outputs regenerated with a checker (only
+  data_location differs; backup of runs/ in the session scratchpad).
+- **Sealed batch -> 1 bar** (`calculators/pressure.py`, prebiotic postprocess "atmospheric_start"):
+  new conditions parameter `vessel_sealed` (sealed/open, choices; a pack standard column). Batch +
+  sealed + no initial_pressure_bar -> 1.0, provenance "assumed: ...", ONE `assumed_default` flag for
+  the paper; digitized rows use the paper-wide vessel_sealed. Next (not built): sampled_pressure_bar by
+  Raoult's law (needs water's vapour pressure vs T, composition, volumes).
+- Prompt: sampled_pressure_bar now follows the sampled-temperature rule (faisal live: captured).

@@ -214,6 +214,15 @@ class MainWindow(QMainWindow):
                                       + "<br><br>Figure-digitizing suggestions and LaTeX conversion (when you ask "
                                         "for them) always use Sonnet 5.5.")
         options.addRow("Models:", self.profile_combo)
+        self.passes_combo = QComboBox()
+        for n, label in ((1, "1 pass"), (2, "2 passes, keep values by vote"), (3, "3 passes, keep values by vote")):
+            self.passes_combo.addItem(label, n)
+        self.passes_combo.setToolTip(
+            "Runs the extraction steps after the row plan 2 or 3 times and keeps each value by majority. "
+            "Mostly useful with Economy models: a single Economy pass sometimes drops whole blocks of values "
+            "at random, and a vote recovers them. Each extra pass adds the cost of those steps again (the "
+            "paper itself is read from cache). Disagreements between passes are flagged.")
+        options.addRow("Passes:", self.passes_combo)
         self.batch_box = QCheckBox("Batch mode -- half price, slower")
         self.batch_box.setToolTip("Sends every request through Anthropic's Message Batches API at half the price. "
                                   "Each step then waits in Anthropic's batch queue: usually a few minutes, at "
@@ -271,7 +280,7 @@ class MainWindow(QMainWindow):
         self._inputs_form = options
         form.addRow(self.options_widget)
         self.options_btn.toggled.connect(self._show_options)
-        for w in (self.profile_combo,):
+        for w in (self.profile_combo, self.passes_combo):
             w.currentIndexChanged.connect(self._update_options_summary)
         for w in self.option_toggles():
             w.toggled.connect(self._update_options_summary)
@@ -302,7 +311,9 @@ class MainWindow(QMainWindow):
         on = [short[b] for b in self.option_toggles() if b.isChecked()]
         self.toggles_btn.setText(", ".join(on) if on else "None on")
         stages = [b for b in self.stage_boxes.values()]
+        passes = self.passes_combo.currentData() or 1
         parts = [self.profile_combo.currentText().split(" (")[0] + " models",
+                 f"{passes} passes with vote" if passes > 1 else "",
                  "batch" if self.batch_box.isChecked() else "",
                  "arXiv text when available" if self.arxiv_box.isChecked() else "",
                  "equations to LaTeX" if self.equations_box.isChecked() else "",
@@ -421,6 +432,7 @@ class MainWindow(QMainWindow):
         self.batch_box.setChecked(self._settings.value("batch_mode", False, type=bool))
         self.arxiv_box.setChecked(self._settings.value("prefer_arxiv", False, type=bool))
         self.suggest_box.setChecked(self._settings.value("suggest_new_variables", True, type=bool))
+        self.passes_combo.setCurrentIndex(max(0, self.passes_combo.findData(self._settings.value("passes", 1, type=int))))
         if self.settings_dialog.handoff_box is not None:
             self.settings_dialog.handoff_edit.setText(self._settings.value("dev/handoff_dir", ""))
             self.settings_dialog.handoff_box.setChecked(self._settings.value("dev/handoff", False, type=bool))
@@ -489,6 +501,7 @@ class MainWindow(QMainWindow):
         self._settings.setValue("batch_mode", self.batch_box.isChecked())
         self._settings.setValue("prefer_arxiv", self.arxiv_box.isChecked())
         self._settings.setValue("suggest_new_variables", self.suggest_box.isChecked())
+        self._settings.setValue("passes", self.passes_combo.currentData() or 1)
         if self.settings_dialog.handoff_box is not None:
             self._settings.setValue("dev/handoff", self.settings_dialog.handoff_box.isChecked())
             self._settings.setValue("dev/handoff_dir", self.settings_dialog.handoff_edit.text().strip())
@@ -589,6 +602,7 @@ class MainWindow(QMainWindow):
                          batch_mode=self.batch_box.isChecked(),
                          prefer_arxiv=self.arxiv_box.isChecked(), ads_token=self.ads_edit.text().strip(),
                          suggest_new_variables=self.suggest_box.isChecked(),
+                         passes=self.passes_combo.currentData() or 1,
                          handoff_dir=self.settings_dialog.handoff_dir(),
                          pubchem_cache_path=default_pubchem_cache_path(), arxiv_cache_dir=default_arxiv_cache_dir())
 
@@ -766,7 +780,7 @@ class MainWindow(QMainWindow):
 
     def _set_inputs_enabled(self, enabled: bool) -> None:
         for w in (self.pdf_edit, self.terms_edit, self.registry_action, self.pack_combo,
-                  self.stages_widget, self.profile_combo, self.toggles_btn,
+                  self.stages_widget, self.profile_combo, self.passes_combo, self.toggles_btn,
                   *self.option_toggles()):   # the pack is active during a run
             w.setEnabled(enabled)
         self.settings_dialog.lock(not enabled)
@@ -934,11 +948,12 @@ class MainWindow(QMainWindow):
         fit_flags = [f for f in result.paper_flags if f.kind in ("fit_model", "multimodal", "other_estimates")]
         identity_flags = [f for f in result.paper_flags if f.kind == "identity_not_quoted"]
         source_flags = [f for f in result.paper_flags if f.kind == "paper_source"]
+        vote_flags = [f for f in result.paper_flags if f.kind == "pass_disagreement"]
         other_paper_flags = [f for f in result.paper_flags
                              if f.kind not in ("new_variable", "cited_data", "derived_value", "duplicate_removed",
                                                "archive_check", "archive_match", "fit_model",
                                                "multimodal", "other_estimates", "identity_not_quoted",
-                                               "paper_source")]
+                                               "paper_source", "pass_disagreement")]
         if source_flags:
             add_group("Where the text came from", source_flags)
         if cited_flags:
@@ -955,6 +970,8 @@ class MainWindow(QMainWindow):
             add_group("How the values were obtained (fitting models)", fit_flags)
         if repeat_flags:
             add_group("Left out as repeats of the solution chemistry", repeat_flags)
+        if vote_flags:
+            add_group("Passes disagreed (value kept by vote)", vote_flags)
         if other_paper_flags:
             add_group("Whole paper", other_paper_flags)
         for row_id, flags in result.row_flags.items():

@@ -70,6 +70,7 @@ class RunContext:
     # api_client.BatchCollector shared by many papers' contexts (focused search in batch mode)
     batch_collector: object = None
     handoff_paper_dir: Optional[Path] = None   # developer handoff mode (handoff.py): this paper's folder
+    vote_notes: list = field(default_factory=list)   # voting.Disagreement, with several passes
     # stages run in parallel (pipeline.extract): progress, usage and the client are shared
     _lock: threading.Lock = field(default_factory=threading.Lock, repr=False)
 

@@ -141,11 +141,11 @@ def test_shared_columns_and_prompt_rules():
     assert common[:5] == ["paper_title", "paper_DOI", "author_list", "year_published", "journal_published"]
     try:
         exo = packs.activate("exoplanets")
-        assert standard_columns()[:6] == common                       # none in the archive's layout
+        assert standard_columns()[:len(common)] == common             # none in the archive's layout
         assert "Rules for this research area" not in load_prompt("figure_planner")     # no extra rules
         assert "row of the exoplanets dataset" in " ".join(load_prompt("figure_planner").split())
         packs.activate("prebiotic_chemistry")
-        assert standard_columns()[0] == "paper_arxiv_id"               # the rest are template columns
+        assert standard_columns()[:2] == ["data_location", "paper_arxiv_id"]   # the rest are template columns
         prompt = load_prompt("figure_planner", FIGURE_ID="Fig. 2")
         assert "Rules for this research area (Prebiotic chemistry):" in prompt
         assert "COMPLETE initial composition" in prompt and "THE FIGURE TO DESCRIBE: Fig. 2" in prompt

@@ -20,6 +20,7 @@ and returned as NewVariable records, like any other unaccepted variable.
 from __future__ import annotations
 from typing import List, Optional, Tuple
 
+from parameter_extractor.ingestion.data_location import COLUMN as DATA_LOCATION, location
 from parameter_extractor.digitizing.calibration import pixel_to_data
 from parameter_extractor.ingestion.flatten_to_template import (
     FIELD_TO_TEMPLATE, UNRECOGNIZED_SUFFIX, resolve_template_column, set_row_value, current_column_name)
@@ -232,6 +233,8 @@ def build_figure_rows(
                     extraction_confidence=DIGITIZED,
                     original_data_reference=fig.data_source or None,
                 )
+                extra[DATA_LOCATION] = location(fig.figure_id)
+                prov[DATA_LOCATION] = CellSource(origin=f"{fig.figure_id} (digitized)", source=where)
                 if fig.data_source:
                     prov["original_data_reference"] = CellSource(
                         origin=f"{fig.figure_id} (reproduces another publication's data)", source=where)
