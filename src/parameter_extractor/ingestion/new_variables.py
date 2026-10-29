@@ -109,8 +109,9 @@ def collect_new_variables(
         found.append(NewVariable(
             kind="parameter", name=name, alias_name=name,
             proposed_column=f"added_{column_safe_name(sol.solution)}_volume_uL", value_text=sol.volume,
-            set_label=sol.set_label or None, quote=sol.quote, source=sol.source, confidence="high",
-            origin="chemistry", row_ids=rows_for(sol.set_label or None, None),
+            set_label=sol.set_label or None, sample_label=getattr(sol, "sample_label", "") or None, quote=sol.quote,
+            source=sol.source, confidence="high", origin="chemistry",
+            row_ids=rows_for(sol.set_label or None, getattr(sol, "sample_label", "") or None),
             category=categories.for_source("added_solution") or ""))
     for p in methodology.other_parameters:
         found.append(_categorised(NewVariable(

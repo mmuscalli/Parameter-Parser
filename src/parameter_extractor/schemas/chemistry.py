@@ -29,6 +29,9 @@ class AddedSolution(BaseModel):
     (structured-output grammar size)."""
     set_label: str = Field(default="", description="The structure-plan set_label this applies to, or '' if "
                                                    "the same in every set.")
+    # kim2017 live run (2026-10-29): one set whose samples differ by the volume of one stock added
+    sample_label: str = Field(default="", description="Exact sample_label when this volume differs between the "
+                                                      "samples of one set; else ''.")
     solution: str = Field(description="Short label, e.g. 'ribose 1,2-cyclic phosphate stock', 'nucleobase "
                                       "solution', 'water'. Species entries refer to it in `stock_solution`.")
     volume: str = Field(description="Volume added, exactly as printed with its unit, e.g. '5 µL', '0.2 mL'.")
@@ -131,6 +134,12 @@ class SoluteEntry(BaseModel):
                                            "Table 2 entry 3', 'compound 7 = ...', 'abbreviation FF'.")
     # a result named without an amount (Mickey, 2026-10-23): 'detected' is written as the text
     # "detected", 'not detected' as 0 (calculators/amounts.py)
+    # what a sampled % means (Mickey, 2026-10-29): a product's yield, or how much of a starting material was
+    # recovered -> sampled_<name>_%recovered
+    measure: Literal["yield", "recovered"] = Field(
+        default="yield", alias="meas",
+        description="For a sampled % value only: 'recovered' when it is the share of a STARTING material left "
+                    "unreacted or recovered (e.g. 'Recovered nicotinamide (%)'); leave out for a product yield.")
     detection: Literal["", "detected", "not detected"] = Field(
         default="", alias="det",
         description="Only for a 'sampled' species with no amount (v null): 'detected' when the paper lists "
@@ -198,6 +207,10 @@ class TableColumn(BaseModel):
     identified_by: str = Field(default="", alias="how",
                                description="Only when the header doesn't name the species: how you identified "
                                            "it, at most 15 words.")
+    measure: Literal["yield", "recovered"] = Field(
+        default="yield", alias="meas",
+        description="For a sampled % value only: 'recovered' when it is the share of a STARTING material left "
+                    "unreacted or recovered (e.g. 'Recovered nicotinamide (%)'); leave out for a product yield.")
 
 
 class TableRow(BaseModel):
@@ -246,7 +259,7 @@ class TableResults(BaseModel):
                     concentration_unit_raw=col.unit or None, detection=detection if col.role == "sampled" else "",
                     quote=f"{row.label} {text}".strip(),
                     source=f"{self.source}, row {row.label}, column {col.label}",
-                    confidence=self.confidence, identified_by=col.identified_by))
+                    confidence=self.confidence, identified_by=col.identified_by, measure=col.measure))
         return out
 
 

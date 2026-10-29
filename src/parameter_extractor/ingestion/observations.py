@@ -49,7 +49,7 @@ QUOTE_IN_PAPER = {"in text": "yes", "table image": "table image", "not found": "
 # Unit from the column name, following the template's naming conventions.
 # Compound units first: "_mL_min" must win over "_min".
 _SUFFIX_UNITS = [
-    (r"_mL_min$", "mL/min"), (r"_%yield$", "%"), (r"_pct$", "%"), (r"_mM$", "mM"), (r"_C$", "°C"), (r"_hr$", "h"),
+    (r"_mL_min$", "mL/min"), (r"_%yield$", "%"), (r"_%recovered$", "%"), (r"_pct$", "%"), (r"_mM$", "mM"), (r"_C$", "°C"), (r"_hr$", "h"),
     (r"_h$", "h"), (r"_sec$", "s"), (r"_min$", "min"), (r"_bar$", "bar"), (r"_mL$", "mL"),
     (r"_uL$", "µL"), (r"_g$", "g"), (r"_nm$", "nm"), (r"_rpm$", "rpm"), (r"_K$", "K"),
 ]

@@ -66,6 +66,20 @@ def is_percent(entry) -> bool:
     return "%" in (entry.concentration_unit_raw or "")
 
 
+# a % of a STARTING material left over, not a product yield (kim2017's "Recovered Nicotinamide (%)")
+_RECOVERED_HEADER = re.compile(r"\b(recovered|recovery|unreacted|remaining|residual|left over|unconsumed)\b",
+                               re.IGNORECASE)
+
+
+def percent_suffix(entry) -> str:
+    """'%recovered' for recovered / unreacted starting material (the model's `meas`, or a column header
+    that says so -- older answers), else '%yield'."""
+    header = re.search(r"\bcolumn\s+(.+)$", getattr(entry, "source", "") or "")
+    recovered = (getattr(entry, "measure", "yield") == "recovered"
+                 or bool(header and _RECOVERED_HEADER.search(header.group(1))))
+    return "%recovered" if recovered else "%yield"
+
+
 _BASE_REGISTRY: dict = {}
 
 
@@ -82,7 +96,9 @@ def base_registry():
 def species_alias_name(entry) -> str:
     """How the registry remembers a species value: role and % vs concentration
     matter ("initial RbCl" and "sampled RbCl %" are different variables)."""
-    return f"{_column_role(entry)} {entry.name}" + (" %" if entry.role == "sampled" and is_percent(entry) else "")
+    if entry.role == "sampled" and is_percent(entry):
+        return f"sampled {entry.name} " + ("%" if percent_suffix(entry) == "%yield" else "% recovered")
+    return f"{_column_role(entry)} {entry.name}"
 
 
 def _column_role(entry) -> str:
@@ -111,7 +127,8 @@ def column_for_solute(entry, registry=None) -> Optional[str]:
         if initial and initial.startswith("initial_") and registry.is_known_column("stock_" + initial[8:]):
             return "stock_" + initial[8:]
     if entry.role == "sampled" and is_percent(entry):
-        candidates = (f"sampled_{entry.name}_%yield", f"sampled_{entry.name}_aq_%yield")
+        suffix = percent_suffix(entry)
+        candidates = (f"sampled_{entry.name}_{suffix}", f"sampled_{entry.name}_aq_{suffix}")
     else:
         role = _column_role(entry)
         candidates = (f"{role}_{entry.name}_aq_mM", f"{role}_{entry.name}_mM")
@@ -164,7 +181,7 @@ def proposed_column_for_solute(entry) -> str:
     """What the column would be called if this new variable were accepted."""
     name = column_safe_name(entry.name)
     if entry.role == "sampled" and is_percent(entry):
-        return f"sampled_{name}_%yield"
+        return f"sampled_{name}_{percent_suffix(entry)}"
     if _column_role(entry) != "stock" and is_peptide_column(f"{entry.role}_{name}_mM"):
         return f"{entry.role}_{name}_mM"           # peptides: no _aq_ infix, as in the template
     if _column_role(entry) == "stock":

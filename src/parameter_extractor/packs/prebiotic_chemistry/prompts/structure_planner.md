@@ -17,6 +17,8 @@ Guidance:
   time/duration under otherwise-fixed conditions. "Independent" when each row
   is its own self-contained condition with no shared sweep. "Evaporation
   Cycle" for wet-dry cycling (name each sample by its cycle, e.g. "Cycle 3").
+- `duration_hr`: give every sample's duration, including a duration stated once for
+  the whole table or experiment (a caption's "heated at 90 °C for 3 hours").
 - `data_source`: for each set, '' if the data was measured in this paper.
   If the paper presents data from another publication -- a review, a
   comparison table, a redrawn figure, or results quoted from earlier work

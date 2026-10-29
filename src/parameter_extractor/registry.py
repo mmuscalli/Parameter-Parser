@@ -204,10 +204,11 @@ class VariableRegistry:
             parts = label.split(" ", 1)
             if len(parts) == 2 and parts[0] in ("initial", "sampled", "stock"):
                 role, species = parts
+                recovered = species.endswith(" % recovered")
                 pct = species.endswith(" %")
-                species = species.removesuffix(" %")
+                species = species.removesuffix(" % recovered").removesuffix(" %")
                 what = {"initial": "starting concentration", "stock": "stock solution, before mixing"}.get(
-                    role, "measured, % yield" if pct else "measured")
+                    role, "measured, % recovered" if recovered else "measured, % yield" if pct else "measured")
                 return f"{species} ({what})"
         return label
 

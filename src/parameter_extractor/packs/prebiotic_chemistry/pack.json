@@ -17,7 +17,7 @@
     {"id": "solution_prep", "label": "Solution Preparation", "sources": ["added_solution"], "model_assigns": true, "value_type": "any", "max_words": 10,
      "description": "how the starting solutions were made and combined: volumes added, stock solutions, buffers, degassing"},
     {"id": "conditions", "label": "Reaction Conditions", "value_type": "number",
-     "description": "a quantity the reaction ran under that has no column: reaction time, reactor or headspace volume, residence time, stirring rate, irradiation wavelength or power"},
+     "description": "a quantity the reaction ran under that has no column: reactor or headspace volume, residence time, stirring rate, irradiation wavelength or power (not the reaction time: each row's duration is recorded already)"},
     {"id": "analysis", "label": "Analysis", "value_type": "any", "max_words": 12,
      "description": "how the products were identified and measured, beyond analysis_method: instrument, column, mobile phase or eluent, detection wavelength, standards and calibration, detection limit, sample preparation for analysis"}
   ]

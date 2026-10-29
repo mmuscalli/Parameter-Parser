@@ -148,7 +148,8 @@ def vote_chemistry(results: list) -> Tuple[object, dict, List[Disagreement]]:
         step=step, what=lambda s: f"{s.name} ({s.role})",
         where=lambda s: " / ".join(x for x in (s.set_label, s.sample_label) if x) or "whole paper")
     added, n2 = vote_items(
-        [r.added_solutions for r in results], key=lambda a: (a.solution.strip().lower(), a.set_label),
+        [r.added_solutions for r in results],
+        key=lambda a: (a.solution.strip().lower(), a.set_label, getattr(a, "sample_label", "")),
         signature=lambda a: a.volume.replace(" ", "").lower(), shown=lambda a: a.volume, step=step,
         what=lambda a: f"volume added: {a.solution}", where=lambda a: a.set_label or "whole paper")
     ratios, n3 = vote_items(

@@ -63,6 +63,9 @@ For each species:
   a solution added at the same volume in every set is listed once with
   `set_label` '' -- even when its concentration differs between sets (that
   goes on the species entries).
+  If the volumes differ between the SAMPLES of one set (one row per amount
+  added), give one entry per sample with `sample_label` -- never put a volume
+  in a species' concentration.
   If the paper states the concentration in the mixture itself, record that
   without `b` -- and if it gives both, record both.
 - Molar ratios: when the paper gives a ratio between species (e.g. "3 :
@@ -114,6 +117,9 @@ For each species:
   other results of that kind use (e.g. "%" in a yield table).
 - Reported percent yields (e.g. "% (Gly)2") go in `v` with the unit as
   stated in `u` (no `mM`).
+- A percentage of a STARTING material left over ("Recovered nicotinamide (%)",
+  "unreacted 4"): role sampled, `meas` "recovered" (on the table column or the species) -- it
+  isn't a yield.
 - Do not extract values that only appear as a point on a scatter plot/figure
   -- table and in-text values only, for this pass.
 - Keep every `q` to the shortest span that shows the value (at most 20

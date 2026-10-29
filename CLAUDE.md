@@ -1437,3 +1437,16 @@ of 7, 6 recovered nicotinamide, stocks + calculated mixtures, T, times, HPLC det
   experimental_conditions has a chemistry one.
 - Category formats: µL values keep a `_uL` column.
 Not done: a reference run (answers are Claude-Code-written, not the app's models).
+- **Follow-up (same day): %recovered + live Standard reference.** `SoluteEntry.measure` / TableColumn
+  `meas` ("yield" | "recovered") -> `sampled_<name>_%recovered` (flatten_to_template.percent_suffix; also
+  from a column header saying recovered/unreacted/remaining -- older answers); alias "sampled X %
+  recovered", registry display "measured, % recovered", unit %. Live Standard ($0.16-0.18) found:
+  Sonnet planned Table 1 as ONE set whose samples differ by the ammonium formate volume and put those
+  volumes in as "concentrations" (µL). Now `AddedSolution.sample_label` (mixing per (set, sample):
+  solutions_for / _missing_solutions / derive_mixture_concentrations(samples_by_set)),
+  `mixing.volumes_as_concentrations` repairs a volume-unit "concentration" of a species that has a stock
+  (-> its stock's added volume, `unit_conversion` flag grouped per species), "volume added" values land
+  on their sample's row; structure prompt: duration for every sample incl. a caption's fixed time; the
+  Reaction Conditions category and the conditions hint no longer suggest reaction time (= duration_hr).
+  Reference `runs/reference/kim2017/` (second live run; every value correct after accepting all
+  suggestions; local only, like all of runs/).

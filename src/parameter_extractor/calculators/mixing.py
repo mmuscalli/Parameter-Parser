@@ -59,15 +59,19 @@ def _volume_uL(text: str) -> Optional[float]:
     return convert(q[0], q[1], "µL") if q else None
 
 
-def solutions_for(chemistry: ChemistryExtraction, set_label: Optional[str]) -> List[AddedSolution]:
-    """The solutions combined for one set: the paper-wide ones ('') with any
-    set-specific entry of the same name taking their place."""
+def solutions_for(chemistry: ChemistryExtraction, set_label: Optional[str],
+                  sample_label: Optional[str] = None) -> List[AddedSolution]:
+    """The solutions combined for one set (and sample): the paper-wide ones ('') with any set-specific
+    entry of the same name taking their place, and a sample-specific one taking that one's."""
     by_name: Dict[str, AddedSolution] = {}
     for sol in chemistry.added_solutions:
-        if not sol.set_label:
+        if not sol.set_label and not sol.sample_label:
             by_name.setdefault(_key(sol.solution), sol)
     for sol in chemistry.added_solutions:
-        if set_label and sol.set_label == set_label:
+        if set_label and sol.set_label == set_label and not sol.sample_label:
+            by_name[_key(sol.solution)] = sol
+    for sol in chemistry.added_solutions:
+        if sample_label and sol.sample_label == sample_label and sol.set_label in ("", set_label):
             by_name[_key(sol.solution)] = sol
     return list(by_name.values())
 
@@ -93,19 +97,49 @@ def _mixture(entry: SoluteEntry, solutions: List[AddedSolution]) -> Tuple[Option
                    f"x {own_volume:g} µL / {total:g} µL total ({parts})")
 
 
-def _missing_solutions(chemistry: ChemistryExtraction, set_label: Optional[str]) -> List[str]:
+def _missing_solutions(chemistry: ChemistryExtraction, set_label: Optional[str],
+                       sample_label: Optional[str] = None) -> List[str]:
     """Solutions listed for some other set but not for this one: the total volume would be short.
     (kim2019 live run, 2026-10-26: the 20 µL nucleobase solution listed only for the 1:1 sets -- its
     concentration was stated for 1:1 -- made the 1:2 / 1:3 mixtures 13 µL instead of 33 µL.)"""
-    present = {_key(s.solution) for s in solutions_for(chemistry, set_label)}
+    present = {_key(s.solution) for s in solutions_for(chemistry, set_label, sample_label)}
     elsewhere = {}
     for sol in chemistry.added_solutions:
-        if sol.set_label and sol.set_label != set_label and _key(sol.solution) not in present:
+        other = (sol.set_label and sol.set_label != set_label) or (sol.sample_label and sol.sample_label != sample_label)
+        if other and _key(sol.solution) not in present:
             elsewhere.setdefault(_key(sol.solution), sol.solution)
     return sorted(elsewhere.values())
 
 
-def derive_mixture_concentrations(chemistry: ChemistryExtraction, set_labels: List[str]) -> List[MixingNote]:
+def volumes_as_concentrations(chemistry: ChemistryExtraction) -> List[MixingNote]:
+    """A starting 'concentration' given in a VOLUME unit for a species that also has a stock solution
+    (kim2017 live run: ammonium formate '2.5 µL' per sample) is the volume of that stock added: moved to
+    added_solutions for its set and sample, with a note."""
+    stocks = {_key(s.name): s for s in chemistry.solutes
+              if s.role == "initial" and s.concentration_basis == "stock" and s.stock_solution}
+    kept, notes = [], []
+    for s in chemistry.solutes:
+        q = parse_quantity(f"{s.concentration_value} {s.concentration_unit_raw}") \
+            if s.concentration_value is not None and s.concentration_unit_raw else None
+        stock = stocks.get(_key(s.name))
+        if (s.role == "initial" and s.concentration_basis == "mixture" and q and stock
+                and convert(q[0], q[1], "µL") is not None):
+            chemistry.added_solutions.append(AddedSolution(
+                set_label=s.set_label or "", sample_label=s.sample_label or "", solution=stock.stock_solution,
+                volume=f"{s.concentration_value:g} {s.concentration_unit_raw}", quote=s.quote, source=s.source))
+            notes.append(MixingNote(
+                "repaired", f"{s.name}: '{s.concentration_value:g} {s.concentration_unit_raw}' is a volume, not a "
+                f"concentration -- recorded as the volume of '{stock.stock_solution}' added", s.quote, s.source,
+                species=s.name, short=" / ".join(x for x in (s.set_label, s.sample_label) if x)
+                + f": {s.concentration_value:g} {s.concentration_unit_raw}"))
+        else:
+            kept.append(s)
+    chemistry.solutes = kept
+    return notes
+
+
+def derive_mixture_concentrations(chemistry: ChemistryExtraction, set_labels: List[str],
+                                  samples_by_set: Optional[Dict[str, List[str]]] = None) -> List[MixingNote]:
     """Adds a derived mixture entry for each stock concentration that can be
     calculated. `set_labels`: the structure plan's sets, for a paper-wide stock
     value whose mixture differs by set."""
@@ -119,18 +153,29 @@ def derive_mixture_concentrations(chemistry: ChemistryExtraction, set_labels: Li
             notes.append(MixingNote("not_derived", f"{entry.name}: stock concentration has no mM value, so the "
                                     f"mixture concentration wasn't calculated.", entry.quote, entry.source))
             continue
-        # a paper-wide stock value gets one mixture value per set when the mixtures differ by set
-        targets = [entry.set_label] if entry.set_label or not set_specific else list(set_labels)
-        for label in targets:
-            if (label, entry.sample_label, entry.name) in stated or (None, entry.sample_label, entry.name) in stated:
+        # a paper-wide stock value gets one mixture value per set when the mixtures differ by set -- and
+        # per sample when the volumes differ between a set's samples
+        labels = [entry.set_label] if entry.set_label or not set_specific else list(set_labels)
+        targets = []
+        for label in labels:
+            samples = (samples_by_set or {}).get(label, [])
+            specific = {sol.sample_label for sol in chemistry.added_solutions
+                        if sol.sample_label and sol.set_label in ("", label)}
+            per_sample = [smp for smp in samples if smp in specific] if samples else sorted(specific)
+            if entry.sample_label:
+                targets.append((label, entry.sample_label))
+            else:
+                targets += [(label, smp) for smp in per_sample] or [(label, None)]
+        for label, sample in targets:
+            if (label, sample, entry.name) in stated or (None, sample, entry.name) in stated:
                 continue                       # the paper gives the mixture value itself
-            missing = _missing_solutions(chemistry, label)
+            missing = _missing_solutions(chemistry, label, sample)
             if missing:
                 value, how = None, (f"{', '.join(missing)} is listed for other sets but not for this one, so "
                                     f"the total volume isn't known")
             else:
-                value, how = _mixture(entry, solutions_for(chemistry, label))
-            where = f" (set '{label}')" if label else ""
+                value, how = _mixture(entry, solutions_for(chemistry, label, sample))
+            where = (f" (set '{label}'" + (f", sample '{sample}'" if sample else "") + ")") if label else ""
             if value is None:
                 notes.append(MixingNote("not_derived", f"{entry.name}{where}: mixture concentration not "
                                         f"calculated -- {how}. Only the stock value is recorded.",
@@ -138,13 +183,14 @@ def derive_mixture_concentrations(chemistry: ChemistryExtraction, set_labels: Li
                 continue
             exact, value = value, _sig(value)
             derived = entry.model_copy(update=dict(
-                set_label=label, concentration_basis="mixture", stock_solution="", concentration_value=value,
+                set_label=label, sample_label=sample, concentration_basis="mixture", stock_solution="", concentration_value=value,
                 concentration_unit_raw="mM", concentration_mM=value, conversion_note=how, derived=True,
                 exact_mM=exact))
             chemistry.solutes.append(derived)
             notes.append(MixingNote("derived", f"{entry.name}{where}: {value:g} mM in the mixture -- {how}.",
                                     entry.quote, entry.source, species=entry.name,
-                                    short=f"{label or 'every set'}: {value:g} mM"))
+                                    short=f"{label or 'every set'}" + (f" / {sample}" if sample else "")
+                                    + f": {value:g} mM"))
     return notes
 
 

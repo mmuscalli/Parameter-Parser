@@ -20,7 +20,7 @@ from parameter_extractor import variable_categories as vc
 from parameter_extractor.config.run_config import RunConfig
 from parameter_extractor.ingestion.new_variables import collect_new_variables, group_new_variables, stored_value
 from parameter_extractor.pipeline import extract, finish
-from parameter_extractor.schemas.chemistry import ChemistryExtraction
+from parameter_extractor.schemas.chemistry import ChemistryExtraction, SoluteEntry
 from parameter_extractor.schemas.methodology import OtherParameter, empty_methodology
 from parameter_extractor.schemas.variables import TermFinding, TermSearch
 from parameter_extractor.stages.optional import for_run, load_specs
@@ -200,7 +200,47 @@ def test_mixture_flags_are_one_per_species():
     notes.append(MixingNote("not_derived", "X: not calculated"))
     flags = grouped_mixing_flags(notes)
     assert [f.kind for f in flags] == ["not_calculated", "derived_value"]
-    assert "in 2 sets -- S0: 9 mM; S1: 6 mM" in flags[1].message and "15 mM x 15 µL / 25 µL" in flags[1].message
+    assert "in 2 places -- S0: 9 mM; S1: 6 mM" in flags[1].message and "15 mM x 15 µL / 25 µL" in flags[1].message
+
+
+def test_recovered_starting_material_is_not_a_yield():
+    from parameter_extractor.ingestion.flatten_to_template import proposed_column_for_solute, species_alias_name
+    from parameter_extractor.ingestion.observations import unit_for_column
+    from parameter_extractor.registry import VariableRegistry
+    c = dict(phase="aq", role="sampled", concentration_value=93.1, concentration_unit_raw="%", quote="1 93.1",
+             confidence="high", conversion_note=None)
+    by_header = SoluteEntry(name="nicotinamide", source="Table 1, row 1, column Recovered Nicotinamide (%)", **c)
+    by_model = SoluteEntry(name="nicotinamide", source="Table 1", measure="recovered", **c)
+    product = SoluteEntry(name="nicotinamide ribose 2'-phosphate", source="Table 1, row 1, column Yield of 7 (%)", **c)
+    assert proposed_column_for_solute(by_header) == proposed_column_for_solute(by_model) == "sampled_nicotinamide_%recovered"
+    assert proposed_column_for_solute(product) == "sampled_nicotinamide_ribose_2'-phosphate_%yield"
+    assert species_alias_name(by_model) == "sampled nicotinamide % recovered" and unit_for_column(
+        "sampled_nicotinamide_%recovered") == "%"
+    assert VariableRegistry(None).display_name("species:sampled nicotinamide % recovered") == \
+        "nicotinamide (measured, % recovered)"
+
+
+def test_volumes_that_differ_by_sample():
+    """kim2017 live run: one set whose samples differ by the ammonium formate volume added -- given per
+    sample (sample_label on the added solution), or wrongly as a 'concentration' in µL (repaired)."""
+    from parameter_extractor.calculators.mixing import derive_mixture_concentrations, volumes_as_concentrations
+    from parameter_extractor.schemas.chemistry import AddedSolution
+    base = dict(phase="aq", quote="q", source="s", confidence="high", conversion_note=None)
+    chem = ChemistryExtraction(
+        solutes=[SoluteEntry(name="CaCl2", role="initial", concentration_value=15, concentration_unit_raw="mM",
+                             concentration_mM=15, concentration_basis="stock", stock_solution="CaCl2 stock", **base),
+                 SoluteEntry(name="formate", role="initial", concentration_value=15, concentration_unit_raw="mM",
+                             concentration_mM=15, concentration_basis="stock", stock_solution="formate stock", **base),
+                 SoluteEntry(name="formate", role="initial", set_label="T1", sample_label="b",
+                             concentration_value=5, concentration_unit_raw="µL", **base)],      # a volume
+        added_solutions=[AddedSolution(solution="CaCl2 stock", volume="15 µL"),
+                         AddedSolution(set_label="T1", sample_label="a", solution="formate stock", volume="0 µL")])
+    [repair] = volumes_as_concentrations(chem)
+    assert repair.kind == "repaired" and [s.sample_label for s in chem.added_solutions] == ["", "a", "b"]
+    notes = derive_mixture_concentrations(chem, ["T1"], {"T1": ["a", "b"]})
+    got = {(s.name, s.sample_label): s.concentration_mM for s in chem.solutes if s.derived}
+    assert got == {("CaCl2", "a"): 15.0, ("CaCl2", "b"): 11.25, ("formate", "a"): 0.0, ("formate", "b"): 3.75}, got   # b: 15 + 5 µL
+    assert all(n.kind == "derived" for n in notes)
 
 
 if __name__ == "__main__":

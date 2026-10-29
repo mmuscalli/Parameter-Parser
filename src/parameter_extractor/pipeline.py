@@ -40,7 +40,8 @@ from typing import Callable, Dict, List, Optional, Sequence
 
 from parameter_extractor.calculators.peptide_totals import fill_total_peptide_yield
 from parameter_extractor.calculators.amounts import VOLUME_COLUMN, apply_detection, derive_from_amounts, split_totals
-from parameter_extractor.calculators.mixing import derive_from_ratios, derive_mixture_concentrations
+from parameter_extractor.calculators.mixing import (
+    derive_from_ratios, derive_mixture_concentrations, volumes_as_concentrations)
 from parameter_extractor import packs
 from parameter_extractor.paper_source import ResolvedPaper, resolve_paper, run_name
 from parameter_extractor.calculators import exoplanets as exo
@@ -803,7 +804,8 @@ def _reaction_volumes(ex) -> dict:
     return out
 
 
-MIXING_FLAG_KINDS = {"derived": "derived_value", "not_derived": "not_calculated", "mismatch": "conflicting_values"}
+MIXING_FLAG_KINDS = {"derived": "derived_value", "not_derived": "not_calculated", "mismatch": "conflicting_values",
+                     "repaired": "unit_conversion"}
 
 
 def grouped_mixing_flags(notes) -> List[Flag]:
@@ -811,17 +813,20 @@ def grouped_mixing_flags(notes) -> List[Flag]:
     were 32 flags), the first set's calculation in full and every set's value; other notes one each."""
     flags, by_species = [], {}
     for n in notes:
-        if n.kind == "derived" and n.species:
-            by_species.setdefault(n.species, []).append(n)
+        if n.kind in ("derived", "repaired") and n.species:
+            by_species.setdefault((n.kind, n.species), []).append(n)
         else:
             flags.append(Flag(MIXING_FLAG_KINDS[n.kind], n.message, quote=n.quote or None, source=n.source or None))
-    for species, ns in by_species.items():
+    for (kind, species), ns in by_species.items():
         if len(ns) == 1:
             message = ns[0].message
+        elif kind == "derived":
+            message = (f"{species}: mixture concentration calculated by the pipeline in {len(ns)} places -- "
+                       + "; ".join(n.short for n in ns) + f". How (first): {ns[0].message}")
         else:
-            message = (f"{species}: mixture concentration calculated by the pipeline in {len(ns)} sets -- "
-                       + "; ".join(n.short for n in ns) + f". How (first set): {ns[0].message}")
-        flags.append(Flag("derived_value", message, quote=ns[0].quote or None, source=ns[0].source or None))
+            message = (f"{species}: {len(ns)} values given as volumes, not concentrations, were recorded as the "
+                       f"volumes of its stock solution added -- " + "; ".join(n.short for n in ns) + ".")
+        flags.append(Flag(MIXING_FLAG_KINDS[kind], message, quote=ns[0].quote or None, source=ns[0].source or None))
     return flags
 
 
@@ -852,7 +857,10 @@ def finish(
         mixing += derive_from_amounts(ex.chemistry, _reaction_volumes(ex),
                                       {s.set_label: [x.sample_label for x in s.samples]
                                        for s in ex.structure.experiment_sets})
-    mixing += derive_mixture_concentrations(ex.chemistry, set_labels) if pack.uses("mixing") else []
+    if pack.uses("mixing"):
+        samples_by_set = {s.set_label: [x.sample_label for x in s.samples] for s in ex.structure.experiment_sets}
+        mixing += volumes_as_concentrations(ex.chemistry)
+        mixing += derive_mixture_concentrations(ex.chemistry, set_labels, samples_by_set)
     mixing += derive_from_ratios(ex.chemistry, set_labels) if pack.uses("molar_ratios") else []
     rows = build_rows(ex.metadata, ex.structure, ex.methodology, ex.chemistry, config.paper_prefix,
                       drop_below=config.confidence_drop_below, registry=registry, optional=ex.optional_list)
