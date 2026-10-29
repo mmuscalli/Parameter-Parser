@@ -106,7 +106,8 @@ def guess(value: str, pack: Optional[Pack] = None) -> str:
 # times in hours, temperatures in °C, volumes in mL; observations.unit_for_column reads them back)
 _SUFFIX = {"concentration": "_mM", "volume": "_mL", "time": "_hr", "temperature": "_C", "pressure": "_bar",
            "mass": "_g"}
-_UNIT_SUFFIX = {"nm": "_nm", "rpm": "_rpm", "%": "_pct", "mL/min": "_mL_min", "K": "_C", "°F": "_C"}
+_UNIT_SUFFIX = {"nm": "_nm", "rpm": "_rpm", "%": "_pct", "mL/min": "_mL_min", "K": "_C", "°F": "_C",
+                "µL": "_uL"}      # microlitre volumes keep a µL column (the dataset's added_*_uL style)
 
 
 def unit_suffix(unit: str) -> str:

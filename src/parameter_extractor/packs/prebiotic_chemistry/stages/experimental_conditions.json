@@ -13,6 +13,7 @@
   "suffix_separator": "_",
   "alternatives": true,
   "table_images": true,
+  "alternatives_rule": "If the paper gives SEVERAL values of one condition for the same experiment from different methods (e.g. an oven set point and the temperature measured in the solution; a pH measured before and after adding a reagent), give each: the one the paper uses for its results without `meth`, every other one as its own entry with `meth` naming how it was obtained as the paper does, e.g. 'thermocouple in the solution'. A value that differs between experiments is NOT another estimate -- it belongs to its own set or sample.",
   "open_ended": true,
   "open_ended_hint": "e.g. stirring or agitation, light / UV irradiation, buffers, heating method, sealing or atmosphere details. Not wet-dry cycling details (cycle number, durations, phase temperatures, humidity: a separate step records those), not dissolved species or their concentrations (a separate step extracts those, including catalysts and reactants). Analysis details beyond analysis_method DO belong here (instrument, column, mobile phase, detection wavelength, standards, detection limit): one entry each, category analysis",
   "set_word": "experiment",

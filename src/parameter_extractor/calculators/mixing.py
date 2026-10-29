@@ -42,6 +42,8 @@ class MixingNote:
     message: str
     quote: str = ""
     source: str = ""
+    species: str = ""   # "derived" notes: grouped into one flag per species (pipeline.grouped_mixing_flags)
+    short: str = ""     # that note's part of the grouped flag: "<set>: <value> mM"
 
 
 def _key(text: str) -> str:
@@ -141,7 +143,8 @@ def derive_mixture_concentrations(chemistry: ChemistryExtraction, set_labels: Li
                 exact_mM=exact))
             chemistry.solutes.append(derived)
             notes.append(MixingNote("derived", f"{entry.name}{where}: {value:g} mM in the mixture -- {how}.",
-                                    entry.quote, entry.source))
+                                    entry.quote, entry.source, species=entry.name,
+                                    short=f"{label or 'every set'}: {value:g} mM"))
     return notes
 
 

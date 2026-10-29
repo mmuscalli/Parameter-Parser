@@ -89,6 +89,13 @@ For each species:
   whole set -- but if a starting concentration DIFFERS between the samples
   of one set (a sweep of initial concentrations, one per row), put each in
   its sample's group; otherwise the values can't be told apart.
+- Compound numbers and citations: papers often label compounds with bold numbers defined once
+  (in the text or a figure caption: "ribose-1,2-cyclic phosphate 4", "nicotinamide 6") and then
+  write only the number ("the yield of 7", "Yield of 7 (%)"); and the text layer prints
+  superscript citations inline ("ammonia.14", "phosphate20"). Name every species by its NAME
+  (look up where the number is defined), never "7" or "compound 7", and give the number in `how`
+  ("compound 7 = nicotinamide ribose 2'-phosphate, Fig. 2 caption"). A number right after a
+  name is a label or a citation, never a concentration, amount or volume.
 - When the quote can't name the species -- a table that shows compounds as
   structure drawings, a compound number ("7"), a general procedure ("the
   carboxylic acid (3 mmol)") that applies to several entries -- say in `how`

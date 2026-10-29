@@ -127,16 +127,24 @@ def collect_new_variables(
                                   "methodology", rows_for))
     from parameter_extractor.stages.optional import optional_results, stage_values
     for spec, result in optional_results(optional, wet_dry):
-        targets = spec.target_sets(structure) if structure else []
         for v in result.parameters:
             if v.basis == "assumed":
                 # in the parameter's unit (or its text, for a text parameter), for its sample if it names one
                 converted, _ = stage_values(spec, v)
                 value = converted[v.parameter].value if v.parameter in converted else v.value
                 sample = getattr(v, "sample_label", "") or None
-                for label in ([v.set_label] if v.set_label else targets):
-                    found.append(_assumed(v.parameter, value, label, v.quote, v.source, v.confidence,
+                if v.set_label:
+                    found.append(_assumed(v.parameter, value, v.set_label, v.quote, v.source, v.confidence,
                                           spec.origin_label, rows_for, sample))
+                    continue
+                # paper-wide: ONE review line for the rows of every set the step applies to (kim2017:
+                # 'polypropylene' for the Eppendorf tubes was 8 lines and 8 flags, one per set)
+                targets = spec.target_sets(structure) if structure else []
+                one = _assumed(v.parameter, value, targets[0] if len(targets) == 1 else None, v.quote, v.source,
+                               v.confidence, spec.origin_label, rows_for, sample)
+                if len(targets) > 1:
+                    one.row_ids = [rid for t in targets for rid in rows_for(t, sample)]
+                found.append(one)
     for f in (term_search.findings if term_search else []):
         if not f.found:
             continue
@@ -172,7 +180,7 @@ def _assumed(column, value, set_label, quote, source, confidence, origin, rows_f
     numeric = isinstance(value, (int, float)) and not isinstance(value, bool)
     return NewVariable(
         kind="assumed_value", category=categories.ASSUMED.id, name=column,
-        alias_name=f"{column} @ {sample_label or set_label}",
+        alias_name=f"{column} @ {sample_label or set_label or 'whole paper'}",
         proposed_column=column, value=value if numeric else None, value_text=None if numeric else str(value),
         set_label=set_label, sample_label=sample_label, quote=quote, source=source, confidence=confidence,
         origin=f"{origin} (assumed)", row_ids=rows_for(set_label, sample_label))

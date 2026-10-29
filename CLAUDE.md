@@ -1417,3 +1417,23 @@ same paper 287 s. The real lever for many full runs would be a multi-paper full-
   the paper; digitized rows use the paper-wide vessel_sealed. Next (not built): sampled_pressure_bar by
   Raoult's law (needs water's vapour pressure vs T, composition, volumes).
 - Prompt: sampled_pressure_bar now follows the sampled-temperature rule (faisal live: captured).
+
+## kim2017 via developer handoff (2026-10-29): nucleotide paper, compound numbers
+
+Mickey's first nucleotide paper (`Paper Lists/Nucleotide Papers/Kim2017/kim2017.pdf`, Kim & Benner,
+Chem. Eur. J., nicotinamide ribose phosphate by dry-down with Ca2+ / ammonium formate). Run through
+handoff with Claude Code answering (3 rounds). Every value correct after "Add all as suggested" (14 yields
+of 7, 6 recovered nicotinamide, stocks + calculated mixtures, T, times, HPLC details). Fixes from it:
+- pdf_parser: SymbolMT glyphs in the private-use area (U+F000 + Symbol code: U+F06D µ, F061 α, F062 β)
+  were dropped -> "5 L" for 5 µL. `_symbol_private_use` maps them (Greek, µ, °, ±, ×, ≤, ≥ ...).
+- Flags: mixture concentrations calculated from stocks -> ONE derived_value flag per species
+  (`pipeline.grouped_mixing_flags`, MixingNote.species/short; was 32 flags); a paper-wide ASSUMED value
+  -> one review line / flag for the rows of the step's target sets (was one per set).
+- quotes.unnamed_species: a table cell is named by its column header in the source ("column Recovered
+  Nicotinamide (%)") -- the '<row> <value>' quote can't be placed on a page.
+- Prompts: compound numbers ("nicotinamide 6", "Yield of 7") and inline citations ("ammonia.14") are
+  never values -- rules in chemistry.md (name by name, number in `how`), structure_planner.md and the
+  shared optional_stage.md. Spec field `alternatives_rule` (the default's examples were astronomy);
+  experimental_conditions has a chemistry one.
+- Category formats: µL values keep a `_uL` column.
+Not done: a reference run (answers are Claude-Code-written, not the app's models).

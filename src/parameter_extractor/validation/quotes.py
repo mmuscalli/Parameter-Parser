@@ -239,6 +239,11 @@ def unnamed_species(solutes, page_texts: Optional[List[str]] = None) -> list:
             continue
         if species_named_in(s.name, s.quote):
             continue
+        # a table cell's quote is just '<row> <value>'; its column header (in the source: '..., column
+        # Recovered Nicotinamide (%)') names it -- kim2017's quote '1 93.1' couldn't be placed on a page
+        header = re.search(r"\bcolumn\s+(.+)$", s.source or "")
+        if header and species_named_in(s.name, header.group(1)):
+            continue
         page = paper.page_of(s.quote) if paper and s.quote else None
         if page:
             key = (s.name, page)

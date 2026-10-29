@@ -31,6 +31,9 @@ Guidance:
   `excluded_data` with a short reason. Results that only exist as points in
   a figure are out of scope for this pass too -- the user digitizes figures
   separately -- so list them in `excluded_data` as well.
+- Compound numbers and citations: a bold number after a compound name is its label ("nicotinamide
+  6"), and digits printed inline after a word are usually reference citations ("ammonia.14") -- not
+  conditions or samples. In set labels name compounds by name, not by number.
 - If NO table in the paper reports results (e.g. all results are in
   figures), return no sets; the user can still digitize the figures.
 - If you are not confident a figure doesn't duplicate tabulated data, say so

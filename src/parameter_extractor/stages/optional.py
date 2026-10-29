@@ -98,6 +98,8 @@ class StageSpec(BaseModel):
     alternatives: bool = False
     # send the rendered table pages along (tables whose text layer is garbled or sideways)
     table_images: bool = False
+    # the prompt rule for `alternatives`, when the default's examples (astronomy) don't fit the field
+    alternatives_rule: str = ""
     # also collect conditions/parameters that have no column (`other`: name, value as stated, ...),
     # offered in the review like the old methodology step's other_parameters
     open_ended: bool = False
@@ -120,13 +122,7 @@ class StageSpec(BaseModel):
                          "without `mode` and each mode's value as its own entry with `mode` describing the mode "
                          "as printed, e.g. 'i < 90 deg (prograde)'.")
         if self.alternatives:
-            rules.append("If the paper gives SEVERAL estimates of one parameter for the same object from different "
-                         "methods (e.g. a rotation period from v sin i, from an activity-rotation relation and from "
-                         "a GP fit; a stellar mass from isochrones and from asteroseismology), give each: the one "
-                         "the paper adopts (its tables) without `meth`, every other one as its own entry with "
-                         "`meth` naming the method as the paper does, e.g. 'activity-rotation relation "
-                         "(Mamajek & Hillenbrand 2008)'. Limits ('> 13 d') count as estimates. Different fits of "
-                         "a planet are separate rows, not methods.")
+            rules.append(self.alternatives_rule or ALTERNATIVES_RULE)
         if self.open_ended:
             rules.append("Also list in `other` any OTHER condition or parameter that could affect the outcome but "
                          "has no parameter above" + (f" -- {self.open_ended_hint}" if self.open_ended_hint else "")
@@ -264,6 +260,16 @@ class StageSpec(BaseModel):
                                 f"of the whole set."]
                                if self.per == "sample" else [])),
                            STRUCTURE_PLAN_JSON=structure.model_dump_json(indent=2), PAPER_TEXT=paper_text)
+
+
+ALTERNATIVES_RULE = (
+    "If the paper gives SEVERAL estimates of one parameter for the same object from different "
+    "methods (e.g. a rotation period from v sin i, from an activity-rotation relation and from "
+    "a GP fit; a stellar mass from isochrones and from asteroseismology), give each: the one "
+    "the paper adopts (its tables) without `meth`, every other one as its own entry with "
+    "`meth` naming the method as the paper does, e.g. 'activity-rotation relation "
+    "(Mamajek & Hillenbrand 2008)'. Limits ('> 13 d') count as estimates. Different fits of "
+    "a planet are separate rows, not methods.")
 
 
 def _require_all(schema: dict) -> None:

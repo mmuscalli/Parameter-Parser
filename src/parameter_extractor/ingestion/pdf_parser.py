@@ -87,6 +87,20 @@ def _clean(page_text: str) -> str:
 # near-universal m -> µ (micro) is applied to them.
 _SYMBOL_GREEK = dict(zip("abcdefghiklmnopqrstuwxyzDFGLPQSWY", "αβχδεφγηικλμνοπθρστυωξψζΔΦΓΛΠΘΣΩΨ"))
 _SYMBOL_GREEK["m"] = "µ"
+# Symbol's other glyphs by code (Adobe Symbol encoding), for fonts that use the private-use copy
+# U+F000 + code: kim2017's "5 µL" came out as "5 L" and "β-nucleoside" as "-nucleoside" (the PUA
+# characters were dropped later), a µL read as litres
+_SYMBOL_CODES = {0xB0: "°", 0xB1: "±", 0xB4: "×", 0xA3: "≤", 0xB3: "≥", 0xB8: "÷", 0xB9: "≠", 0xBB: "≈",
+                 0xAE: "→", 0xAC: "←", 0x2D: "−", 0xD7: "·", 0xA5: "∞", 0xB6: "∂", 0xC5: "⊕"}
+
+
+def _symbol_private_use(text: str):
+    """What a Symbol-font character in the private-use area U+F020-U+F0FF shows, else None."""
+    if len(text) != 1 or not 0xF020 <= ord(text) <= 0xF0FF:
+        return None
+    code = ord(text) - 0xF000
+    char = chr(code)
+    return _SYMBOL_GREEK.get(char) or _SYMBOL_CODES.get(code) or (char if 0x20 < code < 0x7F else None)
 
 
 def _fix_symbol_font_chars(page) -> int:
@@ -94,7 +108,9 @@ def _fix_symbol_font_chars(page) -> int:
     n = 0
     for c in page.chars:
         font = (c.get("fontname") or "").lower()
-        if "symbol" in font:
+        if _symbol_private_use(c["text"] or ""):
+            mapped = _symbol_private_use(c["text"])
+        elif "symbol" in font:
             mapped = _SYMBOL_GREEK.get(c["text"])
         elif "pi" in font.split("+")[-1][:8] and c["text"] == "m":     # e.g. MKMFED+AdvPi1, MathematicalPi
             mapped = "µ"

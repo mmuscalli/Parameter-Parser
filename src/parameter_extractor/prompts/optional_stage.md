@@ -29,6 +29,9 @@ Rules:
 - Values written in LaTeX: in `x_{-a}^{+b}` (or `x^{+b}_{-a}`) the
   superscript +b is the upper uncertainty `ep` and the subscript -a the
   lower one `em`, whichever comes first.
+- Numbers next to words are often not values: compound labels (bold numbers: "nicotinamide 6",
+  "compound 7") and reference citations (superscripts the text prints inline: "ammonia.14",
+  "phosphate20", "Fig 1).2"). Never read them as a value, amount, count or unit.
 - `n` is at most 15 words of your own -- never a place to repeat the value,
   its method or its mode.
 - Keep every `q` to the shortest span that shows the value (at most 20

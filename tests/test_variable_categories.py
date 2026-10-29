@@ -184,6 +184,25 @@ def test_suggestions_repeating_dataset_values_are_dropped():
                                                          "spread"]
 
 
+def test_symbol_font_characters_in_the_private_use_area():
+    """kim2017: SymbolMT draws µ, α, β at U+F06D/F061/F062 -- they used to vanish ('5 L' for 5 µL)."""
+    from parameter_extractor.ingestion.pdf_parser import _symbol_private_use
+    assert [_symbol_private_use(c) for c in "\uf06d\uf061\uf062\uf0b0\uf0b1"] == ["µ", "α", "β", "°", "±"]
+    assert _symbol_private_use("m") is None and _symbol_private_use("\ue000") is None
+    assert vc.unit_suffix("µL") == "_uL" and vc.unit_suffix("mL") == "_mL" and vc.unit_suffix("min") == "_hr"
+
+
+def test_mixture_flags_are_one_per_species():
+    from parameter_extractor.calculators.mixing import MixingNote
+    from parameter_extractor.pipeline import grouped_mixing_flags
+    notes = [MixingNote("derived", f"CaCl2 (set 'S{i}'): {v} mM in the mixture -- 15 mM x 15 µL / {t} µL.",
+                        species="CaCl2", short=f"S{i}: {v} mM") for i, (v, t) in enumerate([(9, 25), (6, 37.5)])]
+    notes.append(MixingNote("not_derived", "X: not calculated"))
+    flags = grouped_mixing_flags(notes)
+    assert [f.kind for f in flags] == ["not_calculated", "derived_value"]
+    assert "in 2 sets -- S0: 9 mM; S1: 6 mM" in flags[1].message and "15 mM x 15 µL / 25 µL" in flags[1].message
+
+
 if __name__ == "__main__":
     for name, fn in list(globals().items()):
         if name.startswith("test_") and callable(fn):

@@ -713,7 +713,9 @@ def _shown(v) -> str:
 
 
 def _where(v) -> str:
-    return f"'{v.sample_label}'" if getattr(v, "sample_label", None) else f"set '{v.set_label}'"
+    if getattr(v, "sample_label", None):
+        return f"'{v.sample_label}'"
+    return f"set '{v.set_label}'" if v.set_label else "every row (paper-wide)"
 
 
 def _identity_flags(chemistry, page_texts=None) -> List[Flag]:
@@ -804,6 +806,25 @@ def _reaction_volumes(ex) -> dict:
 MIXING_FLAG_KINDS = {"derived": "derived_value", "not_derived": "not_calculated", "mismatch": "conflicting_values"}
 
 
+def grouped_mixing_flags(notes) -> List[Flag]:
+    """Mixture concentrations calculated from stocks: ONE flag per species (kim2017: 4 species x 8 sets
+    were 32 flags), the first set's calculation in full and every set's value; other notes one each."""
+    flags, by_species = [], {}
+    for n in notes:
+        if n.kind == "derived" and n.species:
+            by_species.setdefault(n.species, []).append(n)
+        else:
+            flags.append(Flag(MIXING_FLAG_KINDS[n.kind], n.message, quote=n.quote or None, source=n.source or None))
+    for species, ns in by_species.items():
+        if len(ns) == 1:
+            message = ns[0].message
+        else:
+            message = (f"{species}: mixture concentration calculated by the pipeline in {len(ns)} sets -- "
+                       + "; ".join(n.short for n in ns) + f". How (first set): {ns[0].message}")
+        flags.append(Flag("derived_value", message, quote=ns[0].quote or None, source=ns[0].source or None))
+    return flags
+
+
 def finish(
     extraction: Extraction,
     digitized: Sequence[DigitizedFigure] = (),
@@ -847,8 +868,7 @@ def finish(
     if pubchem and pubchem.unavailable_reason:
         paper_flags.append(Flag("lookup_unavailable", f"{pubchem.unavailable_reason}: species names were "
                                 f"matched by the built-in rules only, so synonyms may show up as new variables."))
-    paper_flags += [Flag(MIXING_FLAG_KINDS[n.kind], n.message,
-                         quote=n.quote or None, source=n.source or None) for n in mixing]
+    paper_flags += grouped_mixing_flags(mixing)
     n_text_rows = len(rows)
 
     figure_summary, fig_new_vars = [], []
