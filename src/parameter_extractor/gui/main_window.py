@@ -163,6 +163,7 @@ class MainWindow(QMainWindow):
         in Settings (gui/settings_dialog.py); their widgets keep their names here."""
         from parameter_extractor.gui.settings_dialog import SettingsDialog
         self.settings_dialog = SettingsDialog(self)
+        self.settings_dialog.closed.connect(self._save_preferences)
         d = self.settings_dialog
         self.key_edit, self.show_key_box, self.remember_key_box = d.key_edit, d.show_key_box, d.remember_key_box
         self.ads_edit, self.remember_ads_box = d.ads_edit, d.remember_ads_box
@@ -482,19 +483,21 @@ class MainWindow(QMainWindow):
         self._settings.setValue("batch_mode", self.batch_box.isChecked())
         self._settings.setValue("prefer_arxiv", self.arxiv_box.isChecked())
         self._settings.setValue("suggest_new_variables", self.suggest_box.isChecked())
+        # keys: saved when "remember" is ticked; forgotten when it's un-ticked or the field is emptied
         ads = self.ads_edit.text().strip()
         if self.remember_ads_box.isChecked() and ads:
-            key_store.save_key(ads, key_store.ADS_ACCOUNT)
+            if not key_store.save_key(ads, key_store.ADS_ACCOUNT):
+                self.status.setText("Note: couldn't save the ADS token to the system keychain.")
             self._ads_was_stored = True
-        elif self._ads_was_stored and not self.remember_ads_box.isChecked():
+        elif self._ads_was_stored:
             key_store.delete_key(key_store.ADS_ACCOUNT)
             self._ads_was_stored = False
         key = self.key_edit.text().strip()
-        if self.remember_key_box.isChecked():
+        if self.remember_key_box.isChecked() and key:
             if not key_store.save_key(key):
                 self.status.setText("Note: couldn't save the key to the system keychain.")
             self._key_was_stored = True
-        elif self._key_was_stored:  # the user un-ticked "remember": forget it
+        elif self._key_was_stored:
             key_store.delete_key()
             self._key_was_stored = False
 
@@ -1098,7 +1101,7 @@ class MainWindow(QMainWindow):
 
     def closeEvent(self, event) -> None:
         if not self._busy:
-            self._settings.setValue("output_dir", self.out_edit.text().strip())
+            self._save_preferences()            # keys too: they may have been entered with no run since
             event.accept()
             return
         detail = ("The current step will finish first (this can take up to a minute)."

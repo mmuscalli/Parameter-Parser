@@ -257,6 +257,7 @@ class FocusedSearchWindow(QDialog):
         self._settings.setValue("focused/whole_paper", self.whole_box.isChecked())
         self._settings.setValue("focused/whole_tables", self.tables_box.isChecked())
         words = [w.strip() for w in self.words_edit.text().split(",") if w.strip()]
+        self.main._save_preferences()
         config = self.main.current_config()
         self._worker = FocusedWorker(items, columns, config, words, self.whole_box.isChecked(),
                                      self.tables_box.isChecked())

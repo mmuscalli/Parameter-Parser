@@ -8,6 +8,7 @@ attribute names: key_edit, out_edit, pubchem_box ...); closing the dialog only h
 """
 from __future__ import annotations
 
+from PySide6.QtCore import Signal
 from PySide6.QtWidgets import (QCheckBox, QDialog, QDialogButtonBox, QFileDialog, QFormLayout, QGroupBox,
                                QHBoxLayout, QLabel, QLineEdit, QPushButton, QVBoxLayout, QWidget)
 
@@ -32,6 +33,10 @@ def _secret(placeholder: str):
 
 
 class SettingsDialog(QDialog):
+    # emitted when the dialog is closed: the main window saves the settings then (keys to the keychain
+    # too), not only when a run starts -- the ADS token was otherwise lost if no extraction followed
+    closed = Signal()
+
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setWindowTitle("Settings")
@@ -76,6 +81,10 @@ class SettingsDialog(QDialog):
         path = QFileDialog.getExistingDirectory(self, "Save results to", self.out_edit.text())
         if path:
             self.out_edit.setText(path)
+
+    def hideEvent(self, event) -> None:
+        super().hideEvent(event)
+        self.closed.emit()
 
     def lock(self, locked: bool) -> None:
         """Read-only while a run uses these settings."""

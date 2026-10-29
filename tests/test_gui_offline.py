@@ -675,6 +675,30 @@ def test_settings_and_run_options():
         w.close()
 
 
+def test_tokens_are_remembered_without_a_run():
+    """Mickey, 2026-10-29: the ADS token typed into Settings was gone after reopening the app --
+    keys were only saved when an extraction started. Now: on closing Settings and on quitting."""
+    keys = FakeKeyStore()
+    with tempfile.TemporaryDirectory() as tmp, patch.object(main_window, "key_store", keys):
+        w = _window(keys, Path(tmp))
+        w.show(); _pump()
+        w.open_settings(); _pump()
+        w.ads_edit.setText("ads-new")
+        w.remember_ads_box.setChecked(True)
+        w.settings_dialog.hide(); _pump()                                 # closing Settings saves it
+        assert keys.other == {keys.ADS_ACCOUNT: "ads-new"}
+        w.ads_edit.setText("ads-changed")
+        w.key_edit.setText("sk-typed"); w.remember_key_box.setChecked(True)
+        w.close(); _pump()                                                # quitting saves too
+        assert keys.other[keys.ADS_ACCOUNT] == "ads-changed" and keys.saved[-1] == "sk-typed"
+        w2 = _window(keys, Path(tmp))                                     # "reopening the app"
+        assert w2.ads_edit.text() == "ads-changed" and w2.remember_ads_box.isChecked()
+        w2.ads_edit.setText("")                                           # emptied: forgotten
+        w2.settings_dialog.show(); w2.settings_dialog.hide(); _pump()
+        assert keys.ADS_ACCOUNT not in keys.other
+        w2.close()
+
+
 def test_a_paper_by_arxiv_id_from_the_window():
     from parameter_extractor import packs
     from parameter_extractor.ingestion import arxiv_source as ax
