@@ -164,8 +164,12 @@ def answer_model(columns: Sequence[str]):
     required = lambda names: {"json_schema_extra": {"required": names}}
     Value = create_model(
         "FocusedValue", __config__=ConfigDict(populate_by_name=True, **required(
-            ["obj", "col", "v", "u", "ep", "em", "q", "src", "c"])),
-        obj=(str, Field(description="What the value describes, '' for the paper as a whole")),
+            ["set", "obj", "col", "v", "u", "ep", "em", "q", "src", "c"])),
+        # the pack's two row levels, as in a full run's structure plan (2026-10-30: eder1994's focused rows
+        # were whole experiment sets, every time point in one row)
+        grp=(str, Field(default="", alias="set", description="The set (experiment condition / system) the value "
+                                                             "belongs to; '' for the paper as a whole")),
+        obj=(str, Field(description="The sample (row) within the set; '' for a value of the whole set")),
         col=(Col, Field(description="The parameter")),
         v=(str, Field(description="The value exactly as printed")),
         u=(str, Field(description="Its unit as printed, '' if none")),
@@ -174,8 +178,14 @@ def answer_model(columns: Sequence[str]):
         q=(str, Field(description=f"Shortest exact quote showing it, at most {QUOTE_WORDS} words")),
         src=(str, Field(description="Where: section, or table + row")),
         c=(Literal["high", "medium", "low"], Field(description="Confidence")))
+    Row = create_model(
+        "FocusedRow", __config__=ConfigDict(populate_by_name=True, **required(["set", "obj"])),
+        grp=(str, Field(alias="set", description="The set")), obj=(str, Field(description="The row within it")))
     return create_model(
-        "FocusedAnswer", __config__=ConfigDict(json_schema_extra={"required": ["values", "not_found"]}),
+        "FocusedAnswer", __config__=ConfigDict(json_schema_extra={"required": ["rows", "values", "not_found"]}),
+        # every row the paper's results make, also those with no requested value: a set's values then fill
+        # each of its rows (a search for set-level conditions alone gave one row per set)
+        rows=(List[Row], Field(default_factory=list, description="Every row (set + sample) of the paper's results")),
         values=(List[Value], Field(default_factory=list)),
         not_found=(List[Col], Field(default_factory=list, description="Parameters the paper doesn't report")))
 
@@ -183,7 +193,7 @@ def answer_model(columns: Sequence[str]):
 @dataclass
 class FocusedValue:
     paper: str
-    obj: str
+    obj: str                      # the sample (row); '' for a value of the whole set / paper
     parameter: str
     value: object                 # in the parameter's unit when it's a number that converted
     unit: str
@@ -194,6 +204,7 @@ class FocusedValue:
     where: str = ""
     confidence: str = ""
     note: str = ""
+    set: str = ""                 # the set the sample belongs to; '' for the whole paper
 
 
 @dataclass
@@ -211,6 +222,7 @@ class PaperOutcome:
     output_tokens: int = 0
     message: str = ""
     values: List[FocusedValue] = field(default_factory=list)
+    rows: List[tuple] = field(default_factory=list)   # (set, sample) of every row the paper's results make
 
 
 def _number(text: str) -> Optional[float]:
@@ -225,7 +237,7 @@ def _number(text: str) -> Optional[float]:
 def _converted(param: FocusParameter, item, paper: str) -> FocusedValue:
     from parameter_extractor.units import convert_printed
     printed = f"{item.v} {item.u}".strip()
-    out = FocusedValue(paper=paper, obj=item.obj, parameter=item.col, value=item.v, unit=item.u, printed=printed,
+    out = FocusedValue(paper=paper, obj=item.obj, set=getattr(item, "grp", "") or "", parameter=item.col, value=item.v, unit=item.u, printed=printed,
                        quote=item.q, where=item.src, confidence=item.c, err_plus=item.ep, err_minus=item.em)
     if param.column.endswith("exofastver"):          # the column is the version: 'EXOFASTv2' -> 2
         m = re.search(r"exofast\s*v?(?:ersion)?\s*([12])\b|^\s*v?([12])\s*$", item.v, re.IGNORECASE)
@@ -270,7 +282,7 @@ def _paper_text(source, run_dir: Path, whole_paper: bool, rasterize: bool, dpi: 
 def search_paper(item: PaperItem, params: Sequence[FocusParameter], config: RunConfig, run_dir: Path,
                  search_words: Sequence[str] = (), whole_paper: bool = False,
                  cancel_event: Optional[threading.Event] = None, whole_tables: bool = True,
-                 record=None, cache=None, client=None, collector=None) -> PaperOutcome:
+                 record=None, cache=None, client=None, collector=None, plan_rows: bool = False) -> PaperOutcome:
     """`record`: the identifier's arXiv record (or the PaperSourceError) from the batched lookup;
     `cache`: arXiv texts kept between runs; `client` / `collector`: shared by all papers (one
     Anthropic client; in batch mode, requests pooled into shared batches)."""
@@ -287,7 +299,10 @@ def search_paper(item: PaperItem, params: Sequence[FocusParameter], config: RunC
                            record=record, cache=cache)
     (run_dir / "source.json").write_text(json.dumps(source.summary(), indent=2, ensure_ascii=False))
     outcome.read_from = source.label
-    text, images = _paper_text(source, run_dir, whole_paper, config.rasterize_table_pages, config.table_raster_dpi)
+    # rows as in a full extraction: the table images are needed to plan them (eder1994's text-layer tables
+    # are garbled), and go with the focused question too
+    text, images = _paper_text(source, run_dir, whole_paper or plan_rows, config.rasterize_table_pages,
+                               config.table_raster_dpi)
     outcome.title = (source.record.title if source.record else next(
         (line.strip() for line in text.splitlines()[:60] if len(line.strip()) > 25
          and not re.search(r"https?://|doi\.org|^\W*(?:a&a|astronomy|publ\.|journal)\b", line.strip(), re.IGNORECASE)),
@@ -310,9 +325,18 @@ def search_paper(item: PaperItem, params: Sequence[FocusParameter], config: RunC
              + ", ".join(keywords[:20]) + ". '[...]' marks text left out"
              + ("; tables near a match are complete." if whole_tables else "."))
     units = pack.manifest.units
-    prompt = load_prompt(STAGE, PARAMETERS=listing, SCOPE=scope,
-                         OBJECT_HINT=f"the {units.get('sample', 'sample')} or {units.get('set', 'set')}, named as "
-                                     f"the paper names it")
+    prompt = load_prompt(STAGE, PARAMETERS=listing, SCOPE=scope, SET_WORD=units.get("set", "set"),
+                         SAMPLE_WORD=units.get("sample", "sample"))
+    plan = None
+    if plan_rows:
+        from parameter_extractor.stages.structure_planner import run_structure_planner
+        plan = run_structure_planner(ctx, text, table_images=images or None)
+        if plan.experiment_sets:
+            prompt += ("\n\nROW PLAN of this paper (from its full row planning): use EXACTLY these `set` and `obj` "
+                       "labels -- every value goes on one of these rows (`obj` '' for a value of a whole set, `set` "
+                       "'' for the whole paper); leave `rows` empty.\n" + "\n".join(
+                           f"- set {s.set_label!r}: " + ", ".join(repr(x.sample_label) for x in s.samples)
+                           for s in plan.experiment_sets))
     content = f"{prompt}\n\nPAPER {'TEXT' if whole_paper else 'PASSAGES'}:\n{body}"
     model = answer_model([p.column for p in params])
     answer = call_structured(ctx, stage=STAGE, system_prompt="Find only the requested parameters in a research "
@@ -321,6 +345,9 @@ def search_paper(item: PaperItem, params: Sequence[FocusParameter], config: RunC
                              max_tokens=OUTPUT_BASE + OUTPUT_PER_PARAMETER * len(params))
     by_column = {p.column: p for p in params}
     outcome.values = [_converted(by_column[v.col], v, outcome.paper) for v in answer.values if v.col in by_column]
+    outcome.rows = list(dict.fromkeys((r.grp, r.obj) for r in getattr(answer, "rows", []) if r.obj or r.grp))
+    if plan is not None and plan.experiment_sets:          # the planned rows, in the plan's order
+        outcome.rows = [(s.set_label, x.sample_label) for s in plan.experiment_sets for x in s.samples]
     outcome.found = list(dict.fromkeys(v.parameter for v in outcome.values))
     outcome.status = "found" if outcome.values else "not found"
     outcome.cost_usd = total_cost(ctx.usage) or 0.0
@@ -342,21 +369,28 @@ class FocusedRun:
 
 @dataclass
 class WideRow:
-    """One row of the results: a paper, or one object (planet, sample) in it, with its values by
-    parameter. Values about the paper as a whole (obj '') go on each of the paper's object rows."""
+    """One row of the results: a paper, or one sample (row) of a set in it -- the pack's rows, as in a
+    full run -- with its values by parameter. A set's values (obj '') go on each of that set's sample
+    rows, the paper's (set and obj '') on every row; a set with no sample values is a row of its own."""
     outcome: PaperOutcome
     obj: str
     cells: Dict[str, List[FocusedValue]] = field(default_factory=dict)
+    set: str = ""
 
 
 def wide_rows(outcomes: Sequence[PaperOutcome]) -> List[WideRow]:
     rows = []
     for o in outcomes:
-        paper_wide = [v for v in o.values if not v.obj]
-        objects = list(dict.fromkeys(v.obj for v in o.values if v.obj))
-        for obj in objects or [""]:
-            row = WideRow(o, obj)
-            for v in paper_wide + [v for v in o.values if v.obj == obj and obj]:
+        paper_wide = [v for v in o.values if not v.obj and not v.set]
+        # the rows the answer listed (the pack's rows), then any row a value names that wasn't listed
+        keys = list(dict.fromkeys([k for k in o.rows if k[1]] + [(v.set, v.obj) for v in o.values if v.obj]))
+        with_samples = {s for s, _ in keys}
+        keys += list(dict.fromkeys((v.set, "") for v in o.values if v.set and not v.obj and v.set not in with_samples))
+        for set_label, obj in keys or [("", "")]:
+            row = WideRow(o, obj, set=set_label)
+            own = [v for v in o.values if v.set == set_label and v.obj == obj and (obj or set_label)]
+            whole_set = [v for v in o.values if set_label and v.set == set_label and not v.obj] if obj else []
+            for v in paper_wide + whole_set + own:
                 row.cells.setdefault(v.parameter, []).append(v)
             rows.append(row)
     return rows
@@ -390,7 +424,7 @@ def value_tip(values: Sequence[FocusedValue]) -> str:
     return "\n".join(lines)
 
 
-RESULT_COLUMNS = ["paper", "obj", "parameter", "value", "unit", "err_plus", "err_minus", "printed", "quote", "where",
+RESULT_COLUMNS = ["paper", "set", "obj", "parameter", "value", "unit", "err_plus", "err_minus", "printed", "quote", "where",
                   "confidence", "note"]
 PAPER_COLUMNS = ["item", "reference", "paper", "read_from", "title", "status", "found", "hits", "cost_usd", "input_tokens",
                  "output_tokens", "message"]
@@ -444,8 +478,10 @@ def run_focused_search(items: Sequence[PaperItem], columns: Sequence[str], confi
                        search_words: Sequence[str] = (), whole_paper: bool = False,
                        on_progress: Optional[Callable[[int, int, str], None]] = None,
                        cancel_event: Optional[threading.Event] = None, max_workers: int = 0,
-                       whole_tables: bool = True) -> FocusedRun:
-    """Search every paper for `columns` only. on_progress(done, total, message). `whole_tables`
+                       whole_tables: bool = True, plan_rows: Optional[bool] = None) -> FocusedRun:
+    """Search every paper for `columns` only. `plan_rows`: plan each paper's rows with the pack's structure
+    planner first, as a full extraction does (more tokens: the whole paper + its table images); None = the
+    pack's default (pack.json focused_row_plan). on_progress(done, total, message). `whole_tables`
     (passages mode): a match in or just above a table sends the whole table (measured 2026-10-24:
     +10-45% passage tokens, ~$0.003 a paper on Economy; without it teng2023's planet table -- rows
     without the search words -- was missed)."""
@@ -459,6 +495,8 @@ def run_focused_search(items: Sequence[PaperItem], columns: Sequence[str], confi
         raise PipelineError(f"Not parameters of the active stages of '{packs.current().label}': "
                             f"{', '.join(unknown) or '(none chosen)'}.")
     params = [known[c] for c in dict.fromkeys(columns)]
+    if plan_rows is None:
+        plan_rows = packs.current().manifest.focused_row_plan
     items = list(dict.fromkeys(items))
     out_dir = _new_dir(Path(config.output_dir))
     report = on_progress or (lambda *a: None)
@@ -488,7 +526,8 @@ def run_focused_search(items: Sequence[PaperItem], columns: Sequence[str], confi
     report(0, len(jobs), f"Searching {len(jobs)} paper(s) for {', '.join(c for c in columns)}")
     with ThreadPoolExecutor(max_workers=workers, thread_name_prefix="focused") as pool:
         futures = {pool.submit(search_paper, item, params, config, run_dir, search_words, whole_paper,
-                               cancel_event, whole_tables, records.get(str(item)), cache, client, collector):
+                               cancel_event, whole_tables, records.get(str(item)), cache, client, collector,
+                               plan_rows):
                    (item, run_dir) for item, run_dir in jobs}
         try:
             for future in as_completed(futures):
@@ -539,10 +578,10 @@ def _write(out_dir: Path, outcomes: List[PaperOutcome], params, config: RunConfi
     columns = result_columns(params, outcomes)
     with open(results_csv, "w", newline="", encoding="utf-8") as f:
         w = csv.writer(f)
-        w.writerow(["reference", "paper", "obj", "status"] + [c for c, _, _ in columns] + ["read_from", "title"])
+        w.writerow(["reference", "paper", "set", "obj", "status"] + [c for c, _, _ in columns] + ["read_from", "title"])
         for row in wide_rows(outcomes):
             o = row.outcome
-            w.writerow([o.reference, o.paper, row.obj, o.status]
+            w.writerow([o.reference, o.paper, row.set, row.obj, o.status]
                        + [cell_text(row.cells.get(p.column, []), p, part) for _, p, part in columns]
                        + [o.read_from, o.title])
     with open(quotes_csv, "w", newline="", encoding="utf-8") as f:

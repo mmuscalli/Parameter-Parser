@@ -72,6 +72,12 @@ def main() -> int:
     focused.add_argument("--rows-only", action="store_true",
                          help="In passages mode, send only the table rows near the search words instead of "
                               "whole tables (a little cheaper; misses table values whose rows lack the words)")
+    plan = focused.add_mutually_exclusive_group()
+    plan.add_argument("--plan-rows", dest="plan_rows", action="store_true", default=None,
+                      help="Plan each paper's rows like a full extraction first (the pack's row planner, with "
+                           "table images): rows match a full run; more tokens. Default: the pack's setting")
+    plan.add_argument("--no-plan-rows", dest="plan_rows", action="store_false",
+                      help="Let the focused answer name the rows itself (cheapest)")
     focused.add_argument("--list-parameters", action="store_true",
                          help="List the parameters a focused search can look for (with --pack) and exit")
     parser.add_argument("--out", type=Path, help="Folder for run outputs (default: runs/)")
@@ -256,6 +262,7 @@ def _focused(args, parser) -> int:
     try:
         run = run_focused_search(items, args.focus, config, search_words=args.search_word,
                                  whole_paper=args.whole_paper, whole_tables=not args.rows_only,
+                                 plan_rows=args.plan_rows,
                                  on_progress=lambda done, total, message: print(f"[{done}/{total}] {message}"))
     except PipelineError as e:
         print(f"\nError: {e}", file=sys.stderr)

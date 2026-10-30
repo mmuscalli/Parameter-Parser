@@ -1450,3 +1450,21 @@ Not done: a reference run (answers are Claude-Code-written, not the app's models
   Reaction Conditions category and the conditions hint no longer suggest reaction time (= duration_hr).
   Reference `runs/reference/kim2017/` (second live run; every value correct after accepting all
   suggestions; local only, like all of runs/).
+
+## Focused search rows = the pack's rows (2026-10-30, Mickey's eder1994 focused test)
+
+Focused search had no row planning: one call per paper, `obj` chosen by the model from a hint ("the
+sample or experiment set") -> eder1994's rows were whole experiment sets. Now:
+- Answers have two levels like a structure plan: `set` (field `grp`, alias "set") + `obj` (the sample),
+  and `rows` (every row of the paper's results). `wide_rows`: one row per (set, sample); a set's values
+  (obj '') fill each of its rows, paper values ('' / '') every row; a set with no samples is its own row;
+  old answers (obj only) unchanged. CSVs and the window get a set column (headers from pack units).
+  Pack rules `prompts/focused_search.rules.md` (prebiotic: set = condition / table block, obj = time point,
+  cycle, entry; compound numbers / citations; exoplanets: set = host star, obj = planet [fit]).
+- **Rows as in a full extraction** (`plan_rows`; pack.json `focused_row_plan`, true for prebiotic; window
+  checkbox per pack, QSettings focused/<pack>/plan_rows; CLI --plan-rows / --no-plan-rows): the pack's
+  structure planner runs first (whole text + table images), the focused prompt gets the plan's labels and
+  the table images, outcome.rows = the plan's rows. Live eder1994 Economy, 2 parameters: 42 rows as a full
+  run, per-set temperatures, $0.010 (without: 2 invented sets "long-time / short-time", $0.002). Without
+  table images Haiku couldn't read eder's garbled table text -- prompts alone can't fix that.
+- Prompt: an introduction summarising earlier experiments is other work (eder's "argon" came from it).

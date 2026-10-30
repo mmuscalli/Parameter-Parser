@@ -121,6 +121,32 @@ def test_results_one_row_per_object_and_a_column_per_parameter():
     assert [c for c, _, _ in fs.result_columns([period], [none])] == ["pl_orbper"]   # no errors: no columns
 
 
+def test_rows_are_the_packs_samples_grouped_by_set():
+    """Mickey, 2026-10-30: eder1994's focused rows were whole experiment sets (every time point of a set
+    in one cell). Values now name their set and sample, as in a full run: one row per sample, a set's
+    values on each of its rows, the paper's on every row, a set with no sample values as its own row."""
+    v = lambda st, obj, col, value: fs.FocusedValue("p", obj, col, value, "", set=st)
+    out = fs.PaperOutcome(item="x", paper="p", status="found", values=[
+        v("", "", "analysis_method", "HPLC"),
+        v("Na+ 3.33, 81 C", "", "initial_temperature_C", 81), v("Na+ 3.33, 81 C", "t = 97.3 h", "yield", 2.77),
+        v("Na+ 3.33, 81 C", "t = 245.8 h", "yield", 5.60), v("K+ 3.33, 85 C", "", "initial_temperature_C", 85)])
+    rows = fs.wide_rows([out])
+    assert [(r.set, r.obj) for r in rows] == [("Na+ 3.33, 81 C", "t = 97.3 h"), ("Na+ 3.33, 81 C", "t = 245.8 h"),
+                                               ("K+ 3.33, 85 C", "")]
+    first, _, k = rows
+    assert {c: [x.value for x in vs] for c, vs in first.cells.items()} == {
+        "analysis_method": ["HPLC"], "initial_temperature_C": [81], "yield": [2.77]}
+    assert [x.value for x in k.cells["initial_temperature_C"]] == [85] and "yield" not in k.cells
+    # rows the answer lists: a set-level value fills each of them, even with no sample value requested
+    listed = fs.PaperOutcome(item="z", paper="r", status="found", rows=[("A", "t = 1 h"), ("A", "t = 2 h")],
+                             values=[v("A", "", "initial_temperature_C", 80)])
+    assert [(r.set, r.obj, [x.value for x in r.cells["initial_temperature_C"]]) for r in fs.wide_rows([listed])] \
+        == [("A", "t = 1 h", [80]), ("A", "t = 2 h", [80])]
+    # answers without a set (older recordings) keep one row per object
+    old = fs.PaperOutcome(item="y", paper="q", status="found", values=[fs.FocusedValue("q", "b", "x", 1, "")])
+    assert [(r.set, r.obj) for r in fs.wide_rows([old])] == [("", "b")]
+
+
 def _fake_send(calls):
     def send(ctx, *, model, system_prompt, content, response_model, stop_reason="end_turn"):
         calls.append({"model": model, "content": content})
@@ -160,7 +186,7 @@ def test_a_search_over_several_papers():
             assert "PAPER PASSAGES" in sent and len(sent) < 30_000                     # passages, not the paper
             import csv as _csv
             rows = list(_csv.DictReader(open(run.results_csv)))
-            assert list(rows[0])[:6] == ["reference", "paper", "obj", "status", "pl_fitsoftware", "pl_fitexofastver"]
+            assert list(rows[0])[:7] == ["reference", "paper", "set", "obj", "status", "pl_fitsoftware", "pl_fitexofastver"]
             nielsen_row = next(r for r in rows if r["paper"] == "arXiv_1811.01882")
             assert (nielsen_row["pl_fitsoftware"], nielsen_row["pl_fitexofastver"]) == ("EXOFASTv2", "2")
             assert len(rows) == 3 and {r["status"] for r in rows} == {"found", "not mentioned", "error"}

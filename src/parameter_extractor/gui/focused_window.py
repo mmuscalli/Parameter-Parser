@@ -35,9 +35,9 @@ class FocusedWorker(QObject):
     cancelled = Signal()
     done = Signal()
 
-    def __init__(self, items, columns, config, search_words, whole_paper, whole_tables=True):
+    def __init__(self, items, columns, config, search_words, whole_paper, whole_tables=True, plan_rows=None):
         super().__init__()
-        self.args = (items, columns, config, search_words, whole_paper, whole_tables)
+        self.args = (items, columns, config, search_words, whole_paper, whole_tables, plan_rows)
         self._cancel = threading.Event()
 
     def cancel(self) -> None:
@@ -47,9 +47,10 @@ class FocusedWorker(QObject):
     def run(self) -> None:
         from parameter_extractor.focused_search import run_focused_search
         from parameter_extractor.gui.error_log import record
-        items, columns, config, words, whole, tables = self.args
+        items, columns, config, words, whole, tables, plan = self.args
         try:
             run = run_focused_search(items, columns, config, search_words=words, whole_paper=whole, whole_tables=tables,
+                                     plan_rows=plan,
                                      on_progress=self.progress.emit, cancel_event=self._cancel)
         except RunCancelledError:
             self.cancelled.emit()
@@ -122,6 +123,13 @@ class FocusedSearchWindow(QDialog):
                                    "and numbers), so without this most of a table is left out. Measured: about "
                                    "10-45% more tokens than the matching lines alone (~$0.003 a paper on Economy).")
         form.addRow("", self.tables_box)
+        self.plan_box = QCheckBox("Rows as in a full extraction -- plan each paper's rows first (more tokens)")
+        self.plan_box.setToolTip("Runs the research area's row planner on each paper (the whole paper and images of "
+                                 "its tables), then asks for the parameters on those rows: one row per sample, as a "
+                                 "full extraction makes them. Roughly doubles the cost of a search. Unticked, the "
+                                 "answer names its rows itself (fine for planets; experiment sets can end up as "
+                                 "single rows).")
+        form.addRow("", self.plan_box)
         self.whole_box = QCheckBox("Whole paper -- send each paper in full (finds more, costs more)")
         self.whole_box.toggled.connect(lambda on: self.tables_box.setEnabled(not on))
         form.addRow("", self.whole_box)
@@ -159,10 +167,20 @@ class FocusedSearchWindow(QDialog):
         self.words_edit.setText(self._settings.value("focused/search_words", ""))
         self.whole_box.setChecked(self._settings.value("focused/whole_paper", False, type=bool))
         self.tables_box.setChecked(self._settings.value("focused/whole_tables", True, type=bool))
+        self._load_plan_box()
+
+    def _load_plan_box(self) -> None:
+        """Per research area, defaulting to the pack's setting (on for prebiotic chemistry)."""
+        from parameter_extractor import packs
+        pack_id = self.main.pack_combo.currentData() or "prebiotic_chemistry"
+        pack = packs.available().get(pack_id)
+        default = bool(pack and pack.manifest.focused_row_plan)
+        self.plan_box.setChecked(self._settings.value(f"focused/{pack_id}/plan_rows", default, type=bool))
 
     # ---- parameters -------------------------------------------------------------------------------
     def showEvent(self, event) -> None:
         self._refresh_parameters()
+        self._load_plan_box()                  # the research area may have changed
         super().showEvent(event)
 
     def _refresh_parameters(self) -> None:
@@ -256,11 +274,12 @@ class FocusedSearchWindow(QDialog):
         self._settings.setValue("focused/search_words", self.words_edit.text())
         self._settings.setValue("focused/whole_paper", self.whole_box.isChecked())
         self._settings.setValue("focused/whole_tables", self.tables_box.isChecked())
+        self._settings.setValue(f"focused/{pack_id}/plan_rows", self.plan_box.isChecked())
         words = [w.strip() for w in self.words_edit.text().split(",") if w.strip()]
         self.main._save_preferences()
         config = self.main.current_config()
         self._worker = FocusedWorker(items, columns, config, words, self.whole_box.isChecked(),
-                                     self.tables_box.isChecked())
+                                     self.tables_box.isChecked(), self.plan_box.isChecked())
         self._thread = QThread(self)
         self._worker.moveToThread(self._thread)
         self._thread.started.connect(self._worker.run)
@@ -296,24 +315,27 @@ class FocusedSearchWindow(QDialog):
         self._run = run
         columns = result_columns(run.params, run.outcomes)
         rows = wide_rows(run.outcomes)
-        headers = ["Paper", "Object", "Result"] + [
+        from parameter_extractor import packs
+        units = packs.current().manifest.units          # the searched pack's set / row words
+        headers = ["Paper", units.get("set", "set").capitalize(), units.get("sample", "sample").capitalize(),
+                   "Result"] + [
             name + (f" [{p.unit}]" if part == "value" and p.unit else "") for name, p, part in columns] + ["Read from"]
         self.results.clear()
         self.results.setColumnCount(len(headers))
         self.results.setHorizontalHeaderLabels(headers)
-        for c, (name, p, part) in enumerate(columns, start=3):
+        for c, (name, p, part) in enumerate(columns, start=4):
             self.results.horizontalHeaderItem(c).setToolTip(p.description)
         self.results.setRowCount(len(rows))
         for r, row in enumerate(rows):
             o = row.outcome
             result = STATUS_TEXT.get(o.status, o.status)
             fixed = [(o.reference or o.title or o.paper, "\n".join(x for x in (o.reference, o.item, o.title) if x)),
-                     (row.obj, row.obj), (result, o.message or result)]
+                     (row.set, row.set), (row.obj, row.obj), (result, o.message or result)]
             for c, (text, tip) in enumerate(fixed):
                 item = QTableWidgetItem(str(text))
                 item.setToolTip(tip)
                 self.results.setItem(r, c, item)
-            for c, (name, p, part) in enumerate(columns, start=3):
+            for c, (name, p, part) in enumerate(columns, start=4):
                 values = row.cells.get(p.column, [])
                 item = QTableWidgetItem(cell_text(values, p, part))
                 if values:

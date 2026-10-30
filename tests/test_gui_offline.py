@@ -773,11 +773,12 @@ def test_focused_search_window():
             assert not f.running and "Done:" in f.status.text(), f.status.text()
             assert f.results.rowCount() == 2 and len(calls) == 1
             headers = [f.results.horizontalHeaderItem(c).text() for c in range(f.results.columnCount())]
-            assert headers == ["Paper", "Object", "Result", "pl_fitsoftware", "pl_fitexofastver", "Read from"]
-            by_result = {f.results.item(r, 2).text(): r for r in range(2)}
+            assert headers == ["Paper", "Planetary system", "Planet", "Result", "pl_fitsoftware", "pl_fitexofastver",
+                               "Read from"]                                    # the pack's row words
+            by_result = {f.results.item(r, 3).text(): r for r in range(2)}
             found = by_result["Found"]
-            assert (f.results.item(found, 3).text(), f.results.item(found, 4).text()) == ("EXOFASTv2", "2")
-            assert "using EXOFASTv2" in f.results.item(found, 4).toolTip()          # the quote on hover
+            assert (f.results.item(found, 4).text(), f.results.item(found, 5).text()) == ("EXOFASTv2", "2")
+            assert "using EXOFASTv2" in f.results.item(found, 5).toolTip()          # the quote on hover
             assert "Not mentioned (no API call)" in by_result
             assert f.open_csv_btn.isEnabled() and w.pack_combo.isEnabled()
             assert not f.retry_btn.isEnabled()                                   # nothing failed

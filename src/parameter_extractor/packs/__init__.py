@@ -59,6 +59,8 @@ class PackManifest(BaseModel):
     # send the paper text with long runs of layout spaces collapsed (-20% tokens; tables go
     # as images anyway)
     compact_text: bool = False
+    # focused search plans each paper's rows like a full extraction by default (focused_search.py)
+    focused_row_plan: bool = False
     # categories of suggested new variables beyond the shared ones (variable_categories.py)
     variable_categories: List[dict] = Field(default_factory=list)
 
