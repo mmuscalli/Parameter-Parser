@@ -390,8 +390,13 @@ def wide_rows(outcomes: Sequence[PaperOutcome]) -> List[WideRow]:
             row = WideRow(o, obj, set=set_label)
             own = [v for v in o.values if v.set == set_label and v.obj == obj and (obj or set_label)]
             whole_set = [v for v in o.values if set_label and v.set == set_label and not v.obj] if obj else []
-            for v in paper_wide + whole_set + own:
-                row.cells.setdefault(v.parameter, []).append(v)
+            # the most specific level wins for a parameter, as in a full run (sample > set > paper):
+            # eder1994's paper-wide "oven at 80 C" (a different, untabulated experiment) sat next to each
+            # set's own temperature as "80; 81"
+            for level in (own, whole_set, paper_wide):
+                for v in level:
+                    if v.parameter not in row.cells or level is own or row.cells[v.parameter][0] in level:
+                        row.cells.setdefault(v.parameter, []).append(v)
             rows.append(row)
     return rows
 

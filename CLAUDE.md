@@ -1468,3 +1468,8 @@ sample or experiment set") -> eder1994's rows were whole experiment sets. Now:
   run, per-set temperatures, $0.010 (without: 2 invented sets "long-time / short-time", $0.002). Without
   table images Haiku couldn't read eder's garbled table text -- prompts alone can't fix that.
 - Prompt: an introduction summarising earlier experiments is other work (eder's "argon" came from it).
+- Follow-up: eder1994 focused "80; 81" -- the 80 °C was the untabulated short-time vial experiments ("oven at
+  80 °C", Fig. 1), answered paper-wide. `wide_rows` now keeps only the most specific level per parameter
+  (sample > set > paper, like a full run); prompt: '' set only for values that hold for every row; values
+  from experiments that aren't rows are left out. (Not initial vs sampled temperature: the tables give one
+  reaction temperature per condition.)

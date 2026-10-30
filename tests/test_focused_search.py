@@ -142,6 +142,16 @@ def test_rows_are_the_packs_samples_grouped_by_set():
                              values=[v("A", "", "initial_temperature_C", 80)])
     assert [(r.set, r.obj, [x.value for x in r.cells["initial_temperature_C"]]) for r in fs.wide_rows([listed])] \
         == [("A", "t = 1 h", [80]), ("A", "t = 2 h", [80])]
+    # the most specific value wins: a set's own temperature over a paper-wide one (eder1994: "80; 81")
+    mixed = fs.PaperOutcome(item="m", paper="s", status="found", rows=[("A", "t = 1 h")], values=[
+        v("", "", "initial_temperature_C", 80), v("A", "", "initial_temperature_C", 81),
+        v("", "", "analysis_method", "HPLC"), v("A", "t = 1 h", "initial_temperature_C", 81.5)])
+    [row] = fs.wide_rows([mixed])
+    assert [x.value for x in row.cells["initial_temperature_C"]] == [81.5]
+    assert [x.value for x in row.cells["analysis_method"]] == ["HPLC"]          # nothing more specific: kept
+    no_sample = fs.PaperOutcome(item="n", paper="t", status="found", rows=[("A", "t = 1 h")], values=[
+        v("", "", "initial_temperature_C", 80), v("A", "", "initial_temperature_C", 81)])
+    assert [x.value for x in fs.wide_rows([no_sample])[0].cells["initial_temperature_C"]] == [81]
     # answers without a set (older recordings) keep one row per object
     old = fs.PaperOutcome(item="y", paper="q", status="found", values=[fs.FocusedValue("q", "b", "x", 1, "")])
     assert [(r.set, r.obj) for r in fs.wide_rows([old])] == [("", "b")]

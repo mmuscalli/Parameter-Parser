@@ -26,6 +26,10 @@ paper doesn't report.
 
 Rules:
 - Only what the paper states. Never a typical or assumed value.
+- `set` '' (the whole paper) only for a value that holds for EVERY row. A value
+  from an experiment that is not one of the rows (e.g. a separate method
+  test, a calibration, a side experiment shown only in a figure) belongs to
+  no row: leave it out. A row's own value always wins over a general one.
 - One entry per object and per distinct value: if the paper gives a
   parameter for several rows, or several fits / methods, list each one
   (name the fit or method in `obj`, e.g. "HD 1397 b [joint fit]").
