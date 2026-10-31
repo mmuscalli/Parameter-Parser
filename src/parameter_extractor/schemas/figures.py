@@ -38,7 +38,8 @@ class FigureCandidate(BaseModel):
 # ---- the model's suggestions (structured output of the figure_planner stage) ----
 
 class SpeciesAmount(BaseModel):
-    name: str = Field(description="Species name from the controlled vocabulary, e.g. 'NaCl', 'Gly'.")
+    name: str = Field(description="Species name from the controlled vocabulary, e.g. 'NaCl', 'Gly'; "
+                                   "a species not in it keeps the paper's name (never left out).")
     concentration_mM: Optional[float] = Field(description="Initial concentration in mM (mol dm-3 x 1000).")
     basis: Literal["stated", "indirect"] = Field(
         default="stated",

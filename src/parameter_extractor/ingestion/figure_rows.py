@@ -18,6 +18,7 @@ hand in the digitizer) is a new variable: its values are held out of the CSV
 and returned as NewVariable records, like any other unaccepted variable.
 """
 from __future__ import annotations
+import re
 from typing import List, Optional, Tuple
 
 from parameter_extractor.ingestion.data_location import COLUMN as DATA_LOCATION, location
@@ -37,6 +38,17 @@ _FIELD_FOR_COLUMN = {col: field for field, col in FIELD_TO_TEMPLATE.items()}
 _ID_FIELDS = {"full_id", "set_id", "sample_id", "set_type", "entry_number", "paper_doi",
               "paper_title", "authors", "year_published", "journal_published",
               "species_mM", "extra", "source_notes", "extraction_confidence"}
+
+
+def axis_column_from_label(label: str, average: bool = False) -> str:
+    """A column name from an axis label no column fits: 'Length (nt)' -> 'length_nt',
+    'Relative RNA concentration' -> 'relative_RNA_concentration' (case kept for acronyms). An
+    averaged axis loses its 'avg.'/'mean' words: '_avg' is added to the name instead."""
+    text = re.sub(r"[()\[\]{}]", " ", label).replace("%", " pct ")
+    words = [w if (w.isupper() and len(w) > 1) else w.lower() for w in re.findall(r"[A-Za-z0-9]+", text)]
+    if average:
+        words = [w for w in words if w.lower() not in ("avg", "average", "averaged", "mean")]
+    return "_".join(words)[:60].strip("_") or "figure_value"
 
 
 def _assign(fields: dict, species: dict, extra: dict, column: Optional[str], value: float,
@@ -130,7 +142,8 @@ def build_figure_rows(
             if not panel.y_cal.complete() or not (categorical or panel.x_cal.complete()):
                 problems.append(f"{fig.figure_id} series '{series.label}': axes not calibrated -- left out.")
                 continue
-            if not (panel.x.column or panel.y.column or series.y_column):
+            if not (panel.x.column or panel.y.column or series.y_column or panel.y.label
+                    or (not categorical and panel.x.label)):
                 problems.append(f"{fig.figure_id} series '{series.label}': neither axis is assigned "
                                 f"to a column -- left out.")
                 continue
@@ -198,9 +211,15 @@ def build_figure_rows(
                     extra["initial_pH"] = series.initial_pH
                     prov["initial_pH"] = conditions
                 y_axis = panel.y.model_copy(update={"column": series.y_column}) if series.y_column else panel.y
+                # an axis no column fits (mizuuchi2019's 'Relative RNA concentration', 'Length (nt)'):
+                # a column named after its label, reviewed as a new variable like any other
+                if not y_axis.column and y_axis.label:
+                    y_axis = y_axis.model_copy(update={"column": axis_column_from_label(y_axis.label, y_axis.average)})
                 # the template's old DKP_<AA> names follow the cyclic naming (cyclo_<AA>-<AA>)
                 x_axis = panel.x.model_copy(update={"column": current_column_name(panel.x.column)}) \
                     if panel.x.column else panel.x
+                if not x_axis.column and x_axis.label and not categorical:
+                    x_axis = x_axis.model_copy(update={"column": axis_column_from_label(x_axis.label, x_axis.average)})
                 if y_axis.column:
                     y_axis = y_axis.model_copy(update={"column": current_column_name(y_axis.column)})
                 # averaged values go in '<name>_avg_<unit>' columns

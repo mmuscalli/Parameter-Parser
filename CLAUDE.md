@@ -1493,3 +1493,33 @@ sample or experiment set") -> eder1994's rows were whole experiment sets. Now:
   `page_label` shows S<n> in provenance/flags, a paper_source flag. Queues and focused searches fold SI files
   into their papers (`drop_supplements`). Table captions 'Table S1' recognised; contents pages (>= 3 dot-leader
   lines) aren't table pages; data_location 'SI Table 1' -> 'Table. S1'. Figures: main PDF only (not yet SI).
+
+## Test Paper List via developer handoff (2026-10-31, Mickey's "Paper Files/Test Paper List")
+
+Six papers run with the prebiotic pack in handoff mode (answers written by Claude in the session, so
+the Standard / batch settings didn't apply to them): eder1994 42 rows (= reference except analysis_method
+wording), kim2017 14 (= reference; my metadata answer said 2017 -- the accepted-manuscript PDF prints no
+year, the live reference's 2018 is the version of record), pulletikurti2022 30 (all from SI Tables S1-S3,
+every value checked), tapiero1971 6 (all correct incl. %recovered and ratio columns), Riggi2023 0 and
+mizuuchi2019 0 (results only in figures -> digitizer).
+Fixes from the evaluation:
+- Table cells: '%' after a number or a +- value parses (pulletikurti lost 45 of 60 values silently);
+  a dash with a footnote mark is empty; any other unreadable cell is KEPT with no value and grouped into a
+  `value_not_read` flag (was dropped without a trace). `meas` "ratio" (u "ratio") for product ratios.
+- Assumed values grouped into one flag per (parameter, value); `concentration_not_stated` only for starting
+  species, with the reason.
+- Auto-calibration (`digitizing/auto_axes.find_frames`) on spreadsheet-style charts: if no dark corner frame,
+  a FAINT (< 232) pass with shorter lines (pale axes, small panels -- mizuuchi Fig. 1A-C) whose interior is
+  mostly blank (not the gel photo), then `_grid_frames`: >= 3 evenly spaced fully inked horizontal gridlines
+  with the same right end (labels glue onto the left end), several runs per group (panels stacked in a
+  column share ends), extended down through bars that hide the lower lines; `Frame.gridlines` are the y
+  ticks (`_pair_with_gridlines`: top line = highest number, every k-th line if fewer numbers). Riggi Fig. 2:
+  all 5 panels 0-6 on the gridlines; mizuuchi: axes snapped to the line when the lowest number sits <= 6 px
+  off it. Digitizer: a categorical x axis says "no calibration needed".
+- Figure planner (live, Standard, ~$0.07-0.13/figure): species missing from the vocabulary are now given
+  (Riggi ImpA 15 mM, mizuuchi RNA 0.6 uM each) -- the vocabulary heading had read as a restriction;
+  `max_peptide_length` only for peptides. An axis no column fits is no longer a dead end:
+  `figure_rows.axis_column_from_label` ('Length (nt)' -> length_nt, averaged 'Relative RNA concentration'
+  -> relative_RNA_concentration_avg) -> reviewed as a new variable (was "neither axis assigned -- left out").
+Open: SI figures (main PDF only), text-only averages (excluded by the tables-only rule), Riggi's PDF text
+layer carries overlapping draft text.

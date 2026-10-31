@@ -63,7 +63,8 @@ def resolve_template_column(species_name: str, role: str) -> str:
 
 
 def is_percent(entry) -> bool:
-    return "%" in (entry.concentration_unit_raw or "")
+    """A value kept as printed (not converted to mM): a %, or a ratio between products."""
+    return "%" in (entry.concentration_unit_raw or "") or getattr(entry, "measure", "yield") == "ratio"
 
 
 # a % of a STARTING material left over, not a product yield (kim2017's "Recovered Nicotinamide (%)")
@@ -72,7 +73,7 @@ _RECOVERED_HEADER = re.compile(r"\b(recovered|recovery|unreacted|remaining|resid
 
 
 # '<name>_avg_<unit>' for averaged values (Mickey, 2026-10-31): 'sampled_2peptide_Gly_avg_mM'
-_UNIT_SUFFIX = re.compile(r"(_(?:mM|uM|%yield|%recovered|pct|mL_min|mL|uL|hr|h|min|sec|d|C|K|bar|MPa|g|mg|nm|rpm|nt|mer))$")
+_UNIT_SUFFIX = re.compile(r"(_(?:mM|uM|%yield|%recovered|ratio|pct|mL_min|mL|uL|hr|h|min|sec|d|C|K|bar|MPa|g|mg|nm|rpm|nt|mer))$")
 
 
 def with_average(column: str) -> str:
@@ -86,6 +87,8 @@ def percent_suffix(entry) -> str:
     """'%recovered' for recovered / unreacted starting material (the model's `meas`, or a column header
     that says so -- older answers), else '%yield'."""
     header = re.search(r"\bcolumn\s+(.+)$", getattr(entry, "source", "") or "")
+    if getattr(entry, "measure", "yield") == "ratio":
+        return "ratio"                     # tapiero1971's 'ribo : arabino' (II : III)
     recovered = (getattr(entry, "measure", "yield") == "recovered"
                  or bool(header and _RECOVERED_HEADER.search(header.group(1))))
     return "%recovered" if recovered else "%yield"
@@ -109,7 +112,8 @@ def species_alias_name(entry) -> str:
     matter ("initial RbCl" and "sampled RbCl %" are different variables), and so does an average."""
     avg = " avg" if getattr(entry, "average", False) else ""
     if entry.role == "sampled" and is_percent(entry):
-        return f"sampled {entry.name}{avg} " + ("%" if percent_suffix(entry) == "%yield" else "% recovered")
+        return f"sampled {entry.name}{avg} " + {"%yield": "%", "%recovered": "% recovered"}.get(
+            percent_suffix(entry), percent_suffix(entry))
     return f"{_column_role(entry)} {entry.name}{avg}"
 
 
@@ -183,7 +187,8 @@ def column_safe_name(name: str) -> str:
     """A species name usable inside a column name: whitespace/commas/quotes -> '_'
     ("cytidine 2'-phosphate" -> "cytidine_2'-phosphate"); primes etc. are kept,
     since they matter chemically (2'- vs 5'-phosphate)."""
-    return re.sub(r'[\s,;"]+', "_", name.strip()).strip("_")
+    name = re.sub(r"\s+:\s+", " to ", name.strip())        # a ratio 'II : III' -> 'II_to_III' (2':3' stays)
+    return re.sub(r'[\s,;"]+', "_", name).strip("_")
 
 
 def is_peptide_column(column: str) -> bool:

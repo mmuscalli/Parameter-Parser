@@ -188,15 +188,28 @@ def check_extraction(
     # starting species: no concentration in the paper is its own (always reported) problem;
     # otherwise one flag per species and confidence level
     chem_groups: Dict[tuple, list] = {}
+    unread: Dict[str, list] = {}               # table cells that aren't one number, per species (never dropped silently)
+    for s in chemistry.solutes:
+        if (s.role == "sampled" and s.concentration_value is None and not getattr(s, "detection", "")
+                and (s.conversion_note or "").startswith("table cell")):
+            unread.setdefault(s.name, []).append(s)
+    for name, entries in unread.items():
+        cells = "; ".join(f"{e.sample_label or e.set_label or 'paper'}: {e.conversion_note.split(chr(39))[1]}"
+                          for e in entries[:6])
+        flags.append(Flag("value_not_read", f"{name}: {len(entries)} table cell(s) aren't a single number (a range, a "
+                                            f"limit or a lost exponent), so nothing was written for them -- {cells}"
+                                            + (" ..." if len(entries) > 6 else "") + ". Enter them by hand if needed.",
+                          quote=entries[0].quote or None, source=entries[0].source or None))
     for s in chemistry.solutes:
         if s.role != "initial":
             continue
         where = f"set '{s.set_label}'" if s.set_label else "every set"
-        if s.concentration_value is None and s.concentration_mM is None:
+        if s.concentration_value is None and s.concentration_mM is None and s.role == "initial":
             flags.append(Flag(
                 "concentration_not_stated",
-                f"{s.name} is part of the starting mixture ({where}), but no concentration was found in the "
-                f"paper -- nothing was written for it. Check the paper or its supplementary information.",
+                f"{s.name} is part of the starting mixture ({where}), but no single concentration was found in "
+                f"the paper" + (f" ({s.conversion_note})" if s.conversion_note else "")   # e.g. given as a range
+                + " -- nothing was written for it. Check the paper or its supplementary information.",
                 quote=s.quote or None, source=s.source or None))
         elif confidence_below(s.confidence, flag_below):
             value = (f"{s.concentration_value:g} {s.concentration_unit_raw or ''}".strip()

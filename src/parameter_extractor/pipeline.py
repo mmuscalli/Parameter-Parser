@@ -1128,14 +1128,19 @@ def _new_variable_flags(groups: List[VariableGroup]) -> List[Flag]:
     """One flag per variable left out of the CSV, with an example quote."""
     from parameter_extractor.variable_categories import by_id
     flags = []
+    # the same assumption in several places (pulletikurti2022: 'r.t.' as 25 C in 8 sets) -> one flag
+    assumed: Dict[tuple, list] = {}
     for g in groups:
         if g.kind == "assumed_value":
-            v = g.values[0]
-            flags.append(Flag(
-                "assumed_value",
-                f"{g.name} = {_shown(v)} for {_where(v)} is not stated in the paper (the model "
-                f"marked it assumed), so it was NOT written. Enter it by hand if you agree.",
-                quote=v.quote or None, source=v.source or v.origin))
+            assumed.setdefault((g.name, _shown(g.values[0])), []).append(g.values[0])
+    for (name, shown), vs in assumed.items():
+        where = "; ".join(_where(v) for v in vs[:6]) + (f"; ... ({len(vs) - 6} more)" if len(vs) > 6 else "")
+        flags.append(Flag(
+            "assumed_value",
+            f"{name} = {shown} for {where} is not stated in the paper (the model marked it assumed), so it was NOT "
+            f"written. Enter it by hand if you agree.", quote=vs[0].quote or None, source=vs[0].source or vs[0].origin))
+    for g in groups:
+        if g.kind == "assumed_value":
             continue
         what = {"species": "species", "parameter": "experimental parameter",
                 "figure_axis": "figure axis column"}[g.kind]

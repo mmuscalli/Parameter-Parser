@@ -140,10 +140,12 @@ class SoluteEntry(BaseModel):
         default=False, alias="avg",
         description="True when the value is an AVERAGE over several runs or replicates (mean, avg., 'averaged "
                     "across triplicate experiments'); leave out otherwise.")
-    measure: Literal["yield", "recovered"] = Field(
+    measure: Literal["yield", "recovered", "ratio"] = Field(
         default="yield", alias="meas",
-        description="For a sampled % value only: 'recovered' when it is the share of a STARTING material left "
-                    "unreacted or recovered (e.g. 'Recovered nicotinamide (%)'); leave out for a product yield.")
+        description="For a sampled value only: 'recovered' when it is the % of a STARTING material left "
+                    "unreacted or recovered (e.g. 'Recovered nicotinamide (%)'); 'ratio' when it is a ratio "
+                    "between products (e.g. 'ribo : arabino', name the species 'II : III'); leave out for a "
+                    "product yield or concentration.")
     detection: Literal["", "detected", "not detected"] = Field(
         default="", alias="det",
         description="Only for a 'sampled' species with no amount (v null): 'detected' when the paper lists "
@@ -184,8 +186,10 @@ class SoluteGroup(BaseModel):
     species: List[SoluteEntry]
 
 
-_CELL = re.compile(r"^\s*([-+]?\d+(?:\.\d+)?|[-+]?\.\d+)\s*(?:[x×*·]\s*10\s*\^?\s*([-+]?\d+))?"
-                   r"\s*[a-zA-Z*†‡§#]{0,2}\s*(?:(?:±|\+/-|\+-)\s*\d+(?:\.\d+)?\s*[a-zA-Z*]{0,2})?\s*$")
+# a trailing '%' is the column's unit printed in the cell (pulletikurti2022's '88%', '19%a'): 45 of 60 values
+# were dropped before it was allowed
+_CELL = re.compile(r"^\s*([-+]?\d+(?:\.\d+)?|[-+]?\.\d+)\s*(?:[x×*·]\s*10\s*\^?\s*([-+]?\d+))?\s*%?"
+                   r"\s*[a-zA-Z*†‡§#]{0,2}\s*(?:(?:±|\+/-|\+-)\s*\d+(?:\.\d+)?\s*%?\s*[a-zA-Z*]{0,2})?\s*$")
 
 
 def _cell_number(text: str):
@@ -216,10 +220,12 @@ class TableColumn(BaseModel):
         default=False, alias="avg",
         description="True when the value is an AVERAGE over several runs or replicates (mean, avg., 'averaged "
                     "across triplicate experiments'); leave out otherwise.")
-    measure: Literal["yield", "recovered"] = Field(
+    measure: Literal["yield", "recovered", "ratio"] = Field(
         default="yield", alias="meas",
-        description="For a sampled % value only: 'recovered' when it is the share of a STARTING material left "
-                    "unreacted or recovered (e.g. 'Recovered nicotinamide (%)'); leave out for a product yield.")
+        description="For a sampled value only: 'recovered' when it is the % of a STARTING material left "
+                    "unreacted or recovered (e.g. 'Recovered nicotinamide (%)'); 'ratio' when it is a ratio "
+                    "between products (e.g. 'ribo : arabino', name the species 'II : III'); leave out for a "
+                    "product yield or concentration.")
 
 
 class TableRow(BaseModel):
@@ -253,18 +259,18 @@ class TableResults(BaseModel):
         for row in self.rows:
             for col, raw in zip(self.columns, row.values):
                 text = (raw or "").strip()
-                if not text or text in ("-", "\u2013", "\u2014", "n.m.", "nm"):
-                    continue
+                if not text or text in ("-", "\u2013", "\u2014", "n.m.", "nm") or re.fullmatch(r"[-\u2013\u2014]\s*[a-z*†‡]?", text):
+                    continue                             # empty, or a dash with a footnote mark ('-b')
                 low = text.lower()
                 detection = "not detected" if low in self._ND else "detected" if low in self._DETECTED else ""
-                number = None
+                number, note = None, None
                 if not detection:
                     number = _cell_number(text)
-                    if number is None:
-                        continue                         # not a single value (a range, '<0.1', '10-4') -- skipped
+                    if number is None:                   # a range, '<0.1', '10-4': kept, flagged, never guessed
+                        note = f"table cell '{text}' isn't a single number -- not read"
                 out.append(SoluteEntry(
                     name=col.name, role=col.role, phase=col.phase, set_label=row.set_label or None,
-                    sample_label=row.sample_label or None, concentration_value=number,
+                    sample_label=row.sample_label or None, concentration_value=number, conversion_note=note,
                     concentration_unit_raw=col.unit or None, detection=detection if col.role == "sampled" else "",
                     quote=f"{row.label} {text}".strip(),
                     source=f"{self.source}, row {row.label}, column {col.label}",

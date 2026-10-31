@@ -61,6 +61,7 @@ def answer(ctx, stage: str, system_prompt: str, content, response_model):
         from parameter_extractor.errors import PipelineError
         raise PipelineError("Developer handoff works for full extraction runs only (not focused searches).")
     folder = Path(ctx.handoff_paper_dir)
+    folder.mkdir(parents=True, exist_ok=True)      # a paper without table images had none yet (mizuuchi2019)
     texts, images = _flatten(folder, content)
     task = texts[-1] if texts else ""
     key = f"{stage}-{hashlib.sha1((system_prompt + task).encode()).hexdigest()[:8]}"
@@ -115,7 +116,7 @@ def _flatten(folder: Path, content):
 
 def _is_label(text: str) -> bool:
     """api_client puts a short label ('Page 9, piece 2 of 2 ...') before an image piece."""
-    return text.startswith("Page ") and "\n" not in text
+    return text.startswith(("Page ", "Supplementary information")) and "\n" not in text
 
 
 def _write_request(folder: Path, key: str, stage: str, system_prompt: str, texts, images, response_model):

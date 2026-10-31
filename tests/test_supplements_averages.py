@@ -119,6 +119,33 @@ def test_digitized_averages():
     assert rows[0].species_mM == {} and rows[0].extra.get("sampled_2peptide_Gly_avg_%yield") == 4.0
 
 
+def test_axes_no_column_fits_are_named_from_their_labels():
+    """mizuuchi2019 Fig. 1: 'Relative RNA concentration' (averaged) against 'Length (nt)' -- no column fits
+    either axis; the series still gives rows, and both values go to the review under label-based names."""
+    from parameter_extractor.ingestion.figure_rows import axis_column_from_label, build_figure_rows
+    from parameter_extractor.registry import VariableRegistry
+    from parameter_extractor.schemas.figures import (AxisCalibration, AxisVariable, CalibrationPoint,
+                                                     DigitizedFigure, DigitizedPanel, DigitizedPoint, DigitizedSeries)
+    from parameter_extractor.schemas.methodology import empty_methodology
+    from parameter_extractor.schemas.paper_metadata import PaperMetadata
+    assert axis_column_from_label("avg. max. linear oligomer length", average=True) == "max_linear_oligomer_length"
+    assert axis_column_from_label("Length (nt)") == "length_nt"
+    cal = lambda a, b: AxisCalibration(p1=CalibrationPoint(px=a[0], py=a[1], value=a[2]),
+                                       p2=CalibrationPoint(px=b[0], py=b[1], value=b[2]))
+    panel = DigitizedPanel(x_cal=cal((0, 100, 0), (100, 100, 24)), y_cal=cal((0, 100, 0), (0, 0, 2)),
+                           x=AxisVariable(label="Length (nt)", column=None),
+                           y=AxisVariable(label="Relative RNA concentration", column=None, average=True))
+    fig = DigitizedFigure(figure_id="Fig. 1", number=1, page=2, caption="c", render_scale=1.0, page_image="",
+                          panels=[panel], series=[DigitizedSeries(label="Pyrite", initial_temperature_C=22,
+                                                                  points=[DigitizedPoint(px=50, py=50)])])
+    meta = PaperMetadata(paper_id="p", paper_title="t", authors=["A"], year_published=2019, journal_published="j")
+    rows, problems, new_vars = build_figure_rows([fig], meta, empty_methodology("p"), "001", 1, 1,
+                                                 registry=VariableRegistry(None))
+    assert len(rows) == 1 and not problems and rows[0].set_type == "Average"
+    assert {(v.kind, v.proposed_column, v.value) for v in new_vars} == {
+        ("figure_axis", "length_nt", 12.0), ("figure_axis", "relative_RNA_concentration_avg", 1.0)}
+
+
 if __name__ == "__main__":
     for name, fn in list(globals().items()):
         if name.startswith("test_") and callable(fn):

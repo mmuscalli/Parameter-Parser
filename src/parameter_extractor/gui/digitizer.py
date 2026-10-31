@@ -986,6 +986,9 @@ class DigitizerWidget(QWidget):
             notes.append(str(e))
         else:
             for axis, side, var in (("x", x_side, panel.x), ("y", y_side, panel.y)):
+                if axis == "x" and not var.column and not var.tick_labels:
+                    notes.append("X: categories (bars), no calibration needed")
+                    continue
                 try:
                     (ax, ay, av), (bx, by, bv), is_log = calibrate_axis(
                         self._gray(), frame, side, list(var.tick_labels), self.fig.tick_numbers)

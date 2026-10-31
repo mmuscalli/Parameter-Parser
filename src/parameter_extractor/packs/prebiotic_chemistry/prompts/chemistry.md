@@ -124,6 +124,8 @@ For each species:
 - A percentage of a STARTING material left over ("Recovered nicotinamide (%)",
   "unreacted 4"): role sampled, `meas` "recovered" (on the table column or the species) -- it
   isn't a yield.
+- A RATIO between products ("Ratio ribo : arabino" = II : III): role sampled, `meas` "ratio", `u`
+  "ratio", named by what it compares ("cytidine 2':3'-cyclic phosphate : aracytidine 3'-phosphate").
 - Do not extract values that only appear as a point on a scatter plot/figure
   -- table and in-text values only, for this pass.
 - Keep every `q` to the shortest span that shows the value (at most 20

@@ -61,6 +61,31 @@ def test_frames_and_axes_are_found():
             raise AssertionError("a mismatched set of numbers must not calibrate")
 
 
+def test_spreadsheet_charts_pale_axes_and_gridlines():
+    """mizuuchi2019 / Riggi2023 style: pale grey axis lines with no box, and bar charts drawn with
+    only gridlines (no axis lines; bars hide the lower gridlines); two panels stacked in a column."""
+    from parameter_extractor.digitizing.auto_axes import _pair_with_gridlines, find_frames
+    img = np.full((900, 700), 255, np.uint8)
+    # panel 1: pale L-shaped axes (grey 205), 300 x 250
+    img[100:351, 100] = 205
+    img[350, 100:401] = 205
+    # panels 2 and 3: gridlines (grey 185) every 30 px at x 450..650; bars (dark) over the lower ones
+    for top in (420, 660):
+        for k in range(7):
+            img[top + 30 * k, 450:651] = 185
+        img[top + 60:top + 181, 455:645] = 90          # bars from value 0 to 4 cover gridlines 0..4
+    frames = sorted(find_frames(img, (0, 0, 700, 900)), key=lambda f: f.top)
+    assert len(frames) == 3, frames
+    pale, g1, g2 = frames
+    assert (pale.left, pale.bottom) == (100, 350) and not pale.gridlines
+    for f, top in ((g1, 420), (g2, 660)):
+        assert abs(f.top - top) <= 1 and abs(f.bottom - (top + 180)) <= 1 and len(f.gridlines) == 7
+    positions, values, _ = _pair_with_gridlines(g1.gridlines, [0, 1, 2, 3, 4, 5, 6])
+    assert values == [0, 1, 2, 3, 4, 5, 6] and abs(positions[0] - 600) <= 1 and abs(positions[-1] - 420) <= 1
+    (ax, ay, av), (bx, by, bv), _ = calibrate_axis(img, g1, "left", [0, 2, 4, 6])
+    assert (av, bv) == (0, 6) and abs(ay - 600) <= 1 and abs(by - 420) <= 1
+
+
 def test_markers_like_an_example_are_found():
     if not PDF.is_file():
         print(f"SKIP: needs {PDF}"); return

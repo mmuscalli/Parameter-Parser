@@ -222,7 +222,8 @@ def test_table_results_expand_to_species_entries():
     assert _cell_number("2.1 \u00b1 0.3") == 2.1                                    # the value; its error dropped
     for unclear in ("10\u22124", "<0.1", "1-4", "trace", ""):
         assert _cell_number(unclear) is None, unclear
-    assert ("Gly", "a") not in by                                                    # '10−4': not guessed
+    unread = by[("Gly", "a")]                         # '10−4': not guessed, but kept (no value) to be flagged
+    assert unread.concentration_value is None and "isn't a single number" in unread.conversion_note
 
 if __name__ == "__main__":
     for name, fn in list(globals().items()):

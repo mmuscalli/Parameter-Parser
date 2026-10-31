@@ -67,7 +67,8 @@ STRUCTURE PLAN (sets and rows already planned from text and tables):
 {{STRUCTURE_PLAN_JSON}}
 
 ---
-CONTROLLED VOCABULARY (species names, if any):
+CONTROLLED VOCABULARY (species names, if any -- use these spellings where a species is listed; a
+species that isn't listed is still given, under the paper's name -- the user reviews it):
 
 {{CONTROLLED_VOCAB_JSON}}
 
