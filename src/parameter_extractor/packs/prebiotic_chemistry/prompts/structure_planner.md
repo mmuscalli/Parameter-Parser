@@ -23,6 +23,8 @@ Guidance:
   averaged condition, or one set for a table of averages with one row per
   condition). When the individual runs ARE given, each run is its own row in one
   set with set_type "Independent", and the average goes with that set's rows.
+  An average stated only in the running text never gets a row of its own (see
+  the tables rule below); the chemistry step puts it on the rows of its set.
 - `duration_hr`: give every sample's duration, including a duration stated once for
   the whole table or experiment (a caption's "heated at 90 °C for 3 hours").
 - `data_source`: for each set, '' if the data was measured in this paper.

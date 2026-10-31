@@ -182,8 +182,11 @@ def test_full_run_fills_results():
         figures_tab = w.tabs.indexOf(w.figures_view)
         assert w.tabs.tabText(figures_tab) == "Figures (5)"
         assert "Fig. 3" in w.figures_view.toPlainText() and "skipped" in w.figures_view.toPlainText()
+        assert "image not kept" in w.figures_view.toPlainText()          # skipped figures' images removed
+        assert w.tabs.tabText(w.tabs.indexOf(w.tables_view)) == "Tables (3)"          # eder1994's Tables 1-3
+        assert "Table 2" in w.tables_view.toPlainText()
         assert w.tabs.tabText(w.tabs.indexOf(w.equations_view)) == "Equations (1)"   # eder1994's rate law
-        for i, name in enumerate(["1_rows", "2_flags", "3_figures", "4_equations", "5_summary"]):
+        for i, name in enumerate(["1_rows", "2_flags", "3_figures", "4_tables", "5_equations", "6_summary"]):
             w.tabs.setCurrentIndex(i); _pump(); _screenshot(w, name)
         w.close()
 
@@ -644,14 +647,19 @@ def test_settings_and_run_options():
         w.options_btn.click()
         assert w.options_widget.isVisible() and QSettings().value("options_shown", type=bool)
         assert w.suggest_box.isChecked() and w.current_config().suggest_new_variables   # on by default
-        assert w.toggles_btn.text() == "Variable suggestions, SI"                    # the dropdown says what's on
+        assert w.toggles_btn.text() == "Variable suggestions, SI, Images"            # the dropdown says what's on
+        cfg = w.current_config()
+        assert cfg.save_images and not cfg.save_all_figure_images                       # image defaults
+        w.images_box.setChecked(False)
+        assert not w.all_figures_box.isEnabled()
+        w.images_box.setChecked(True)
         w.batch_box.setChecked(True)
         w.arxiv_box.setChecked(True)
         w.suggest_box.setChecked(False)
         assert "batch" in w.options_summary.text() and "arXiv text" in w.options_summary.text()
         assert "no new-variable suggestions" in w.options_summary.text()
         assert w.toggles_btn.text().startswith("Batch, arXiv text")
-        assert len(w.toggles_btn.menu().actions()) == 5 and w.current_config().include_supplements
+        assert len(w.toggles_btn.menu().actions()) == 7 and w.current_config().include_supplements
         assert w.settings_hint.isVisible() and "API key" in w.settings_hint.text()       # no key yet
         w.key_edit.setText("k")
         assert not w.settings_hint.isVisible()

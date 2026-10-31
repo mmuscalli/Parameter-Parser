@@ -97,6 +97,23 @@ def _rename_ratio_species(chemistry: ChemistryExtraction, original) -> None:
             part.name = renamed
 
 
+def _range_text(s) -> None:
+    """A value printed as a range: 'low:high' -- as printed for a % or ratio, else in mM (Mickey, 2026-10-31)."""
+    from parameter_extractor.ingestion.flatten_to_template import is_percent
+    from parameter_extractor.units import format_range, range_to_column_unit
+    lo, hi, unit = s.concentration_value, s.concentration_high, (s.concentration_unit_raw or "").strip()
+    printed = f"{lo:g}-{hi:g} {unit}".strip()
+    if is_percent(s):
+        s.concentration_range = format_range(lo, hi)
+    elif (converted := range_to_column_unit(lo, hi, unit, "mM")) is not None:
+        s.concentration_range = converted[0]
+    else:
+        _append_note(s, f"range {printed} -- unit not converted, not written")
+        return
+    s.concentration_mM = None          # a range has no single value: kept out of calculations
+    _append_note(s, f"range printed as {printed}")
+
+
 def normalize_chemistry(chemistry: ChemistryExtraction, pubchem=None, registry=None) -> List[NormalizationNote]:
     """`pubchem`: a pubchem.PubChem (None = no lookups); `registry`: for species
     the user accepted earlier."""
@@ -112,6 +129,9 @@ def normalize_chemistry(chemistry: ChemistryExtraction, pubchem=None, registry=N
     _identify(chemistry, pubchem, registry, notes, rule_matched)
     _rename_ratio_species(chemistry, original)
     for s in chemistry.solutes:
+        if s.concentration_high and s.concentration_value is not None and s.concentration_high > s.concentration_value:
+            _range_text(s)                 # 'low:high', never used in calculations
+            continue
         unit = canonical_unit(s.concentration_unit_raw) if s.concentration_unit_raw else None
         if s.concentration_value is None or unit is None:
             continue

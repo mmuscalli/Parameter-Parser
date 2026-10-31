@@ -33,6 +33,15 @@ class FigureCandidate(BaseModel):
     # numbers in the PDF's text layer inside the figure (vector plots' tick labels):
     # (centre x, centre y, value) in page-image pixels; empty for plots that are images
     tick_numbers: List[Tuple[float, float, float]] = Field(default_factory=list)
+    # a figure in the paper's supplementary information (Fig. S1): `page` counts on from the paper's pages,
+    # `page_label` is the supplement's own ('S3')
+    supplement: bool = False
+    page_label: str = ""
+
+    @property
+    def tag(self) -> str:
+        """'3', or 'S3' for a supplement's figure: file and audit names."""
+        return f"S{self.number}" if self.supplement else str(self.number)
 
 
 # ---- the model's suggestions (structured output of the figure_planner stage) ----
@@ -209,3 +218,9 @@ class DigitizedFigure(BaseModel):
     panels: List[DigitizedPanel] = Field(default_factory=lambda: [DigitizedPanel()])
     series: List[DigitizedSeries] = Field(default_factory=list)
     plan: Optional[FigurePlan] = None               # the suggestions it started from, for the audit trail
+    supplement: bool = False                        # see FigureCandidate
+    page_label: str = ""
+
+    @property
+    def tag(self) -> str:
+        return f"S{self.number}" if self.supplement else str(self.number)

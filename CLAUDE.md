@@ -1523,3 +1523,42 @@ Fixes from the evaluation:
   -> relative_RNA_concentration_avg) -> reviewed as a new variable (was "neither axis assigned -- left out").
 Open: SI figures (main PDF only), text-only averages (excluded by the tables-only rule), Riggi's PDF text
 layer carries overlapping draft text.
+
+## SI figures, image options, text-only averages, ranges, Tables tab (2026-10-31, Mickey's answers)
+
+- **SI figures** are offered for digitizing: `find_figures(si, supplement=True, page_offset=...)` (SI_CAPTION_RE
+  takes 'Figure S1' or the SI's own 'Figure 1') -> 'Fig. S<n>', files fig-S<n>.png / page-S<p>.png,
+  `FigureCandidate/DigitizedFigure.supplement` + `page_label` ('S8'), `.tag` ('S1') for file and audit names
+  (annotate, figure_planner.fig<tag>), figure_passages(..., supplement) matches 'Fig. S1'. Review dialog:
+  "Skip the supplement's figures" (pulletikurti2022_SI has 90, mostly NMR spectra), pages shown as
+  "supplementary information, page S8".
+- **Images** (RunConfig `save_images` default True, `save_all_figure_images` default False; Options menu
+  "Save table and figure images" / "Also keep images of figures not digitized"; CLI --no-images /
+  --all-figure-images): figure renders are needed for the review, so `pipeline._tidy_figure_images` removes
+  them in finish() -- digitized figures' crop/page/annotated image kept unless save_images is off; the
+  fig-N.digitized.json (data) always stays; summary entries get `image_note` (shown in the Figures tab).
+- **Tables tab** (`ingestion/table_finder.py`, local): on the parser's table pages, "Table N" captions
+  (column-aware like the figure finder), the block below to the next caption / a gap > 4 lines / two lines
+  of running text (`_is_running_text`: long, few numbers, no column gaps; for full-width tables either half
+  of a merged two-column line), the block above if nothing is below, rows crossing the middle -> full
+  width, a mostly-crossing page = one column; the crop is widened to the ink across the table's rows within
+  its column. Landscape (turned) pages: whole page, upright, named by the parser's caption (faisal2005's
+  Table 1). -> <run>/tables/table-N.png (SI: table-S<n>.png) + tables.json, RunResult.tables, GUI "Tables"
+  tab. Checked on eder1994 (scan), kim2017, kim2019, truman2024, tapiero1971, Riggi2023, pulletikurti SI,
+  faisal2005, teng2023. Failures never stop a run (note only).
+- **Text-only averages** (Mickey: no rows of their own, but a column on rows of the same set): chemistry
+  prompt -- an average stated only in the text for a planned set goes in `groups` with that set, no sample,
+  `avg` true (build_rows already puts set-wide averages on each row of the set); averages for experiments
+  that aren't rows are left out. Structure prompt says they never get rows.
+- **Ranges** (Mickey: keep them; '<name>_range_<unit>', cell 'low:high'): units.parse_range (low < high only,
+  so '10-4 M' stays an OCR-lost exponent), format_range, range_to_column_unit; flatten_to_template.with_range /
+  without_range; registry: the range of a known column is known. Sources: figure conditions
+  (convert_condition, also pH '6-7'), spec stages (item field `hi`, alias; a range only when hi != 0 and >
+  v -- a negative value with the default 0 isn't one: st_radv broke the aa57186 replay), chemistry
+  (`SoluteEntry.concentration_high` / `hi`, table cells '5-10' via `_cell_range`; normalize writes
+  `concentration_range` text, % / ratio as printed else mM, and concentration_mM None -> never in
+  calculations), review values (`_categorised` / `stored_value`: '10-200 s' -> residence_time_range_hr
+  '0.00277778:0.0555556'). One `value_range` flag per range column. Prompts: optional_stage.md and
+  chemistry.md (`hi`).
+- Live faisal2005 Standard x2 ($0.23, $0.18): 25 rows = reference except wording; one run dropped the
+  per-sample sampled_pH (variance: the second had all 25).

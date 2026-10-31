@@ -108,6 +108,10 @@ def main() -> int:
                              "each step waits in the batch queue (usually minutes, at most 24 h)")
     parser.add_argument("--no-si", action="store_true",
                         help="Don't read a paper's supplementary information ('<paper>_SI.pdf' next to it) with it")
+    parser.add_argument("--no-images", action="store_true",
+                        help="Don't keep table crops (tables/) or figure images in the run folder")
+    parser.add_argument("--all-figure-images", action="store_true",
+                        help="Also keep the images of figures that weren't digitized (normally removed)")
     parser.add_argument("--no-suggestions", action="store_true",
                         help="Don't suggest new variables: no open-ended capture of conditions without a column "
                              "(new variables are listed in one flag and new_variables.json, never added)")
@@ -161,6 +165,7 @@ def main() -> int:
                  "batch_mode": args.batch, "prefer_arxiv": args.arxiv,
                  "suggest_new_variables": not args.no_suggestions, "passes": args.passes,
                  "include_supplements": not args.no_si,
+                 "save_images": not args.no_images, "save_all_figure_images": args.all_figure_images,
                  "pubchem_cache_path": default_pubchem_cache_path(), "arxiv_cache_dir": default_arxiv_cache_dir()}
     if args.ads_token is not None:
         overrides["ads_token"] = args.ads_token

@@ -8,8 +8,9 @@ Answer format: `rows` -- one entry per set (and sample) that has values:
 `set` (the set_label), {{SAMPLE_KEY}}and its `values`. Each value: `col` the
 parameter, `v` the value, `u` the unit as printed, `q` the quote, `src`
 where it is, `c` your confidence; and ONLY when they apply (leave them out
-otherwise): `ep` / `em` upper / lower uncertainty, `lim` limit, `txt` text,
-`mode`, `meth` method, `b` basis, `n` a short note.
+otherwise): `hi` the upper end of a range, `ep` / `em` upper / lower
+uncertainty, `lim` limit, `txt` text, `mode`, `meth` method, `b` basis, `n` a
+short note.
 
 Rules:
 - Only values the paper states, or that follow arithmetically from stated
@@ -26,6 +27,8 @@ Rules:
   JD-2450000 -> JD, fraction -> %, ...). Don't convert values yourself:
   a date printed under "BJD - 2450000" is `v` 9662.74 with that `u`, not
   2459662.74.
+- A value printed as a range ("5-6 mg", "80 to 90 °C"): `v` the lower end,
+  `hi` the upper end, `u` their unit -- never one end alone or the midpoint.
 - Values written in LaTeX: in `x_{-a}^{+b}` (or `x^{+b}_{-a}`) the
   superscript +b is the upper uncertainty `ep` and the subscript -a the
   lower one `em`, whichever comes first.

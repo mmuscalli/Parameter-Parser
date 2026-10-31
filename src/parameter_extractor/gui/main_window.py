@@ -251,6 +251,15 @@ class MainWindow(QMainWindow):
                                "'_supplementary', '_supporting information') is read with it: its text and tables "
                                "are used, its pages shown as S1, S2, ..., and everything is reported under the "
                                "paper. In a paper list, SI files are folded into their papers.")
+        self.images_box = QCheckBox("Save table and figure images")
+        self.images_box.setChecked(True)
+        self.images_box.setToolTip("Keep a crop of every table (the Tables tab) and the images of the figures you "
+                                   "digitize in the run folder, for checking values and flags against the paper.")
+        self.all_figures_box = QCheckBox("Also keep images of figures not digitized")
+        self.all_figures_box.setChecked(False)
+        self.all_figures_box.setToolTip("Figures are rendered for the figure review; normally only the ones you "
+                                        "digitize are kept. Tick to keep every figure's image.")
+        self.images_box.toggled.connect(self.all_figures_box.setEnabled)
         # the on/off options in one dropdown (it will grow); checkboxes inside keep the menu open
         self.toggles_btn = QToolButton()
         self.toggles_btn.setPopupMode(QToolButton.ToolButtonPopupMode.InstantPopup)
@@ -307,13 +316,15 @@ class MainWindow(QMainWindow):
 
     def option_toggles(self) -> List[QCheckBox]:
         """The on/off run options in the Options dropdown, in menu order."""
-        return [self.batch_box, self.arxiv_box, self.equations_box, self.suggest_box, self.si_box]
+        return [self.batch_box, self.arxiv_box, self.equations_box, self.suggest_box, self.si_box,
+                self.images_box, self.all_figures_box]
 
     def _update_options_summary(self, *_args) -> None:
         """One line for the collapsed run options: what this run will do (and the dropdown's
         own text: the options that are on)."""
         short = {self.batch_box: "Batch", self.arxiv_box: "arXiv text", self.equations_box: "LaTeX",
-                 self.suggest_box: "Variable suggestions", self.si_box: "SI"}
+                 self.suggest_box: "Variable suggestions", self.si_box: "SI",
+                 self.images_box: "Images", self.all_figures_box: "All figure images"}
         on = [short[b] for b in self.option_toggles() if b.isChecked()]
         self.toggles_btn.setText(", ".join(on) if on else "None on")
         stages = [b for b in self.stage_boxes.values()]
@@ -391,6 +402,9 @@ class MainWindow(QMainWindow):
         self.figures_view = QTextBrowser(placeholderText="Figures found in the paper appear here.")
         self.figures_view.setOpenExternalLinks(False)
         tabs.addTab(self.figures_view, "Figures")
+        self.tables_view = QTextBrowser(placeholderText="Tables found in the paper appear here.")
+        self.tables_view.setOpenExternalLinks(False)
+        tabs.addTab(self.tables_view, "Tables")
         self.equations_view = QTextBrowser(placeholderText="Equations the authors label, e.g. '(1)' or "
                                                            "'Eq. 2', appear here.")
         self.equations_view.setTextInteractionFlags(Qt.TextInteractionFlag.TextBrowserInteraction)
@@ -440,6 +454,9 @@ class MainWindow(QMainWindow):
         self.arxiv_box.setChecked(self._settings.value("prefer_arxiv", False, type=bool))
         self.suggest_box.setChecked(self._settings.value("suggest_new_variables", True, type=bool))
         self.si_box.setChecked(self._settings.value("include_supplements", True, type=bool))
+        self.images_box.setChecked(self._settings.value("save_images", True, type=bool))
+        self.all_figures_box.setChecked(self._settings.value("save_all_figure_images", False, type=bool))
+        self.all_figures_box.setEnabled(self.images_box.isChecked())
         self.passes_combo.setCurrentIndex(max(0, self.passes_combo.findData(self._settings.value("passes", 1, type=int))))
         if self.settings_dialog.handoff_box is not None:
             self.settings_dialog.handoff_edit.setText(self._settings.value("dev/handoff_dir", ""))
@@ -510,6 +527,8 @@ class MainWindow(QMainWindow):
         self._settings.setValue("prefer_arxiv", self.arxiv_box.isChecked())
         self._settings.setValue("suggest_new_variables", self.suggest_box.isChecked())
         self._settings.setValue("include_supplements", self.si_box.isChecked())
+        self._settings.setValue("save_images", self.images_box.isChecked())
+        self._settings.setValue("save_all_figure_images", self.all_figures_box.isChecked())
         self._settings.setValue("passes", self.passes_combo.currentData() or 1)
         if self.settings_dialog.handoff_box is not None:
             self._settings.setValue("dev/handoff", self.settings_dialog.handoff_box.isChecked())
@@ -612,6 +631,8 @@ class MainWindow(QMainWindow):
                          prefer_arxiv=self.arxiv_box.isChecked(), ads_token=self.ads_edit.text().strip(),
                          suggest_new_variables=self.suggest_box.isChecked(),
                          include_supplements=self.si_box.isChecked(),
+                         save_images=self.images_box.isChecked(),
+                         save_all_figure_images=self.images_box.isChecked() and self.all_figures_box.isChecked(),
                          passes=self.passes_combo.currentData() or 1,
                          handoff_dir=self.settings_dialog.handoff_dir(),
                          pubchem_cache_path=default_pubchem_cache_path(), arxiv_cache_dir=default_arxiv_cache_dir())
@@ -807,6 +828,7 @@ class MainWindow(QMainWindow):
         self._fill_rows(result)
         self._fill_flags(result)
         self._fill_figures(result)
+        self._fill_tables(result)
         self._fill_equations(result)
         self._fill_summary(result)
         self.open_folder_btn.setEnabled(True)
@@ -1035,10 +1057,32 @@ class MainWindow(QMainWindow):
                 f"<h3>{html.escape(f['figure_id'])}"
                 + (f" <span style='font-weight:normal;color:gray'>(page {f['page']})</span>" if f.get("page") else "")
                 + f"</h3><p><b>{status_text.get(f['status'], f['status'])}</b>{detail}</p>"
-                + (f"<p>{self._image_html(image)}</p>" if image else "")
+                + (f"<p>{self._image_html(image)}</p>" if image else
+                   f"<p style='color:gray'>({html.escape(f['image_note'])})</p>" if f.get("image_note") else "")
                 + (f"<p style='color:gray'>{html.escape(f.get('caption', ''))}</p>" if f.get("caption") else "")
                 + "<hr>")
         self.figures_view.setHtml("".join(parts))
+
+    def _fill_tables(self, result) -> None:
+        tables = getattr(result, "tables", []) or []
+        self.tabs.setTabText(self.tabs.indexOf(self.tables_view), f"Tables ({len(tables)})")
+        if not tables:
+            self.tables_view.setHtml(
+                "<p>No table images. Tables are cropped from the paper's table pages when "
+                "&ldquo;Save table and figure images&rdquo; is on (Options); a paper read from arXiv text "
+                "has none.</p>")
+            return
+        parts = ["<p style='color:gray'>Crops of the paper's tables, for checking values and flags "
+                 "(&ldquo;Where: Table 2&rdquo; in a cell's hover text). The values themselves were read from "
+                 "the full page images.</p>"]
+        for t in tables:
+            parts.append(f"<h3>{html.escape(t['table_id'])} "
+                         f"<span style='font-weight:normal;color:gray'>(page {html.escape(str(t['page_label']))})"
+                         f"</span></h3>"
+                         + (f"<p>{self._image_html(t['image'])}</p>" if Path(t["image"]).is_file() else "")
+                         + (f"<p style='color:gray'>{html.escape(t['caption'])}</p>" if t.get("caption") else "")
+                         + "<hr>")
+        self.tables_view.setHtml("".join(parts))
 
     def _fill_equations(self, result) -> None:
         equations = result.equations

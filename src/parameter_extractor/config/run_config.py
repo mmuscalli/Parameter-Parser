@@ -66,6 +66,11 @@ class RunConfig:
     prefer_arxiv: bool = False
     # Read a paper's supplementary information with it ('<paper>_SI.pdf' next to the PDF, supplements.py)
     include_supplements: bool = True
+    # Images kept in the run folder (Mickey, 2026-10-31): a crop of every table (tables/, the Tables tab) and
+    # of every digitized figure -- on by default; figures that weren't digitized only with
+    # save_all_figure_images (off by default: they're rendered for the review, then removed).
+    save_images: bool = True
+    save_all_figure_images: bool = False
     # Run the extraction steps after the structure plan this many times (1-3) and keep each value by vote
     # (voting.py): another lever for cheap runs -- Economy with 2-3 passes recovers values a single pass
     # drops at random. Each extra pass adds the cost of those steps again (the paper is read from cache).

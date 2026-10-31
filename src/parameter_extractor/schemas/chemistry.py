@@ -110,6 +110,10 @@ class SoluteEntry(BaseModel):
                                                                         "unit; null if the paper gives none.")
     concentration_unit_raw: Optional[str] = Field(alias="u", description="Unit exactly as stated, e.g. 'mol dm-3', "
                                                                          "'%'.")
+    # a range ('5-10 mM'; Mickey, 2026-10-31): v = the low end, hi = the high end; kept as 'low:high'
+    concentration_high: float = Field(default=0.0, alias="hi",
+                                      description="Only for a value printed as a range ('5-10 mM'): its upper end "
+                                                  "(v = the lower end, same unit); leave out otherwise.")
     concentration_basis: ConcentrationBasis = Field(
         default="mixture", alias="b",
         description="Leave out for the concentration in the reaction mixture itself; 'stock' for a solution "
@@ -154,6 +158,7 @@ class SoluteEntry(BaseModel):
                     "use (e.g. '%' in a yield table).")
     # set by calculators/mixing.py / amounts.py, never by the model (hidden from its schema)
     derived: SkipJsonSchema[bool] = False
+    concentration_range: SkipJsonSchema[str] = ""   # 'low:high' in the column's unit (normalize.py), for ranges
     calculated_from: SkipJsonSchema[str] = ""  # "amount": mM = amount / reaction volume (amounts.py)
     exact_mM: SkipJsonSchema[float] = 0.0      # a derived value before rounding, for chained calculations
 
@@ -170,7 +175,7 @@ class SoluteEntry(BaseModel):
         species name, or 'stock <name>' for a stock-solution concentration (both
         can exist for one species, in different columns)."""
         name = f"stock {self.name}" if self.concentration_basis == "stock" else self.name
-        return name + (" avg" if self.average else "")
+        return name + (" avg" if self.average else "") + (" range" if self.concentration_high else "")
 
 
 class SoluteGroup(BaseModel):
@@ -190,6 +195,17 @@ class SoluteGroup(BaseModel):
 # were dropped before it was allowed
 _CELL = re.compile(r"^\s*([-+]?\d+(?:\.\d+)?|[-+]?\.\d+)\s*(?:[x×*·]\s*10\s*\^?\s*([-+]?\d+))?\s*%?"
                    r"\s*[a-zA-Z*†‡§#]{0,2}\s*(?:(?:±|\+/-|\+-)\s*\d+(?:\.\d+)?\s*%?\s*[a-zA-Z*]{0,2})?\s*$")
+
+
+def _cell_range(text: str):
+    """A table cell printed as a range -> (low, high): '5-10', '5–10%', '0.1 to 0.5'; None otherwise
+    (also for '10-4', an OCR-lost exponent: low must be below high)."""
+    from parameter_extractor.units import parse_range
+    t = re.sub(r"(?<=\d)\s*[a-z*†‡]$", "", text.strip())        # a footnote mark after the number
+    found = parse_range(t)
+    if found is None or found[2] not in ("", "%"):
+        return None
+    return found[0], found[1]
 
 
 def _cell_number(text: str):
@@ -263,14 +279,17 @@ class TableResults(BaseModel):
                     continue                             # empty, or a dash with a footnote mark ('-b')
                 low = text.lower()
                 detection = "not detected" if low in self._ND else "detected" if low in self._DETECTED else ""
-                number, note = None, None
+                number, note, high = None, None, 0.0
                 if not detection:
                     number = _cell_number(text)
-                    if number is None:                   # a range, '<0.1', '10-4': kept, flagged, never guessed
+                    if number is None and (rng := _cell_range(text)):
+                        number, high = rng               # '5-10': a range, kept as 'low:high'
+                    elif number is None:                 # '<0.1', '10-4': kept, flagged, never guessed
                         note = f"table cell '{text}' isn't a single number -- not read"
                 out.append(SoluteEntry(
                     name=col.name, role=col.role, phase=col.phase, set_label=row.set_label or None,
                     sample_label=row.sample_label or None, concentration_value=number, conversion_note=note,
+                    concentration_high=high,
                     concentration_unit_raw=col.unit or None, detection=detection if col.role == "sampled" else "",
                     quote=f"{row.label} {text}".strip(),
                     source=f"{self.source}, row {row.label}, column {col.label}",

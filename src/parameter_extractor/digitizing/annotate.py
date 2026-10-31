@@ -28,7 +28,7 @@ def save_digitized(fig: DigitizedFigure, out_dir: Path) -> Tuple[Path, Path]:
         for p_rec, pt in zip(s_rec["points"], series.points):
             xy = try_pixel_to_data(panel, pt.px, pt.py)
             p_rec["x_axis_value"], p_rec["y_axis_value"] = xy if xy else (None, None)
-    json_path = out_dir / f"fig-{fig.number}.digitized.json"
+    json_path = out_dir / f"fig-{fig.tag}.digitized.json"
     json_path.write_text(json.dumps(record, indent=2, ensure_ascii=False))
 
     img = Image.open(fig.page_image).convert("RGB")
@@ -66,6 +66,6 @@ def save_digitized(fig: DigitizedFigure, out_dir: Path) -> Tuple[Path, Path]:
     for j, series in enumerate(fig.series):
         legend.text((8, 8 + 14 * j), f"● {series.label} ({len(series.points)} pts)",
                     fill=SERIES_COLORS[j % len(SERIES_COLORS)])
-    png_path = out_dir / f"fig-{fig.number}.digitized.png"
+    png_path = out_dir / f"fig-{fig.tag}.digitized.png"
     crop.save(png_path)
     return json_path, png_path

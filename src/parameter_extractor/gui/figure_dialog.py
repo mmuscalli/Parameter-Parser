@@ -30,6 +30,11 @@ from parameter_extractor.gui.digitizer import DigitizerWidget
 PlanRequester = Callable[[FigureCandidate, Callable[[FigurePlan], None], Callable[[str], None]], None]
 
 
+
+def _where(f) -> str:
+    """'page 4', or 'supplementary information, page S8'."""
+    return f"supplementary information, page {f.page_label}" if f.supplement else f"page {f.page}"
+
 class PlanBridge(QObject):
     """Runs plan requests on Python threads and hands results back to the GUI
     thread via a queued signal. Owned by the main window, so a result that
@@ -103,9 +108,13 @@ class FigureReviewDialog(QDialog):
         self.digitize_btn = QPushButton("Digitize this figure", clicked=self._choose, default=True)
         self.skip_btn = QPushButton("Skip", clicked=self._skip)
         self.skip_rest_btn = QPushButton("Skip all remaining figures", clicked=self._skip_rest)
+        # a supplement can hold dozens of figures (pulletikurti2022_SI: 90, mostly NMR spectra)
+        self.skip_si_btn = QPushButton("Skip the supplement's figures", clicked=self._skip_supplement)
+        self.skip_si_btn.setVisible(any(f.supplement for f in figures))
         drow.addWidget(self.digitize_btn)
         drow.addWidget(self.skip_btn)
         drow.addStretch(1)
+        drow.addWidget(self.skip_si_btn)
         drow.addWidget(self.skip_rest_btn)
         dv.addLayout(drow)
         self.choose_hint = QLabel()
@@ -153,7 +162,11 @@ class FigureReviewDialog(QDialog):
             self._next_to_digitize()
             return
         f = self.figure
-        self.header.setText(f"{f.figure_id} (page {f.page}) -- figure {self.index + 1} of {len(self.figures)}: "
+        if f.supplement and f.figure_id in self.skipped:       # 'Skip the supplement's figures'
+            self._next()
+            return
+        self.skip_si_btn.setVisible(any(g.supplement for g in self.figures[self.index:]))
+        self.header.setText(f"{f.figure_id} ({_where(f)}) -- figure {self.index + 1} of {len(self.figures)}: "
                             f"digitize or skip?")
         pix = QPixmap(f.crop_image)
         if pix.width() > 1100:
@@ -179,6 +192,12 @@ class FigureReviewDialog(QDialog):
         self.skipped.append(self.figure.figure_id)
         self._next()
 
+    def _skip_supplement(self) -> None:
+        """Skip every figure of the supplementary information still to be decided."""
+        self.skipped += [f.figure_id for f in self.figures[self.index:] if f.supplement]
+        self.index -= 1
+        self._next()
+
     def _skip_rest(self) -> None:
         self.skipped += [f.figure_id for f in self.figures[self.index:]]
         self.index = len(self.figures) - 1
@@ -193,7 +212,7 @@ class FigureReviewDialog(QDialog):
             self.accept()
             return
         f = self.figure
-        self.header.setText(f"Digitizing {f.figure_id} (page {f.page}) -- {self.digitize_index + 1} of "
+        self.header.setText(f"Digitizing {f.figure_id} ({_where(f)}) -- {self.digitize_index + 1} of "
                             f"{len(self.chosen)} chosen")
         self._start_digitizing()
 
@@ -235,7 +254,8 @@ class FigureReviewDialog(QDialog):
         f = self.figure
         model = DigitizedFigure(figure_id=f.figure_id, number=f.number, page=f.page, caption=f.caption,
                                 render_scale=f.render_scale, page_image=f.page_image,
-                                figure_bbox=f.figure_bbox, tick_numbers=list(f.tick_numbers))
+                                figure_bbox=f.figure_bbox, tick_numbers=list(f.tick_numbers),
+                                supplement=f.supplement, page_label=f.page_label)
         self.editor = DigitizerWidget(model, self.columns)
         self.digitize_layout.insertWidget(0, self.editor, 1)
         self.stack.setCurrentIndex(1)

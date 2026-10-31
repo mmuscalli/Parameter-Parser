@@ -26,7 +26,7 @@ def test_wet_dry_spec():
     spec = load_specs()["wet_dry"]
     Item, Result = spec.models()
     assert Result.__name__ == "WetDryConditions"                     # what replays look up
-    assert list(Item.model_fields) == ["set_label", "sample_label", "parameter", "value", "unit", "basis", "quote",
+    assert list(Item.model_fields) == ["set_label", "sample_label", "parameter", "value", "unit", "high", "basis", "quote",
                                        "source", "confidence", "note"]          # per sample (cycle_number)
     assert not spec.triggered(STRUCTURE, "")                          # eder1994: no cycling
     truman = StructurePlan.model_validate_json(

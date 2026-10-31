@@ -160,6 +160,14 @@ def collect_new_variables(
     return found
 
 
+def _printed_range(text):
+    """(low, high, canonical unit) for a value printed as a range with a known unit, else None."""
+    from parameter_extractor.units import canonical_unit, parse_range
+    found = parse_range(text) if text else None
+    unit = canonical_unit(found[2]) if found and found[2] else None
+    return (found[0], found[1], unit) if unit else None
+
+
 def _categorised(v: NewVariable, category: str, keep_column: bool = False) -> NewVariable:
     """A parameter's category (the model's choice if it's one the model may assign, else a guess
     from its value) and its value in that category's format: a quantity is parsed into number +
@@ -168,6 +176,18 @@ def _categorised(v: NewVariable, category: str, keep_column: bool = False) -> Ne
     ids = {c.id for c in categories.assignable()}
     v.category = category if category in ids else categories.guess(v.value_text or "")
     number, unit, v.format_note = categories.check_format(categories.by_id(v.category), v.value_text)
+    rng = _printed_range(v.value_text) if number is None else None
+    if rng and categories.by_id(v.category) and categories.by_id(v.category).value_type in ("number", "any"):
+        # a range ('10-200 s'): kept, as 'low:high' in '<name>_range_<unit>' (Mickey, 2026-10-31)
+        from parameter_extractor.ingestion.flatten_to_template import with_range
+        v.unit, v.format_note = rng[2], ""
+        suffix = categories.unit_suffix(rng[2])
+        if v.proposed_column and not keep_column:
+            base = v.proposed_column
+            if suffix and not base.endswith(suffix):
+                base += suffix
+            v.proposed_column = with_range(base)
+        return v
     if number is not None:
         v.value, v.unit = number, unit
         suffix = categories.unit_suffix(unit)
@@ -236,6 +256,11 @@ def stored_value(v: NewVariable, column: str):
         return v.value_text, ""              # a column with no unit keeps the unit with the value
     if raw in (None, "", DETECTED) or not column_unit or column_unit == "pH":
         return raw, ""                       # 'detected' is meant as text
+    rng = _printed_range(v.value_text) if v.value is None else None
+    if rng:                              # a range: 'low:high' in the column's unit
+        from parameter_extractor.units import range_to_column_unit
+        converted = range_to_column_unit(rng[0], rng[1], rng[2], column_unit)
+        return (converted if converted else (v.value_text, f"not converted to {column_unit}"))
     conversion = to_column_unit(raw, v.unit, column_unit)
     if conversion is None:
         return raw, f"not converted to {column_unit}"

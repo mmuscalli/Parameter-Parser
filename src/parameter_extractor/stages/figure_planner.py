@@ -23,11 +23,12 @@ PASSAGE_WINDOW = 4        # lines of context either side of a mention
 MAX_PASSAGE_CHARS = 8000
 
 
-def figure_passages(page_texts: List[str], number: int) -> str:
+def figure_passages(page_texts: List[str], number: int, supplement: bool = False) -> str:
     """Lines around every mention of Fig./Figure <number> (including lists like
     'Figs. 1 and 2'), matched with whitespace removed so OCR letter-spacing
-    doesn't hide them."""
-    mention = re.compile(rf"fig(?:ure)?s?\.?(?:\d+(?:,|and|&|-|–))*{number}(?![\d])", re.IGNORECASE)
+    doesn't hide them. A supplement's figure: 'Fig. S<number>'."""
+    s = "S" if supplement else ""
+    mention = re.compile(rf"fig(?:ure)?s?\.?(?:{s}\d+(?:,|and|&|-|–))*{s}{number}(?![\d])", re.IGNORECASE)
     chunks = []
     for page_no, text in enumerate(page_texts, start=1):
         lines = text.splitlines()
@@ -78,12 +79,12 @@ def run_figure_planner(
     prompt = load_prompt(
         "figure_planner",
         FIGURE_ID=figure.figure_id,
-        PAGE=str(figure.page),
+        PAGE=figure.page_label or str(figure.page),
         CAPTION=figure.caption,
         STRUCTURE_PLAN_JSON=structure_plan.model_dump_json(indent=2),
         CONTROLLED_VOCAB_JSON=json.dumps(controlled_vocab),
         TEMPLATE_COLUMNS_JSON=json.dumps(template_columns),
-        FIGURE_PASSAGES=figure_passages(page_texts, figure.number),
+        FIGURE_PASSAGES=figure_passages(page_texts, figure.number, figure.supplement),
         # the same for every figure of the paper (no lines left out per figure): part of the cached prefix
         COMPOSITION_PASSAGES=composition_passages(page_texts),
         THIS_FIGURE=FIGURE_SPLIT,
@@ -95,7 +96,7 @@ def run_figure_planner(
     return call_structured(
         ctx,
         stage="figure_planner",
-        audit_name=f"figure_planner.fig{figure.number}",
+        audit_name=f"figure_planner.fig{figure.tag}",
         system_prompt="You help a scientist digitize plots from a paper. Describe only what "
                       "the figure and text support; never invent series or conditions.",
         user_content=this_figure,

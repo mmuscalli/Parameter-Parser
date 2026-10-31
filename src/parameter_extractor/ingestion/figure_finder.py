@@ -26,6 +26,8 @@ from parameter_extractor.schemas.figures import BBox, FigureCandidate
 # Captions start with a capital ("Fig. 3", "Figure 3", "FIG. 3"); a lowercase "figure 13,
 # ref. 2)" at the start of a line is running text citing another paper (truman2024).
 CAPTION_RE = re.compile(r"^(?:Fig(?:ure)?|FIG(?:URE)?)\.?(\d{1,2})(?![\d(])")
+# in a supplement: 'Figure S1' (or the supplement's own 'Figure 1')
+SI_CAPTION_RE = re.compile(r"^(?:Fig(?:ure)?|FIG(?:URE)?)\.?S?(\d{1,2})(?![\d(])")
 MIN_FIGURE_HEIGHT = 30.0    # points; a smaller area means the "caption" wasn't one
 RENDER_SCALE = 3.0          # 216 dpi: enough to click points accurately
 LINE_TOLERANCE = 3.0        # points; words closer than this vertically share a line
@@ -73,7 +75,7 @@ def _is_body_line(line: dict, col_width: float) -> bool:
     return (line["x1"] - line["x0"]) >= 0.55 * col_width and len(line["compact"]) >= 30
 
 
-def _find_on_page(page, page_no: int) -> List[dict]:
+def _find_on_page(page, page_no: int, caption_re=CAPTION_RE) -> List[dict]:
     mid = page.width / 2
     columns: Dict[str, Tuple[float, float]] = {
         "left": (0.0, mid), "right": (mid, page.width), "full": (0.0, page.width)}
@@ -105,7 +107,7 @@ def _find_on_page(page, page_no: int) -> List[dict]:
     for col in ("left", "right", "full"):
         col_lines = lines[col]
         for i, ln in enumerate(col_lines):
-            m = CAPTION_RE.match(ln["compact"])
+            m = caption_re.match(ln["compact"])
             # a real caption has text after the number; a bare "Fig. 4" is the tail of some
             # other line (e.g. a table caption "...distribution of Fig. 4") split at the column gap
             if not m or len(ln["compact"]) - m.end() < 3:
@@ -114,7 +116,7 @@ def _find_on_page(page, page_no: int) -> List[dict]:
             block = [ln]
             for nxt in col_lines[i + 1:]:
                 gap = nxt["top"] - block[-1]["bottom"]
-                if gap > 0.9 * (ln["bottom"] - ln["top"]) + 2 or CAPTION_RE.match(nxt["compact"]):
+                if gap > 0.9 * (ln["bottom"] - ln["top"]) + 2 or caption_re.match(nxt["compact"]):
                     break
                 block.append(nxt)
             size = statistics.mean(w["size"] for l in block for w in l["words"])
@@ -141,7 +143,7 @@ def _find_on_page(page, page_no: int) -> List[dict]:
         col_width = cx1 - cx0
         top = 28.0
         for l in sorted(above, key=lambda l: l["bottom"], reverse=True):
-            if _is_body_line(l, col_width if l in lines[col] else page.width) or CAPTION_RE.match(l["compact"]):
+            if _is_body_line(l, col_width if l in lines[col] else page.width) or caption_re.match(l["compact"]):
                 top = l["bottom"] + 3
                 break
         cap["figure_bbox"] = (max(cx0 + (SIDE_MARGIN if col == "right" else 20), 0.0), top,
@@ -174,16 +176,20 @@ def _numbers_in(words, figure_bbox, offset):
     return out
 
 
-def find_figures(pdf_path: str, out_dir: Path, render_scale: float = RENDER_SCALE) -> List[FigureCandidate]:
+def find_figures(pdf_path: str, out_dir: Path, render_scale: float = RENDER_SCALE, supplement: bool = False,
+                 page_offset: int = 0) -> List[FigureCandidate]:
     """Detect figures and render their pages (and a figure+caption crop each)
     into out_dir. One candidate per figure number: if a number matches more
     than one line (a caption, plus body text that happens to start a line
-    with "Fig. N"), the line in the smaller font -- the caption -- wins."""
+    with "Fig. N"), the line in the smaller font -- the caption -- wins.
+    `supplement`: the paper's supplementary information -- figures 'Fig. S<n>' (files fig-S<n>.png,
+    page-S<p>.png), pages numbered on from the paper's (`page_offset`), page_label 'S<p>'."""
     import pypdfium2 as pdfium
     from parameter_extractor.ingestion.pdf_parser import open_plumber, render_offset, to_render_box
 
     with open_plumber(pdf_path) as doc:
-        caps = [c for i, page in enumerate(doc.pages, start=1) for c in _find_on_page(page, i)]
+        caps = [c for i, page in enumerate(doc.pages, start=1)
+                for c in _find_on_page(page, i, SI_CAPTION_RE if supplement else CAPTION_RE)]
 
     best: Dict[int, dict] = {}
     for c in caps:
@@ -193,6 +199,7 @@ def find_figures(pdf_path: str, out_dir: Path, render_scale: float = RENDER_SCAL
         return []
 
     out_dir.mkdir(parents=True, exist_ok=True)
+    s = "S" if supplement else ""
     pdf = pdfium.PdfDocument(pdf_path)
     rendered: Dict[int, object] = {}
     candidates = []
@@ -202,7 +209,7 @@ def find_figures(pdf_path: str, out_dir: Path, render_scale: float = RENDER_SCAL
             page_no = c["page_no"]
             if page_no not in rendered:
                 img = pdf[page_no - 1].render(scale=render_scale).to_pil().convert("RGB")
-                img.save(out_dir / f"page-{page_no}.png")
+                img.save(out_dir / f"page-{s}{page_no}.png")
                 rendered[page_no] = img
             img = rendered[page_no]
             # boxes in rendered-page points (the render shows the CropBox only)
@@ -211,14 +218,15 @@ def find_figures(pdf_path: str, out_dir: Path, render_scale: float = RENDER_SCAL
             fx0, ftop, fx1, _ = figure_bbox
             _, _, cx1, cbottom = caption_bbox
             crop_box = [round(v * render_scale) for v in (fx0, ftop, max(fx1, cx1), cbottom + 2)]
-            crop_path = out_dir / f"fig-{number}.png"
+            crop_path = out_dir / f"fig-{s}{number}.png"
             img.crop(crop_box).save(crop_path)
             candidates.append(FigureCandidate(
-                figure_id=f"Fig. {number}", number=number, page=page_no, caption=c["caption"],
+                figure_id=f"Fig. {s}{number}", number=number, page=page_no + page_offset, caption=c["caption"],
+                supplement=supplement, page_label=f"S{page_no}" if supplement else "",
                 figure_bbox=figure_bbox, caption_bbox=caption_bbox,
                 tick_numbers=[((x0 + x1) / 2 * render_scale, (t + b) / 2 * render_scale, v)
                               for (x0, t, x1, b), v in _numbers_in(c.get("numbers", []), figure_bbox, offset)],
-                page_image=str(out_dir / f"page-{page_no}.png"), crop_image=str(crop_path),
+                page_image=str(out_dir / f"page-{s}{page_no}.png"), crop_image=str(crop_path),
                 render_scale=render_scale))
     finally:
         pdf.close()

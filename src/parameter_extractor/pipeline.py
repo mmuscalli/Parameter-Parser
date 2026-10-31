@@ -54,6 +54,7 @@ from parameter_extractor.digitizing.annotate import save_digitized
 from parameter_extractor.ingestion.duplicates import drop_recorded_software, drop_repeated_amounts, drop_repeated_values
 from parameter_extractor.ingestion.equation_finder import find_equations
 from parameter_extractor.ingestion.figure_finder import find_figures
+from parameter_extractor.ingestion.table_finder import find_tables
 from parameter_extractor.ingestion.figure_rows import build_figure_rows
 from parameter_extractor.ingestion.flatten_to_template import build_rows, write_template_csv
 from parameter_extractor.ingestion.normalize import normalize_chemistry
@@ -112,6 +113,7 @@ class RunResult:
     gold_standard_score: Optional[dict] = None
     figures: List[dict] = field(default_factory=list)   # [{figure_id, status, series, points, image, ...}]
     equations: List[EquationCandidate] = field(default_factory=list)   # labelled equations found
+    tables: List[dict] = field(default_factory=list)    # [{table_id, page, page_label, caption, image}]
     new_variables: List[NewVariable] = field(default_factory=list)   # left out of the CSV (not accepted)
     accepted_variables: List[dict] = field(default_factory=list)     # [{name, kind, column, values, how}]
     unfound_terms: List[str] = field(default_factory=list)           # searched for, not stated in the paper
@@ -245,6 +247,7 @@ class Extraction:
     equations: List[EquationCandidate] = field(default_factory=list)
     source: Optional["ResolvedPaper"] = None        # what was read (paper_source)
     table_images: List[Path] = field(default_factory=list)   # rendered table pages sent with the paper
+    tables: List[dict] = field(default_factory=list)         # table crops for the Tables tab (table_finder.py)
     terms: List[str] = field(default_factory=list)           # parameters to look for (focus terms)
     always_on: set = field(default_factory=set)              # optional stages that always run
     structure_ready: threading.Event = field(default_factory=threading.Event)
@@ -306,7 +309,7 @@ def read_paper(
                            cache=LookupCache(config.arxiv_cache_dir) if config.arxiv_cache_dir else None)
     (ctx.run_dir / "source.json").write_text(json.dumps(source.summary(), indent=2, ensure_ascii=False))
     table_images: List[Path] = []
-    figures, equations = [], []
+    figures, equations, tables = [], [], []
     if source.from_arxiv_text:                  # exact text tables; no pages, figures or equation crops
         parsed = _parse_text(source, ctx.run_dir)
     else:
@@ -327,18 +330,80 @@ def read_paper(
                                                    dpi=config.table_raster_dpi)
             table_images = [path for p in sorted(images_by_page) for path in images_by_page[p]]
         figures = find_figures(str(pdf_path), ctx.run_dir / "figures")
+        own = parsed.supplements[0]["offset"] if parsed.supplements else parsed.page_count
         try:
+            if config.save_images:
+                tables += _find_tables(ctx, str(pdf_path), [p for p in sorted(parsed.table_pages) if p <= own],
+                                       {p: d for p, d in parsed.page_rotations.items() if p <= own}, parsed)
             equations = find_equations(str(pdf_path), ctx.run_dir / "equations")     # local, no API call
+            for s in parsed.supplements:          # the supplement's figures (Fig. S1, ...) and tables too
+                offset, end = s["offset"], s["offset"] + s["pages"]
+                figures += find_figures(s["file"], ctx.run_dir / "figures", supplement=True, page_offset=offset)
+                if config.save_images:
+                    tables += _find_tables(ctx, s["file"], [p - offset for p in sorted(parsed.table_pages)
+                                                            if offset < p <= end],
+                                           {p - offset: d for p, d in parsed.page_rotations.items() if offset < p <= end},
+                                           parsed, offset)
         finally:
-            close_shared()               # the page layouts were shared by the three steps above
+            close_shared()               # the page layouts were shared by the steps above
     (ctx.run_dir / "figures_found.json").write_text(
         json.dumps([f.model_dump() for f in figures], indent=2, ensure_ascii=False))
     _write_equations(ctx, equations)
     vocab = packs.current().vocab
+    if tables:
+        (ctx.run_dir / "tables.json").write_text(json.dumps(tables, indent=2, ensure_ascii=False))
     ex = Extraction(ctx=ctx, pdf_path=pdf_path, started=started, parsed=parsed, vocab=vocab,
-                    figures=figures, equations=equations, source=source, table_images=table_images,
+                    figures=figures, equations=equations, source=source, table_images=table_images, tables=tables,
                     terms=terms, always_on=always_on)
     return ex
+
+
+def _range_flags(rows: List[ExtractedRow]) -> List[Flag]:
+    """One flag per column holding values printed as ranges ('low:high', '<name>_range_<unit>')."""
+    by_column: Dict[str, List[str]] = {}
+    for r in rows:
+        for column, value in r.extra.items():
+            if "_range" in column and isinstance(value, str) and ":" in value:
+                by_column.setdefault(column, []).append(f"{r.full_id} = {value}")
+    return [Flag("value_range", f"{column}: {len(cells)} value(s) printed as a range, written as 'low:high' "
+                                f"in the column's unit ({'; '.join(cells[:4])}{' ...' if len(cells) > 4 else ''}).")
+            for column, cells in by_column.items()]
+
+
+def _tidy_figure_images(ex: "Extraction", summary: List[dict]) -> None:
+    """Figure images were rendered for the review; keep those of digitized figures (and, with
+    save_all_figure_images, the others) -- or none when save_images is off (Mickey, 2026-10-31). The
+    digitized points (fig-N.digitized.json) are data and always kept."""
+    config = ex.ctx.config
+    digitized = {f["figure_id"] for f in summary if f["status"] == "digitized"}
+    keep = {c.figure_id for c in ex.figures
+            if config.save_images and (c.figure_id in digitized or config.save_all_figure_images)}
+    kept_pages = {c.page_image for c in ex.figures if c.figure_id in keep}
+    for c in ex.figures:
+        if c.figure_id not in keep:
+            Path(c.crop_image).unlink(missing_ok=True)
+        if c.page_image not in kept_pages:
+            Path(c.page_image).unlink(missing_ok=True)
+    for f in summary:
+        if f["figure_id"] not in keep:
+            f["image"] = ""
+            if f.get("annotated_image"):
+                Path(f["annotated_image"]).unlink(missing_ok=True)
+                f["annotated_image"] = ""
+            f["image_note"] = ("images not kept (Options: save table and figure images)" if not config.save_images
+                               else "image not kept: only digitized figures' images are saved (Options)")
+
+
+def _find_tables(ctx, pdf: str, pages: List[int], rotations: dict, parsed, offset: int = 0) -> List[dict]:
+    """Table crops for the Tables tab (ingestion/table_finder.py); a failure there never stops a run."""
+    if not pages:
+        return []
+    try:
+        return find_tables(pdf, pages, ctx.run_dir / "tables", supplement=bool(offset), page_offset=offset,
+                           rotations=rotations, captions=parsed.table_pages)
+    except Exception as e:                        # an estimate for reference only
+        ctx.note("parse", f"Table images couldn't be saved ({type(e).__name__}: {e})")
+        return []
 
 
 def extract_steps(ex: "Extraction") -> "Extraction":
@@ -925,7 +990,8 @@ def finish(
     for f in figure_summary:
         if f["figure_id"] in found:
             c = found[f["figure_id"]]
-            f.update(image=c.crop_image, caption=c.caption, page=c.page)
+            f.update(image=c.crop_image, caption=c.caption, page=c.page_label or c.page)
+    _tidy_figure_images(ex, figure_summary)
 
     if pack.uses("water_type"):                 # "water" -> which water (assumed distilled, flagged)
         paper_flags += [Flag("assumed_default", m) for m in normalize_water(rows)]
@@ -1024,6 +1090,7 @@ def finish(
         archive = _archive_check(rows, ex, ctx)
         paper_flags += archive_flags(archive)
     row_flags = {r.full_id: f for r in rows if (f := check_row(r, **thresholds))}
+    paper_flags += _range_flags(rows)
     image_tables = image_table_numbers(ex.parsed.table_pages) if config.rasterize_table_pages else set()
     table_pages = table_page_numbers(ex.parsed.table_pages)
     paper_flags += _source_flags(ex.source)
@@ -1073,13 +1140,14 @@ def finish(
                    searched_terms=list(config.focus_terms), unfound_terms=unfound,
                    normalization=[{"kind": n.kind, "change": n.message} for n in normalization],
                    figures=sorted(figure_summary, key=lambda f: f["figure_id"]),
+                   tables=ex.tables,
                    equations=[{"label": e.label, "page": e.page, "latex": e.latex} for e in ex.equations])
 
     return RunResult(paper_id=ex.paper_id, run_dir=ctx.run_dir, csv_path=csv_path, rows=rows,
                      paper_flags=paper_flags, row_flags=row_flags, usage=list(ctx.usage),
                      flags_path=flags_path, gold_standard_score=gold_score,
                      observations_path=observations_path,
-                     figures=sorted(figure_summary, key=lambda f: f["figure_id"]),
+                     figures=sorted(figure_summary, key=lambda f: f["figure_id"]), tables=list(ex.tables),
                      new_variables=held_out, accepted_variables=accepted, unfound_terms=unfound,
                      equations=list(ex.equations))
 

@@ -136,6 +136,11 @@ class VariableRegistry:
             return True
         if is_peptide_column(column):
             return True
+        # a range of a known quantity ('<name>_range_<unit>', 'low:high') is the same variable (2026-10-31)
+        if "_range" in column:
+            from parameter_extractor.ingestion.flatten_to_template import without_range
+            if (base := without_range(column)) != column and self.is_known_column(base):
+                return True
         # a species' stock-solution concentration goes with its starting concentration:
         # stock_X_aq_mM is known wherever initial_X_aq_mM is
         return column.startswith("stock_") and self.is_known_column("initial_" + column.removeprefix("stock_"))

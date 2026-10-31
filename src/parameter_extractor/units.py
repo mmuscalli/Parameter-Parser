@@ -115,6 +115,43 @@ def parse_quantity(text: str) -> Optional[Tuple[float, str]]:
     return value, unit
 
 
+# a range as printed: '5-6 mg', '5–6 mg', '5 mg - 6 mg', '10 to 200 s', '0.1–0.5 M' (Mickey, 2026-10-31: kept as
+# 'low:high' in a '<name>_range_<unit>' column). Only when low < high: '10-4 M' is an OCR-lost exponent.
+_RANGE = re.compile(rf"^\s*(?P<lo>{_NUMBER})\s*(?P<u1>[^\d\s\-–—~]*)\s*(?:-|–|—|~|to)\s*(?P<hi>{_NUMBER})\s*(?P<unit>.*?)\s*$")
+
+
+def parse_range(text) -> Optional[Tuple[float, float, str]]:
+    """'5-6 mg' -> (5.0, 6.0, 'mg'): low, high and the printed unit ('' if none); None if it isn't a
+    range of two plain numbers with low < high (one unit, or the same unit after both numbers)."""
+    if text is None:
+        return None
+    t = str(text).replace("−", "-").strip()
+    m = _RANGE.match(t)
+    if not m or re.search(r"[x×*]\s*10", t):
+        return None
+    lo, hi = (float(m.group(k).replace(",", ".")) for k in ("lo", "hi"))
+    unit, u1 = m.group("unit").strip(), m.group("u1").strip()
+    if u1 and unit and normalise_unit_text(u1) != normalise_unit_text(unit):
+        return None
+    if not lo < hi:
+        return None
+    return lo, hi, unit or u1
+
+
+def format_range(lo: float, hi: float) -> str:
+    """How a range is written in a cell: '5:6'."""
+    return f"{_tidy(lo):g}:{_tidy(hi):g}"
+
+
+def range_to_column_unit(lo: float, hi: float, unit: str, column_unit: str) -> Optional[Tuple[str, str]]:
+    """('lo:hi' in the column's unit, note), or None if the unit can't be converted."""
+    a, b = to_column_unit(lo, unit or None, column_unit), to_column_unit(hi, unit or None, column_unit)
+    if a is None or b is None:
+        return None
+    printed = f"{lo:g}-{hi:g} {unit}".strip()
+    return format_range(a.value, b.value), (f"range, converted from '{printed}'" if a.note else "range")
+
+
 def convert(value: float, from_unit: str, to_unit: str) -> Optional[float]:
     """Convert between canonical units of the same dimension; None if incompatible."""
     if from_unit == to_unit:

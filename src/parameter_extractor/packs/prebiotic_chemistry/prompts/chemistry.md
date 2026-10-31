@@ -24,7 +24,7 @@ entry per set (and sample) that has species:
 `sample` when needed (below), and its `species`. Each species: `nm` name,
 `r` role, `ph` phase, `v` value and `u` unit as printed, `q` quote, `src`
 where it is, `c` confidence; and ONLY when they apply (leave them out
-otherwise): `mM` the value in mM, `cn` why there's no mM value, `b` "stock"
+otherwise): `hi` the upper end of a range, `mM` the value in mM, `cn` why there's no mM value, `b` "stock"
 and `stk` for a stock-solution concentration, `how` when the quoted words
 don't name the species, `det` for a product reported without an amount
 (see below).
@@ -118,7 +118,14 @@ For each species:
 - Averages: a value the paper reports as an AVERAGE over several runs or
   replicates (mean, avg., "averaged across triplicate experiments") gets
   `avg` true -- on the table column, or on the species. Individual runs'
-  values don't.
+  values don't. An average stated only in the TEXT for experiments that are
+  rows of the structure plan (e.g. "the average yield of Gly-Gly over these
+  runs was 4%") goes in `groups` with that set's `set`, NO `sample`, `avg`
+  true: it's written on each row of the set. An average in the text for
+  experiments that aren't in the plan is left out.
+- A value printed as a range ("5-10 mM", "0.1 to 0.5 M"): `v` the lower end,
+  `hi` the upper end, `u` their unit (in a table, copy the cell as printed,
+  e.g. "5-10") -- never one end alone or the midpoint.
 - Reported percent yields (e.g. "% (Gly)2") go in `v` with the unit as
   stated in `u` (no `mM`).
 - A percentage of a STARTING material left over ("Recovered nicotinamide (%)",

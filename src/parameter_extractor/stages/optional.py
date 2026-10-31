@@ -354,6 +354,8 @@ def _models(spec_json: str, categories: Tuple[str, ...] = ()) -> Tuple[type, typ
                                                             "'L_sun', 'fraction', 'ppm', '10^9 erg s-1 cm-2'; '' only "
                                                             "if printed in exactly the parameter's unit. The app "
                                                             "converts.")),
+        high=(float, Field(default=0.0, alias="hi", description="Only for a value printed as a range ('5-6 mg'): "
+                                                              "its upper end (v = the lower end, same unit).")),
         **({"text": (str, Field(default="", alias="txt", description="A text parameter's text as printed."))}
            if spec.has_text else {}),
         **({"mode": (str, Field(default="", alias="mode", description="Only for one mode of a bi-/multimodal "
@@ -512,6 +514,17 @@ def stage_values(spec: StageSpec, item) -> Tuple[Dict[str, StageValue], List[str
             text = match
         return ({param.column: StageValue(text, note=item.note, **base)} if text else {}), []
     from parameter_extractor.units import convert_printed
+    high = getattr(item, "high", 0.0) or 0.0
+    if high and high > item.value:     # a range: '<column>_range<unit>' = 'low:high' (Mickey, 2026-10-31)
+        from parameter_extractor.ingestion.flatten_to_template import with_range
+        from parameter_extractor.units import format_range
+        lo, lo_note = convert_printed(item.value, printed, param.unit)
+        hi, _ = convert_printed(high, printed, param.unit)
+        if lo is None or hi is None:
+            return {}, [f"{spec.label}: {param.column} = {item.value:g}-{high:g} {printed} for "
+                        f"'{item.set_label}' left out -- {lo_note}."]
+        note = "; ".join(n for n in (item.note, f"range printed as {item.value:g}-{high:g} {printed}".strip()) if n)
+        return {with_range(param.column): StageValue(format_range(lo, hi), note=note, **base)}, []
     value, note = convert_printed(item.value, printed, param.unit)
     if value is None:
         return {}, [f"{spec.label}: {param.column} = {item.value:g} {printed} for '{item.set_label}' left out -- {note}."]

@@ -106,9 +106,19 @@ def convert_condition(condition: SeriesCondition) -> Tuple[str, object, str]:
         try:
             return column, float(raw), ""
         except ValueError:
+            from parameter_extractor.ingestion.flatten_to_template import with_range
+            from parameter_extractor.units import format_range, parse_range
+            rng = parse_range(raw)                       # 'pH 6-7' -> initial_pH_range = '6:7'
+            if rng and not rng[2]:
+                return with_range(column), format_range(rng[0], rng[1]), ""
             return column, raw, f"'{raw}' isn't a number"
     converted = to_column_unit(raw, None, unit)
     if converted is None:
+        from parameter_extractor.ingestion.flatten_to_template import with_range
+        from parameter_extractor.units import parse_range, range_to_column_unit
+        rng = parse_range(raw)        # '5-6 mg' -> solid_material_mass_range_g = '0.005:0.006'
+        if rng and (in_unit := range_to_column_unit(*rng, unit)):
+            return with_range(column), in_unit[0], ""
         return column, raw, f"'{raw}' can't be converted to {unit} (the unit of {column})"
     return column, converted.value, ""
 
@@ -230,7 +240,7 @@ def build_figure_rows(
                 for axis, value in ((x_axis, x), (y_axis, y)):
                     value = round(value * axis.multiplier, 6)
                     read = CellSource(origin=f"{fig.figure_id} (digitized)", confidence=DIGITIZED,
-                                      source=f"{where}, point {sample_idx} (page {fig.page}), read off axis "
+                                      source=f"{where}, point {sample_idx} (page {fig.page_label or fig.page}), read off axis "
                                              f"'{axis.label}'"
                                              + (f" x {axis.multiplier:g}" if axis.multiplier != 1 else ""))
                     if not _assign(fields, row_species, extra, axis.column, value, registry, prov, read):
@@ -258,7 +268,7 @@ def build_figure_rows(
                     headspace_gas=methodology.headspace_gas.value,
                     initial_pressure_bar=methodology.initial_pressure_bar.value,
                     species_mM=row_species, extra=extra,
-                    source_notes=f"digitized from {fig.figure_id} (page {fig.page}), series "
+                    source_notes=f"digitized from {fig.figure_id} (page {fig.page_label or fig.page}), series "
                                  f"'{series.label}', point {sample_idx}"
                                  + (f"; {series.notes}" if series.notes else ""),
                     extraction_confidence=DIGITIZED,
