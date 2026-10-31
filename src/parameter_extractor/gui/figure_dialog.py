@@ -255,7 +255,7 @@ class FigureReviewDialog(QDialog):
         model = DigitizedFigure(figure_id=f.figure_id, number=f.number, page=f.page, caption=f.caption,
                                 render_scale=f.render_scale, page_image=f.page_image,
                                 figure_bbox=f.figure_bbox, tick_numbers=list(f.tick_numbers),
-                                supplement=f.supplement, page_label=f.page_label)
+                                supplement=f.supplement, page_label=f.page_label, prefix=f.prefix)
         self.editor = DigitizerWidget(model, self.columns)
         self.digitize_layout.insertWidget(0, self.editor, 1)
         self.stack.setCurrentIndex(1)

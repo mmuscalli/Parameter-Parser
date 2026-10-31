@@ -130,6 +130,33 @@ def test_images_kept_by_the_options():
                 (EDER_REF / "expected_extracted.csv").read_text()
 
 
+def test_appendix_figures_and_overprinted_text():
+    """Riggi2023's 'Figure A1' / 'Figure A2' (appendices): letter-numbered captions, and text drawn in several
+    overlapping copies ('Figure FigureA1.X-ray... Figure A1') reduced to one."""
+    from parameter_extractor.ingestion.figure_finder import CAPTION_RE, drop_overprinted
+    assert CAPTION_RE.match("FigureA1.X-ray").groups() == ("A", "1") and CAPTION_RE.match("Fig.12Plots").groups() == ("", "12")
+    assert CAPTION_RE.match("FigureS1.shows") is None                   # left to supplements
+    w = lambda t, x0, top=100.0: {"text": t, "x0": x0, "x1": x0 + 6 * len(t), "top": top, "bottom": top + 9}
+    words = [w("Figure", 156), w("A1.", 185), w("X-ray", 201), w("FigureA1.X-ray", 166, 98.2),
+             w("Figure", 167, 97.3), w("A1.", 196, 97.3), w("FFiigguurree", 157, 99), w("11", 300)]
+    assert [x["text"] for x in drop_overprinted(words)] == ["Figure", "A1.", "X-ray", "11"]
+    riggi = ROOT.parent / "Paper Files" / "Test Paper List" / "Riggi2023.pdf"
+    if not riggi.is_file():
+        print("SKIP: needs Riggi2023.pdf"); return
+    from parameter_extractor.ingestion.figure_finder import find_figures
+    with tempfile.TemporaryDirectory() as tmp:
+        figs = find_figures(str(riggi), Path(tmp))
+        assert [f.figure_id for f in figs] == ["Fig. 1", "Fig. 2", "Fig. 3", "Fig. A1", "Fig. A2"]
+        a1 = figs[3]
+        assert (a1.page, a1.tag, Path(a1.crop_image).name) == (12, "A1", "fig-A1.png")
+        assert a1.caption.startswith("Figure A1. X-ray diffraction spectrum")
+    from parameter_extractor.ingestion.data_location import location
+    from parameter_extractor.stages.figure_planner import figure_passages
+    assert location("Fig. A2") == "Figure. A2" and location("Table A1, row 2") == "Table. A1"
+    assert "Figure A2" in figure_passages(["... see Figure A2 ...", "Figure 2 here"], 2, prefix="A")
+    assert "Figure 2" not in figure_passages(["Figure 2 here"], 2, prefix="A")
+
+
 if __name__ == "__main__":
     for name, fn in list(globals().items()):
         if name.startswith("test_") and callable(fn):

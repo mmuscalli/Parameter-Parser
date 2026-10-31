@@ -23,11 +23,11 @@ PASSAGE_WINDOW = 4        # lines of context either side of a mention
 MAX_PASSAGE_CHARS = 8000
 
 
-def figure_passages(page_texts: List[str], number: int, supplement: bool = False) -> str:
+def figure_passages(page_texts: List[str], number: int, supplement: bool = False, prefix: str = "") -> str:
     """Lines around every mention of Fig./Figure <number> (including lists like
     'Figs. 1 and 2'), matched with whitespace removed so OCR letter-spacing
     doesn't hide them. A supplement's figure: 'Fig. S<number>'."""
-    s = "S" if supplement else ""
+    s = "S" if supplement else prefix          # 'Fig. S1' / an appendix's 'Fig. A1'
     mention = re.compile(rf"fig(?:ure)?s?\.?(?:{s}\d+(?:,|and|&|-|–))*{s}{number}(?![\d])", re.IGNORECASE)
     chunks = []
     for page_no, text in enumerate(page_texts, start=1):
@@ -84,7 +84,7 @@ def run_figure_planner(
         STRUCTURE_PLAN_JSON=structure_plan.model_dump_json(indent=2),
         CONTROLLED_VOCAB_JSON=json.dumps(controlled_vocab),
         TEMPLATE_COLUMNS_JSON=json.dumps(template_columns),
-        FIGURE_PASSAGES=figure_passages(page_texts, figure.number, figure.supplement),
+        FIGURE_PASSAGES=figure_passages(page_texts, figure.number, figure.supplement, figure.prefix),
         # the same for every figure of the paper (no lines left out per figure): part of the cached prefix
         COMPOSITION_PASSAGES=composition_passages(page_texts),
         THIS_FIGURE=FIGURE_SPLIT,

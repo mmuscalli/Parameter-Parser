@@ -1562,3 +1562,16 @@ layer carries overlapping draft text.
   chemistry.md (`hi`).
 - Live faisal2005 Standard x2 ($0.23, $0.18): 25 rows = reference except wording; one run dropped the
   per-sample sampled_pH (variance: the second had all 25).
+
+## Appendix figures + overprinted text (2026-10-31, Mickey: Riggi2023's Figures A1/A2 were missed)
+
+Two causes: CAPTION_RE needed a digit right after 'Figure' (appendix numbering 'Figure A1'), and Riggi's PDF
+draws its text in several overlapping copies (two clean ~11 pt apart + one with spaces run together), so the
+line read 'Figure FigureA1.X-ray... Figure A1'. Now: CAPTION_RE `([A-RT-Z]?)(\d+)` -- 'S' stays reserved for
+supplements, so a paper line citing 'Figure S1' isn't a caption; candidates keyed (letter, number) -> 'Fig. A1',
+`FigureCandidate/DigitizedFigure.prefix`, `.tag` 'A1' (files fig-A1.png, audit names), figure_passages(prefix=).
+`figure_finder.drop_overprinted` (also in table_finder): drops a word repeating a kept word's text within a few
+points, a run-together word that is just the words it covers, and a doubled-character word over its copy.
+Tables: 'Table A1' too (table_finder keyed (letter, number); pdf_parser.TABLE_CAPTION_RE `[A-Z]?\d+`);
+data_location / quotes._TABLE_REF accept the letter ('Figure. A2', 'Table. A1'). Old vs new finder over all 88
+PDFs in Paper Files: only Riggi2023 (+A1, A2) and iqubal2017 (+Fig. 15, same overprint problem) changed.

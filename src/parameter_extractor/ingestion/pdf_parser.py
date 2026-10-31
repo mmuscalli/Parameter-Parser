@@ -40,7 +40,7 @@ from parameter_extractor.errors import PdfNotReadableError
 # Formation of Cytidine..."): "Table N." followed by a capitalised title. In-text
 # references like "(Table 1, Fig. 2)" match neither.
 # 'Table S1' too: supplementary information numbers its tables S1, S2, ... (pulletikurti2022_SI)
-TABLE_CAPTION_RE = re.compile(r"(?m)^\s*(?:Table|TABLE)\s+S?\d+\b|\b(?:Table|TABLE)\s+S?\d+\.\s+[A-Z][a-z]")
+TABLE_CAPTION_RE = re.compile(r"(?m)^\s*(?:Table|TABLE)\s+[A-Z]?\d+\b|\b(?:Table|TABLE)\s+[A-Z]?\d+\.\s+[A-Z][a-z]")
 # Word-gap threshold (points) for text extraction. pdfplumber's default (3) runs words
 # together in tightly set papers (kim2019: letter gaps ~0.1 pt, word gaps ~2-3 pt), so a
 # page that comes out with many implausibly long "words" is re-extracted with this.

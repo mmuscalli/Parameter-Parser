@@ -23,9 +23,11 @@ from pathlib import Path
 from typing import Dict, List, Optional
 
 from parameter_extractor.ingestion.figure_finder import (CAPTION_RE as FIGURE_CAPTION_RE, _caption_text,
-                                                         _continues_across, _group_lines, _is_body_line)
+                                                         _continues_across, _group_lines, _is_body_line,
+                                                         drop_overprinted)
 
-TABLE_RE = re.compile(r"^(?:Table|TABLE)\.?(S?)(\d{1,2})(?![\d(])")
+TABLE_RE = re.compile(r"^(?:Table|TABLE)\.?([A-Z]?)(\d{1,2})(?![\d(])")    # 'Table 2', 'Table S1', 'Table A1'
+
 RENDER_SCALE = 2.5          # 180 dpi: readable on screen, small files
 MIN_TABLE_HEIGHT = 18.0     # points below (or above) the caption
 MARGIN = 4.0
@@ -40,7 +42,7 @@ def _words(page) -> List[dict]:
                                    x_tolerance=TIGHT_X_TOLERANCE)
         if _merged_word_ratio(" ".join(w["text"] for w in tight)) < _merged_word_ratio(" ".join(w["text"] for w in words)):
             words = tight
-    return [w for w in words if w.get("upright", True)]
+    return drop_overprinted([w for w in words if w.get("upright", True)])
 
 
 def _is_running_text(line: dict, width: float) -> bool:
@@ -152,7 +154,7 @@ def _find_on_page(page, page_no: int) -> List[dict]:
             x1s = [l["x1"] for l in region + caption]
             box = (max(min(x0s) - MARGIN, 0.0), max(min(top, region[0]["top"]) - MARGIN, 0.0),
                    min(max(x1s) + MARGIN, page.width), min(max(bottom, region[-1]["bottom"]) + MARGIN, page.height))
-            found.append({"number": int(m.group(2)), "s": bool(m.group(1)), "page_no": page_no,
+            found.append({"number": int(m.group(2)), "letter": m.group(1), "page_no": page_no,
                           "caption": _caption_text(caption), "box": box,
                           "size": statistics.mean(w["size"] for l in caption for w in l["words"]),
                           "height": box[3] - box[1],
@@ -175,19 +177,20 @@ def find_tables(pdf_path: str, pages: List[int], out_dir: Path, supplement: bool
         caps = [c for p in pages if 1 <= p <= len(doc.pages) and not rotations.get(p)
                 for c in _find_on_page(doc.pages[p - 1], p)]
     turned = [p for p in pages if rotations.get(p)]
-    best: Dict[int, dict] = {}
-    for c in caps:                   # one per number: the caption with the biggest table next to it
-        if c["number"] not in best or c["height"] > best[c["number"]]["height"]:
-            best[c["number"]] = c
+    best: Dict[tuple, dict] = {}     # (letter, number): Table 1 and Table A1 (appendix) are different tables
+    for c in caps:                   # one per table: the caption with the biggest table next to it
+        key = ("S" if supplement else c["letter"], c["number"])
+        if key not in best or c["height"] > best[key]["height"]:
+            best[key] = c
     if not best and not turned:
         return []
     out_dir.mkdir(parents=True, exist_ok=True)
-    prefix = "S" if supplement else ""
+    sp = "S" if supplement else ""       # a supplement's page names
     pdf = pdfium.PdfDocument(pdf_path)
     tables = []
     try:
-        for number in sorted(best):
-            c = best[number]
+        for (prefix, number) in sorted(best, key=lambda k: (k[0] != "", k[0], k[1])):
+            c = best[(prefix, number)]
             page = pdf[c["page_no"] - 1]
             img = page.render(scale=RENDER_SCALE).to_pil().convert("RGB")
             offset = render_offset(page)
@@ -202,7 +205,7 @@ def find_tables(pdf_path: str, pages: List[int], out_dir: Path, supplement: bool
                 box[0], box[2] = min(box[0], lo + int(cols[0]) - 6), max(box[2], lo + int(cols[-1]) + 6)
             path = out_dir / f"table-{prefix}{number}.png"
             img.crop(box).save(path)
-            tables.append({"table_id": f"Table {prefix}{number}", "number": number,
+            tables.append({"table_id": f"Table {prefix}{number}", "number": number, "prefix": prefix,
                            "page": c["page_no"] + page_offset,
                            "page_label": f"S{c['page_no']}" if supplement else str(c["page_no"]),
                            "caption": c["caption"], "image": str(path)})
@@ -214,16 +217,17 @@ def find_tables(pdf_path: str, pages: List[int], out_dir: Path, supplement: bool
                             if TABLE_RE.match(re.sub(r"\s+", "", c))), "")
             m = TABLE_RE.match(re.sub(r"\s+", "", caption))
             number = int(m.group(2)) if m else 0
-            if m and number in best:
+            prefix = sp or (m.group(1) if m else "")
+            if m and (prefix, number) in best:
                 continue                              # already cropped from an upright page
-            path = out_dir / (f"table-{prefix}{number}.png" if m else f"table-page-{prefix}{p}.png")
+            path = out_dir / (f"table-{prefix}{number}.png" if m else f"table-page-{sp}{p}.png")
             img.crop((max(x0 - 10, 0), max(y0 - 10, 0), x1 + 10, y1 + 10)).save(path)
-            tables.append({"table_id": f"Table {prefix}{number}" if m else f"Table on page {prefix}{p}",
-                           "number": number, "page": p + page_offset,
+            tables.append({"table_id": f"Table {prefix}{number}" if m else f"Table on page {sp}{p}",
+                           "number": number, "prefix": prefix, "page": p + page_offset,
                            "page_label": f"S{p}" if supplement else str(p),
                            "caption": (caption + " " if caption else "") + "(landscape page, shown whole)",
                            "image": str(path)})
     finally:
         pdf.close()
-    tables.sort(key=lambda t: (t["number"] == 0, t["number"]))
+    tables.sort(key=lambda t: (t["number"] == 0, t.get("prefix", "") != "", t.get("prefix", ""), t["number"]))
     return tables

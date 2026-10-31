@@ -37,11 +37,12 @@ class FigureCandidate(BaseModel):
     # `page_label` is the supplement's own ('S3')
     supplement: bool = False
     page_label: str = ""
+    prefix: str = ""               # an appendix's letter: 'A' for 'Fig. A1' (Riggi2023)
 
     @property
     def tag(self) -> str:
-        """'3', or 'S3' for a supplement's figure: file and audit names."""
-        return f"S{self.number}" if self.supplement else str(self.number)
+        """'3', 'A1' (appendix), or 'S3' for a supplement's figure: file and audit names."""
+        return f"S{self.number}" if self.supplement else f"{self.prefix}{self.number}"
 
 
 # ---- the model's suggestions (structured output of the figure_planner stage) ----
@@ -220,7 +221,8 @@ class DigitizedFigure(BaseModel):
     plan: Optional[FigurePlan] = None               # the suggestions it started from, for the audit trail
     supplement: bool = False                        # see FigureCandidate
     page_label: str = ""
+    prefix: str = ""
 
     @property
     def tag(self) -> str:
-        return f"S{self.number}" if self.supplement else str(self.number)
+        return f"S{self.number}" if self.supplement else f"{self.prefix}{self.number}"

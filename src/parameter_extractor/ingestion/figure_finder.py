@@ -25,13 +25,42 @@ from parameter_extractor.schemas.figures import BBox, FigureCandidate
 
 # Captions start with a capital ("Fig. 3", "Figure 3", "FIG. 3"); a lowercase "figure 13,
 # ref. 2)" at the start of a line is running text citing another paper (truman2024).
-CAPTION_RE = re.compile(r"^(?:Fig(?:ure)?|FIG(?:URE)?)\.?(\d{1,2})(?![\d(])")
+# an appendix's letter is part of the number ('Figure A1', Riggi2023); 'S' is left to supplements, so a
+# line of the paper citing 'Figure S1' isn't taken for a caption
+CAPTION_RE = re.compile(r"^(?:Fig(?:ure)?|FIG(?:URE)?)\.?([A-RT-Z]?)(\d{1,2})(?![\d(])")
 # in a supplement: 'Figure S1' (or the supplement's own 'Figure 1')
-SI_CAPTION_RE = re.compile(r"^(?:Fig(?:ure)?|FIG(?:URE)?)\.?S?(\d{1,2})(?![\d(])")
+SI_CAPTION_RE = re.compile(r"^(?:Fig(?:ure)?|FIG(?:URE)?)\.?(S?)(\d{1,2})(?![\d(])")
 MIN_FIGURE_HEIGHT = 30.0    # points; a smaller area means the "caption" wasn't one
 RENDER_SCALE = 3.0          # 216 dpi: enough to click points accurately
 LINE_TOLERANCE = 3.0        # points; words closer than this vertically share a line
 SIDE_MARGIN = 6.0
+
+
+def drop_overprinted(words: List[dict]) -> List[dict]:
+    """Text drawn more than once at nearly the same place (Riggi2023's appendix carries two copies of its
+    text ~11 pt apart plus a third with the spaces run together, so its lines read 'Figure FigureA1.X-ray...
+    Figure A1' and the 'Figure A1' caption was never seen). Kept: one copy of each word. Dropped: a word
+    with the same text as a kept one within a few points, a word whose text is just the kept words it covers
+    run together, and a word with every character doubled ('FFiigguurree') over its single copy."""
+    near = lambda a, b: abs(a["top"] - b["top"]) <= 4
+    kept: List[dict] = []
+    for w in words:
+        width = w["x1"] - w["x0"]
+        if any(k["text"] == w["text"] and near(k, w) and abs(k["x0"] - w["x0"]) <= max(0.6 * width, 12) for k in kept):
+            continue
+        kept.append(w)
+    out = []
+    for w in kept:
+        covered = sorted((k for k in kept if k is not w and near(k, w) and k["x0"] >= w["x0"] - 2 and k["x1"] <= w["x1"] + 2),
+                         key=lambda k: k["x0"])
+        if len(covered) >= 2 and "".join(k["text"] for k in covered) in w["text"]:
+            continue                                      # the run-together copy
+        t = w["text"]
+        if (len(t) >= 2 and len(t) % 2 == 0 and t[0::2] == t[1::2]
+                and any(k["text"] == t[0::2] and near(k, w) and k["x0"] < w["x1"] and w["x0"] < k["x1"] for k in kept)):
+            continue                                      # the doubled-character copy
+        out.append(w)
+    return out
 
 
 def _group_lines(words: List[dict]) -> List[dict]:
@@ -91,7 +120,7 @@ def _find_on_page(page, page_no: int, caption_re=CAPTION_RE) -> List[dict]:
             words = tight
     # drop sideways text (publisher watermarks down the margin, rotated axis titles): it
     # would otherwise join the start of whatever line it happens to sit beside
-    words = [w for w in words if w.get("upright", True)]
+    words = drop_overprinted([w for w in words if w.get("upright", True)])
     by_col: Dict[str, List[dict]] = {"left": [], "right": [], "full": []}
     for w in words:
         if w["x1"] <= mid + 4:
@@ -126,7 +155,7 @@ def _find_on_page(page, page_no: int, caption_re=CAPTION_RE) -> List[dict]:
                 # from all the words in the caption's band (alargov2002 once its words split)
                 band = [w for w in words if block[0]["top"] - 2 <= w["top"] <= block[-1]["bottom"]]
                 block = _group_lines(band)
-            found.append({"number": int(m.group(1)), "col": "full" if wide else col,
+            found.append({"number": int(m.group(2)), "prefix": m.group(1), "col": "full" if wide else col,
                           "block": block, "size": size, "page_no": page_no})
 
     results = []
@@ -191,25 +220,26 @@ def find_figures(pdf_path: str, out_dir: Path, render_scale: float = RENDER_SCAL
         caps = [c for i, page in enumerate(doc.pages, start=1)
                 for c in _find_on_page(page, i, SI_CAPTION_RE if supplement else CAPTION_RE)]
 
-    best: Dict[int, dict] = {}
+    best: Dict[Tuple[str, int], dict] = {}
     for c in caps:
-        if c["number"] not in best or c["size"] < best[c["number"]]["size"] - 0.2:
-            best[c["number"]] = c
+        key = ("S" if supplement else c["prefix"], c["number"])     # Fig. 1 and Fig. A1 are different figures
+        if key not in best or c["size"] < best[key]["size"] - 0.2:
+            best[key] = c
     if not best:
         return []
 
     out_dir.mkdir(parents=True, exist_ok=True)
-    s = "S" if supplement else ""
+    sp = "S" if supplement else ""          # a supplement's page names
     pdf = pdfium.PdfDocument(pdf_path)
     rendered: Dict[int, object] = {}
     candidates = []
     try:
-        for number in sorted(best):
-            c = best[number]
+        for (s, number) in sorted(best, key=lambda k: (k[0] != "", k[0], k[1])):
+            c = best[(s, number)]
             page_no = c["page_no"]
             if page_no not in rendered:
                 img = pdf[page_no - 1].render(scale=render_scale).to_pil().convert("RGB")
-                img.save(out_dir / f"page-{s}{page_no}.png")
+                img.save(out_dir / f"page-{sp}{page_no}.png")
                 rendered[page_no] = img
             img = rendered[page_no]
             # boxes in rendered-page points (the render shows the CropBox only)
@@ -222,11 +252,11 @@ def find_figures(pdf_path: str, out_dir: Path, render_scale: float = RENDER_SCAL
             img.crop(crop_box).save(crop_path)
             candidates.append(FigureCandidate(
                 figure_id=f"Fig. {s}{number}", number=number, page=page_no + page_offset, caption=c["caption"],
-                supplement=supplement, page_label=f"S{page_no}" if supplement else "",
+                supplement=supplement, page_label=f"S{page_no}" if supplement else "", prefix=s,
                 figure_bbox=figure_bbox, caption_bbox=caption_bbox,
                 tick_numbers=[((x0 + x1) / 2 * render_scale, (t + b) / 2 * render_scale, v)
                               for (x0, t, x1, b), v in _numbers_in(c.get("numbers", []), figure_bbox, offset)],
-                page_image=str(out_dir / f"page-{s}{page_no}.png"), crop_image=str(crop_path),
+                page_image=str(out_dir / f"page-{sp}{page_no}.png"), crop_image=str(crop_path),
                 render_scale=render_scale))
     finally:
         pdf.close()
