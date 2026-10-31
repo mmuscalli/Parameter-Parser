@@ -17,6 +17,12 @@ Guidance:
   time/duration under otherwise-fixed conditions. "Independent" when each row
   is its own self-contained condition with no shared sweep. "Evaporation
   Cycle" for wet-dry cycling (name each sample by its cycle, e.g. "Cycle 3").
+- Averages: a result reported only as an average over several runs (replicates,
+  "triplicate experiments", "mean of n = 3") whose individual values the paper
+  doesn't give is a row of its own in a set with set_type "Average" (one set per
+  averaged condition, or one set for a table of averages with one row per
+  condition). When the individual runs ARE given, each run is its own row in one
+  set with set_type "Independent", and the average goes with that set's rows.
 - `duration_hr`: give every sample's duration, including a duration stated once for
   the whole table or experiment (a caption's "heated at 90 °C for 3 hours").
 - `data_source`: for each set, '' if the data was measured in this paper.

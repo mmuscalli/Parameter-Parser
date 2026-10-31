@@ -17,7 +17,7 @@ COLUMN = "data_location"
 FIGURE, TABLE, TEXT = "Figure. {}", "Table. {}", "Text: {}"
 
 _FIGURE_OR_TABLE = re.compile(
-    r"\b(?:supp(?:lementary|l)?\.?\s+|extended\s+data\s+)?(fig(?:ure)?s?|tab(?:le)?s?)\.?\s*"
+    r"(?:\b(?:supp(?:lementary|l)?\.?|extended\s+data|e?si)\s+)?\b(fig(?:ure)?s?|tab(?:le)?s?)\.?\s*"
     r"(S?\d+)\s*(?:\(?([a-h])\)?(?![a-z]))?", re.IGNORECASE)
 
 
@@ -28,7 +28,7 @@ def location(*sources: str) -> str:
         m = _FIGURE_OR_TABLE.search(text or "")
         if m:
             kind, number, panel = m.group(1).lower(), m.group(2).upper(), (m.group(3) or "").lower()
-            if "extended data" in m.group(0).lower() or re.match(r"supp", m.group(0), re.IGNORECASE):
+            if "extended data" in m.group(0).lower() or re.match(r"supp|e?si\s", m.group(0), re.IGNORECASE):
                 number = number if number.startswith("S") else f"S{number}"
             return FIGURE.format(number + panel) if kind.startswith("fig") else TABLE.format(number)
     # the text: the broadest source given (the set's section, passed last), so every row from one passage

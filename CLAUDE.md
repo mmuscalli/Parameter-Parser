@@ -1473,3 +1473,23 @@ sample or experiment set") -> eder1994's rows were whole experiment sets. Now:
   (sample > set > paper, like a full run); prompt: '' set only for values that hold for every row; values
   from experiments that aren't rows are left out. (Not initial vs sampled temperature: the tables give one
   reaction temperature per condition.)
+
+## Averages, category bar charts, supplementary information (2026-10-31, Mickey's test set prep)
+
+- **Averages**: SetType "Average" (results averaged over runs whose individual values aren't given; individual
+  runs given -> "Independent" rows + the average on each row of the set). `SoluteEntry.average` /
+  TableColumn `avg` -> `flatten_to_template.with_average`: '_avg' before the unit ('sampled_2peptide_Gly_avg_mM',
+  'initial_NaCl_aq_avg_mM', '..._avg_%yield'); alias "... avg"; `SoluteEntry.variable` includes avg; peptide
+  avg columns known (registry regex), excluded from peptide totals; set-wide averages (no sample) go on
+  each row of the set. Figures: `AxisVariable.average` -> avg column + set type Average.
+- **Category bar charts** (Riggi2023 Fig. 2: one bar per mineral): planner rule -- one series per bar, the
+  category as a condition, x column null; figure_rows accepts a y-only calibration when x has no column
+  (`calibration.pixel_to_y`).
+- **Supplementary information** (`ingestion/supplements.py`): '<paper>_SI.pdf' / ' SI' / '-ESI' /
+  '_supplementary' / '_supporting information' next to the PDF is read with it (RunConfig.include_supplements,
+  Options "Include supplementary information", CLI --no-si): `ParsedPaper.add_supplement` appends its pages
+  (marked header telling steps to cite 'SI Table N'), table pages renumbered after the paper's and rendered
+  from the SI file into page_images/SI (api_client labels them "Supplementary information page S<n>"),
+  `page_label` shows S<n> in provenance/flags, a paper_source flag. Queues and focused searches fold SI files
+  into their papers (`drop_supplements`). Table captions 'Table S1' recognised; contents pages (>= 3 dot-leader
+  lines) aren't table pages; data_location 'SI Table 1' -> 'Table. S1'. Figures: main PDF only (not yet SI).

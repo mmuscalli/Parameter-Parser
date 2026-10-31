@@ -44,6 +44,13 @@ Return a FigurePlan:
   - Points that represent different conditions within one series (e.g. one
     point per separate experiment) are still one series; describe that in
     `notes`.
+  - Bar charts whose bars are categories (one mineral, salt or condition per
+    bar): one series per bar, labelled by its category, with the category as a
+    condition when a column fits (e.g. a solid material's name); the x axis
+    gets `column` null -- the user clicks each bar's top.
+  - `average` on an axis: true when its values are averages over several runs
+    or replicates (an axis label "avg.", "mean", or a caption saying values
+    are averaged across triplicates). Its column then holds averages.
   - `initial_species` and `concentrations` are for chemical compositions;
     leave them empty if the research area's rules below don't ask for them.
 - `data_source`: '' if the plotted data was measured in this paper. If the

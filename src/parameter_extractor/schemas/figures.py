@@ -61,6 +61,11 @@ class AxisVariable(BaseModel):
                     "1000 for an axis in mol dm-3 going into an _mM column, 0.001 for an axis "
                     "labelled '10^3 x (% yield)'.")
     scale: Literal["linear", "log"] = "linear"
+    # Mickey, 2026-10-31 (Riggi2023: 'avg. max. linear oligomer length' over triplicates): averaged values
+    # -> '<name>_avg_<unit>' columns and set type "Average"
+    average: bool = Field(default=False, description="True when the plotted values are AVERAGES over several runs "
+                                                     "or replicates (axis label or caption: avg., mean, "
+                                                     "averaged across triplicates).")
     tick_labels: List[float] = Field(
         default_factory=list,
         description="The numbers printed at this axis's labelled ticks, in order from the low end of the "

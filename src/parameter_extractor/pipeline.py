@@ -64,6 +64,7 @@ from parameter_extractor.ingestion.new_variables import (
     split_known, write_values)
 from parameter_extractor.registry import VariableRegistry
 from parameter_extractor.ingestion.pdf_parser import ParsedPaper, close_shared, parse_pdf, rasterize_table_pages
+from parameter_extractor.ingestion.supplements import find_supplements
 from parameter_extractor.run_context import ProgressCallback, RunContext, StageUsage, total_cost
 from parameter_extractor.pricing import PRICES_CHECKED
 from parameter_extractor.pubchem import PubChem
@@ -312,6 +313,15 @@ def read_paper(
         pdf_path = source.pdf
         parsed = _parse(pdf_path, ctx.run_dir)
         parsed.read_from = source.label
+        if config.include_supplements:     # '<paper>_SI.pdf' next to it: read with the paper (supplements.py)
+            for si_path in find_supplements(pdf_path):
+                si = parse_pdf(str(si_path))
+                if si.has_text_layer and si.page_count:
+                    parsed.add_supplement(si, si_path)
+                    ctx.note("parse", f"Supplementary information read with the paper: {si_path.name} "
+                                      f"({si.page_count} pages, S1-S{si.page_count})")
+            if parsed.supplements:
+                (ctx.run_dir / "parsed_paper.json").write_text(parsed.to_json())
         if config.rasterize_table_pages and parsed.table_pages:
             images_by_page = rasterize_table_pages(parsed, ctx.run_dir / "page_images",
                                                    dpi=config.table_raster_dpi)
@@ -1017,6 +1027,11 @@ def finish(
     image_tables = image_table_numbers(ex.parsed.table_pages) if config.rasterize_table_pages else set()
     table_pages = table_page_numbers(ex.parsed.table_pages)
     paper_flags += _source_flags(ex.source)
+    for si in ex.parsed.supplements:
+        paper_flags.append(Flag("paper_source", f"Supplementary information read with the paper: "
+                                                f"{Path(si['file']).name} ({si['pages']} pages). Its pages are "
+                                                f"shown as S1-S{si['pages']}; its values are reported under this "
+                                                f"paper."))
     if ex.source is not None and ex.source.read_arxiv:          # common column: which arXiv version
         from parameter_extractor.ingestion.flatten_to_template import set_row_value
         from parameter_extractor.schemas.row_schema import CellSource
@@ -1026,6 +1041,12 @@ def finish(
     check_flag_quotes([*paper_flags, *(f for fs in row_flags.values() for f in fs)], ex.parsed.text, image_tables,
                       ex.parsed.pages_for_lookup, table_pages)
     check_row_quotes(rows, ex.parsed.text, image_tables, ex.parsed.pages_for_lookup, table_pages)
+    if ex.parsed.supplements:          # pages of the supplementary information are shown as S1, S2, ...
+        for f in [*paper_flags, *(f for fs in row_flags.values() for f in fs)]:
+            f.page = ex.parsed.page_label(f.page)
+        for row in rows:
+            for src in row.provenance.values():
+                src.page = ex.parsed.page_label(src.page)
     flags_path = None
     if paper_flags or row_flags:
         flags_path = ctx.run_dir / "plausibility_flags.json"

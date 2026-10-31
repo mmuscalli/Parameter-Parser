@@ -63,6 +63,16 @@ def pixel_to_data(panel: DigitizedPanel, px: float, py: float) -> Tuple[float, f
             _interp(t, yc.p1.value, yc.p2.value, yc.log))
 
 
+def pixel_to_y(panel: DigitizedPanel, px: float, py: float) -> float:
+    """The y value alone, for a plot whose x axis isn't numeric (bars of categories: Riggi2023)."""
+    yc = panel.y_cal
+    _check(yc, "y")
+    ey = (yc.p2.px - yc.p1.px, yc.p2.py - yc.p1.py)
+    if math.hypot(*ey) < 1e-6:
+        raise CalibrationError("The two Y reference points are at the same place -- put them far apart on the axis.")
+    return _interp(_fraction_along((yc.p1.px, yc.p1.py), ey, (px, py)), yc.p1.value, yc.p2.value, yc.log)
+
+
 def try_pixel_to_data(panel: DigitizedPanel, px: float, py: float) -> Optional[Tuple[float, float]]:
     try:
         return pixel_to_data(panel, px, py)

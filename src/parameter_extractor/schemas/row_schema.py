@@ -27,7 +27,7 @@ class CellSource(BaseModel):
     # wording; None = not checked / no quote
     quote_check: Optional[str] = None
     # the page the quote is on (found in the text, or the table's page) -- to find the full context
-    page: Optional[int] = None
+    page: Optional[Union[int, str]] = None   # 'S5': a page of the supplementary information
 
     @field_validator("quote", mode="before")
     @classmethod

@@ -644,14 +644,14 @@ def test_settings_and_run_options():
         w.options_btn.click()
         assert w.options_widget.isVisible() and QSettings().value("options_shown", type=bool)
         assert w.suggest_box.isChecked() and w.current_config().suggest_new_variables   # on by default
-        assert w.toggles_btn.text().startswith("Variable suggestions")                # the dropdown says what's on
+        assert w.toggles_btn.text() == "Variable suggestions, SI"                    # the dropdown says what's on
         w.batch_box.setChecked(True)
         w.arxiv_box.setChecked(True)
         w.suggest_box.setChecked(False)
         assert "batch" in w.options_summary.text() and "arXiv text" in w.options_summary.text()
         assert "no new-variable suggestions" in w.options_summary.text()
         assert w.toggles_btn.text().startswith("Batch, arXiv text")
-        assert len(w.toggles_btn.menu().actions()) == 4
+        assert len(w.toggles_btn.menu().actions()) == 5 and w.current_config().include_supplements
         assert w.settings_hint.isVisible() and "API key" in w.settings_hint.text()       # no key yet
         w.key_edit.setText("k")
         assert not w.settings_hint.isVisible()

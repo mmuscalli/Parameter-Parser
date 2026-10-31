@@ -38,12 +38,16 @@ _MEDIA_TYPES = {".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".png": "image/png"
 
 
 def _piece_label(path: Path) -> str:
-    """'page-9-2of2.jpg' -> a note saying how the pieces of a large table page fit together."""
+    """'page-9-2of2.jpg' -> a note saying how the pieces of a large table page fit together; a page of
+    the supplementary information (rendered into an 'SI' folder) is called 'SI page N'."""
+    si = path.parent.name.startswith("SI")
     m = re.fullmatch(r"page-(\d+)-(\d+)of(\d+)", path.stem)
     if not m:
-        return ""
+        whole = re.fullmatch(r"page-(\d+)", path.stem)
+        return f"Supplementary information, page S{whole.group(1)}:" if si and whole else ""
     page, k, n = m.groups()
-    return (f"Page {page}, piece {k} of {n} (a large table page is cut into pieces, top to bottom and left to "
+    where = f"Supplementary information page S{page}" if si else f"Page {page}"
+    return (f"{where}, piece {k} of {n} (a large table page is cut into pieces, top to bottom and left to "
             f"right; a piece that continues the table to the right repeats the row labels on its left):")
 
 

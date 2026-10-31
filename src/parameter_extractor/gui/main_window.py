@@ -245,6 +245,12 @@ class MainWindow(QMainWindow):
                                     "review (about 1.5% fewer tokens); parameters you ask to look for and "
                                     "assumed values are still reviewed, and what was left out is listed in "
                                     "one flag.")
+        self.si_box = QCheckBox("Include supplementary information")
+        self.si_box.setChecked(True)
+        self.si_box.setToolTip("A PDF next to the paper named like '<paper>_SI.pdf' (or ' SI', '-ESI', "
+                               "'_supplementary', '_supporting information') is read with it: its text and tables "
+                               "are used, its pages shown as S1, S2, ..., and everything is reported under the "
+                               "paper. In a paper list, SI files are folded into their papers.")
         # the on/off options in one dropdown (it will grow); checkboxes inside keep the menu open
         self.toggles_btn = QToolButton()
         self.toggles_btn.setPopupMode(QToolButton.ToolButtonPopupMode.InstantPopup)
@@ -301,13 +307,13 @@ class MainWindow(QMainWindow):
 
     def option_toggles(self) -> List[QCheckBox]:
         """The on/off run options in the Options dropdown, in menu order."""
-        return [self.batch_box, self.arxiv_box, self.equations_box, self.suggest_box]
+        return [self.batch_box, self.arxiv_box, self.equations_box, self.suggest_box, self.si_box]
 
     def _update_options_summary(self, *_args) -> None:
         """One line for the collapsed run options: what this run will do (and the dropdown's
         own text: the options that are on)."""
         short = {self.batch_box: "Batch", self.arxiv_box: "arXiv text", self.equations_box: "LaTeX",
-                 self.suggest_box: "Variable suggestions"}
+                 self.suggest_box: "Variable suggestions", self.si_box: "SI"}
         on = [short[b] for b in self.option_toggles() if b.isChecked()]
         self.toggles_btn.setText(", ".join(on) if on else "None on")
         stages = [b for b in self.stage_boxes.values()]
@@ -318,6 +324,7 @@ class MainWindow(QMainWindow):
                  "arXiv text when available" if self.arxiv_box.isChecked() else "",
                  "equations to LaTeX" if self.equations_box.isChecked() else "",
                  "" if self.suggest_box.isChecked() else "no new-variable suggestions",
+                 "" if self.si_box.isChecked() else "no supplementary information",
                  f"{sum(b.isChecked() for b in stages)} of {len(stages)} stages" if stages else "",
                  f"{len(self.focus_terms())} parameter(s) to look for" if self.focus_terms() else ""]
         self.options_summary.setText(" · ".join(p for p in parts if p))
@@ -432,6 +439,7 @@ class MainWindow(QMainWindow):
         self.batch_box.setChecked(self._settings.value("batch_mode", False, type=bool))
         self.arxiv_box.setChecked(self._settings.value("prefer_arxiv", False, type=bool))
         self.suggest_box.setChecked(self._settings.value("suggest_new_variables", True, type=bool))
+        self.si_box.setChecked(self._settings.value("include_supplements", True, type=bool))
         self.passes_combo.setCurrentIndex(max(0, self.passes_combo.findData(self._settings.value("passes", 1, type=int))))
         if self.settings_dialog.handoff_box is not None:
             self.settings_dialog.handoff_edit.setText(self._settings.value("dev/handoff_dir", ""))
@@ -501,6 +509,7 @@ class MainWindow(QMainWindow):
         self._settings.setValue("batch_mode", self.batch_box.isChecked())
         self._settings.setValue("prefer_arxiv", self.arxiv_box.isChecked())
         self._settings.setValue("suggest_new_variables", self.suggest_box.isChecked())
+        self._settings.setValue("include_supplements", self.si_box.isChecked())
         self._settings.setValue("passes", self.passes_combo.currentData() or 1)
         if self.settings_dialog.handoff_box is not None:
             self._settings.setValue("dev/handoff", self.settings_dialog.handoff_box.isChecked())
@@ -602,6 +611,7 @@ class MainWindow(QMainWindow):
                          batch_mode=self.batch_box.isChecked(),
                          prefer_arxiv=self.arxiv_box.isChecked(), ads_token=self.ads_edit.text().strip(),
                          suggest_new_variables=self.suggest_box.isChecked(),
+                         include_supplements=self.si_box.isChecked(),
                          passes=self.passes_combo.currentData() or 1,
                          handoff_dir=self.settings_dialog.handoff_dir(),
                          pubchem_cache_path=default_pubchem_cache_path(), arxiv_cache_dir=default_arxiv_cache_dir())

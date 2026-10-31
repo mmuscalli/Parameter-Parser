@@ -106,6 +106,8 @@ def main() -> int:
     parser.add_argument("--batch", action="store_true",
                         help="Batch mode: every request at half price through Anthropic's Message Batches API; "
                              "each step waits in the batch queue (usually minutes, at most 24 h)")
+    parser.add_argument("--no-si", action="store_true",
+                        help="Don't read a paper's supplementary information ('<paper>_SI.pdf' next to it) with it")
     parser.add_argument("--no-suggestions", action="store_true",
                         help="Don't suggest new variables: no open-ended capture of conditions without a column "
                              "(new variables are listed in one flag and new_variables.json, never added)")
@@ -158,6 +160,7 @@ def main() -> int:
                  "model_profile": args.models, "prompt_caching": not args.no_cache,
                  "batch_mode": args.batch, "prefer_arxiv": args.arxiv,
                  "suggest_new_variables": not args.no_suggestions, "passes": args.passes,
+                 "include_supplements": not args.no_si,
                  "pubchem_cache_path": default_pubchem_cache_path(), "arxiv_cache_dir": default_arxiv_cache_dir()}
     if args.ads_token is not None:
         overrides["ads_token"] = args.ads_token
@@ -247,6 +250,7 @@ def _focused(args, parser) -> int:
         parser.error("a focused search needs papers: --papers LIST, --paper ID or --pdf")
     from parameter_extractor.registry import default_arxiv_cache_dir
     overrides = {"pack": args.pack, "model_profile": args.models, "batch_mode": args.batch,
+                 "include_supplements": not args.no_si,
                  "prefer_arxiv": args.arxiv, "optional_stages": {name: "off" for name in args.skip_stage},
                  "arxiv_cache_dir": default_arxiv_cache_dir()}
     if args.ads_token is not None:

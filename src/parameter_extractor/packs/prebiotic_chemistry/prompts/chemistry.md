@@ -115,6 +115,10 @@ For each species:
   "n.d.", "-" explained as not detected): `v` null, `det` "not detected" --
   one entry per product and sample. In both cases `u` = the unit the paper's
   other results of that kind use (e.g. "%" in a yield table).
+- Averages: a value the paper reports as an AVERAGE over several runs or
+  replicates (mean, avg., "averaged across triplicate experiments") gets
+  `avg` true -- on the table column, or on the species. Individual runs'
+  values don't.
 - Reported percent yields (e.g. "% (Gly)2") go in `v` with the unit as
   stated in `u` (no `mM`).
 - A percentage of a STARTING material left over ("Recovered nicotinamide (%)",

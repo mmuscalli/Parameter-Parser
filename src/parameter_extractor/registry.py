@@ -60,7 +60,7 @@ def _peptide_column_re():
     from parameter_extractor.names import AMINO_ACIDS
     aa = "(?:" + "|".join(AMINO_ACIDS) + ")"
     return re.compile(rf"(?:initial|sampled)_(?:(?P<n>\d+)peptide_{aa}|(?P<cyclo>cyclo_{aa}(?:-{aa})+)|"
-                      rf"(?P<seq>{aa}(?:-{aa})+))_(?:mM|%yield)")
+                      rf"(?P<seq>{aa}(?:-{aa})+))(?:_avg)?_(?:mM|%yield)")
 
 
 _PEPTIDE_COLUMN = None

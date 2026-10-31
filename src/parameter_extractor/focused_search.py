@@ -263,7 +263,7 @@ def _converted(param: FocusParameter, item, paper: str) -> FocusedValue:
     return out
 
 
-def _paper_text(source, run_dir: Path, whole_paper: bool, rasterize: bool, dpi: int):
+def _paper_text(source, run_dir: Path, whole_paper: bool, rasterize: bool, dpi: int, supplements: bool = True):
     """(text, table images): arXiv text as is; a PDF's text (+ its table images, whole-paper mode)."""
     from parameter_extractor.pipeline import compact_text
     if source.from_arxiv_text:
@@ -272,6 +272,12 @@ def _paper_text(source, run_dir: Path, whole_paper: bool, rasterize: bool, dpi: 
     parsed = parse_pdf(str(source.pdf))
     if not parsed.has_text_layer:
         raise PipelineError(f"'{source.pdf.name}' has no text layer (a scan): not searched.")
+    if supplements:                       # '<paper>_SI.pdf' next to it is searched with it
+        from parameter_extractor.ingestion.supplements import find_supplements
+        for si_path in find_supplements(source.pdf):
+            si = parse_pdf(str(si_path))
+            if si.has_text_layer:
+                parsed.add_supplement(si, si_path)
     images = []
     if whole_paper and rasterize and parsed.table_pages:
         by_page = rasterize_table_pages(parsed, run_dir / "page_images", dpi=dpi)
@@ -302,7 +308,7 @@ def search_paper(item: PaperItem, params: Sequence[FocusParameter], config: RunC
     # rows as in a full extraction: the table images are needed to plan them (eder1994's text-layer tables
     # are garbled), and go with the focused question too
     text, images = _paper_text(source, run_dir, whole_paper or plan_rows, config.rasterize_table_pages,
-                               config.table_raster_dpi)
+                               config.table_raster_dpi, config.include_supplements)
     outcome.title = (source.record.title if source.record else next(
         (line.strip() for line in text.splitlines()[:60] if len(line.strip()) > 25
          and not re.search(r"https?://|doi\.org|^\W*(?:a&a|astronomy|publ\.|journal)\b", line.strip(), re.IGNORECASE)),
@@ -503,6 +509,9 @@ def run_focused_search(items: Sequence[PaperItem], columns: Sequence[str], confi
     if plan_rows is None:
         plan_rows = packs.current().manifest.focused_row_plan
     items = list(dict.fromkeys(items))
+    if config.include_supplements:        # an SI file is searched with its paper, not on its own
+        from parameter_extractor.ingestion.supplements import drop_supplements
+        items, _ = drop_supplements(items)
     out_dir = _new_dir(Path(config.output_dir))
     report = on_progress or (lambda *a: None)
     # 1. every identifier looked up at once (batched arXiv queries; cached lookups reused)

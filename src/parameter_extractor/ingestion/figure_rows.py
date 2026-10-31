@@ -21,7 +21,8 @@ from __future__ import annotations
 from typing import List, Optional, Tuple
 
 from parameter_extractor.ingestion.data_location import COLUMN as DATA_LOCATION, location
-from parameter_extractor.digitizing.calibration import pixel_to_data
+from parameter_extractor.ingestion.flatten_to_template import with_average
+from parameter_extractor.digitizing.calibration import pixel_to_data, pixel_to_y
 from parameter_extractor.ingestion.flatten_to_template import (
     FIELD_TO_TEMPLATE, UNRECOGNIZED_SUFFIX, resolve_template_column, set_row_value, current_column_name)
 from parameter_extractor.schemas.figures import DigitizedFigure, SeriesCondition
@@ -124,7 +125,9 @@ def build_figure_rows(
             if not series.points:
                 continue
             panel = fig.panels[series.panel]
-            if not (panel.x_cal.complete() and panel.y_cal.complete()):
+            # bars of categories: no numeric x axis -- only y is calibrated, and x has no column
+            categorical = not panel.x.column and not panel.x_cal.complete()
+            if not panel.y_cal.complete() or not (categorical or panel.x_cal.complete()):
                 problems.append(f"{fig.figure_id} series '{series.label}': axes not calibrated -- left out.")
                 continue
             if not (panel.x.column or panel.y.column or series.y_column):
@@ -135,6 +138,8 @@ def build_figure_rows(
             set_id = f"{paper_prefix}{set_idx:03d}"
             set_idx += 1
             set_type = "Time Series" if "duration_hr" in (panel.x.column, panel.y.column) else "Independent"
+            if getattr(panel.y, "average", False) or getattr(panel.x, "average", False):
+                set_type = "Average"           # averaged values without the individual runs (Riggi2023's bars)
             where = f"{fig.figure_id}, series '{series.label}'"
             species, held_species, species_sources = {}, [], {}
             for sp in series.initial_species:
@@ -172,9 +177,11 @@ def build_figure_rows(
                         value_text=cond.value, set_label=where, source=f"{where}; {cond.source}".strip("; "),
                         origin=fig.figure_id))
 
-            points = sorted(series.points, key=lambda p: pixel_to_data(panel, p.px, p.py)[0])
+            to_data = (lambda p: (p.px, pixel_to_y(panel, p.px, p.py))) if categorical else \
+                (lambda p: pixel_to_data(panel, p.px, p.py))
+            points = sorted(series.points, key=lambda p: to_data(p)[0])
             for sample_idx, pt in enumerate(points, start=1):
-                x, y = pixel_to_data(panel, pt.px, pt.py)
+                x, y = to_data(pt)
                 fields = {
                     "initial_temperature_C": series.initial_temperature_C
                     if series.initial_temperature_C is not None else methodology.initial_temperature_C.value,
@@ -196,6 +203,11 @@ def build_figure_rows(
                     if panel.x.column else panel.x
                 if y_axis.column:
                     y_axis = y_axis.model_copy(update={"column": current_column_name(y_axis.column)})
+                # averaged values go in '<name>_avg_<unit>' columns
+                if getattr(y_axis, "average", False) and y_axis.column:
+                    y_axis = y_axis.model_copy(update={"column": with_average(y_axis.column)})
+                if getattr(x_axis, "average", False) and x_axis.column:
+                    x_axis = x_axis.model_copy(update={"column": with_average(x_axis.column)})
                 for axis, value in ((x_axis, x), (y_axis, y)):
                     value = round(value * axis.multiplier, 6)
                     read = CellSource(origin=f"{fig.figure_id} (digitized)", confidence=DIGITIZED,

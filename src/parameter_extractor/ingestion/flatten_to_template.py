@@ -71,6 +71,17 @@ _RECOVERED_HEADER = re.compile(r"\b(recovered|recovery|unreacted|remaining|resid
                                re.IGNORECASE)
 
 
+# '<name>_avg_<unit>' for averaged values (Mickey, 2026-10-31): 'sampled_2peptide_Gly_avg_mM'
+_UNIT_SUFFIX = re.compile(r"(_(?:mM|uM|%yield|%recovered|pct|mL_min|mL|uL|hr|h|min|sec|d|C|K|bar|MPa|g|mg|nm|rpm|nt|mer))$")
+
+
+def with_average(column: str) -> str:
+    """The column for an AVERAGE of what `column` holds: '_avg' just before the unit."""
+    if not column or "_avg_" in column or column.endswith("_avg"):
+        return column
+    return _UNIT_SUFFIX.sub(r"_avg\1", column) if _UNIT_SUFFIX.search(column) else column + "_avg"
+
+
 def percent_suffix(entry) -> str:
     """'%recovered' for recovered / unreacted starting material (the model's `meas`, or a column header
     that says so -- older answers), else '%yield'."""
@@ -95,10 +106,11 @@ def base_registry():
 
 def species_alias_name(entry) -> str:
     """How the registry remembers a species value: role and % vs concentration
-    matter ("initial RbCl" and "sampled RbCl %" are different variables)."""
+    matter ("initial RbCl" and "sampled RbCl %" are different variables), and so does an average."""
+    avg = " avg" if getattr(entry, "average", False) else ""
     if entry.role == "sampled" and is_percent(entry):
-        return f"sampled {entry.name} " + ("%" if percent_suffix(entry) == "%yield" else "% recovered")
-    return f"{_column_role(entry)} {entry.name}"
+        return f"sampled {entry.name}{avg} " + ("%" if percent_suffix(entry) == "%yield" else "% recovered")
+    return f"{_column_role(entry)} {entry.name}{avg}"
 
 
 def _column_role(entry) -> str:
@@ -132,6 +144,8 @@ def column_for_solute(entry, registry=None) -> Optional[str]:
     else:
         role = _column_role(entry)
         candidates = (f"{role}_{entry.name}_aq_mM", f"{role}_{entry.name}_mM")
+    if getattr(entry, "average", False):
+        candidates = tuple(with_average(c) for c in candidates)
     return next((c for c in candidates if registry.is_known_column(c)), None)
 
 
@@ -179,6 +193,11 @@ def is_peptide_column(column: str) -> bool:
 
 def proposed_column_for_solute(entry) -> str:
     """What the column would be called if this new variable were accepted."""
+    column = _proposed_column(entry)
+    return with_average(column) if getattr(entry, "average", False) else column
+
+
+def _proposed_column(entry) -> str:
     name = column_safe_name(entry.name)
     if entry.role == "sampled" and is_percent(entry):
         return f"sampled_{name}_{percent_suffix(entry)}"
@@ -305,7 +324,10 @@ def build_rows(
             sample_id = f"{sample_idx:03d}"
             full_id = f"{set_id}{sample_id}"
 
-            sampled_here = [s for s in sampled_for_set if s.sample_label == sample.sample_label]
+            # a set's AVERAGE given without a sample (individual runs in the set, Mickey 2026-10-31) goes on
+            # each of its rows, in the '_avg' column
+            sampled_here = [s for s in sampled_for_set if s.sample_label == sample.sample_label
+                            or (not s.sample_label and getattr(s, "average", False))]
             sampled_kept = [s for s in sampled_here if _kept(s.confidence)]
             sampled_mM, extra, yield_fields, prov = {}, {}, {}, dict(species_prov)
             row_species = dict(species_mM)

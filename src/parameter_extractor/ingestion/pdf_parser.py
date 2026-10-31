@@ -39,7 +39,8 @@ from parameter_extractor.errors import PdfNotReadableError
 # the left column's text comes first (kim2019: "...incubated at 85-125C in the Table 1.
 # Formation of Cytidine..."): "Table N." followed by a capitalised title. In-text
 # references like "(Table 1, Fig. 2)" match neither.
-TABLE_CAPTION_RE = re.compile(r"(?m)^\s*(?:Table|TABLE)\s+\d+\b|\b(?:Table|TABLE)\s+\d+\.\s+[A-Z][a-z]")
+# 'Table S1' too: supplementary information numbers its tables S1, S2, ... (pulletikurti2022_SI)
+TABLE_CAPTION_RE = re.compile(r"(?m)^\s*(?:Table|TABLE)\s+S?\d+\b|\b(?:Table|TABLE)\s+S?\d+\.\s+[A-Z][a-z]")
 # Word-gap threshold (points) for text extraction. pdfplumber's default (3) runs words
 # together in tightly set papers (kim2019: letter gaps ~0.1 pt, word gaps ~2-3 pt), so a
 # page that comes out with many implausibly long "words" is re-extracted with this.
@@ -65,6 +66,34 @@ class ParsedPaper:
     # False for a text without pages (arXiv HTML full text): no page numbers are given for quotes
     paged: bool = True
     read_from: str = ""            # what was read, e.g. "arXiv:2308.05343v1 full text (arXiv HTML; a preprint)"
+    # supplementary information read with the paper (ingestion/supplements.py): its pages follow the
+    # paper's -- [{"file": path, "offset": pages before it, "pages": n}]; shown as S1, S2, ...
+    supplements: List[dict] = field(default_factory=list)
+
+    def page_label(self, page) -> object:
+        """A page as shown to the user: the paper's own number, or 'S<n>' for a supplement's page."""
+        for s in self.supplements:
+            if isinstance(page, int) and s["offset"] < page <= s["offset"] + s["pages"]:
+                return f"S{page - s['offset']}"
+        return page
+
+    def add_supplement(self, si: "ParsedPaper", path) -> None:
+        """Append a supplement's pages after the paper's (text marked, table pages renumbered)."""
+        offset = self.page_count
+        header = (f"=== SUPPLEMENTARY INFORMATION ({Path(path).name}), pages S1-S{si.page_count}. Everything "
+                  f"from here on is the paper's supplement: cite its tables and figures as 'SI Table N' / "
+                  f"'SI Fig. N' (or by their own S-numbers) so they aren't mistaken for the paper's. ===\n")
+        pages = list(si.page_texts) or [si.text]
+        pages[0] = header + pages[0]
+        self.page_texts += pages
+        self.text += "\f" + "\f".join(pages)
+        for page, captions in si.table_pages.items():
+            self.table_pages[offset + int(page)] = captions
+        for page, degrees in si.page_rotations.items():
+            self.page_rotations[offset + int(page)] = degrees
+        self.page_count += si.page_count
+        self.warnings += [f"{Path(path).name}: {w}" for w in si.warnings]
+        self.supplements.append({"file": str(path), "offset": offset, "pages": si.page_count})
 
     @property
     def pages_for_lookup(self) -> Optional[List[str]]:
@@ -146,12 +175,17 @@ def find_table_pages(page_texts: List[str]) -> Dict[int, List[str]]:
     human skimming the run's page_images/ will notice that gap quickly."""
     found: Dict[int, List[str]] = {}
     for i, text in enumerate(page_texts, start=1):
-        captions = TABLE_CAPTION_RE.findall(text)
-        if captions:
-            # capture a bit more context than just "Table 1" for the audit trail
-            lines = [l.strip() for l in text.splitlines() if TABLE_CAPTION_RE.search(l)]
+        # capture a bit more context than just "Table 1" for the audit trail; a contents page's
+        # entries ("Table 3. ... ..... 86", pulletikurti2022_SI pp. 2-3) aren't tables
+        if sum(bool(_CONTENTS_ENTRY.search(l)) for l in text.splitlines()) >= 3:
+            continue                      # a contents page lists tables, it doesn't hold them
+        lines = [l.strip() for l in text.splitlines() if TABLE_CAPTION_RE.search(l) and not _CONTENTS_ENTRY.search(l)]
+        if lines:
             found[i] = lines
     return found
+
+
+_CONTENTS_ENTRY = re.compile(r"(?:\.\s*){4,}\s*S?\d+\s*$")
 
 
 def render_offset(pdfium_page) -> tuple:
@@ -236,8 +270,18 @@ def rasterize_table_pages(parsed: "ParsedPaper", out_dir: Path, dpi: int = 220) 
     reports everything in running text with no tables)."""
     if not parsed.table_pages:
         return {}
-    return rasterize_pages(parsed.source_pdf, sorted(parsed.table_pages.keys()), out_dir, dpi=dpi,
-                           rotations=parsed.page_rotations)
+    own = parsed.supplements[0]["offset"] if parsed.supplements else parsed.page_count
+    out = rasterize_pages(parsed.source_pdf, sorted(p for p in parsed.table_pages if p <= own), out_dir, dpi=dpi,
+                          rotations=parsed.page_rotations)
+    for s in parsed.supplements:          # a supplement's pages from its own PDF, in out_dir/SI (labelled SI)
+        pages = [p - s["offset"] for p in sorted(parsed.table_pages) if s["offset"] < p <= s["offset"] + s["pages"]]
+        if pages:
+            si = rasterize_pages(s["file"], pages, out_dir / ("SI" if len(parsed.supplements) == 1 else
+                                                               f"SI{parsed.supplements.index(s) + 1}"), dpi=dpi,
+                                 rotations={p - s["offset"]: d for p, d in parsed.page_rotations.items()
+                                            if s["offset"] < p <= s["offset"] + s["pages"]})
+            out.update({s["offset"] + p: paths for p, paths in si.items()})
+    return out
 
 
 _shared_lock = threading.RLock()

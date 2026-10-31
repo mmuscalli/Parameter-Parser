@@ -71,8 +71,12 @@ class PaperQueue:
             self.out_dir, n = Path(config.output_dir) / f"queue_{stamp}_{n}", n + 1
         self.out_dir.mkdir(parents=True)
         self.config = config
+        # a paper's supplementary information is read with it, not queued on its own (supplements.py)
+        from parameter_extractor.ingestion.supplements import drop_supplements
+        items, self.folded_supplements = drop_supplements(list(dict.fromkeys(items))) \
+            if config.include_supplements else (list(dict.fromkeys(items)), [])
         self.papers = [QueuedPaper(item=item, prefix=f"{i:03d}", label=getattr(item, "label", "") or run_name(item))
-                       for i, item in enumerate(dict.fromkeys(items), start=1)]
+                       for i, item in enumerate(items, start=1)]
         self.on_change = on_change or (lambda paper: None)
         self.cancel_event = cancel_event or threading.Event()
         self.parallel = parallel or (BATCH_PARALLEL if config.batch_mode else DIRECT_PARALLEL)

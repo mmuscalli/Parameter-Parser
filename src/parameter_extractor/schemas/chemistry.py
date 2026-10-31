@@ -136,6 +136,10 @@ class SoluteEntry(BaseModel):
     # "detected", 'not detected' as 0 (calculators/amounts.py)
     # what a sampled % means (Mickey, 2026-10-29): a product's yield, or how much of a starting material was
     # recovered -> sampled_<name>_%recovered
+    average: bool = Field(
+        default=False, alias="avg",
+        description="True when the value is an AVERAGE over several runs or replicates (mean, avg., 'averaged "
+                    "across triplicate experiments'); leave out otherwise.")
     measure: Literal["yield", "recovered"] = Field(
         default="yield", alias="meas",
         description="For a sampled % value only: 'recovered' when it is the share of a STARTING material left "
@@ -163,7 +167,8 @@ class SoluteEntry(BaseModel):
         """Which variable this value is, among entries for the same set/sample: the
         species name, or 'stock <name>' for a stock-solution concentration (both
         can exist for one species, in different columns)."""
-        return f"stock {self.name}" if self.concentration_basis == "stock" else self.name
+        name = f"stock {self.name}" if self.concentration_basis == "stock" else self.name
+        return name + (" avg" if self.average else "")
 
 
 class SoluteGroup(BaseModel):
@@ -207,6 +212,10 @@ class TableColumn(BaseModel):
     identified_by: str = Field(default="", alias="how",
                                description="Only when the header doesn't name the species: how you identified "
                                            "it, at most 15 words.")
+    average: bool = Field(
+        default=False, alias="avg",
+        description="True when the value is an AVERAGE over several runs or replicates (mean, avg., 'averaged "
+                    "across triplicate experiments'); leave out otherwise.")
     measure: Literal["yield", "recovered"] = Field(
         default="yield", alias="meas",
         description="For a sampled % value only: 'recovered' when it is the share of a STARTING material left "
@@ -259,7 +268,8 @@ class TableResults(BaseModel):
                     concentration_unit_raw=col.unit or None, detection=detection if col.role == "sampled" else "",
                     quote=f"{row.label} {text}".strip(),
                     source=f"{self.source}, row {row.label}, column {col.label}",
-                    confidence=self.confidence, identified_by=col.identified_by, measure=col.measure))
+                    confidence=self.confidence, identified_by=col.identified_by, measure=col.measure,
+                    average=col.average))
         return out
 
 

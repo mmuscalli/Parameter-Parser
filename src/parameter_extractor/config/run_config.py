@@ -64,6 +64,8 @@ class RunConfig:
     # tokens, exact table values, but a PREPRINT (the version read is recorded and flagged). Papers
     # given by identifier instead of a PDF always come from arXiv.
     prefer_arxiv: bool = False
+    # Read a paper's supplementary information with it ('<paper>_SI.pdf' next to the PDF, supplements.py)
+    include_supplements: bool = True
     # Run the extraction steps after the structure plan this many times (1-3) and keep each value by vote
     # (voting.py): another lever for cheap runs -- Economy with 2-3 passes recovers values a single pass
     # drops at random. Each extra pass adds the cost of those steps again (the paper is read from cache).

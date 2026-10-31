@@ -11,7 +11,7 @@ still a complete human-readable sentence.
 """
 from __future__ import annotations
 from dataclasses import asdict, dataclass
-from typing import Dict, List, Literal, Optional
+from typing import Union, Dict, List, Literal, Optional
 
 from parameter_extractor.config import settings
 from parameter_extractor.schemas.chemistry import ChemistryExtraction
@@ -40,7 +40,7 @@ class Flag:
     unverified_quote: Optional[str] = None
     table_image_quote: Optional[str] = None   # transcribed by the model from a table sent as an image
     model_note: Optional[str] = None          # the model's explanation (e.g. how a value was derived)
-    page: Optional[int] = None                # page of the quote / table (validation/quotes.py)
+    page: Optional[Union[int, str]] = None   # 'S5': a page of the supplementary information                # page of the quote / table (validation/quotes.py)
 
     def __post_init__(self):
         from parameter_extractor.schemas.common import NOTE_MAX_CHARS, QUOTE_MAX_CHARS, QUOTE_SEPARATOR_SAFE, capped

@@ -10,7 +10,8 @@ from __future__ import annotations
 from typing import List, Literal, Optional
 from pydantic import BaseModel, Field
 
-SetType = Literal["Independent", "Time Series", "Evaporation Cycle"]
+# "Average" (Mickey, 2026-10-31): a result averaged over several runs whose individual values the paper doesn't give
+SetType = Literal["Independent", "Time Series", "Evaporation Cycle", "Average"]
 
 
 class PlannedSample(BaseModel):
