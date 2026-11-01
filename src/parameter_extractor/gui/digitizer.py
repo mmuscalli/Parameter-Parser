@@ -29,7 +29,7 @@ about rows or files.
 """
 from __future__ import annotations
 import re
-from typing import Callable, List, Optional
+from typing import Callable, List, Optional, Tuple
 
 from PySide6.QtCore import QEvent, QPointF, QRectF, QSettings, Qt, Signal
 from PySide6.QtGui import (QBrush, QColor, QIcon, QKeySequence, QPainter, QPainterPath, QPen,
@@ -45,7 +45,8 @@ from PySide6.QtWidgets import (
 
 from parameter_extractor.digitizing.annotate import CALIBRATION_COLOR, SERIES_COLORS
 from parameter_extractor.gui.widgets import ExpandingLineEdit
-from parameter_extractor.digitizing.calibration import try_pixel_to_data
+from parameter_extractor.digitizing.calibration import (
+    CalibrationError, is_categorical, pixel_to_y, snap, try_pixel_to_data)
 from parameter_extractor.schemas.figures import (
     AxisCalibration, AxisVariable, CalibrationPoint, DigitizedFigure, DigitizedPanel,
     DigitizedPoint, DigitizedSeries, FigurePlan, SeriesCondition, SpeciesAmount,
@@ -62,6 +63,17 @@ MODES = [("pan", "Pan / zoom", "Drag to move around; scroll to zoom."),
                                   "existing one; Ctrl+Z undoes."),
          ("delete", "Delete points", "Click a point of the selected series to remove it.")]
 NONE_COLUMN = "(none -- not stored)"
+ROUND_CHOICES = [("exact", None), ("whole numbers", 0), ("1 decimal", 1), ("2 decimals", 2), ("3 decimals", 3)]
+
+
+def read_values(panel: DigitizedPanel, px: float, py: float) -> Optional[Tuple[Optional[float], float]]:
+    """(x, y) at a pixel -- x None on a category axis -- or None if the axes aren't calibrated."""
+    if is_categorical(panel):
+        try:
+            return None, pixel_to_y(panel, px, py)
+        except CalibrationError:
+            return None
+    return try_pixel_to_data(panel, px, py)
 FIXED_CONDITION_ROWS = 2     # temperature and pH head the Conditions table
 
 
@@ -120,13 +132,23 @@ def _parse_float(text: str) -> Optional[float]:
         return None
 
 
+
+def _with_new_column(var: AxisVariable) -> AxisVariable:
+    """A suggested axis with the NEW column the model proposed when none fits, loaded into the column field
+    (averaged values: '_avg' added) -- the user sees it while digitizing, and the review asks to accept it."""
+    if var.column or not var.new_column or var.categorical:
+        return var.model_copy()
+    from parameter_extractor.ingestion.flatten_to_template import with_average
+    return var.model_copy(update={"column": with_average(var.new_column) if var.average else var.new_column})
+
 class PointItem(QGraphicsEllipseItem):
     """A data point marker: constant on-screen size, draggable."""
 
     def __init__(self, series_idx: int, point_idx: int, color: QColor, on_moved: Callable,
-                 editable: bool = True):
+                 editable: bool = True, snap_to: Optional[Callable] = None):
         super().__init__(-6, -6, 12, 12)
         self.series_idx, self.point_idx, self._on_moved = series_idx, point_idx, on_moved
+        self._snap = snap_to             # rounds a dragged point to the axes' precision
         self.editable = editable
         self.setPen(QPen(color, 2.5))
         self.setBrush(QBrush(QColor(color.red(), color.green(), color.blue(), 60)))
@@ -141,6 +163,8 @@ class PointItem(QGraphicsEllipseItem):
         self.setZValue(10 if editable else 5)
 
     def itemChange(self, change, value):
+        if change == QGraphicsItem.GraphicsItemChange.ItemPositionChange and self._snap is not None:
+            return self._snap(value)
         if change == QGraphicsItem.GraphicsItemChange.ItemPositionHasChanged:
             self._on_moved(self.series_idx, self.point_idx, self.pos())
         return super().itemChange(change, value)
@@ -334,6 +358,23 @@ class DigitizerWidget(QWidget):
             log.toggled.connect(lambda on, a=axis: self._on_log(a, on))
             self.cal_edits[(axis, "log")] = log
             h.addWidget(log)
+            rounding = QComboBox()
+            for text, _ in ROUND_CHOICES:
+                rounding.addItem(text)
+            rounding.setToolTip(f"Round {axis} values: points snap to this precision when placed or dragged "
+                                f"(e.g. whole numbers for an oligomer length), and the stored values are rounded.")
+            rounding.currentIndexChanged.connect(lambda i, a=axis: self._on_rounding(a, i))
+            self.cal_edits[(axis, "round")] = rounding
+            h.addWidget(QLabel("round:"))
+            h.addWidget(rounding)
+            if axis == "x":
+                categories = QCheckBox("categories")
+                categories.setToolTip("A bar chart's x axis of categories (mineral names ...): no x calibration; "
+                                      "each series' category goes in the X column (e.g. solid_material_name), "
+                                      "from its condition for that column or else its name.")
+                categories.toggled.connect(self._on_categories)
+                self.cal_edits[("x", "categories")] = categories
+                h.addWidget(categories)
             h.addStretch(1)
             form.addRow(f"{axis.upper()} axis:", row)
 
@@ -345,10 +386,11 @@ class DigitizerWidget(QWidget):
         self.source_edit.editingFinished.connect(
             lambda: setattr(self.fig, "data_source", self.source_edit.text().strip()))
 
-        self.var_widgets = {}
+        self.var_widgets, self.var_hints = {}, {}
         for axis in ("x", "y"):
             combo = QComboBox(editable=True)
             combo.addItems([NONE_COLUMN] + self.columns)
+            combo.lineEdit().setPlaceholderText("choose a column, or type a new name")
             completer = QCompleter(self.columns, combo)
             completer.setFilterMode(Qt.MatchFlag.MatchContains)
             completer.setCaseSensitivity(Qt.CaseSensitivity.CaseInsensitive)
@@ -365,7 +407,11 @@ class DigitizerWidget(QWidget):
             h.addWidget(QLabel("x"))
             h.addWidget(mult)
             self.var_widgets[axis] = (combo, mult)
+            hint = QLabel()
+            hint.setStyleSheet("color: palette(placeholder-text);")
+            self.var_hints[axis] = hint
             form.addRow(f"{axis.upper()} column:", row)
+            form.addRow("", self.var_hints[axis])
         form.addRow("Data reproduced from:", self.source_edit)
 
         # optional automation: place the calibration markers from the axis numbers
@@ -553,6 +599,7 @@ class DigitizerWidget(QWidget):
     def add_point(self, x: float, y: float) -> None:
         if self.series is None:
             self.add_series()
+        x, y = snap(self.fig.panels[min(self.series.panel, len(self.fig.panels) - 1)], x, y)
         self.series.points.append(DigitizedPoint(px=x, py=y))
         self._undo.append((self.series_idx, len(self.series.points) - 1))
         self.redraw()
@@ -596,8 +643,11 @@ class DigitizerWidget(QWidget):
             self._refresh_points_table()
 
     def _on_hover(self, x: float, y: float) -> None:
-        xy = try_pixel_to_data(self.panel, x, y)
+        xy = read_values(self.panel, x, y)
         name = self.panel.name
+        if xy and xy[0] is None:
+            self.hover_label.setText(f"{name}: y = {xy[1]:.4g} (x: categories)")
+            return
         self.hover_label.setText(f"{name}: x = {xy[0]:.4g}, y = {xy[1]:.4g}" if xy
                                  else f"{name}: calibrate both axes to read values")
 
@@ -658,7 +708,9 @@ class DigitizerWidget(QWidget):
             if not selected:
                 color.setAlpha(130)
             for pi, p in enumerate(s.points):
-                item = PointItem(si, pi, color, self._on_point_moved, editable=selected)
+                panel = self.fig.panels[min(s.panel, len(self.fig.panels) - 1)]
+                item = PointItem(si, pi, color, self._on_point_moved, editable=selected,
+                                 snap_to=lambda pos, pn=panel: QPointF(*snap(pn, pos.x(), pos.y())))
                 item.setPos(p.px, p.py)
                 scene.addItem(item)
         self._refresh_points_table()
@@ -715,9 +767,44 @@ class DigitizerWidget(QWidget):
             self.cal_edits[(axis, "log")].setChecked(cal.log)
             var: AxisVariable = getattr(p, axis)
             combo, mult = self.var_widgets[axis]
-            combo.setCurrentText(var.column or NONE_COLUMN)
+            combo.setCurrentText(var.column or ("" if var.store else NONE_COLUMN))
             mult.setText(_fmt(var.multiplier))
+            self.cal_edits[(axis, "round")].setCurrentIndex(
+                next((i for i, (_, d) in enumerate(ROUND_CHOICES) if d == var.decimals), 0))
+            self._update_column_hint(axis)
+        self.cal_edits[("x", "categories")].setChecked(bool(p.x.categorical))
         self._updating = False
+
+    def _update_column_hint(self, axis: str) -> None:
+        var: AxisVariable = getattr(self.panel, axis)
+        hint = ""
+        if var.column and var.column not in self.columns:
+            hint = "New variable: offered in the review at the end (accept it there)."
+        elif not var.column and not (axis == "x" and var.categorical):
+            from parameter_extractor.ingestion.figure_rows import axis_column_from_label
+            hint = ("Not stored." if not var.store or not var.label else
+                    f"No column chosen: offered in the review as "
+                    f"'{var.new_column or axis_column_from_label(var.label, var.average)}' -- or choose one.")
+        if axis == "x" and var.categorical:
+            hint = (hint + " " if hint else "") + "Categories: each series' category goes in this column."
+        self.var_hints[axis].setText(hint)
+
+    def _on_rounding(self, axis: str, index: int) -> None:
+        if self._updating:
+            return
+        getattr(self.panel, axis).decimals = ROUND_CHOICES[index][1]
+        # points already placed in this coordinate system snap too
+        for s in self.fig.series:
+            if self.fig.panels[min(s.panel, len(self.fig.panels) - 1)] is self.panel:
+                s.points = [DigitizedPoint(px=q[0], py=q[1]) for q in (snap(self.panel, p.px, p.py) for p in s.points)]
+        self.redraw()
+
+    def _on_categories(self, on: bool) -> None:
+        if self._updating:
+            return
+        self.panel.x.categorical = on
+        self._update_column_hint("x")
+        self.redraw()
 
     def _on_cal_value(self, axis: str, k: int) -> None:
         if self._updating:
@@ -740,8 +827,10 @@ class DigitizerWidget(QWidget):
         text = combo.currentText().strip()
         var: AxisVariable = getattr(self.panel, axis)
         var.column = None if text in ("", NONE_COLUMN) else text
+        var.store = text != NONE_COLUMN          # chosen explicitly: nothing stored for this axis
         m = _parse_float(mult.text())
         var.multiplier = m if m else 1.0
+        self._update_column_hint(axis)
         self.changed.emit()
 
     # ---- series ------------------------------------------------------------------
@@ -1055,8 +1144,9 @@ class DigitizerWidget(QWidget):
         panel = self.fig.panels[s.panel] if s else self.panel
         self.points_table.setRowCount(len(pts))
         for i, p in enumerate(pts):
-            xy = try_pixel_to_data(panel, p.px, p.py)
-            self.points_table.setItem(i, 0, QTableWidgetItem(f"{xy[0]:.4g}" if xy else "—"))
+            xy = read_values(panel, p.px, p.py)
+            self.points_table.setItem(i, 0, QTableWidgetItem("category" if xy and xy[0] is None
+                                                             else f"{xy[0]:.4g}" if xy else "—"))
             self.points_table.setItem(i, 1, QTableWidgetItem(f"{xy[1]:.4g}" if xy else "—"))
 
     # ---- suggestions -------------------------------------------------------------
@@ -1107,7 +1197,8 @@ class DigitizerWidget(QWidget):
             base = old_panels[i] if i < len(old_panels) else DigitizedPanel()
             x_cal = base.x_cal.model_copy(update={"log": pp.x.scale == "log"})
             y_cal = base.y_cal.model_copy(update={"log": pp.y.scale == "log"})
-            panels.append(DigitizedPanel(name=pp.name, x_cal=x_cal, y_cal=y_cal, x=pp.x, y=pp.y))
+            panels.append(DigitizedPanel(name=pp.name, x_cal=x_cal, y_cal=y_cal, x=_with_new_column(pp.x),
+                                         y=_with_new_column(pp.y)))
             for ps in pp.series:
                 label = ps.label + (f" [{ps.marker}]" if ps.marker and ps.marker not in ps.label else "")
                 series.append(DigitizedSeries(

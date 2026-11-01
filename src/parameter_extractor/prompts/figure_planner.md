@@ -17,8 +17,13 @@ Return a FigurePlan:
   second x-axis) that a set of points is read against. Name them clearly
   ("main", "(a)", "right y-axis", "top x-axis").
   - `x`, `y`: the axis title as printed, and the `column` from the list
-    below that the value belongs in. Use null when no column fits (e.g. a
-    derived quantity the dataset doesn't record). `tick_labels`: the numbers
+    below that the value belongs in. When no column fits a quantity the
+    dataset should record (a measured result or condition), `column` null and
+    `new_column` a short snake_case name for a new one ending in its unit's
+    suffix (e.g. 'max_linear_oligomer_length_nt', 'relative_RNA_concentration')
+    -- it's loaded into the digitizer and offered to the user as a new
+    variable; no `new_column` for a derived quantity the dataset doesn't
+    record (a rate constant, an enthalpy). `tick_labels`: the numbers
     printed at the axis's labelled ticks, low end first, exactly as printed
     (read them carefully from the image -- they place the calibration
     markers). `multiplier` converts axis values to the column's unit (e.g.
@@ -45,9 +50,11 @@ Return a FigurePlan:
     point per separate experiment) are still one series; describe that in
     `notes`.
   - Bar charts whose bars are categories (one mineral, salt or condition per
-    bar): one series per bar, labelled by its category, with the category as a
-    condition when a column fits (e.g. a solid material's name); the x axis
-    gets `column` null -- the user clicks each bar's top.
+    bar): one series per bar, labelled by its category; the x axis gets
+    `categorical` true, no tick labels, and as `column` the column the category
+    itself goes in (e.g. a solid material's name) -- or `new_column` if none
+    fits; each series repeats its category as a condition in that column. The
+    user clicks each bar's top; only the y axis is calibrated.
   - `average` on an axis: true when its values are averages over several runs
     or replicates (an axis label "avg.", "mean", or a caption saying values
     are averaged across triplicates). Its column then holds averages.

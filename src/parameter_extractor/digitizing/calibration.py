@@ -73,6 +73,52 @@ def pixel_to_y(panel: DigitizedPanel, px: float, py: float) -> float:
     return _interp(_fraction_along((yc.p1.px, yc.p1.py), ey, (px, py)), yc.p1.value, yc.p2.value, yc.log)
 
 
+def _fraction_of(value: float, v1: float, v2: float, log: bool) -> float:
+    if log:
+        return (math.log10(value) - math.log10(v1)) / (math.log10(v2) - math.log10(v1))
+    return (value - v1) / (v2 - v1)
+
+
+def is_categorical(panel: DigitizedPanel) -> bool:
+    """An x axis of categories (bars): marked so, or with no column and no x calibration."""
+    return bool(getattr(panel.x, "categorical", False)) or (not panel.x.column and not panel.x_cal.complete())
+
+
+def rounded(value: float, decimals: Optional[int]) -> float:
+    return value if decimals is None else round(value, decimals)
+
+
+def snap(panel: DigitizedPanel, px: float, py: float) -> Tuple[float, float]:
+    """The pixel whose axis values are this pixel's, rounded to each axis's `decimals` (Mickey, 2026-10-31:
+    a click at x = 1.018 on an integer axis lands on 1). Unchanged where an axis has no rounding or isn't
+    calibrated. Each axis is a projection, so the new pixel solves both projections at once; a category
+    axis isn't rounded (the point only moves along y)."""
+    xd, yd = panel.x.decimals, panel.y.decimals
+    yc = panel.y_cal
+    if yd is None and xd is None or not yc.complete():
+        return px, py
+    ey = (yc.p2.px - yc.p1.px, yc.p2.py - yc.p1.py)
+    t = _fraction_along((yc.p1.px, yc.p1.py), ey, (px, py))
+    t_new = t if yd is None else _fraction_of(round(_interp(t, yc.p1.value, yc.p2.value, yc.log), yd),
+                                               yc.p1.value, yc.p2.value, yc.log)
+    xc = panel.x_cal
+    if is_categorical(panel) or not xc.complete():
+        return px + (t_new - t) * ey[0], py + (t_new - t) * ey[1]
+    ex = (xc.p2.px - xc.p1.px, xc.p2.py - xc.p1.py)
+    s = _fraction_along((xc.p1.px, xc.p1.py), ex, (px, py))
+    s_new = s if xd is None else _fraction_of(round(_interp(s, xc.p1.value, xc.p2.value, xc.log), xd),
+                                               xc.p1.value, xc.p2.value, xc.log)
+    # (q - X1).ex = s_new |ex|^2 and (q - Y1).ey = t_new |ey|^2: two linear equations for q
+    a1, b1 = ex
+    c1 = s_new * (a1 * a1 + b1 * b1) + a1 * xc.p1.px + b1 * xc.p1.py
+    a2, b2 = ey
+    c2 = t_new * (a2 * a2 + b2 * b2) + a2 * yc.p1.px + b2 * yc.p1.py
+    det = a1 * b2 - a2 * b1
+    if abs(det) < 1e-9:
+        return px, py
+    return (c1 * b2 - c2 * b1) / det, (a1 * c2 - a2 * c1) / det
+
+
 def try_pixel_to_data(panel: DigitizedPanel, px: float, py: float) -> Optional[Tuple[float, float]]:
     try:
         return pixel_to_data(panel, px, py)

@@ -1575,3 +1575,30 @@ points, a run-together word that is just the words it covers, and a doubled-char
 Tables: 'Table A1' too (table_finder keyed (letter, number); pdf_parser.TABLE_CAPTION_RE `[A-Z]?\d+`);
 data_location / quotes._TABLE_REF accept the letter ('Figure. A2', 'Table. A1'). Old vs new finder over all 88
 PDFs in Paper Files: only Riggi2023 (+A1, A2) and iqubal2017 (+Fig. 15, same overprint problem) changed.
+
+## Digitizer: suggested new columns, category axes, rounding (2026-10-31, Mickey's Riggi2023 Fig. 2 run)
+
+His run: the planner gave no y column (he typed 'avg_max_linear_oligomer_length_n'; with_average then made
+'..._n_avg'), and the bar chart's x became a numeric 'mineral_category' review item holding pixel garbage.
+- `AxisVariable.new_column` (planner: a new snake_case column with its unit suffix when none fits; prompt +
+  prebiotic rules) -> loaded into the digitizer's column field (`digitizer._with_new_column`, '_avg' added for
+  averages) with a hint "New variable: offered in the review"; empty field + placeholder when nothing chosen
+  (hint names the label-derived column it will get); choosing "(none -- not stored)" sets `store` False (hidden
+  field) -> figure_rows makes nothing up. figure_rows: column -> new_column -> label name (if store).
+- `AxisVariable.categorical` (bar charts: x column = where the category goes, e.g. solid_material_name; the
+  planner repeats the category as a series condition): `calibration.is_categorical` (flag, or no column and no
+  x calibration); no x number is ever written; the category goes in x.column from the series' condition, else
+  its label minus ' [marker]' (unknown column -> review with the text). Digitizer "categories" checkbox, hover
+  and points table show y only.
+- **Rounding** (`AxisVariable.decimals`, hidden from the model; digitizer "round:" exact / whole numbers /
+  1-3 decimals per axis): `calibration.snap` solves both projections for the rounded values (category axis:
+  moves along y only); points snap when added, while dragged (PointItem ItemPositionChange) and when the
+  setting changes; figure_rows rounds the stored values too.
+- with_average leaves a column that already has an 'avg' word alone.
+- **Planner answers**: every field of the plan's models REQUIRED in the sent schema (`schemas/figures._require_all`;
+  the planner uses a non-strict tool, where defaulted fields are optional): live, Sonnet once returned no
+  `panels` at all and once looped inside an axis `note` ("ok. --- end. ..."). `plan_figure` asks once more when a
+  data plot comes back without panels, then a PipelineError. AxisVariable.note described/capped (NOTE_DESC).
+  Live after: Riggi Fig. 2 x2 -- 5 panels, x categorical -> solid_material_name, y new_column
+  max_linear_oligomer_length_nt (avg), ImpA 15 mM; mizuuchi Fig. 1 -- RNA_length_nt / relative_RNA_concentration_*.
+- tests/test_digitizer_columns_rounding.py.

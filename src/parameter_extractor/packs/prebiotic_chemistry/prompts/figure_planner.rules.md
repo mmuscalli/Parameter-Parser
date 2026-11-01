@@ -6,8 +6,9 @@
   percentages. `max_peptide_length` is for the longest peptide (amino-acid
   residues) only: an RNA / nucleotide length -- also an axis of oligomer
   lengths like 8, 12, 16 nt -- or any other quantity no column fits, gets a
-  null column; the app names it after the axis label and the user reviews it
-  as a new variable.
+  null column and a `new_column` (e.g. 'max_linear_oligomer_length_nt',
+  'RNA_length_nt'); the user reviews it as a new variable. Bar charts of
+  minerals: x `categorical`, column 'solid_material_name'.
 - Give each series its COMPLETE initial composition in `initial_species`
   (controlled-vocabulary names where the vocabulary has the species, else the
   paper's name -- a species missing from the vocabulary, e.g. ImpA or an RNA

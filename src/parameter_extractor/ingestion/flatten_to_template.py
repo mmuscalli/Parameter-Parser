@@ -83,7 +83,7 @@ _UNIT_SUFFIX = re.compile(r"(_(?:mM|uM|%yield|%recovered|ratio|pct|mL_min|mL|uL|
 
 def with_average(column: str) -> str:
     """The column for an AVERAGE of what `column` holds: '_avg' just before the unit."""
-    if not column or "_avg_" in column or column.endswith("_avg"):
+    if not column or re.search(r"(?:^|_)avg(?:_|$)", column):     # already says so ('avg_max_..._n', typed in)
         return column
     return _UNIT_SUFFIX.sub(r"_avg\1", column) if _UNIT_SUFFIX.search(column) else column + "_avg"
 

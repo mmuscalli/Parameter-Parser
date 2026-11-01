@@ -23,7 +23,7 @@ from typing import List, Optional, Tuple
 
 from parameter_extractor.ingestion.data_location import COLUMN as DATA_LOCATION, location
 from parameter_extractor.ingestion.flatten_to_template import with_average
-from parameter_extractor.digitizing.calibration import pixel_to_data, pixel_to_y
+from parameter_extractor.digitizing.calibration import is_categorical, pixel_to_data, pixel_to_y, rounded
 from parameter_extractor.ingestion.flatten_to_template import (
     FIELD_TO_TEMPLATE, UNRECOGNIZED_SUFFIX, resolve_template_column, set_row_value, current_column_name)
 from parameter_extractor.schemas.figures import DigitizedFigure, SeriesCondition
@@ -38,6 +38,11 @@ _FIELD_FOR_COLUMN = {col: field for field, col in FIELD_TO_TEMPLATE.items()}
 _ID_FIELDS = {"full_id", "set_id", "sample_id", "set_type", "entry_number", "paper_doi",
               "paper_title", "authors", "year_published", "journal_published",
               "species_mM", "extra", "source_notes", "extraction_confidence"}
+
+
+def _series_name(label: str) -> str:
+    """A series' label without the marker the digitizer appends ('kaolinite [blue bar]' -> 'kaolinite')."""
+    return re.sub(r"\s*\[[^\]]*\]\s*$", "", label or "").strip()
 
 
 def axis_column_from_label(label: str, average: bool = False) -> str:
@@ -148,12 +153,13 @@ def build_figure_rows(
                 continue
             panel = fig.panels[series.panel]
             # bars of categories: no numeric x axis -- only y is calibrated, and x has no column
-            categorical = not panel.x.column and not panel.x_cal.complete()
+            categorical = is_categorical(panel)
             if not panel.y_cal.complete() or not (categorical or panel.x_cal.complete()):
                 problems.append(f"{fig.figure_id} series '{series.label}': axes not calibrated -- left out.")
                 continue
-            if not (panel.x.column or panel.y.column or series.y_column or panel.y.label
-                    or (not categorical and panel.x.label)):
+            if not (panel.x.column or panel.y.column or series.y_column
+                    or (panel.y.store and (panel.y.label or panel.y.new_column))
+                    or (not categorical and panel.x.store and (panel.x.label or panel.x.new_column))):
                 problems.append(f"{fig.figure_id} series '{series.label}': neither axis is assigned "
                                 f"to a column -- left out.")
                 continue
@@ -223,13 +229,15 @@ def build_figure_rows(
                 y_axis = panel.y.model_copy(update={"column": series.y_column}) if series.y_column else panel.y
                 # an axis no column fits (mizuuchi2019's 'Relative RNA concentration', 'Length (nt)'):
                 # a column named after its label, reviewed as a new variable like any other
-                if not y_axis.column and y_axis.label:
-                    y_axis = y_axis.model_copy(update={"column": axis_column_from_label(y_axis.label, y_axis.average)})
+                if not y_axis.column and y_axis.store and (y_axis.new_column or y_axis.label):
+                    y_axis = y_axis.model_copy(update={"column": y_axis.new_column
+                                                       or axis_column_from_label(y_axis.label, y_axis.average)})
                 # the template's old DKP_<AA> names follow the cyclic naming (cyclo_<AA>-<AA>)
                 x_axis = panel.x.model_copy(update={"column": current_column_name(panel.x.column)}) \
                     if panel.x.column else panel.x
-                if not x_axis.column and x_axis.label and not categorical:
-                    x_axis = x_axis.model_copy(update={"column": axis_column_from_label(x_axis.label, x_axis.average)})
+                if not x_axis.column and x_axis.store and (x_axis.new_column or x_axis.label) and not categorical:
+                    x_axis = x_axis.model_copy(update={"column": x_axis.new_column
+                                                       or axis_column_from_label(x_axis.label, x_axis.average)})
                 if y_axis.column:
                     y_axis = y_axis.model_copy(update={"column": current_column_name(y_axis.column)})
                 # averaged values go in '<name>_avg_<unit>' columns
@@ -237,8 +245,9 @@ def build_figure_rows(
                     y_axis = y_axis.model_copy(update={"column": with_average(y_axis.column)})
                 if getattr(x_axis, "average", False) and x_axis.column:
                     x_axis = x_axis.model_copy(update={"column": with_average(x_axis.column)})
-                for axis, value in ((x_axis, x), (y_axis, y)):
-                    value = round(value * axis.multiplier, 6)
+                # a category axis has no number: its value is the series' category (below)
+                for axis, value in ([(y_axis, y)] if categorical else [(x_axis, x), (y_axis, y)]):
+                    value = round(rounded(value, getattr(axis, "decimals", None)) * axis.multiplier, 6)
                     read = CellSource(origin=f"{fig.figure_id} (digitized)", confidence=DIGITIZED,
                                       source=f"{where}, point {sample_idx} (page {fig.page_label or fig.page}), read off axis "
                                              f"'{axis.label}'"
@@ -250,6 +259,17 @@ def build_figure_rows(
                             set_label=where, sample_label=f"point {sample_idx}", source=where,
                             quote=f"axis '{axis.label}'", origin=fig.figure_id,
                             row_ids=[f"{set_id}{sample_idx:03d}"]))
+
+                if categorical and x_axis.column and not any(c.column == x_axis.column for c in series.conditions):
+                    # the category goes in the x axis's column (Riggi2023: solid_material_name = 'kaolinite')
+                    category = _series_name(series.label)
+                    read = CellSource(origin=f"{fig.figure_id} (digitized)", source=f"{where}: the bar's category")
+                    if not _assign(fields, row_species, extra, x_axis.column, category, registry, prov, read):
+                        new_vars.append(NewVariable(
+                            kind="figure_axis", name=x_axis.column, alias_name=x_axis.column,
+                            proposed_column=x_axis.column, value_text=category, set_label=where,
+                            sample_label=f"point {sample_idx}", source=where, quote=f"axis '{x_axis.label}'",
+                            origin=fig.figure_id, row_ids=[f"{set_id}{sample_idx:03d}"]))
 
                 sample_id = f"{sample_idx:03d}"
                 series_row_ids.append(f"{set_id}{sample_id}")

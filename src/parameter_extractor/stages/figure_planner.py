@@ -13,6 +13,7 @@ import re
 from pathlib import Path
 from typing import List
 
+from parameter_extractor.errors import PipelineError
 from parameter_extractor.api_client import call_structured
 from parameter_extractor.run_context import RunContext
 from parameter_extractor.schemas.figures import FigureCandidate, FigurePlan
@@ -93,17 +94,24 @@ def run_figure_planner(
     # plan, vocabulary, columns, concentration passages): sent first and cached, so the paper's other
     # figures read it at a tenth of the price (2026-10-27); this figure's image and text follow
     shared, this_figure = prompt.split(FIGURE_SPLIT, 1)
-    return call_structured(
-        ctx,
-        stage="figure_planner",
-        audit_name=f"figure_planner.fig{figure.tag}",
-        system_prompt="You help a scientist digitize plots from a paper. Describe only what "
-                      "the figure and text support; never invent series or conditions.",
-        user_content=this_figure,
-        response_model=FigurePlan,
-        image_paths=[Path(figure.crop_image)],
-        cached_prefix=shared,
-    )
+    for attempt in (1, 2):
+        plan = call_structured(
+            ctx,
+            stage="figure_planner",
+            audit_name=f"figure_planner.fig{figure.tag}" + ("" if attempt == 1 else ".retry"),
+            system_prompt="You help a scientist digitize plots from a paper. Describe only what "
+                          "the figure and text support; never invent series or conditions.",
+            user_content=this_figure,
+            response_model=FigurePlan,
+            image_paths=[Path(figure.crop_image)],
+            cached_prefix=shared,
+        )
+        # a data plot needs its coordinate systems: an answer without them (Riggi2023 Fig. 2 once gave only
+        # notes) is asked again, once -- the second call reads the cached prefix
+        if plan.panels or not plan.is_data_plot:
+            return plan
+    raise PipelineError(f"The suggestions for {figure.figure_id} came back without any axes or series "
+                               f"(twice). Fill them in by hand, or ask for suggestions again.")
 
 
 FIGURE_SPLIT = "\n<<<this figure>>>\n"
