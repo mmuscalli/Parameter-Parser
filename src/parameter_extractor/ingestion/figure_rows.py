@@ -40,6 +40,13 @@ _ID_FIELDS = {"full_id", "set_id", "sample_id", "set_type", "entry_number", "pap
               "species_mM", "extra", "source_notes", "extraction_confidence"}
 
 
+def _has_value(row: ExtractedRow, column: str) -> bool:
+    field = _FIELD_FOR_COLUMN.get(column, column)
+    if field in ExtractedRow.model_fields and field not in _ID_FIELDS:
+        return getattr(row, field) not in (None, "")
+    return column in row.extra or column in row.species_mM
+
+
 def _series_name(label: str) -> str:
     """A series' label without the marker the digitizer appends ('kaolinite [blue bar]' -> 'kaolinite')."""
     return re.sub(r"\s*\[[^\]]*\]\s*$", "", label or "").strip()
@@ -136,10 +143,12 @@ def build_figure_rows(
     first_set_index: int,
     first_entry_number: int,
     registry=None,
+    paper_wide: Optional[dict] = None,
 ) -> Tuple[List[ExtractedRow], List[str], List[NewVariable]]:
     """Returns (rows, problems, new_variables). A series is left out, with a
     reason in `problems`, if its panel isn't calibrated or neither axis has a
-    column."""
+    column. `paper_wide`: {column: (value, CellSource)} -- the conditions steps' values for the whole paper
+    (controls, solid mass, ...), written where the series doesn't give its own."""
     from parameter_extractor.ingestion.flatten_to_template import base_registry
     registry = registry or base_registry()
     rows: List[ExtractedRow] = []
@@ -301,6 +310,9 @@ def build_figure_rows(
                         origin=f"{fig.figure_id} (reproduces another publication's data)", source=where)
                 row.update(fields)   # axis/series values win over paper-wide defaults
                 row_obj = ExtractedRow(**row)
+                for column, (value, source) in (paper_wide or {}).items():
+                    if not _has_value(row_obj, column):
+                        set_row_value(row_obj, column, value, source)
                 # the series' other conditions (pressure, flow rate, ...), also over paper-wide defaults
                 for column, value, note in known_conditions:
                     set_row_value(row_obj, column, value, CellSource(

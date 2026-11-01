@@ -1602,3 +1602,26 @@ His run: the planner gave no y column (he typed 'avg_max_linear_oligomer_length_
   Live after: Riggi Fig. 2 x2 -- 5 panels, x categorical -> solid_material_name, y new_column
   max_linear_oligomer_length_nt (avg), ImpA 15 mM; mizuuchi Fig. 1 -- RNA_length_nt / relative_RNA_concentration_*.
 - tests/test_digitizer_columns_rounding.py.
+
+## Ambient conditions, positive / negative controls (2026-11-01, Mickey's Riggi2023 run)
+
+- **Ambient** (Mickey: 'ambient temperature' = 25 °C, 'ambient pressure' = 1 bar, for the experiments referred to,
+  unless stated otherwise): experimental_conditions rule (replaces "never assume room temperature"): where the
+  paper SAYS ambient / room temperature / r.t., initial (+ sampled) temperature 25 °C, b derived, n 'ambient
+  temperature = 25 °C'; ambient / atmospheric pressure -> initial_pressure_bar 1; a value stated for particular
+  experiments wins; never in `other`. Safety net `calculators/ambient.apply_ambient` (pack postprocess
+  "ambient_conditions", run in extract_steps BEFORE `_collect_other_parameters`): 'assumed' ambient items ->
+  derived; `other` items saying ambient temperature/pressure -> the parameters (where none given for those
+  experiments), the entry dropped if that's all it said; one `assumed_default` flag per convention used
+  (`Extraction.ambient_notes`). His run had put it in `other` ('temperature conditions') and quoted 1 bar from
+  the Discussion; live after the change the step itself gave 25 °C / 1 bar from the Methods sentence.
+- **Controls**: `positive_control` / `negative_control` (text, <= 12 words) in the prebiotic conditions spec
+  (spec columns = known standard columns); rule: same wording for sets sharing controls, set '' when all do.
+  Figure planner rule: series-specific controls as conditions.
+- **Digitized rows now get every paper-wide stage value** (`pipeline._paper_wide_values` -> build_figure_rows
+  `paper_wide=`, written where the series has none; the series' own conditions win) -- before, only the
+  Methodology fields reached them (controls, solid mass, vessel_sealed ... didn't).
+- Figure planner + digitizer column list = registry.known_columns() (template + pack standard + accepted),
+  not just the template (vessel_sealed, positive_control were not offered).
+- Live (Standard, $0.19) + Mickey's Fig. 3 / Fig. A2 digitizations: 7 rows, all 25 °C / 1 bar / both controls.
+  tests/test_ambient_controls.py.

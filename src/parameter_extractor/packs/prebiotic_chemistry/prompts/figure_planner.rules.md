@@ -9,6 +9,12 @@
   null column and a `new_column` (e.g. 'max_linear_oligomer_length_nt',
   'RNA_length_nt'); the user reviews it as a new variable. Bar charts of
   minerals: x `categorical`, column 'solid_material_name'.
+- `positive_control` / `negative_control`: when the caption or text says
+  which control experiments a series is compared with, give them as
+  conditions (a short description, e.g. '15 mM ImpA, no mineral'), worded the
+  same for every series that shares them; a control run for the whole paper
+  is filled in by the app. A control shown as its own bar or line (e.g. the
+  grey 'no mineral' bar) is still a series of its own.
 - Give each series its COMPLETE initial composition in `initial_species`
   (controlled-vocabulary names where the vocabulary has the species, else the
   paper's name -- a species missing from the vocabulary, e.g. ImpA or an RNA

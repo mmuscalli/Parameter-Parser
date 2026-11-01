@@ -77,7 +77,7 @@ from parameter_extractor.stages.equations import transcribe_equations
 from parameter_extractor.schemas.figures import DigitizedFigure, FigureCandidate, FigurePlan
 from parameter_extractor.schemas.methodology import Methodology, empty_methodology
 from parameter_extractor.schemas.paper_metadata import PaperMetadata
-from parameter_extractor.schemas.row_schema import ExtractedRow
+from parameter_extractor.schemas.row_schema import CellSource, ExtractedRow
 from parameter_extractor.schemas.structure_plan import StructurePlan
 from parameter_extractor.schemas.variables import NewVariable, TermSearch
 from parameter_extractor.schemas.triage import TriageResult
@@ -248,6 +248,7 @@ class Extraction:
     source: Optional["ResolvedPaper"] = None        # what was read (paper_source)
     table_images: List[Path] = field(default_factory=list)   # rendered table pages sent with the paper
     tables: List[dict] = field(default_factory=list)         # table crops for the Tables tab (table_finder.py)
+    ambient_notes: List[str] = field(default_factory=list)   # ambient conditions filled in (calculators/ambient.py)
     terms: List[str] = field(default_factory=list)           # parameters to look for (focus terms)
     always_on: set = field(default_factory=set)              # optional stages that always run
     structure_ready: threading.Event = field(default_factory=threading.Event)
@@ -350,6 +351,10 @@ def read_paper(
         json.dumps([f.model_dump() for f in figures], indent=2, ensure_ascii=False))
     _write_equations(ctx, equations)
     vocab = packs.current().vocab
+    # the columns figure suggestions and the digitizer offer: every known one -- the template's, the pack's
+    # standard columns (vessel_sealed, positive_control, ...) and the user's accepted ones
+    vocab = dict(vocab, all_columns=list(dict.fromkeys(
+        vocab["all_columns"] + VariableRegistry(config.registry_path).known_columns())))
     if tables:
         (ctx.run_dir / "tables.json").write_text(json.dumps(tables, indent=2, ensure_ascii=False))
     ex = Extraction(ctx=ctx, pdf_path=pdf_path, started=started, parsed=parsed, vocab=vocab,
@@ -472,6 +477,9 @@ def extract_steps(ex: "Extraction") -> "Extraction":
         ex.term_search = results.get("term_search")
         ex.fit_models = results.get("fit_models")
         ex.optional = {spec.name: (spec, results[spec.name]) for spec in specs}
+        if pack.uses("ambient_conditions"):     # 'ambient temperature' -> 25 °C, 'ambient pressure' -> 1 bar
+            from parameter_extractor.calculators.ambient import apply_ambient
+            ex.ambient_notes = [m for spec, result in ex.optional_list for m in apply_ambient(spec, result)]
         _collect_other_parameters(ex)
         ctx.sort_usage(stage_order())
     except BaseException as e:
@@ -510,6 +518,24 @@ def _collect_other_parameters(ex: "Extraction") -> None:
                 name=o.name, value=o.value, set_label=o.set_label or None, quote=o.quote, source=o.source,
                 confidence=o.confidence, sample_label=getattr(o, "sample_label", "") or "",
                 category=getattr(o, "category", "") or ""))
+
+
+def _paper_wide_values(ex: "Extraction") -> dict:
+    """{column: (value, CellSource)}: every value the stages give for the whole paper (set and sample '')
+    -- controls, solid material, volumes ... -- for digitized figure rows (Riggi2023's rows all come from
+    figures). Assumed values stay in the review; the methodology fields come via _paper_wide_methodology."""
+    from parameter_extractor.stages.optional import stage_values
+    out = {}
+    for spec, result in ex.optional_list:
+        for item in result.parameters:
+            if item.set_label or getattr(item, "sample_label", "") or item.basis == "assumed" \
+                    or getattr(item, "method", "") or getattr(item, "mode", ""):
+                continue
+            for column, v in stage_values(spec, item)[0].items():
+                out.setdefault(column, (v.value, CellSource(
+                    origin=spec.origin_label + (", derived" if v.basis == "derived" else "") + " (whole paper)",
+                    quote=v.quote, confidence=v.confidence, source=v.source + (f" [{v.note}]" if v.note else ""))))
+    return out
 
 
 def _paper_wide_methodology(ex: "Extraction"):
@@ -945,6 +971,7 @@ def finish(
     paper_flags = check_extraction(ex.methodology, ex.chemistry, optional=ex.optional_list, **thresholds)
     paper_flags += _cited_data_flags(ex.structure)
     paper_flags += stage_flags
+    paper_flags += [Flag("assumed_default", m) for m in ex.ambient_notes]
     paper_flags += _identity_flags(ex.chemistry, ex.parsed.pages_for_lookup)
     paper_flags += [Flag("unit_conversion", n.message, quote=n.quote or None, source=n.source or None)
                     for n in normalization if n.kind == "unit_corrected"]
@@ -959,7 +986,7 @@ def finish(
         fig_rows, problems, fig_new_vars = build_figure_rows(
             list(digitized), ex.metadata, _paper_wide_methodology(ex), config.paper_prefix,
             first_set_index=len(ex.structure.experiment_sets) + 1,
-            first_entry_number=len(rows) + 1, registry=registry)
+            first_entry_number=len(rows) + 1, registry=registry, paper_wide=_paper_wide_values(ex))
         rows += fig_rows
         paper_flags += [Flag("figure_problem", p) for p in problems]
         annotated = {}
