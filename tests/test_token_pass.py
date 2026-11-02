@@ -94,6 +94,29 @@ def test_new_prebiotic_parameters():
     assert cols == ["paper_title", "data_location", "reagent_suppliers"]                  # after the paper's
 
 
+def test_structure_plan_short_names():
+    """The model answers with short names; the code, saved answers and other prompts keep the full ones,
+    and plans recorded with the full names still load (2026-11-03)."""
+    from parameter_extractor.schemas.structure_plan import StructurePlan
+    short = {"sets": [{"set": "A", "type": "Time Series", "varies": "T = 80 C", "src": "Table 1", "ds": "",
+                       "samples": [{"label": "t = 1 h", "hr": 1.0, "src": "Table 1, row 1"}]}],
+             "n_rows": 1, "excluded": ["Fig. 2: figure only"], "notes": None}
+    plan = StructurePlan.model_validate(short)
+    assert plan.experiment_sets[0].samples[0].duration_hr == 1.0 and plan.excluded_data == ["Fig. 2: figure only"]
+    saved = json.loads(plan.model_dump_json())
+    assert "experiment_sets" in saved and saved["experiment_sets"][0]["samples"][0]["sample_label"] == "t = 1 h"
+    assert StructurePlan.model_validate(saved) == plan                         # full names load too
+    schema = StructurePlan.model_json_schema()
+    assert schema["required"] == ["sets", "n_rows"] and "paper_id" not in schema["properties"]
+    assert set(schema["$defs"]["PlannedSample"]["properties"]) == {"label", "hr", "src"}
+
+
+def test_written_out_powers_in_table_cells():
+    from parameter_extractor.schemas.chemistry import _cell_number
+    assert [_cell_number(t) for t in ("10^-4", "10⁻⁴", "1e-4", "2 × 10^-3")] == [1e-4, 1e-4, 1e-4, 0.002]
+    assert _cell_number("10-4") is None and _cell_number("10−4") is None     # a lost superscript: never guessed
+
+
 if __name__ == "__main__":
     for name, fn in list(globals().items()):
         if name.startswith("test_") and callable(fn):

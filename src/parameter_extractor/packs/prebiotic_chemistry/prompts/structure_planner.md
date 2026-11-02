@@ -9,25 +9,36 @@ distinct condition is a "set"; each time point or replicate within a set is a
 "sample". Getting this grouping right matters more than any individual value,
 because every later stage builds rows on top of this skeleton.
 
+Answer format (short field names): `sets` -- one entry per set: `set` its
+label, `type` the set type, `varies` what distinguishes it from the other
+sets, `src` the table or section it comes from, `ds` the original reference
+when the data is reproduced from another publication ('' otherwise), and
+`samples` -- one per row: `label`, `hr` its duration in hours, `src` where
+it is, briefly ('Table 1, row 3'). Then `n_rows`, `excluded` (each a short
+reason) and `notes`.
+
 Guidance:
 - A table with repeated sub-blocks (e.g. "Conditions: Na+ 3.33 mol dm-3, 81 C"
   followed by several rows of t/h and yield) is one "set" per sub-block, with
   one "sample" per row in that sub-block.
-- set_type "Time Series" when samples within a set differ only by elapsed
+- `type` "Time Series" when samples within a set differ only by elapsed
   time/duration under otherwise-fixed conditions. "Independent" when each row
   is its own self-contained condition with no shared sweep. "Evaporation
   Cycle" for wet-dry cycling (name each sample by its cycle, e.g. "Cycle 3").
 - Averages: a result reported only as an average over several runs (replicates,
   "triplicate experiments", "mean of n = 3") whose individual values the paper
-  doesn't give is a row of its own in a set with set_type "Average" (one set per
+  doesn't give is a row of its own in a set with `type` "Average" (one set per
   averaged condition, or one set for a table of averages with one row per
   condition). When the individual runs ARE given, each run is its own row in one
-  set with set_type "Independent", and the average goes with that set's rows.
+  set with `type` "Independent", and the average goes with that set's rows.
   An average stated only in the running text never gets a row of its own (see
   the tables rule below); the chemistry step puts it on the rows of its set.
-- `duration_hr`: give every sample's duration, including a duration stated once for
+- `hr`: give every sample's duration, including a duration stated once for
   the whole table or experiment (a caption's "heated at 90 °C for 3 hours").
-- `data_source`: for each set, '' if the data was measured in this paper.
+  For wet-dry cycles it is the TOTAL time up to the end of that cycle: 24 h
+  cycles -> Cycle 1 = 24, Cycle 2 = 48, Cycle 3 = 72 (cycles of different
+  lengths add up).
+- `ds`: for each set, '' if the data was measured in this paper.
   If the paper presents data from another publication -- a review, a
   comparison table, a redrawn figure, or results quoted from earlier work
   (often marked by a reference number, "adapted from", "data from") -- give
@@ -38,9 +49,9 @@ Guidance:
   appear only in the running text ("after 10 cycles at 70% RH the total
   yield was 17.33%") get no row: such statements usually lack most of the
   experimental context the paper's tabulated experiments have. List them in
-  `excluded_data` with a short reason. Results that only exist as points in
+  `excluded` with a short reason. Results that only exist as points in
   a figure are out of scope for this pass too -- the user digitizes figures
-  separately -- so list them in `excluded_data` as well.
+  separately -- so list them in `excluded` as well.
 - Compound numbers and citations: a bold number after a compound name is its label ("nicotinamide
   6"), and digits printed inline after a word are usually reference citations ("ammonia.14") -- not
   conditions or samples. In set labels name compounds by name, not by number.
@@ -57,8 +68,8 @@ Guidance:
   resolve the grouping -- the text is a lossy fallback for this, not the
   source of truth, whenever both are available.
 
-Return a StructurePlan. `total_planned_rows` must equal the sum of all
-`samples` across all `experiment_sets` -- this is a cheap self-check, not
+Return a StructurePlan. `n_rows` must equal the sum of all
+`samples` across all `sets` -- this is a cheap self-check, not
 extra work.
 
 ---

@@ -212,6 +212,14 @@ def _cell_number(text: str):
     """A table cell as printed -> its number: '2.77', '2.77a' (footnote mark), '1.2 × 10−3', '−0.5'.
     None for anything else -- never guessed: ranges, limits ('<0.1'), OCR-lost exponents ('10−4')."""
     t = text.replace("\u2212", "-").replace("\u2013", "-").replace(",", "").replace("\u00a0", " ")
+    # a power written out ('10^-4', '10⁻⁴', '1e-4'): unambiguous, unlike a bare '10-4' (truman2024's Table 2)
+    sup = str.maketrans("⁻⁺⁰¹²³⁴⁵⁶⁷⁸⁹", "-+0123456789")
+    power = re.fullmatch(r"\s*(?:([\d.]+)\s*[x×*·]\s*)?10\s*(?:\^\s*([-+]?\d+)|([⁻⁺]?[⁰¹²³⁴⁵⁶⁷⁸⁹]+))\s*", t)
+    if power:
+        exponent = int((power.group(2) or power.group(3)).translate(sup))
+        return float(power.group(1) or 1) * 10 ** exponent
+    if re.fullmatch(r"\s*\d+(?:\.\d+)?[eE][-+]?\d+\s*", t):
+        return float(t)
     m = _CELL.match(t)
     if not m:
         return None

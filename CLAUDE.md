@@ -1714,3 +1714,25 @@ conditions `other` "ImpA stock concentration".
   Not done (small or risky): short field names for the structure plan (~20% of its ~4K output tokens; the prompt
   names fields), dropping the reference list (5K tokens on Riggi, but cited-data references come from it).
   tests/test_token_pass.py.
+
+## Structure plan short names; two conditions rules; written-out powers (2026-11-03, Mickey)
+
+- `schemas/structure_plan.py`: the model answers with aliases -- sets / set, type, varies, src, ds, samples /
+  label, hr, src; n_rows, excluded; paper_id hidden (unused). populate_by_name: saved answers
+  (structure_planner.output.json, model_dump = full names), the other steps' prompts (plan JSON with full names)
+  and recorded answers are unchanged. Both packs' structure prompts reworded (legend + short names; sample `src`
+  brief, 'Table 1, row 3'). Measured: 8-15% of the plan's output tokens (count_tokens on references) -- small,
+  as expected; live eder 3.6K vs 3.75K, kim 1.6-1.9K vs 2.0K, truman 1.0K vs 1.25K.
+- Consistency checks (live, Standard, vs references): eder1994 42 rows, every cell equal; kim2019 13 rows,
+  same plan shape; truman2024 8 rows; aa57186 same plan (fit-model free text wording differs).
+- Found on the way, NOT caused by this change (bisected: replayed reference plan + live steps; spec versions
+  of earlier rounds): kim2019's conditions step dropped sampled_temperature_C and the summed solvent volume in
+  every full live run. Rules clarified: sampled_temperature_C = the temperature when sampled or stopped -- for
+  heated reactions, dry-downs and wet-dry cycles the heating temperature; solvent_volume_mL = the sum of the
+  combined solutions' volumes when only those are given (b derived). After: 2/2.
+- Wet-dry cycle durations: the curated dataset's Evaporation Cycle rows are CUMULATIVE (cycle n of 24 h ->
+  24 n h; varying lengths add up) -- structure prompt rule; truman live 24/48/72/96.
+- `chemistry._cell_number` reads written-out powers ('10^-4', '10⁻⁴', '1e-4', '2 × 10^-3'); a bare '10-4' is
+  still refused (lost superscript). truman Table 2's starting Gly was unread before.
+- Test-harness note: replaying the structure step only (make_replay for that stage, real _send for others)
+  is the way to isolate a downstream step; a replay of every step except one sends that step no cached paper.
