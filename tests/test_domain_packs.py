@@ -152,7 +152,7 @@ def test_shared_columns_and_prompt_rules():
         assert standard_columns()[:2] == ["data_location", "paper_arxiv_id"]   # the rest are template columns
         prompt = load_prompt("figure_planner", FIGURE_ID="Fig. 2")
         assert "Rules for this research area (Prebiotic chemistry):" in prompt
-        assert "COMPLETE initial composition" in prompt and "THE FIGURE TO DESCRIBE: Fig. 2" in prompt
+        assert "Say each concentration ONCE" in prompt and "THE FIGURE TO DESCRIBE: Fig. 2" in prompt
         assert not (packs.current().folder / "prompts" / "figure_planner.md").exists()   # no copy
         assert "{{PACK_RULES}}" not in load_prompt("metadata", PAPER_TEXT="x")
     finally:

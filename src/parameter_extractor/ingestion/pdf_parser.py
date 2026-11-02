@@ -264,23 +264,70 @@ def rasterize_pages(pdf_path: str, page_numbers: List[int], out_dir: Path, dpi: 
     return images
 
 
-def rasterize_table_pages(parsed: "ParsedPaper", out_dir: Path, dpi: int = 220) -> Dict[int, List[Path]]:
+def rasterize_table_pages(parsed: "ParsedPaper", out_dir: Path, dpi: int = 220,
+                          crop_tables: bool = True) -> Dict[int, List[Path]]:
     """Convenience wrapper: rasterizes exactly the pages parsed.table_pages
     flagged, nothing more. Returns {} if none were found (e.g. a paper that
-    reports everything in running text with no tables)."""
+    reports everything in running text with no tables). `crop_tables`: a page whose
+    every captioned table the table finder crops is sent as those crops instead of the
+    whole page (2026-11-03: Riggi2023's two table pages were 9.4K tokens as pages,
+    ~3K as crops -- a fifth of the paper's cached prefix)."""
     if not parsed.table_pages:
         return {}
     own = parsed.supplements[0]["offset"] if parsed.supplements else parsed.page_count
-    out = rasterize_pages(parsed.source_pdf, sorted(p for p in parsed.table_pages if p <= own), out_dir, dpi=dpi,
+    pages = sorted(p for p in parsed.table_pages if p <= own)
+    cropped = _table_crops(parsed.source_pdf, pages, out_dir, dpi, parsed.page_rotations, parsed.table_pages) \
+        if crop_tables else {}
+    out = rasterize_pages(parsed.source_pdf, [p for p in pages if p not in cropped], out_dir, dpi=dpi,
                           rotations=parsed.page_rotations)
+    out.update(cropped)
     for s in parsed.supplements:          # a supplement's pages from its own PDF, in out_dir/SI (labelled SI)
         pages = [p - s["offset"] for p in sorted(parsed.table_pages) if s["offset"] < p <= s["offset"] + s["pages"]]
         if pages:
-            si = rasterize_pages(s["file"], pages, out_dir / ("SI" if len(parsed.supplements) == 1 else
-                                                               f"SI{parsed.supplements.index(s) + 1}"), dpi=dpi,
-                                 rotations={p - s["offset"]: d for p, d in parsed.page_rotations.items()
-                                            if s["offset"] < p <= s["offset"] + s["pages"]})
+            si_dir = out_dir / ("SI" if len(parsed.supplements) == 1 else f"SI{parsed.supplements.index(s) + 1}")
+            rotations = {p - s["offset"]: d for p, d in parsed.page_rotations.items()
+                         if s["offset"] < p <= s["offset"] + s["pages"]}
+            si_cropped = _table_crops(s["file"], pages, si_dir, dpi, rotations, parsed.table_pages, s["offset"]) \
+                if crop_tables else {}
+            si = rasterize_pages(s["file"], [p for p in pages if p not in si_cropped], si_dir, dpi=dpi,
+                                 rotations=rotations)
+            si.update(si_cropped)
             out.update({s["offset"] + p: paths for p, paths in si.items()})
+    return out
+
+
+def _table_crops(pdf_path: str, pages: List[int], out_dir: Path, dpi: int, rotations: Dict[int, int],
+                 captions: Dict[int, List[str]], offset: int = 0) -> Dict[int, List[Path]]:
+    """{page: [crop pieces]} for the pages where every captioned table was found (ingestion/table_finder.py);
+    other pages are left to the whole-page rendering. A crop wider or taller than the API reads unscaled is
+    cut into pieces like a page. Never fails a run: on any problem, nothing is cropped."""
+    from PIL import Image
+    from parameter_extractor.ingestion.table_finder import TABLE_RE, find_tables
+    from parameter_extractor.ingestion.table_tiles import tile
+    upright = [p for p in pages if not rotations.get(p)]          # a landscape page goes whole anyway
+    if not upright:
+        return {}
+    try:
+        found = find_tables(pdf_path, upright, out_dir / "crops", page_offset=offset, captions=captions,
+                            scale=dpi / 72)
+    except Exception:
+        return {}
+    out: Dict[int, List[Path]] = {}
+    for p in upright:
+        here = [t for t in found if t["page"] == p + offset and t["number"]]
+        named = {int(m.group(2)) for c in captions.get(p + offset, [])
+                 if (m := TABLE_RE.match(re.sub(r"\s+", "", c)))}
+        if not here or not named <= {t["number"] for t in here}:
+            continue                                      # a table on it wasn't found: the whole page
+        paths = []
+        for t in here:
+            pieces = tile(Image.open(t["image"]).convert("RGB"))
+            for k, piece in enumerate(pieces, start=1):
+                name = (f"page-{p}-table{t['prefix']}{t['number']}.jpg" if len(pieces) == 1 else
+                        f"page-{p}-table{t['prefix']}{t['number']}-{k}of{len(pieces)}.jpg")
+                piece.save(out_dir / name, "JPEG", quality=85)
+                paths.append(out_dir / name)
+        out[p] = paths
     return out
 
 

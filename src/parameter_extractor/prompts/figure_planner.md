@@ -33,12 +33,17 @@ Return a FigurePlan:
     labelled point group), using the legend or caption to identify it. If a
     series is the same object or experiment as a set in the structure plan
     below, give that `set_label` exactly.
-  - Put EVERY stated condition of a series in `conditions` -- whatever the
+  - Put each stated condition of a series in `conditions` -- what the
     caption, legend, axis titles or passages state for it and isn't on an
     axis: the column it belongs in from the list below, and the value
     exactly as printed with its unit ("22.2 MPa") -- don't convert it, the
-    app does. A condition that applies to a whole panel or figure ("(a) at
-    22.2 MPa, (b) at 40.0 MPa") goes on every series it applies to.
+    app does. Say each condition ONCE: one that differs between series, or
+    applies to one panel ("(a) at 22.2 MPa, (b) at 40.0 MPa"), on the series
+    it applies to; one every series of the figure shares, once in
+    `shared_conditions`; and leave out what the paper states for ALL its
+    experiments (the Methods' solvent, reaction time, analysis method,
+    controls, vessel ...) -- the app fills those in from the paper's
+    conditions.
     Conditions are physical settings with values: a number with its unit,
     or for a few columns a name (a gas, a material, an instrument). Never put
     a description of the apparatus or method into a condition -- mention it

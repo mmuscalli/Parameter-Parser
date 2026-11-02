@@ -133,6 +133,12 @@ def _parse_float(text: str) -> Optional[float]:
 
 
 
+def _with_shared(own: list, shared: list) -> list:
+    """A series' conditions: its own, plus the figure's shared ones it doesn't set itself."""
+    columns = {c.column for c in own}
+    return [c.model_copy() for c in own] + [c.model_copy() for c in shared if c.column not in columns]
+
+
 def _with_new_column(var: AxisVariable) -> AxisVariable:
     """A suggested axis with the NEW column the model proposed when none fits, loaded into the column field
     (averaged values: '_avg' added) -- the user sees it while digitizing, and the review asks to accept it."""
@@ -1204,7 +1210,8 @@ class DigitizerWidget(QWidget):
                 series.append(DigitizedSeries(
                     label=label, panel=i, initial_species=list(ps.initial_species),
                     initial_temperature_C=ps.initial_temperature_C, initial_pH=ps.initial_pH,
-                    conditions=[c.model_copy() for c in ps.conditions], y_column=ps.y_column, notes=ps.notes))
+                    conditions=_with_shared(ps.conditions, plan.shared_conditions), y_column=ps.y_column,
+                    notes=ps.notes))
         if not panels:
             return
         fill_concentrations(series, plan.concentrations)

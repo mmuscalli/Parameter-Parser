@@ -17,36 +17,26 @@
   grey 'no mineral' bar) is still a series of its own.
 - Name each species as the paper does throughout: the vocabulary name, else the
   abbreviation the paper defines ("ImpA") -- the same name the chemistry uses.
-- Give each series its COMPLETE initial composition in `initial_species`
-  (controlled-vocabulary names where the vocabulary has the species, else the
-  paper's name -- a species missing from the vocabulary, e.g. ImpA or an RNA
-  oligomer, is still listed with its concentration: the user reviews it as a
-  new variable -- never leave `initial_species` empty because a species has
-  no column yet;
-  concentrations converted to mM, including components shared by all series
-  such as a fixed CuCl2 or glycine background) -- look for it in the caption, the passages about the figure,
+- Starting compositions: look in the caption, the passages about the figure,
   the structure plan AND the concentration passages from the rest of the
   paper below (starting concentrations are usually stated once, in the
-  Methods, not next to the figure; match them to the series by the
-  conditions they're stated for, e.g. the injection system or pressure a
-  panel uses).
-- A concentration the paper reports only indirectly -- measured in a control
-  run without reaction, or given for the feed or injected solution -- still
-  counts: put it in `concentration_mM` (converted to mM) on EVERY series it
-  applies to, with `basis` "indirect" and `source` saying exactly what it is
-  and where it's stated (every suggestion is shown to the user to check). A
-  null concentration is only for a species whose amount the paper doesn't
-  give at all -- never for one you've identified in the text.
+  Methods; match them to the series by the conditions they're stated for,
+  e.g. the injection system or pressure a panel uses). Name species with the
+  controlled vocabulary where it has them, else the paper's name -- a species
+  missing from the vocabulary (ImpA, an RNA oligomer) is still given: the
+  user reviews it as a new variable. A concentration the paper reports only
+  indirectly -- measured in a control run without reaction, or given for the
+  feed or injected solution -- still counts (`basis` "indirect", `source`
+  saying exactly what it is and where it's stated). A null concentration is
+  only for a species whose amount the paper doesn't give at all.
+- Say each concentration ONCE, in `concentrations` (as printed, with its unit,
+  `basis`, `source`): `series` [] when it holds for every series (a fixed
+  CuCl2 or glycine background, a 15 mM ImpA solution) -- the app adds it to
+  each series -- or the exact labels of the series it applies to. A series'
+  own `initial_species` (in mM) only for a component that is on no
+  `concentrations` entry. Don't leave out one you mention in `notes`.
 - Also give temperature and pH when stated, and every other condition:
   pressure (e.g. `initial_pressure_bar` for a reaction pressure), flow rate,
   volumes, gas or atmosphere, residence or reaction time when not on an
   axis. Category columns take only their listed values: `experiment_type` is
   only "Batch" or "Flowthrough".
-- `concentrations`: list EVERY concentration the paper gives for the species
-  in these series -- stated as a starting concentration, or given indirectly
-  (a control run without reaction, a feed or injected solution: `basis`
-  "indirect") -- as printed with its unit, the exact labels of the series it
-  applies to ([] for all) and where it's stated. Include values you also put
-  in `initial_species`, and species missing from the vocabulary. This list is
-  how the app fills in concentrations, so don't leave out one you mention in
-  `notes`.

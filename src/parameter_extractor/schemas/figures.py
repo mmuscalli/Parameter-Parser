@@ -195,6 +195,12 @@ class FigurePlan(BaseModel):
                                 "reference (e.g. a figure 'redrawn from ref. 12' -> that reference as the "
                                 "reference list gives it).")
     duplicate_note: Optional[str] = None
+    # said once for the whole figure instead of on each of its series (2026-11-03: Riggi2023 Fig. 2 repeated
+    # ten paper-wide conditions on all 29 bars -- 63% of a 13.6K-token answer)
+    shared_conditions: List[SeriesCondition] = Field(
+        default_factory=list,
+        description="Conditions every series of THIS figure shares that the paper doesn't state for all its "
+                    "experiments -- each once here, not on the series.")
     concentrations: List[ConcentrationFound] = Field(
         default_factory=list,
         description="EVERY concentration the paper gives (anywhere: caption, passages, concentration "

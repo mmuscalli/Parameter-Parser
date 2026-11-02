@@ -41,6 +41,14 @@ def _piece_label(path: Path) -> str:
     """'page-9-2of2.jpg' -> a note saying how the pieces of a large table page fit together; a page of
     the supplementary information (rendered into an 'SI' folder) is called 'SI page N'."""
     si = path.parent.name.startswith("SI")
+    crop = re.fullmatch(r"page-(\d+)-table([A-Z]?\d+)(?:-(\d+)of(\d+))?", path.stem)
+    if crop:                                  # a table cropped from its page (pdf_parser._table_crops)
+        page, table, k, n = crop.groups()
+        table = table if not si or table.startswith("S") else f"S{table}"      # a supplement's own 'S' once
+        where = f"{'Supplementary information page S' if si else 'Page '}{page}, Table {table}"
+        return (f"{where}, piece {k} of {n} (a large table is cut into pieces, top to bottom and left to right; "
+                f"a piece that continues the table to the right repeats the row labels on its left):" if k
+                else f"{where} (the table cropped from the page):")
     m = re.fullmatch(r"page-(\d+)-(\d+)of(\d+)", path.stem)
     if not m:
         whole = re.fullmatch(r"page-(\d+)", path.stem)
@@ -67,8 +75,37 @@ class PaperContext:
     def tool_definitions(self) -> list:
         if self._definitions is None:
             self._definitions = [{"name": stage, "description": f"Record your answer for the '{stage}' step.",
-                                  "input_schema": model.model_json_schema()} for stage, model in self.tools.items()]
+                                  "input_schema": model_facing_schema(model.model_json_schema())}
+                                 for stage, model in self.tools.items()]
         return self._definitions
+
+
+def model_facing_schema(schema: dict) -> dict:
+    """A tool's schema as the model needs it: without pydantic's generated "title" on every field and model,
+    and without the classes' docstrings (developer notes); the fields' descriptions stay. 2026-11-03: the
+    prebiotic tool list went from 10.6K to 8.8K tokens -- in every run's cached prefix."""
+    import copy
+    schema = copy.deepcopy(schema)
+
+    def walk(node, model_level: bool) -> None:
+        if isinstance(node, dict):
+            node.pop("title", None)
+            if model_level:
+                node.pop("description", None)
+            for key, value in node.items():
+                if key == "$defs":
+                    for d in value.values():
+                        walk(d, True)
+                elif key == "properties":
+                    for p in value.values():
+                        walk(p, False)
+                else:
+                    walk(value, False)
+        elif isinstance(node, list):
+            for item in node:
+                walk(item, False)
+    walk(schema, True)
+    return schema
 
 
 SHARED_SYSTEM = ("You extract information from one scientific paper for a research dataset. Report only what the "

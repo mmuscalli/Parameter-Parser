@@ -73,6 +73,24 @@ def composition_passages(page_texts: List[str], exclude: str = "") -> str:
     return text[:MAX_COMPOSITION_CHARS] if text else "(no concentrations stated in the text)"
 
 
+# a column's derived variants -- uncertainties, other estimates, modes, priors, ranges, averages: the app makes
+# them from the base column (e.g. '_avg' from `average`), so the list shows the base only
+_DERIVED = re.compile(r"(_err_(plus|minus)|err[12]$|lim$|_alt\d|alt\d|modal_flag|mode\d|prior|_range(_|$)|_avg(_|$))")
+
+
+def planner_columns(columns: List[str]) -> List[str]:
+    """The columns an axis or a series condition can go in (2026-11-03: the full list -- every known column with
+    its variants, identifiers and metadata -- was 6K of the figure prompt's 12K cached tokens)."""
+    from parameter_extractor.column_order import IDENTIFIERS_LABEL, PROVENANCE_LABEL, ColumnOrder
+    try:
+        order = ColumnOrder()
+        skip = {IDENTIFIERS_LABEL, PROVENANCE_LABEL, "Metadata"}
+        keep = lambda c: order.label_of(c) not in skip
+    except Exception:                  # never in the way of suggestions
+        keep = lambda c: True
+    return [c for c in columns if not _DERIVED.search(c) and keep(c)]
+
+
 def run_figure_planner(
     ctx: RunContext, figure: FigureCandidate, page_texts: List[str], structure_plan: StructurePlan,
     controlled_vocab: List[str], template_columns: List[str],
@@ -84,7 +102,7 @@ def run_figure_planner(
         CAPTION=figure.caption,
         STRUCTURE_PLAN_JSON=structure_plan.model_dump_json(indent=2),
         CONTROLLED_VOCAB_JSON=json.dumps(controlled_vocab),
-        TEMPLATE_COLUMNS_JSON=json.dumps(template_columns),
+        TEMPLATE_COLUMNS_JSON=json.dumps(planner_columns(template_columns)),
         FIGURE_PASSAGES=figure_passages(page_texts, figure.number, figure.supplement, figure.prefix),
         # the same for every figure of the paper (no lines left out per figure): part of the cached prefix
         COMPOSITION_PASSAGES=composition_passages(page_texts),

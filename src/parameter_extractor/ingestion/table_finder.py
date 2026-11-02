@@ -165,7 +165,7 @@ def _find_on_page(page, page_no: int) -> List[dict]:
 
 def find_tables(pdf_path: str, pages: List[int], out_dir: Path, supplement: bool = False,
                 page_offset: int = 0, rotations: Optional[Dict[int, int]] = None,
-                captions: Optional[Dict[int, List[str]]] = None) -> List[dict]:
+                captions: Optional[Dict[int, List[str]]] = None, scale: float = RENDER_SCALE) -> List[dict]:
     """[{table_id, number, page, page_label, caption, image}] for the tables on `pages` (1-based, of
     this PDF) -- crops saved in out_dir as table-N.png ('table-SN.png' for a supplement, whose ids are
     'Table SN'). `page` is in the paper's numbering (page_offset added for a supplement)."""
@@ -192,12 +192,12 @@ def find_tables(pdf_path: str, pages: List[int], out_dir: Path, supplement: bool
         for (prefix, number) in sorted(best, key=lambda k: (k[0] != "", k[0], k[1])):
             c = best[(prefix, number)]
             page = pdf[c["page_no"] - 1]
-            img = page.render(scale=RENDER_SCALE).to_pil().convert("RGB")
+            img = page.render(scale=scale).to_pil().convert("RGB")
             offset = render_offset(page)
-            box = [round(v * RENDER_SCALE) for v in to_render_box(c["box"], offset)]
+            box = [round(v * scale) for v in to_render_box(c["box"], offset)]
             # widen to the ink across the table's rows, within its column: a scan's OCR text layer can
             # miss whole columns (eder1994 Table 2's (Gly)3)
-            lo, hi = (round(v * RENDER_SCALE) for v in to_render_box((c["xrange"][0], 0, c["xrange"][1], 0), offset)[::2])
+            lo, hi = (round(v * scale) for v in to_render_box((c["xrange"][0], 0, c["xrange"][1], 0), offset)[::2])
             lo, hi = max(lo, 0), min(hi, img.width)
             ink = _ink(img.crop((lo, box[1], hi, box[3])))
             cols = ink.sum(axis=0).nonzero()[0] if ink.size else []
@@ -210,7 +210,7 @@ def find_tables(pdf_path: str, pages: List[int], out_dir: Path, supplement: bool
                            "page_label": f"S{c['page_no']}" if supplement else str(c["page_no"]),
                            "caption": c["caption"], "image": str(path)})
         for p in turned:              # landscape page: the whole page, upright, cropped to its content
-            img = pdf[p - 1].render(scale=RENDER_SCALE, rotation=rotations[p]).to_pil().convert("RGB")
+            img = pdf[p - 1].render(scale=scale, rotation=rotations[p]).to_pil().convert("RGB")
             x0, y0, x1, y1 = _content_box(_ink(img))
             # named by the caption the parser found on it (faisal2005 p. 3: 'Table 1. Reaction Products ...')
             caption = next((c for c in (captions or {}).get(p + page_offset, [])

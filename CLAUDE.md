@@ -1688,3 +1688,29 @@ conditions `other` "ImpA stock concentration".
   species), "... in ultrapure water, no other salts"; still dropped: "15 mM ImpA stock solution", kim2019's
   "20 uL, 3.75 mM in case of 1:1 molar ratio". kim2019's "0.5 M ammonia solution, with acetamide added" is now kept
   (was dropped: the acetamide would have been lost).
+
+## New prebiotic parameters; token pass on the structure and figure steps (2026-11-03, Mickey)
+
+- Conditions-spec text parameters (often suggested): `pH_buffer` ('none' when stated; Solution Preparation),
+  `reagent_suppliers` (Metadata, after the paper columns: the pack lists metadata's full order),
+  `replicates`, `stirring_agitation` (Experimental Methodology); excluded from `other` in the hint. Live Riggi:
+  none / Sigma-Aldrich ... / triplicate, averaged / vortexed briefly, then undisturbed.
+- Audit (Mickey's Standard Riggi run, $0.39): figure_planner $0.19 (Fig. 2: 13.6K OUTPUT tokens, 63% of it
+  conditions repeated on all 29 bars), structure_planner $0.13 (= the paper's cache write: text 29.3K, tools
+  10.6K, table-page images 9.4K tokens; its own output small). count_tokens is free -- use it for audits.
+  1. Figure answers say each condition once: `FigurePlan.shared_conditions` (merged into every series by
+     `digitizer._with_shared`, the series' own value wins); conditions the paper states for ALL experiments are
+     left out (the app fills them -- _paper_wide_values); shared compositions via `concentrations` series [].
+     Prebiotic figure rules rewritten (one composition paragraph). Fig. 2 live: 13.6K -> 5.3K output, $0.19 -> $0.10.
+  2. Figure prompt column list: `figure_planner.planner_columns` drops derived variants (err/alt/mode/prior/
+     range/avg) and Row/Metadata/Provenance columns: 354 -> 209 columns, ~6K -> ~3.3K tokens of the prefix.
+  3. Table images: `pdf_parser._table_crops` sends the table finder's crops (220 dpi, tiled if large; labels
+     "Page 4, Table 1 ...") instead of the whole page, for pages where EVERY captioned table was found (else
+     the page, as before; landscape pages whole). eder 10.1K -> 2.5K, kim2019 4.4K -> 0.7K, Riggi 9.6K -> 3.1K
+     image tokens. Live eder (Standard, $0.25): 42/42 rows = reference except analysis_method wording.
+  4. Tool schemas: `api_client.model_facing_schema` strips pydantic titles and class docstrings (dev notes):
+     prebiotic tools 10.6K -> 8.8K tokens, exoplanets 9.5K -> 8.3K.
+  Riggi cached prefix 49.7K -> 41.4K; structure step $0.134 -> $0.113; typical Riggi run ~$0.39 -> ~$0.29.
+  Not done (small or risky): short field names for the structure plan (~20% of its ~4K output tokens; the prompt
+  names fields), dropping the reference list (5K tokens on Riggi, but cited-data references come from it).
+  tests/test_token_pass.py.
