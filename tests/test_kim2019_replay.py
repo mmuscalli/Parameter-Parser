@@ -61,14 +61,18 @@ def test_kim2019_replay_reproduces_reference():
         assert sum("sampled_temperature_C has confidence 'medium' in 10 sets" in f["message"] for f in flags) == 1
         assert sorted(f["message"].split()[0] for f in flags if f["kind"] == "concentration_not_stated") == [
             "acetamide", "guanine", "uracil"]
-        assert sum(f["kind"] == "duplicate_removed" for f in flags) == 4
+        # (3, not 4, since 2026-11-02: '0.5 M ammonia solution, with acetamide added' says more than the
+        # repeated 0.5 M -- the acetamide -- so it's kept; ingestion/duplicates._says_more)
+        removed = [f["message"] for f in flags if f["kind"] == "duplicate_removed"]
+        assert len(removed) == 3 and not any("acetamide" in m for m in removed)
         volumes = sorted(v.name for v in result.new_variables if v.name.startswith("volume added"))
         assert volumes == ["volume added: calcium chloride solution", "volume added: nucleobase solution",
                            "volume added: ribose 1,2-cyclic phosphate stock"]
         names = {v.name for v in result.new_variables}
         assert not names & {"nucleobase solution volume", "calcium chloride solution volume",
-                            "reaction volume (ribose 1,2-cyclic phosphate solution)", "guanine dissolution medium"}
+                            "reaction volume (ribose 1,2-cyclic phosphate solution)"}
         assert "redissolution volume before analysis" in names                # not a repeat: kept
+        assert "guanine dissolution medium" in names                          # says more (acetamide): kept
         yields = sorted(v.value for v in result.new_variables if v.alias_name == "sampled cytidine 2'-phosphate %")
         assert yields == sorted([1.7, 2.7, 0.4, 0.8, 2.8, 3.5, 5.3, 0.4, 1.0, 5.9, 3.8, 5.4, 7.7])
 

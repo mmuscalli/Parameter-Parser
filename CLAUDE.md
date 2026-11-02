@@ -1680,3 +1680,11 @@ conditions `other` "ImpA stock concentration".
   Preparation; three 'other' restatements dropped as repeats (one was the halite negative control's
   description -- over-eager but flagged). An earlier live try returned NO chemistry (no sets) -> the no-sets rule.
   tests/test_species_names.py.
+- Repeat check narrowed (Mickey, 2026-11-02: "a little redundancy is preferable to missing values"):
+  `duplicates.drop_repeated_amounts` drops an other-parameter only if, besides every amount matching the
+  chemistry, nothing is left after removing the amounts, the MATCHED species / solution names and framing words
+  (`_FRAMING`: stock, solution, prepared, ultrapure water, ..., molar ratio) -- `_says_more`. Kept now: Riggi's
+  "15 mM ImpA in saturated NaCl, no solid phase" (halite negative control), "15 mM ImpA in NaCl" (another
+  species), "... in ultrapure water, no other salts"; still dropped: "15 mM ImpA stock solution", kim2019's
+  "20 uL, 3.75 mM in case of 1:1 molar ratio". kim2019's "0.5 M ammonia solution, with acetamide added" is now kept
+  (was dropped: the acetamide would have been lost).

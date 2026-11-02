@@ -96,6 +96,27 @@ def test_repeated_amounts_are_dropped_once():
                                                        "total reaction volume", "mystery solution", "heating"]
 
 
+def test_a_repeated_amount_with_more_to_say_is_kept():
+    """Riggi2023 (2026-11-02): '15 mM ImpA in saturated NaCl, no solid phase' -- the halite experiments' extra
+    negative control -- repeats the 15 mM ImpA but says more: kept. Bare restatements still go."""
+    meth = _methods()
+    chem = ChemistryExtraction(
+        solutes=[_solute("ImpA", 15, concentration_basis="stock", stock_solution="ImpA stock solution"),
+                 SoluteEntry(name="NaCl", role="initial", phase="aq", concentration_value=None,
+                             concentration_unit_raw=None, quote="q", source="s", confidence="high")],
+        added_solutions=[AddedSolution(solution="ImpA stock solution", volume="100 µL", quote="q", source="s")])
+    meth.other_parameters = [
+        _param("ImpA stock concentration", "15 mM ImpA in ultrapure water"),                     # repeat
+        _param("ImpA stock", "15 mM ImpA stock solution"),                                         # repeat
+        _param("volume added", "100 µL of the ImpA stock solution"),                               # repeat
+        _param("additional negative control (halite)", "15 mM ImpA in saturated NaCl, no solid phase"),
+        _param("ImpA in NaCl", "15 mM ImpA in NaCl"),                    # another species named: more
+    ]
+    dropped = drop_repeated_amounts(meth, chem)
+    assert [d.parameter.name for d in dropped] == ["ImpA stock concentration", "ImpA stock", "volume added"]
+    assert [p.name for p in meth.other_parameters] == ["additional negative control (halite)", "ImpA in NaCl"]
+
+
 def test_each_solution_volume_is_one_review_variable():
     meth, chem = _methods(), _kim()
     meth.other_parameters = [_param("nucleobase solution volume", "20 µL")]

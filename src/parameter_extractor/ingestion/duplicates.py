@@ -10,10 +10,15 @@ solution, 20 µL"). Two variables for the same amount invite double counting
 it's what the mixture calculations use. (Mickey, 2026-10-15.)
 
 Only exact repeats go: an other-parameter is dropped when it contains at least
-one volume or concentration and EVERY volume/concentration in it matches one
-recorded with the chemistry for the same set (or paper-wide). Anything with an
-extra quantity (a redissolution volume, a total volume) is kept. Dropped items
-are reported, not lost.
+one volume or concentration, EVERY volume/concentration in it matches one
+recorded with the chemistry for the same set (or paper-wide), AND it says
+nothing else -- once the amounts, the species / solutions they belong to and
+filler words ('stock solution', 'prepared in ultrapure water') are taken out,
+nothing is left (Mickey, 2026-11-02: Riggi2023's "15 mM ImpA in saturated NaCl,
+no solid phase" -- the halite experiments' extra negative control -- was dropped
+for repeating 15 mM ImpA; some redundancy is better than a lost value).
+Anything with an extra quantity (a redissolution volume, a total volume) or
+extra words is kept. Dropped items are reported, not lost.
 """
 from __future__ import annotations
 import re
@@ -83,6 +88,30 @@ def _concentration_match(value: float, chemistry: ChemistryExtraction, set_label
     return None
 
 
+# words that only frame an amount ('15 mM ImpA stock solution, prepared in ultrapure water'); the solvent and
+# its type are recorded elsewhere (solvent_name)
+_FRAMING = {"a", "an", "the", "of", "in", "with", "and", "each", "per", "was", "were", "is", "are", "be", "used",
+            "using", "prepared", "made", "make", "stock", "stocks", "solution", "solutions", "concentration",
+            "concentrations", "final", "initial", "starting", "mixture", "aqueous", "aq", "water", "ultrapure",
+            "deionized", "deionised", "distilled", "milli-q", "milliq", "nanopure", "pure", "containing", "contained",
+            "contains", "added", "add", "total", "reaction", "approx", "approximately", "about", "volume", "volumes",
+            "at", "to", "for", "as", "from", "into", "freshly", "fresh",
+            "case", "molar", "ratio", "ratios"}          # molar ratios are recorded by the chemistry step
+
+
+def _says_more(text: str, found, names: set) -> bool:
+    """Words in an other-parameter's value beyond its amounts, the species / solutions those amounts belong to
+    (`names`) and framing words -- 'saturated NaCl, no solid phase' -- i.e. it records something the
+    chemistry doesn't. Another species named in it counts as more ('15 mM ImpA in NaCl')."""
+    rest = f" {text or ''} "
+    for _, _, printed in found:
+        rest = rest.replace(printed, " ")
+    for name in sorted(names, key=len, reverse=True):
+        rest = re.sub(rf"(?<![\w-]){re.escape(name)}(?![\w-])", " ", rest, flags=re.IGNORECASE)
+    words = [w for w in re.findall(r"[A-Za-z][A-Za-z0-9'+-]*", rest) if w.lower() not in _FRAMING]
+    return bool(words)
+
+
 def drop_repeated_amounts(methodology: Methodology, chemistry: ChemistryExtraction) -> List[DroppedParameter]:
     """Removes the repeats from methodology.other_parameters; returns what was removed."""
     kept, dropped = [], []
@@ -91,11 +120,14 @@ def drop_repeated_amounts(methodology: Methodology, chemistry: ChemistryExtracti
         sols = [_volume_match(v, chemistry, label) for kind, v, _ in found if kind == "volume"]
         matches += [f"'{sol.solution}' {sol.volume}" if sol else None for sol in sols]
         linked = {" ".join(sol.solution.lower().split()) for sol in sols if sol}
+        named = {sol.solution for sol in sols if sol}          # what the amounts belong to
         for kind, v, _ in found:
             if kind == "concentration":
                 s = _concentration_match(v, chemistry, label, f"{p.name} {p.value}", linked)
                 matches.append(f"{s.name} {s.concentration_value:g} {s.concentration_unit_raw}" if s else None)
-        if found and all(matches):
+                if s:
+                    named |= {n for n in (s.name, s.pubchem_title, s.stock_solution) if n}
+        if found and all(matches) and not _says_more(p.value, found, named):
             dropped.append(DroppedParameter(p, "; ".join(dict.fromkeys(matches))))
         else:
             kept.append(p)
