@@ -15,6 +15,8 @@
   same for every series that shares them; a control run for the whole paper
   is filled in by the app. A control shown as its own bar or line (e.g. the
   grey 'no mineral' bar) is still a series of its own.
+- Name each species as the paper does throughout: the vocabulary name, else the
+  abbreviation the paper defines ("ImpA") -- the same name the chemistry uses.
 - Give each series its COMPLETE initial composition in `initial_species`
   (controlled-vocabulary names where the vocabulary has the species, else the
   paper's name -- a species missing from the vocabulary, e.g. ImpA or an RNA

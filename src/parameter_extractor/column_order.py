@@ -27,6 +27,17 @@ OTHER = "other"
 IDENTIFIERS_LABEL, PROVENANCE_LABEL = "Row", "Provenance"
 
 
+def write_column_list(columns: List[str], order: "ColumnOrder", path) -> None:
+    """`<paper>_columns.csv`: each column of the dataset CSV, in its order, with its category -- the
+    dataset keeps a single header row (spreadsheets, pandas and the combined queue CSV read it as is)."""
+    import csv
+    with open(path, "w", newline="") as f:
+        writer = csv.writer(f)
+        writer.writerow(["column", "category"])
+        for column in columns:
+            writer.writerow([column, order.label_of(column)])
+
+
 def _suffix_rank(rest: str) -> int:
     """A derived column's place after its value: uncertainties and limit, modes, other estimates, priors."""
     for rank, pattern in enumerate((r"^_?(err|lim)", r"^_?modal|^_?mode", r"^_?alt", r"^_?prior")):

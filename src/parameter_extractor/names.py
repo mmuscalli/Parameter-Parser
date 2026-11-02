@@ -232,3 +232,47 @@ def match_species(name: str, vocab: Optional[Tuple[str, ...]] = None) -> Optiona
 def closest_names(name: str, choices, n: int = 1, cutoff: float = 0.75) -> List[str]:
     """Fuzzy SUGGESTIONS only (for the review screen); never used to map automatically."""
     return difflib.get_close_matches(name, list(choices), n=n, cutoff=cutoff)
+
+
+# ---- one name per species within a paper (Mickey, 2026-11-02, Riggi2023: the chemistry step wrote
+# "adenosine 5'-phosphorimidazolide (ImpA)", the figure suggestions "ImpA" -- two variables for one molecule) ----
+
+_DEFINED = re.compile(r"^(?P<full>.+?)\s*\(\s*(?P<abbr>[A-Za-z][A-Za-z0-9'′+\-]{0,11})\s*\)\s*$")
+_GLUE = r"(?:\(cid:\d+\)|[^A-Za-z0-9])*"       # anything between a name's words in the PDF text (primes, '(cid:48)')
+
+
+def _is_abbreviation(abbr: str, full: str) -> bool:
+    return (any(c.isupper() for c in abbr) and len(abbr) < len(full) and " " not in abbr
+            and not re.fullmatch(r"[IVX]+", abbr))       # a roman-numeral compound label isn't one
+
+
+def abbreviations_in(text: str, names) -> dict:
+    """{full name (lower case): abbreviation} for species names the paper itself defines as
+    'full name (ABBR)' -- in the name as given, or in the paper's text."""
+    found = {}
+    for name in names:
+        m = _DEFINED.match(name or "")
+        if m and _is_abbreviation(m.group("abbr"), m.group("full")):
+            found[m.group("full").strip().lower()] = m.group("abbr")
+            continue
+        words = re.findall(r"[A-Za-z0-9]+", name or "")
+        if len(words) < 2 or not text:           # a one-word name is an abbreviation or plain name already
+            continue
+        pattern = _GLUE.join(map(re.escape, words)) + r"\s*\(\s*([A-Za-z][A-Za-z0-9'′+\-]{0,11})\s*\)"
+        hit = re.search(pattern, text, re.IGNORECASE)
+        if hit and _is_abbreviation(hit.group(1), name):
+            found[name.strip().lower()] = hit.group(1)
+    return found
+
+
+def preferred_name(name: str, abbreviations: dict) -> str:
+    """The one name a species goes by in this paper: the abbreviation the paper defines for it ('ImpA'),
+    unless only the full name is a vocabulary species (then that)."""
+    m = _DEFINED.match(name or "")
+    full = (m.group("full") if m and _is_abbreviation(m.group("abbr"), m.group("full")) else name or "").strip()
+    abbr = abbreviations.get(full.lower())
+    if not abbr:
+        return name
+    if match_species(full) and not match_species(abbr):
+        return match_species(full)[0]
+    return abbr

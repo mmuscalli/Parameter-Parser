@@ -101,7 +101,9 @@ def collect_new_variables(
             set_label=s.set_label, sample_label=s.sample_label, quote=s.quote, source=_from_solute(s).source,
             confidence=s.confidence, origin="calculated" if s.derived else "chemistry",
             row_ids=rows_for(s.set_label, s.sample_label), pubchem_cid=s.pubchem_cid,
-            pubchem_title=s.pubchem_title, category=categories.for_source("species", s.role) or ""))
+            pubchem_title=s.pubchem_title,
+            # a stock solution's concentration is how the solution was prepared (Mickey, 2026-11-02)
+            category=categories.for_source("species", "stock" if s.concentration_basis == "stock" else s.role) or ""))
     for sol in chemistry.added_solutions:
         # the one variable for each solution volume (methodology repeats are dropped,
         # see ingestion/duplicates.py); the mixture calculations use the same records
@@ -232,8 +234,25 @@ def group_new_variables(new_vars: List[NewVariable]) -> List[VariableGroup]:
                                         proposed_column=v.proposed_column or "", values=[],
                                         category=v.category)
         groups[key].values.append(v)
+    for g in groups.values():
+        g.values = _without_repeated_calculations(g.values)
     order = {c.id: i for i, c in enumerate(categories.categories())}
     return sorted(groups.values(), key=lambda g: order.get(g.category, len(order)))
+
+
+def _without_repeated_calculations(values: List[NewVariable]) -> List[NewVariable]:
+    """A calculated value (a mixture concentration from a stock) is left out where the paper states the same
+    value for the same rows (Riggi2023: ImpA 15 mM stated on the digitized series, and 15 mM calculated from
+    its 15 mM stock) -- one value, the paper's (Mickey, 2026-11-02)."""
+    stated = [v for v in values if v.origin != "calculated" and v.value is not None]
+
+    def repeated(v: NewVariable) -> bool:
+        if v.origin != "calculated" or v.value is None or not v.row_ids:
+            return False
+        same = [s for s in stated if abs(s.value - v.value) <= 0.01 * max(abs(v.value), 1e-12)]
+        return set(v.row_ids) <= {r for s in same for r in s.row_ids}
+    kept = [v for v in values if not repeated(v)]
+    return kept or values
 
 
 def _kind_category(kind: str) -> str:

@@ -1647,8 +1647,36 @@ last. All template columns are still written (empty ones too), so every paper's 
   > its base column (longest known prefix + '_' / archive suffix err1/lim/mode/alt/prior; range/avg markers
   stripped) > first matching pattern (definition order) > Other. In a block: explicit order, template, standard,
   name; derived after the value: range/avg, then err (+ before -), modes, alternatives, priors.
-- Rows tab: CSV order minus empty columns; header text "Category\ncolumn" on a block's first column ("\ncolumn"
-  otherwise; the column name in UserRole), alternate blocks tinted (GROUP_TINT, flag/archive colours win).
-  LEADING/TRAILING_COLUMNS gone.
+- Rows tab: CSV order minus empty columns; `gui/widgets.ColumnGroupBand` -- a separate strip above the table
+  naming each block ONCE, centred over its visible columns, following scroll/resize (tooltip = full name).
+  It replaced a QHeaderView subclass painting the band, which on Mickey's native macOS style showed the
+  category over every column (offscreen screenshots looked fine -- check GUI drawing with the native platform:
+  run without QT_QPA_PLATFORM=offscreen and grab()). Header items = plain column names (UserRole too);
+  alternate blocks tinted (GROUP_TINT, flag/archive colours win). LEADING/TRAILING_COLUMNS gone.
+- Categories in the files (the dataset CSV keeps ONE header row -- pandas, spreadsheets, the combined queue CSV):
+  observations CSV has a `category` column; `<paper>_columns.csv` lists every column with its category.
 - Reference CSVs (runs/reference/*, runs/*_auto) reordered by a checker (same cells per row, new order; backup
   in the session scratchpad); replays reproduce them byte for byte. tests/test_column_order.py.
+
+## One name per species; stock values as solution preparation (2026-11-02, Mickey's Riggi2023 run)
+
+His run had ImpA three times: the chemistry wrote "adenosine 5'-phosphorimidazolide (ImpA)" as a STOCK value
+only, mixing derived an identical mixture value under that name, the figure series said "ImpA"; plus a
+conditions `other` "ImpA stock concentration".
+- `names.abbreviations_in(text, names)` ('full (ABBR)' in a name, or a multi-word name the paper's text
+  defines as 'full (ABBR)' -- words matched across '(cid:48)' / primes) + `preferred_name` (the abbreviation,
+  unless only the full name is a vocabulary species; roman numerals / lowercase '(aq)' aren't abbreviations).
+  Applied in normalize_chemistry (abbreviations=, `_rename` notes) and figure_rows (abbreviations=);
+  `Extraction.abbreviations` from the chemistry + digitized series names. Prompts (chemistry, figure_planner
+  rules): one name per species, the paper's abbreviation; a stock used as the reaction solution itself ->
+  also the mixture value; no plan sets (figure-only paper) -> composition with set ''. Conditions hint: stock
+  solutions are not `other`.
+- `new_variables._without_repeated_calculations`: a calculated value is dropped from a review line where stated
+  values with the same number cover its rows.
+- Stock concentrations: review category solution_prep (source species:stock), column order ^(added|stock)_ ->
+  Solution Preparation; starting species = ^initial_.
+- Live Riggi (Standard, $0.08 after the prompt fixes): ImpA stock + mixture 15 mM under one name; review:
+  initial_ImpA_aq_mM (figure + chemistry, one line), stock_ImpA_aq_mM and the 100 uL volume under Solution
+  Preparation; three 'other' restatements dropped as repeats (one was the halite negative control's
+  description -- over-eager but flagged). An earlier live try returned NO chemistry (no sets) -> the no-sets rule.
+  tests/test_species_names.py.

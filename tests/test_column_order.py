@@ -34,7 +34,8 @@ def test_prebiotic_blocks_and_derived_columns():
     block = {c: label for label, cs in order.groups(cols) for c in cs}
     assert block["light_conditions"] == block["positive_control"] == "Experimental Methodology"   # chosen
     assert block["mixing_rate_rpm"] == block["solid_material_mass_range_g"] == "Reaction Conditions"
-    assert block["stock_ImpA_aq_mM"] == block["initial_NaCl_aq_mM"] == "Starting Species"
+    assert block["initial_ImpA_aq_mM"] == block["initial_NaCl_aq_mM"] == "Starting Species"
+    assert block["stock_ImpA_aq_mM"] == "Solution Preparation"        # how the solution was made
     assert block["sampled_2peptide_Gly_avg_%yield"] == block["max_linear_oligomer_length_avg_nt"] == "Products"
     assert block["added_ImpA_stock_volume_uL"] == "Solution Preparation" and block["unclaimed_thing"] == "Other"
     i = cols.index("initial_temperature_C")      # a value, its uncertainties, then other estimates
@@ -98,6 +99,30 @@ def test_a_pack_configures_its_own_blocks():
                                                           "Other"]
         finally:
             packs.activate("prebiotic_chemistry")
+
+
+def test_categories_in_the_files():
+    """The observations CSV gives every value's category; <paper>_columns.csv every column's."""
+    import csv
+    from unittest.mock import patch
+    sys.path.insert(0, str(ROOT / "tests"))
+    from test_pipeline_offline import PDF, REPLAY_DIR, make_replay
+    if not PDF.is_file():
+        print("SKIP: needs eder1994.pdf"); return
+    from parameter_extractor import api_client
+    from parameter_extractor.config.run_config import RunConfig
+    from parameter_extractor.pipeline import run_pipeline
+    packs.activate("prebiotic_chemistry")
+    with tempfile.TemporaryDirectory() as tmp, patch.object(api_client, "_send", make_replay(REPLAY_DIR)):
+        result = run_pipeline(PDF, RunConfig.from_settings(api_key="x", output_dir=Path(tmp), registry_path=None))
+        obs = list(csv.DictReader(open(result.observations_path)))
+        by_column = {o["column"]: o["category"] for o in obs}
+        assert by_column["paper_title"] == "Metadata" and by_column["initial_NaCl_aq_mM"] == "Starting Species"
+        assert by_column["sampled_2peptide_Gly_%yield"] == "Products"
+        listed = list(csv.reader(open(result.run_dir / "eder1994_columns.csv")))
+        header = next(csv.reader(open(result.csv_path)))
+        assert listed[0] == ["column", "category"] and [c for c, _ in listed[1:]] == header
+        assert dict(listed[1:])["full_id"] == "Row" and dict(listed[1:])["source_notes"] == "Provenance"
 
 
 if __name__ == "__main__":

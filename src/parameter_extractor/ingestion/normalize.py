@@ -19,7 +19,7 @@ harmless.
 """
 from __future__ import annotations
 from dataclasses import dataclass
-from typing import List
+from typing import List, Optional
 
 from parameter_extractor.names import match_species, vocabulary
 from parameter_extractor.pubchem import query_name, template_species_cids
@@ -114,11 +114,19 @@ def _range_text(s) -> None:
     _append_note(s, f"range printed as {printed}")
 
 
-def normalize_chemistry(chemistry: ChemistryExtraction, pubchem=None, registry=None) -> List[NormalizationNote]:
+def normalize_chemistry(chemistry: ChemistryExtraction, pubchem=None, registry=None,
+                        abbreviations: Optional[dict] = None) -> List[NormalizationNote]:
     """`pubchem`: a pubchem.PubChem (None = no lookups); `registry`: for species
-    the user accepted earlier."""
+    the user accepted earlier; `abbreviations`: {full name: abbreviation} the paper defines
+    (names.abbreviations_in) -- one name per species within the paper."""
     notes: List[NormalizationNote] = []
     original = [(s, s.name) for s in chemistry.solutes]
+    if abbreviations:
+        from parameter_extractor.names import preferred_name
+        for s in chemistry.solutes:
+            short = preferred_name(s.name, abbreviations)
+            if short != s.name:
+                _rename(s, short, "the paper's own name for it", notes)
     rule_matched = set()
     for s in chemistry.solutes:
         matched = match_species(s.name)

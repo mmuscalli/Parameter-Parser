@@ -369,9 +369,8 @@ class MainWindow(QMainWindow):
         tabs = QTabWidget()
 
         self.rows_table = QTableWidget()
-        from parameter_extractor.gui.widgets import GroupedHeader
-        self.rows_header = GroupedHeader(self.rows_table)        # a band naming each block of columns
-        self.rows_table.setHorizontalHeader(self.rows_header)
+        from parameter_extractor.gui.widgets import ColumnGroupBand
+        self.rows_band = ColumnGroupBand(self.rows_table)         # names each block of columns once
         self.rows_table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
         self.rows_table.setAlternatingRowColors(True)
         self.rows_legend = QLabel(wordWrap=True)
@@ -379,6 +378,8 @@ class MainWindow(QMainWindow):
         rows_page = QWidget()
         rows_layout = QVBoxLayout(rows_page)
         rows_layout.setContentsMargins(0, 0, 0, 0)
+        rows_layout.setSpacing(0)
+        rows_layout.addWidget(self.rows_band)
         rows_layout.addWidget(self.rows_table, stretch=1)
         rows_layout.addWidget(self.rows_legend)
         tabs.addTab(rows_page, "Rows")
@@ -870,7 +871,7 @@ class MainWindow(QMainWindow):
             t.setHorizontalHeaderItem(c, item)
             if (len(groups) - 1) % 2:
                 tinted.add(c)
-        self.rows_header.set_groups([tuple(g) for g in groups] if order else [])
+        self.rows_band.set_groups([tuple(g) for g in groups] if order else [])
         id_col = header.index("full_id")
         provenance = {r.full_id: r.provenance for r in result.rows}
         row_word = packs.row_word(run_pack) if run_pack else "row"

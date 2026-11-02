@@ -512,6 +512,7 @@ def write_template_csv(records: List[dict], out_path: Path, column_categories: O
                        registry=None) -> None:
     present = {k for r in records for k, v in r.items() if v not in (None, "")}
     header = ordered_columns(present, column_categories, registry)
+    write_template_csv.header = header          # for the column list written next to it
     with open(out_path, "w", newline="") as f:
         writer = csv.writer(f)
         writer.writerow(header)

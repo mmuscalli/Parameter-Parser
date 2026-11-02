@@ -249,6 +249,7 @@ class Extraction:
     table_images: List[Path] = field(default_factory=list)   # rendered table pages sent with the paper
     tables: List[dict] = field(default_factory=list)         # table crops for the Tables tab (table_finder.py)
     ambient_notes: List[str] = field(default_factory=list)   # ambient conditions filled in (calculators/ambient.py)
+    abbreviations: Dict[str, str] = field(default_factory=dict)  # species: full name -> the paper's abbreviation
     terms: List[str] = field(default_factory=list)           # parameters to look for (focus terms)
     always_on: set = field(default_factory=set)              # optional stages that always run
     structure_ready: threading.Event = field(default_factory=threading.Event)
@@ -945,7 +946,13 @@ def finish(
     pubchem = PubChem(config.pubchem_cache_path) if config.use_pubchem else None
     # names -> vocabulary (rules, then PubChem identity); mM re-checked
     pack = packs.current()
-    normalization = (normalize_chemistry(ex.chemistry, pubchem=pubchem, registry=registry)
+    # one name per species within the paper: the abbreviation it defines ("ImpA"), in the chemistry and on
+    # digitized series alike
+    from parameter_extractor.names import abbreviations_in
+    ex.abbreviations = abbreviations_in(ex.parsed.text, [s.name for s in ex.chemistry.solutes]
+                                        + [sp.name for f in digitized for s in f.series for sp in s.initial_species])
+    normalization = (normalize_chemistry(ex.chemistry, pubchem=pubchem, registry=registry,
+                                         abbreviations=ex.abbreviations)
                      if pack.uses("normalize_species") else [])
     if pubchem:
         pubchem.save()
@@ -986,7 +993,8 @@ def finish(
         fig_rows, problems, fig_new_vars = build_figure_rows(
             list(digitized), ex.metadata, _paper_wide_methodology(ex), config.paper_prefix,
             first_set_index=len(ex.structure.experiment_sets) + 1,
-            first_entry_number=len(rows) + 1, registry=registry, paper_wide=_paper_wide_values(ex))
+            first_entry_number=len(rows) + 1, registry=registry, paper_wide=_paper_wide_values(ex),
+            abbreviations=ex.abbreviations)
         rows += fig_rows
         paper_flags += [Flag("figure_problem", p) for p in problems]
         annotated = {}
@@ -1149,12 +1157,16 @@ def finish(
                                          indent=2, ensure_ascii=False))
 
     # the long-format record is canonical; the wide template CSV is generated from it
+    from parameter_extractor.column_order import ColumnOrder, write_column_list
+    chosen = {a["column"]: a.get("category", "") for a in accepted}
+    order = ColumnOrder(chosen=chosen, registry=registry)
     observations = rows_to_observations(rows)
     observations_path = ctx.run_dir / f"{ex.paper_id}_observations.csv"
-    write_observations_csv(observations, observations_path)
+    write_observations_csv(observations, observations_path, order)
     csv_path = ctx.run_dir / f"{ex.paper_id}_extracted.csv"
-    write_template_csv(observations_to_records(observations), csv_path,
-                       column_categories={a["column"]: a.get("category", "") for a in accepted}, registry=registry)
+    write_template_csv(observations_to_records(observations), csv_path, column_categories=chosen, registry=registry)
+    # every column of the dataset with its category (the dataset CSV keeps one header row)
+    write_column_list(write_template_csv.header, order, ctx.run_dir / f"{ex.paper_id}_columns.csv")
 
     gold_score = None
     if settings.USE_GOLD_STANDARD:  # OFF until the curated subset exists

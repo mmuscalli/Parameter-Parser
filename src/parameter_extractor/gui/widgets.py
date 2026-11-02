@@ -2,10 +2,10 @@
 from __future__ import annotations
 import html
 
-from PySide6.QtCore import QRect, QSize, Qt
+from PySide6.QtCore import QEvent, QRect, Qt
 from PySide6.QtGui import QPainter, QPalette
-from PySide6.QtWidgets import (QDialog, QDialogButtonBox, QHeaderView, QLabel, QLineEdit, QPlainTextEdit, QStyle,
-                               QVBoxLayout)
+from PySide6.QtWidgets import (QDialog, QDialogButtonBox, QLabel, QLineEdit, QPlainTextEdit, QStyle,
+                               QToolTip, QVBoxLayout, QWidget)
 
 
 class ExpandingLineEdit(QLineEdit):
@@ -56,55 +56,74 @@ class ExpandingLineEdit(QLineEdit):
                 self.editingFinished.emit()
 
 
-class GroupedHeader(QHeaderView):
-    """A table's column header with a band above the column names naming each block of columns
-    (the Rows tab's categories: Row, Metadata, Experimental Methodology, ...). `set_groups([(label, first,
-    last)])` with section indexes; no groups = an ordinary header."""
 
-    def __init__(self, parent=None):
-        super().__init__(Qt.Orientation.Horizontal, parent)
+class ColumnGroupBand(QWidget):
+    """A strip above a table naming each block of columns once, centred over the block (the Rows tab's
+    categories: Row, Metadata, Experimental Methodology, ...). Its own widget rather than part of the
+    header, so the platform's header drawing can't repeat or clip it; it follows scrolling and column
+    resizing. `set_groups([(label, first column, last column)])`."""
+
+    def __init__(self, table, parent=None):
+        super().__init__(parent)
+        self.table = table
         self.groups: list = []
-        self.setSectionsClickable(True)
+        header = table.horizontalHeader()
+        header.sectionResized.connect(lambda *_: self.update())
+        header.sectionMoved.connect(lambda *_: self.update())
+        header.geometriesChanged.connect(self.update)
+        table.horizontalScrollBar().valueChanged.connect(lambda *_: self.update())
+        self.setFixedHeight(self.fontMetrics().height() + 10)
+        self.setHidden(True)
 
     def set_groups(self, groups: list) -> None:
         self.groups = list(groups)
-        self.updateGeometry()
-        self.viewport().update()
+        self.setHidden(not self.groups)
+        self.update()
 
-    def _band(self) -> int:
-        return self.fontMetrics().height() + 8 if self.groups else 0
+    def _span(self, first: int, last: int) -> tuple:
+        header = self.table.horizontalHeader()
+        left = self.table.frameWidth() + (self.table.verticalHeader().width()
+                                          if self.table.verticalHeader().isVisible() else 0)
+        return (left + header.sectionViewportPosition(first),
+                left + header.sectionViewportPosition(last) + header.sectionSize(last))
 
-    def sizeHint(self) -> QSize:
-        size = super().sizeHint()
-        size.setHeight(size.height() + self._band())
-        return size
-
-    def paintSection(self, painter: QPainter, rect: QRect, index: int) -> None:
-        super().paintSection(painter, rect.adjusted(0, self._band(), 0, 0), index)
+    def event(self, e) -> bool:
+        if e.type() == QEvent.Type.ToolTip:          # a block's full name (narrow blocks are shortened)
+            x = e.position().x() if hasattr(e, "position") else e.pos().x()
+            label = next((g[0] for g in self.groups if self._span(g[1], g[2])[0] <= x < self._span(g[1], g[2])[1]), "")
+            if label:
+                QToolTip.showText(e.globalPos(), label, self)
+            else:
+                QToolTip.hideText()
+            return True
+        return super().event(e)
 
     def paintEvent(self, event) -> None:
-        super().paintEvent(event)
         if not self.groups:
             return
-        painter = QPainter(self.viewport())
-        band = self._band()
+        painter = QPainter(self)
+        header = self.table.horizontalHeader()
+        # the table's columns start after its frame and its row-number column
+        left = self.table.frameWidth() + (self.table.verticalHeader().width()
+                                          if self.table.verticalHeader().isVisible() else 0)
+        right = left + header.viewport().width()
         pal = self.palette()
         base, alt = pal.color(QPalette.ColorRole.Button), pal.color(QPalette.ColorRole.Midlight)
+        font = painter.font()
+        font.setBold(True)
+        painter.setFont(font)
         for n, (label, first, last) in enumerate(self.groups):
-            x0 = self.sectionViewportPosition(first)
-            x1 = self.sectionViewportPosition(last) + self.sectionSize(last)
-            if x1 < 0 or x0 > self.viewport().width():
+            x0 = left + header.sectionViewportPosition(first)
+            x1 = left + header.sectionViewportPosition(last) + header.sectionSize(last)
+            x0, x1 = max(x0, left), min(x1, right)
+            if x1 <= x0:
                 continue
-            rect = QRect(x0, 0, x1 - x0, band)
+            rect = QRect(x0, 0, x1 - x0, self.height())
             painter.fillRect(rect, alt if n % 2 else base)
             painter.setPen(pal.color(QPalette.ColorRole.Mid))
-            painter.drawRect(rect.adjusted(0, 0, -1, -1))
+            painter.drawLine(rect.topRight(), rect.bottomRight())
+            painter.drawLine(rect.bottomLeft(), rect.bottomRight())
             painter.setPen(pal.color(QPalette.ColorRole.ButtonText))
-            font = painter.font()
-            font.setBold(True)
-            painter.setFont(font)
-            # keep the name in view while the block is scrolled partly out of sight
-            visible = rect.intersected(QRect(0, 0, self.viewport().width(), band)).adjusted(6, 0, -6, 0)
-            text = painter.fontMetrics().elidedText(label, Qt.TextElideMode.ElideRight, max(visible.width(), 0))
-            painter.drawText(visible, Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft, text)
+            text = painter.fontMetrics().elidedText(label, Qt.TextElideMode.ElideRight, max(rect.width() - 8, 0))
+            painter.drawText(rect, Qt.AlignmentFlag.AlignCenter, text)     # once, centred over the visible part
         painter.end()

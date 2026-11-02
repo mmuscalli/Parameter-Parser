@@ -21,7 +21,7 @@ from parameter_extractor.schemas.row_schema import ExtractedRow
 
 ROW_KEYS = ("full_id", "set_id", "sample_id", "entry_number")   # identify the row; not observations
 OBSERVATION_FIELDS = ["full_id", "set_id", "sample_id", "column", "value", "unit",
-                      "origin", "source", "page", "quote", "quote_in_paper", "confidence"]
+                      "origin", "source", "page", "quote", "quote_in_paper", "confidence", "category"]
 
 
 class Observation(BaseModel):
@@ -41,6 +41,7 @@ class Observation(BaseModel):
     # check it; "": no quote
     quote_in_paper: str = ""
     confidence: Optional[str] = None
+    category: str = ""                  # the column's block in the dataset (column_order.py), when written
 
 
 QUOTE_IN_PAPER = {"in text": "yes", "table image": "table image", "not found": "no"}
@@ -99,10 +100,13 @@ def observations_to_records(observations: List[Observation]) -> List[dict]:
     return list(records.values())
 
 
-def write_observations_csv(observations: List[Observation], out_path: Path) -> None:
+def write_observations_csv(observations: List[Observation], out_path: Path, order=None) -> None:
+    """One line per value; `order` (column_order.ColumnOrder) fills each value's category."""
     with open(out_path, "w", newline="") as f:
         writer = csv.writer(f)
         writer.writerow(OBSERVATION_FIELDS)
         for o in observations:
             d = o.model_dump()
+            if order is not None:
+                d["category"] = order.label_of(o.column)
             writer.writerow(["" if d[k] is None else d[k] for k in OBSERVATION_FIELDS])

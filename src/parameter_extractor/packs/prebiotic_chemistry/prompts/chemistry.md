@@ -115,6 +115,15 @@ For each species:
   "n.d.", "-" explained as not detected): `v` null, `det` "not detected" --
   one entry per product and sample. In both cases `u` = the unit the paper's
   other results of that kind use (e.g. "%" in a yield table).
+- When the structure plan has no sets (the results are only in figures), still
+  give the starting solutions -- stock and reaction concentrations -- with
+  `set` '': the figures' rows use them.
+- One name per species, the same in every entry: the vocabulary name when it
+  has the species, else the abbreviation the paper defines for it ("ImpA", not
+  "adenosine 5'-phosphorimidazolide (ImpA)" in one entry and "ImpA" in
+  another). A stock solution used as the reaction solution itself (no other
+  solution added) is that species' starting concentration too: give the
+  mixture value (`b` left out) as well as the stock value.
 - Averages: a value the paper reports as an AVERAGE over several runs or
   replicates (mean, avg., "averaged across triplicate experiments") gets
   `avg` true -- on the table column, or on the species. Individual runs'

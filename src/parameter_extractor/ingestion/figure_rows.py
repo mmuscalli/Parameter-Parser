@@ -144,6 +144,7 @@ def build_figure_rows(
     first_entry_number: int,
     registry=None,
     paper_wide: Optional[dict] = None,
+    abbreviations: Optional[dict] = None,
 ) -> Tuple[List[ExtractedRow], List[str], List[NewVariable]]:
     """Returns (rows, problems, new_variables). A series is left out, with a
     reason in `problems`, if its panel isn't calibrated or neither axis has a
@@ -183,7 +184,9 @@ def build_figure_rows(
             for sp in series.initial_species:
                 if sp.concentration_mM is None or not sp.name:
                     continue
-                from parameter_extractor.names import match_species
+                from parameter_extractor.names import match_species, preferred_name
+                if abbreviations:                  # the paper's one name for it, as in the chemistry
+                    sp = sp.model_copy(update={"name": preferred_name(sp.name, abbreviations)})
                 matched = match_species(sp.name)
                 if matched and matched[0] != sp.name:
                     sp = sp.model_copy(update={"name": matched[0]})

@@ -169,7 +169,7 @@ def test_full_run_fills_results():
         assert headers[:4] == ["entry_number", "full_id", "set_id", "sample_id"]
         assert headers.index("paper_title") < headers.index("experiment_type") < headers.index("duration_hr") \
             < headers.index("initial_NaCl_aq_mM") < headers.index("sampled_2peptide_Gly_%yield") < headers.index("source_notes")
-        bands = {label: (first, last) for label, first, last in w.rows_header.groups}
+        bands = {label: (first, last) for label, first, last in w.rows_band.groups}
         assert list(bands)[:3] == ["Row", "Metadata", "Experimental Methodology"] and bands["Row"] == (0, 3)
         assert header_items[4].text() == "paper_title" and "Metadata" in header_items[4].toolTip()
         tip = w.rows_table.item(0, headers.index("sampled_2peptide_Gly_%yield")).toolTip()
