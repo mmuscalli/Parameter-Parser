@@ -1061,7 +1061,7 @@ def finish(
     for column, v in known:
         conversion_problems += write_values(rows, column, [v])[1]
         accepted.append({"name": v.name, "kind": v.kind, "column": column, "values": 1,
-                         "how": "recognised from an earlier review"})
+                         "how": "recognised from an earlier review", "category": v.category})
     groups = group_new_variables(pending)
     unfound = _unfound_terms(ex.term_search)
     # suggestions off: only what the user asked about (search terms) and assumed values are reviewed
@@ -1076,7 +1076,8 @@ def finish(
         d = by_key.get((g.kind, g.alias_name))
         if g not in left_out and d:
             accepted.append({"name": g.name, "kind": g.kind, "column": d.column.strip(),
-                             "values": len(g.values), "how": f"accepted in review ({d.action})"})
+                             "values": len(g.values), "how": f"accepted in review ({d.action})",
+                             "category": g.category})
             if g.kind == "assumed_value":
                 v = g.values[0]
                 paper_flags.append(Flag(
@@ -1152,7 +1153,8 @@ def finish(
     observations_path = ctx.run_dir / f"{ex.paper_id}_observations.csv"
     write_observations_csv(observations, observations_path)
     csv_path = ctx.run_dir / f"{ex.paper_id}_extracted.csv"
-    write_template_csv(observations_to_records(observations), csv_path)
+    write_template_csv(observations_to_records(observations), csv_path,
+                       column_categories={a["column"]: a.get("category", "") for a in accepted}, registry=registry)
 
     gold_score = None
     if settings.USE_GOLD_STANDARD:  # OFF until the curated subset exists

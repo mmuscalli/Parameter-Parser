@@ -10,11 +10,19 @@
   "units": {"set": "planetary system", "sample": "planet", "row": "object model instance"},
   "compact_text": true,
   "variable_categories": [
-    {"id": "observations", "label": "Observations & Data", "value_type": "any", "max_words": 12,
+    {"id": "fitting", "label": "Fitting models", "model_assigns": false, "table_order": 60, "description": "how each solution was fitted (pl_fit*, st_fit*)", "patterns": ["^(pl|st)_fit"]},
+    {"id": "discovery", "label": "Discovery", "model_assigns": false, "table_order": 25, "description": "discovery method, year, facility and detection flags", "columns": ["discoverymethod", "rv_flag", "pul_flag", "ptv_flag", "tran_flag", "ast_flag", "obm_flag", "micro_flag", "etv_flag", "ima_flag", "dkin_flag", "ttv_flag"], "patterns": ["^disc_"]},
+    {"id": "planet", "label": "Planet parameters", "model_assigns": false, "table_order": 30, "description": "the planet's orbital and physical parameters", "patterns": ["^pl_"]},
+    {"id": "star", "label": "Stellar parameters", "model_assigns": false, "table_order": 40, "description": "the host star's parameters", "patterns": ["^st_"]},
+    {"id": "system", "label": "System and position", "model_assigns": false, "table_order": 50, "description": "system counts, position, distance and photometry", "columns": ["cb_flag", "ra", "rastr", "dec", "decstr", "glat", "glon", "elat", "elon"], "patterns": ["^sy_"]},
+    {"id": "observations", "table_order": 70, "label": "Observations & Data", "value_type": "any", "max_words": 12,
      "description": "the data behind the results: facilities and instruments, observing campaigns and dates, number of RVs / transits / epochs, time baseline, cadence, exposure times, signal-to-noise"},
-    {"id": "stellar_activity", "label": "Stellar Activity", "value_type": "any", "max_words": 12,
+    {"id": "stellar_activity", "table_order": 75, "label": "Stellar Activity", "value_type": "any", "max_words": 12,
      "description": "the host star's activity as measured: activity indices (log R'HK, S-index, H-alpha), rotation or spot signals, flares, activity cycles, and whether they correlate with the planet signal"},
-    {"id": "data_reduction", "label": "Data Reduction and Software", "value_type": "text", "max_words": 15,
+    {"id": "data_reduction", "table_order": 80, "label": "Data Reduction and Software", "value_type": "text", "max_words": 15,
      "description": "how the data were prepared before fitting and the software used: reduction pipelines, outlier removal or sigma clipping, detrending, removing stellar activity (GP, linear decorrelation), jitter terms, binning; software for reduction and modelling"}
-  ]
+  ],
+  "category_columns": {
+    "metadata": {"columns": ["pl_name", "hostname", "pl_letter", "hd_name", "hip_name", "tic_id", "gaia_dr2_id", "gaia_dr3_id", "default_flag", "soltype", "pl_controv_flag", "pl_refname", "rowupdate", "releasedate"]}
+  }
 }

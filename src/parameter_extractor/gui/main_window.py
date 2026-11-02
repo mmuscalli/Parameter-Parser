@@ -43,16 +43,10 @@ DEFAULT_OUTPUT_DIR = Path.home() / "Documents" / "Parameter Extractor"
 FLAGGED_ROW_COLOR = QColor(255, 243, 205)   # soft amber, readable in light and dark themes
 ARCHIVE_ROW_COLOR = QColor(212, 237, 218)   # soft green: the row (fit) the Exoplanet Archive took
 ARCHIVE_DIFF_COLOR = QColor(255, 196, 140)  # orange: a value that differs from the archive's
+GROUP_TINT = QColor(110, 140, 210, 28)       # every other block of columns (category), faint in either theme
 MAX_COLUMN_WIDTH = 260
 # Rows tab column order: identify the row, then the measured data, then the
 # paper-level details that repeat on every row (DOI, title, ...).
-LEADING_COLUMNS = ["full_id", "set_type", "duration_hr", "initial_temperature_C",
-                   "sampled_temperature_C", "sampled_2peptide_Gly_%yield",
-                   "sampled_3peptide_Gly_%yield", "extraction_confidence"]
-TRAILING_COLUMNS = ["set_id", "sample_id", "entry_number", "experiment_type", "solution_type",
-                    "vessel_material", "solvent_name", "analysis_method", "headspace_gas_name",
-                    "paper_DOI", "paper_title", *[f"author{i}" for i in range(1, 8)], "year_published",
-                    "journal_published", "source_notes"]
 PRIVACY_NOTE = ("The paper's text, and images of its table pages, are sent to Anthropic's API "
                 "to extract the data. API usage is billed to the key you enter.")
 
@@ -375,6 +369,9 @@ class MainWindow(QMainWindow):
         tabs = QTabWidget()
 
         self.rows_table = QTableWidget()
+        from parameter_extractor.gui.widgets import GroupedHeader
+        self.rows_header = GroupedHeader(self.rows_table)        # a band naming each block of columns
+        self.rows_table.setHorizontalHeader(self.rows_header)
         self.rows_table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
         self.rows_table.setAlternatingRowColors(True)
         self.rows_legend = QLabel(wordWrap=True)
@@ -844,19 +841,38 @@ class MainWindow(QMainWindow):
             reader = list(csv.reader(f))
         header, body = reader[0], reader[1:]
         non_empty = [h for i, h in enumerate(header) if any(r[i] for r in body)]
-        lead = [h for h in LEADING_COLUMNS if h in non_empty]
-        trail = [h for h in TRAILING_COLUMNS if h in non_empty]
-        middle = [h for h in non_empty if h not in lead and h not in trail]  # species columns
-        keep = [header.index(h) for h in lead + middle + trail]
+        keep = [header.index(h) for h in non_empty]       # the CSV's order: column_order.py
+        from parameter_extractor import packs
+        from parameter_extractor.column_order import ColumnOrder
+        from parameter_extractor.registry import VariableRegistry
+        run_pack = packs.available().get(self.pack_combo.currentData() or "")   # locked during the run
+        try:
+            order = ColumnOrder(pack=run_pack, registry=VariableRegistry(self.registry_path),
+                                chosen={a["column"]: a.get("category", "") for a in result.accepted_variables})
+        except Exception:                   # the order is a convenience: never in the way of the results
+            order = None
         t = self.rows_table
         t.clear()
         t.setColumnCount(len(keep))
         t.setRowCount(len(body))
-        t.setHorizontalHeaderLabels([header[i] for i in keep])
+        # each block of columns (Row, Metadata, Experimental Methodology, ...) named in a band above its
+        # columns; alternate blocks lightly tinted
+        tinted, groups = set(), []
+        for c, i in enumerate(keep):
+            label = order.label_of(header[i]) if order else ""
+            if not groups or groups[-1][0] != label:
+                groups.append([label, c, c])
+            groups[-1][2] = c
+            item = QTableWidgetItem(header[i])
+            item.setData(Qt.ItemDataRole.UserRole, header[i])
+            if label:
+                item.setToolTip(f"{header[i]} ({label})")
+            t.setHorizontalHeaderItem(c, item)
+            if (len(groups) - 1) % 2:
+                tinted.add(c)
+        self.rows_header.set_groups([tuple(g) for g in groups] if order else [])
         id_col = header.index("full_id")
         provenance = {r.full_id: r.provenance for r in result.rows}
-        from parameter_extractor import packs
-        run_pack = packs.available().get(self.pack_combo.currentData() or "")   # locked during the run
         row_word = packs.row_word(run_pack) if run_pack else "row"
         adopted, differing = self._archive_marks(result.run_dir, row_word)
         name_col = header.index("pl_name") if "pl_name" in header else None
@@ -872,6 +888,8 @@ class MainWindow(QMainWindow):
                 if name_col is not None else {}
             for c, i in enumerate(keep):
                 item = QTableWidgetItem(row[i])
+                if c in tinted:
+                    item.setBackground(QBrush(GROUP_TINT))
                 tip = self._provenance_tip(prov.get(header[i])) if row[i] else ""
                 if not tip and len(row[i]) > 30:            # no provenance (source_notes ...): the full text
                     tip = row[i]

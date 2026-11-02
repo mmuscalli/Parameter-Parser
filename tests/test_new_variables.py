@@ -109,7 +109,10 @@ def test_review_decisions_and_registry_memory():
         assert ("parameter", "stirring rate", "stirring_rate_rpm", 1) in seen["groups"]   # unit suffix (category format)
 
         header, rows = _csv(result)
-        assert header.index("initial_RbCl_aq_mM") > header.index("sampled_DKP_Gly_%yield")   # after template block
+        # accepted columns sit in their category's block (column_order.py): the new species with the starting
+        # species, the stirring rate with the reaction conditions
+        assert header.index("stirring_rate_rpm") < header.index("initial_NaCl_aq_mM") \
+            < header.index("initial_RbCl_aq_mM") < header.index("sampled_DKP_Gly_%yield")
         set1 = [r for r in rows if r["set_id"] == "001001"]
         assert all(r["initial_RbCl_aq_mM"] == "200.0" for r in set1)
         assert all(r["initial_RbCl_aq_mM"] == "" for r in rows if r["set_id"] != "001001")

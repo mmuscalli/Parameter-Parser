@@ -491,24 +491,27 @@ PROVENANCE_COLUMNS = ["yield_below_threshold_note", "source_notes", "extraction_
 OPTIONAL_PROVENANCE_COLUMNS = ["original_data_reference"]
 
 
-def ordered_columns(present: set) -> List[str]:
-    """ALL of PaperDataTemplate's columns, in its exact order (empty ones too),
-    so the rows can be pasted straight into the template. After that block:
-    the app's standard columns that are filled (schemas/standard_columns.json,
-    in their order), then any other columns (accepted in review), then our
-    provenance columns."""
+def ordered_columns(present: set, column_categories: Optional[dict] = None, registry=None) -> List[str]:
+    """The pack's template columns (all of them, empty ones too, so every paper's CSV has the same columns),
+    the app's standard columns that are filled, any other filled columns (accepted in review) and our
+    provenance columns -- in the order of column_order.py (Mickey, 2026-11-02): row identifiers, then
+    one block per variable category (metadata, methodology, conditions, ..., starting species, products,
+    other), provenance last. `column_categories`: the categories this run's review accepted columns under."""
+    from parameter_extractor.column_order import ColumnOrder
     from parameter_extractor.registry import standard_columns
     provenance = set(PROVENANCE_COLUMNS) | set(OPTIONAL_PROVENANCE_COLUMNS)
     standard = [c for c in standard_columns() if c in present]
     extras = sorted(c for c in present
                     if c not in _template_set() and c not in provenance and c not in standard)
     optional = [c for c in OPTIONAL_PROVENANCE_COLUMNS if c in present]
-    return template_columns() + standard + extras + PROVENANCE_COLUMNS + optional
+    columns = template_columns() + standard + extras + PROVENANCE_COLUMNS + optional
+    return ColumnOrder(chosen=column_categories, registry=registry).ordered(columns)
 
 
-def write_template_csv(records: List[dict], out_path: Path) -> None:
+def write_template_csv(records: List[dict], out_path: Path, column_categories: Optional[dict] = None,
+                       registry=None) -> None:
     present = {k for r in records for k, v in r.items() if v not in (None, "")}
-    header = ordered_columns(present)
+    header = ordered_columns(present, column_categories, registry)
     with open(out_path, "w", newline="") as f:
         writer = csv.writer(f)
         writer.writerow(header)
@@ -516,9 +519,10 @@ def write_template_csv(records: List[dict], out_path: Path) -> None:
             writer.writerow(["" if r.get(c) is None else r.get(c) for c in header])
 
 
-def write_csv(rows: List[ExtractedRow], out_path: Path) -> None:
+def write_csv(rows: List[ExtractedRow], out_path: Path, column_categories: Optional[dict] = None,
+              registry=None) -> None:
     """The dataset CSV, with PaperDataTemplate.xlsx's column names and order --
     generated from the long-format record (ingestion/observations.py), the
     run's canonical data."""
     from parameter_extractor.ingestion.observations import observations_to_records, rows_to_observations
-    write_template_csv(observations_to_records(rows_to_observations(rows)), out_path)
+    write_template_csv(observations_to_records(rows_to_observations(rows)), out_path, column_categories, registry)

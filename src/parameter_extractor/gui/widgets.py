@@ -2,7 +2,9 @@
 from __future__ import annotations
 import html
 
-from PySide6.QtWidgets import (QDialog, QDialogButtonBox, QLabel, QLineEdit, QPlainTextEdit, QStyle,
+from PySide6.QtCore import QRect, QSize, Qt
+from PySide6.QtGui import QPainter, QPalette
+from PySide6.QtWidgets import (QDialog, QDialogButtonBox, QHeaderView, QLabel, QLineEdit, QPlainTextEdit, QStyle,
                                QVBoxLayout)
 
 
@@ -52,3 +54,57 @@ class ExpandingLineEdit(QLineEdit):
             if new != self.text():
                 self.setText(new)
                 self.editingFinished.emit()
+
+
+class GroupedHeader(QHeaderView):
+    """A table's column header with a band above the column names naming each block of columns
+    (the Rows tab's categories: Row, Metadata, Experimental Methodology, ...). `set_groups([(label, first,
+    last)])` with section indexes; no groups = an ordinary header."""
+
+    def __init__(self, parent=None):
+        super().__init__(Qt.Orientation.Horizontal, parent)
+        self.groups: list = []
+        self.setSectionsClickable(True)
+
+    def set_groups(self, groups: list) -> None:
+        self.groups = list(groups)
+        self.updateGeometry()
+        self.viewport().update()
+
+    def _band(self) -> int:
+        return self.fontMetrics().height() + 8 if self.groups else 0
+
+    def sizeHint(self) -> QSize:
+        size = super().sizeHint()
+        size.setHeight(size.height() + self._band())
+        return size
+
+    def paintSection(self, painter: QPainter, rect: QRect, index: int) -> None:
+        super().paintSection(painter, rect.adjusted(0, self._band(), 0, 0), index)
+
+    def paintEvent(self, event) -> None:
+        super().paintEvent(event)
+        if not self.groups:
+            return
+        painter = QPainter(self.viewport())
+        band = self._band()
+        pal = self.palette()
+        base, alt = pal.color(QPalette.ColorRole.Button), pal.color(QPalette.ColorRole.Midlight)
+        for n, (label, first, last) in enumerate(self.groups):
+            x0 = self.sectionViewportPosition(first)
+            x1 = self.sectionViewportPosition(last) + self.sectionSize(last)
+            if x1 < 0 or x0 > self.viewport().width():
+                continue
+            rect = QRect(x0, 0, x1 - x0, band)
+            painter.fillRect(rect, alt if n % 2 else base)
+            painter.setPen(pal.color(QPalette.ColorRole.Mid))
+            painter.drawRect(rect.adjusted(0, 0, -1, -1))
+            painter.setPen(pal.color(QPalette.ColorRole.ButtonText))
+            font = painter.font()
+            font.setBold(True)
+            painter.setFont(font)
+            # keep the name in view while the block is scrolled partly out of sight
+            visible = rect.intersected(QRect(0, 0, self.viewport().width(), band)).adjusted(6, 0, -6, 0)
+            text = painter.fontMetrics().elidedText(label, Qt.TextElideMode.ElideRight, max(visible.width(), 0))
+            painter.drawText(visible, Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft, text)
+        painter.end()

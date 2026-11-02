@@ -304,7 +304,7 @@ def apply_decisions(rows: List[ExtractedRow], groups: List[VariableGroup],
         apply_decisions.problems += problems
         if d.remember and g.kind != "assumed_value":     # a guess is decided per paper, never remembered
             if d.action == "new_column":
-                registry.add_column(column, g.kind, note=f"accepted for '{g.name}'")
+                registry.add_column(column, g.kind, note=f"accepted for '{g.name}'", category=g.category)
             registry.add_alias(g.kind, g.alias_name, column)
             cid = next((v.pubchem_cid for v in g.values if v.pubchem_cid), 0)
             if g.kind == "species" and cid:

@@ -35,6 +35,11 @@ class VariableCategory(BaseModel):
     max_words: int = 0                       # text values: longer gets a note (0 = no limit)
     sources: List[str] = Field(default_factory=list)
     model_assigns: Optional[bool] = None     # default: only categories without sources
+    # the dataset's columns in this category, for the column order (column_order.py): by name, and by
+    # regular expression; table_order places the category's block (lower = further left)
+    columns: List[str] = Field(default_factory=list)
+    patterns: List[str] = Field(default_factory=list)
+    table_order: int = 500
 
     @property
     def assignable(self) -> bool:
@@ -61,7 +66,15 @@ def categories(pack: Optional[Pack] = None) -> List[VariableCategory]:
     shared = [VariableCategory(**c) for c in json.loads(SHARED_FILE.read_text())["categories"]]
     own = [VariableCategory(**c) for c in pack.manifest.variable_categories]
     ids = {c.id for c in own}
-    return own + [c for c in shared if c.id not in ids] + [FIGURE, ASSUMED]
+    cats = own + [c for c in shared if c.id not in ids]
+    # the pack's columns for any category, shared ones included ("category_columns" in pack.json)
+    for c in cats:
+        extra = pack.manifest.category_columns.get(c.id, {})
+        c.columns = list(extra.get("columns", [])) + [x for x in c.columns if x not in extra.get("columns", [])]
+        c.patterns = list(extra.get("patterns", [])) + c.patterns
+        if "table_order" in extra:
+            c.table_order = extra["table_order"]
+    return cats + [FIGURE, ASSUMED]
 
 
 def by_id(category_id: str, pack: Optional[Pack] = None) -> Optional[VariableCategory]:

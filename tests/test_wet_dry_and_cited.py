@@ -75,12 +75,13 @@ def test_cycling_fields_and_cited_data():
         with open(result.csv_path, newline="") as f:
             reader = csv.DictReader(f)
             header, rows = reader.fieldnames, list(reader)
-        n_template = 208
-        # standard columns straight after the template block, then provenance; only filled ones
-        assert header[n_template:n_template + 4] == ["data_location", "wet_phase_duration_hr",
-                                                     "wet_phase_relative_humidity_pct", "dry_phase_temperature_C"]
+        # the wet-dry columns (only filled ones) in the reaction conditions block, in the pack's order; the
+        # cited-data reference with the metadata; provenance last (column_order.py)
+        i = header.index("wet_phase_duration_hr")
+        assert header[i:i + 3] == ["wet_phase_duration_hr", "wet_phase_relative_humidity_pct", "dry_phase_temperature_C"]
+        assert header.index("duration_hr") < i < header.index("analysis_method")
         assert "cycle_number" not in header and "cycle_duration_hr" not in header
-        assert header[-1] == "original_data_reference"
+        assert header.index("original_data_reference") < header.index("set_type") and header[-1] == "extraction_confidence"
         set1 = [r for r in rows if r["set_id"] == "001001"]
         assert all(r["wet_phase_duration_hr"] == "20.0" and r["dry_phase_temperature_C"] == "130.0"
                    and r["wet_phase_relative_humidity_pct"] == "70.0" for r in set1)

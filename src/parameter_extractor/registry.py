@@ -167,9 +167,10 @@ class VariableRegistry:
 
     # ---- additions (from the review screen) -----------------------------------
 
-    def add_column(self, column: str, kind: str, note: str = "") -> None:
+    def add_column(self, column: str, kind: str, note: str = "", category: str = "") -> None:
         if column not in self._base_set and column not in self.added_columns:
-            self.added_columns[column] = {"kind": kind, "added": date.today().isoformat(), "note": note}
+            self.added_columns[column] = {"kind": kind, "added": date.today().isoformat(), "note": note,
+                                          **({"category": category} if category else {})}
             self._changed = True
 
     def add_alias(self, kind: str, name: str, column: str) -> None:

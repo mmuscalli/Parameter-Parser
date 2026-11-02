@@ -112,7 +112,11 @@ def test_a_second_pack_runs_end_to_end():
             with open(result.csv_path) as f:
                 rows = list(csv.DictReader(f))
             header = list(rows[0])
-            assert header[:7] == ["full_id", "pl_name", "hostname", "pl_orbper", "pl_bmassj", "st_mass", "paper_title"]
+            # identifiers, the shared Metadata block, then the pack's columns no category claims (Other), in
+            # template order (column_order.py)
+            assert header[:4] == ["entry_number", "full_id", "set_id", "sample_id"] and header[4] == "paper_title"
+            assert [c for c in header if c in ("pl_name", "hostname", "pl_orbper", "pl_bmassj", "st_mass")] == \
+                ["pl_name", "hostname", "pl_orbper", "pl_bmassj", "st_mass"]
             assert [r["pl_orbper"] for r in rows] == ["326.03", "323.6", "1000.0"]          # one row per planet
             assert [r["st_mass"] for r in rows] == ["2.7", "", ""] and rows[0]["pl_bmassj"] == "19.4"
             assert not any(c.startswith(("initial_", "sampled_")) for c in header)          # no chemistry columns

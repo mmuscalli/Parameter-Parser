@@ -187,7 +187,9 @@ class PaperQueue:
         out = {"folder": self.out_dir, "papers": len(self.papers), "finished": len(finished), "rows": len(rows)}
         if rows:
             out["csv"] = self.out_dir / "combined_extracted.csv"
-            write_csv(rows, out["csv"])
+            # each paper's accepted columns keep the category they were accepted under
+            chosen = {a["column"]: a.get("category", "") for p in finished for a in p.result.accepted_variables}
+            write_csv(rows, out["csv"], column_categories=chosen)
             observations = [p.result.observations_path for p in finished if p.result.observations_path]
             if observations:
                 out["observations"] = self.out_dir / "combined_observations.csv"

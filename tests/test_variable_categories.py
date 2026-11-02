@@ -36,14 +36,19 @@ def test_categories_per_pack():
     packs.activate("prebiotic_chemistry")
     ids = [c.id for c in vc.categories()]
     assert ids == ["starting_species", "products", "solution_prep", "conditions", "analysis", "metadata",
-                   "methodology", "figure", "assumed"]
-    assert [c.id for c in vc.assignable()] == ["solution_prep", "conditions", "analysis", "metadata", "methodology"]
+                   "methodology", "other", "figure", "assumed"]
+    assert [c.id for c in vc.assignable()] == ["solution_prep", "conditions", "analysis", "metadata", "methodology",
+                                               "other"]
     assert vc.for_source("species", "sampled") == "products" and vc.for_source("species", "initial") == "starting_species"
     assert vc.for_source("species") == "starting_species" and vc.for_source("added_solution") == "solution_prep"
     try:
         packs.activate("exoplanets")
-        assert [c.id for c in vc.categories()] == ["observations", "stellar_activity", "data_reduction", "metadata",
-                                                   "methodology", "figure", "assumed"]
+        # its column-only groups (column order) first, then the suggestion categories; only those are the model's
+        assert [c.id for c in vc.categories()] == ["fitting", "discovery", "planet", "star", "system", "observations",
+                                                   "stellar_activity", "data_reduction", "metadata", "methodology",
+                                                   "other", "figure", "assumed"]
+        assert [c.id for c in vc.assignable()] == ["observations", "stellar_activity", "data_reduction", "metadata",
+                                                   "methodology", "other"]
         assert vc.guess("45 min") == "methodology"       # no number category there
         spec = load_specs()["system_and_discovery"]      # the step that collects them
         rule = next(r for r in spec._field_rules() if "`cat` its category" in r)
@@ -64,7 +69,7 @@ def test_a_pack_can_replace_a_shared_category():
                                     {"id": "observations", "label": "Observations", "value_type": "any"}]}))
         pack = packs.Pack(folder)
         cats = vc.categories(pack)
-        assert [c.id for c in cats] == ["metadata", "observations", "methodology", "figure", "assumed"]
+        assert [c.id for c in cats] == ["metadata", "observations", "methodology", "other", "figure", "assumed"]
         assert cats[0].label == "Catalogue data"
 
 
@@ -72,7 +77,8 @@ def test_open_ended_items_carry_a_category_unless_suggestions_are_off():
     spec = load_specs()["experimental_conditions"]
     _, result = spec.models()
     other = next(d for name, d in result.model_json_schema()["$defs"].items() if name.endswith("Other"))
-    assert other["properties"]["cat"]["enum"] == ["solution_prep", "conditions", "analysis", "metadata", "methodology"]
+    assert other["properties"]["cat"]["enum"] == ["solution_prep", "conditions", "analysis", "metadata", "methodology",
+                                                  "other"]
     assert "cat" in other["required"] and "default" not in other["properties"]["cat"]
     rule = next(r for r in spec._field_rules() if "`cat` its category" in r)
     assert "`conditions` (" in rule and "one number with its unit" in rule

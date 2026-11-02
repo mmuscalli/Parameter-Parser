@@ -63,6 +63,9 @@ class PackManifest(BaseModel):
     focused_row_plan: bool = False
     # categories of suggested new variables beyond the shared ones (variable_categories.py)
     variable_categories: List[dict] = Field(default_factory=list)
+    # columns (and patterns, table_order) the pack puts in a category -- its own or a shared one -- for the
+    # column order of the CSV and the Rows tab (column_order.py)
+    category_columns: Dict[str, dict] = Field(default_factory=dict)
 
 
 class Pack:

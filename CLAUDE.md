@@ -1625,3 +1625,30 @@ His run: the planner gave no y column (he typed 'avg_max_linear_oligomer_length_
   not just the template (vessel_sealed, positive_control were not offered).
 - Live (Standard, $0.19) + Mickey's Fig. 3 / Fig. A2 digitizations: 7 rows, all 25 °C / 1 bar / both controls.
   tests/test_ambient_controls.py.
+
+## Column order by category (2026-11-02, Mickey)
+
+The CSV (and the Rows tab) is no longer in PaperDataTemplate's order (the paste-parity decision of 2026-10-14
+is superseded): `column_order.ColumnOrder` -- entry_number, full_id, set_id, sample_id; then one block per
+variable category by `table_order`; provenance (yield_below_threshold_note, source_notes, extraction_confidence)
+last. All template columns are still written (empty ones too), so every paper's CSV has the same columns.
+- Configured, not coded: `VariableCategory.columns` (names), `.patterns` (regex), `.table_order`; pack.json
+  `category_columns` {category id: {columns, patterns, table_order}} adds to any category (shared included);
+  column-only categories = model_assigns false (never offered to the model). Shared file: metadata (10; paper
+  columns, data_location, original_data_reference), methodology (20), NEW `other` (900, assignable: "only
+  when no other category fits"). Prebiotic: methodology (set_type, experiment/solution type, vessel, solvent,
+  controls), conditions 30 (duration, T/P/pH, volumes, flow, solid material, wet-dry), analysis 40
+  (analysis_method), solution_prep 50 (^added_), starting_species 60 (^(initial|stock)_, AA identity),
+  products 70 (^(total_)?sampled_, ^max_.*length, peptide flags). Exoplanets: metadata (pl_name, hostname, ids,
+  pl_refname...), discovery 25, planet 30 (^pl_), star 40, system 50, fitting 60 (^(pl|st)_fit, matched before
+  ^pl_ by definition order), then the suggestion categories 70-80.
+- Placement: explicit column > the category it was accepted under (this run: accepted[*].category -> 
+  write_template_csv(column_categories=); remembered: registry added_columns[col]["category"], add_column(category=))
+  > its base column (longest known prefix + '_' / archive suffix err1/lim/mode/alt/prior; range/avg markers
+  stripped) > first matching pattern (definition order) > Other. In a block: explicit order, template, standard,
+  name; derived after the value: range/avg, then err (+ before -), modes, alternatives, priors.
+- Rows tab: CSV order minus empty columns; header text "Category\ncolumn" on a block's first column ("\ncolumn"
+  otherwise; the column name in UserRole), alternate blocks tinted (GROUP_TINT, flag/archive colours win).
+  LEADING/TRAILING_COLUMNS gone.
+- Reference CSVs (runs/reference/*, runs/*_auto) reordered by a checker (same cells per row, new order; backup
+  in the session scratchpad); replays reproduce them byte for byte. tests/test_column_order.py.

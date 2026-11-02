@@ -1,19 +1,39 @@
 {
-  "_comment": "Categories of suggested new variables that every pack gets (variable_categories.py). A pack adds its own, or replaces one of these by id, with \"variable_categories\" in its pack.json. value_type: number (one number with a unit; the column gets the unit's suffix and values are converted), text (words, at most max_words), any (a number if it is one, else short text). sources: where values come from without the model choosing (species, species:initial, species:sampled, added_solution); a category without sources (or with \"model_assigns\": true) is one the model can assign. Pack categories are listed first.",
+  "_comment": "Categories of suggested new variables that every pack gets (variable_categories.py). A pack adds its own, or replaces one of these by id, with \"variable_categories\" in its pack.json. value_type: number (one number with a unit; the column gets the unit's suffix and values are converted), text (words, at most max_words), any (a number if it is one, else short text). sources: where values come from without the model choosing (species, species:initial, species:sampled, added_solution); a category without sources (or with \"model_assigns\": true) is one the model can assign. Pack categories are listed first. Column order (column_order.py): a category's `columns` (by name) and `patterns` (regular expressions) say which dataset columns sit in its block, and `table_order` where the block goes (lower = further left); a pack adds columns to any category with \"category_columns\" in its pack.json. Columns nothing claims go in Other.",
   "categories": [
     {
       "id": "metadata",
       "label": "Metadata",
       "description": "about the study or its materials rather than one experiment's conditions: chemical suppliers and purities, sample or material origin, data or code availability",
       "value_type": "text",
-      "max_words": 12
+      "max_words": 12,
+      "table_order": 10,
+      "columns": [
+        "paper_title",
+        "author_list",
+        "year_published",
+        "journal_published",
+        "paper_DOI",
+        "paper_arxiv_id",
+        "data_location",
+        "original_data_reference"
+      ]
     },
     {
       "id": "methodology",
       "label": "Experimental Methodology",
       "description": "how the experiment was set up and run, in words: apparatus, heating or mixing method, sealing, atmosphere handling, sterilisation, sampling procedure",
       "value_type": "any",
-      "max_words": 10
+      "max_words": 10,
+      "table_order": 20
+    },
+    {
+      "id": "other",
+      "label": "Other",
+      "description": "only when no other category fits: anything else worth recording",
+      "value_type": "any",
+      "max_words": 12,
+      "table_order": 900
     }
   ]
 }

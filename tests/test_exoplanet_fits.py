@@ -183,9 +183,11 @@ def test_one_row_per_solution_with_fit_columns():
             assert rv["st_fitmodels"] == "PARSEC v1.2S; ATLAS9" and rv["st_fitbands"] == "Hipparcos V, B-V"
             assert (joint["st_masspriortype"], joint["st_masspriorcen"], joint["st_masspriorwid"]) == ("gaussian", "2.4", "0.2")
             assert rv["st_masspriortype"] == ""
-            # columns: template block, then the pack's standard columns in their order
-            assert header.index("pl_fitlabel") > header.index("paper_title") > header.index("pl_name")
-            assert header.index("pl_fitlabel") < header.index("st_fitlabel") < header.index("pl_orbeccenpriortype")
+            # columns by category (column_order.py): metadata, planet (a parameter's priors after it), star, ...,
+            # the fitting models last
+            assert header.index("pl_name") < header.index("paper_title") < header.index("pl_orbeccen") \
+                < header.index("pl_orbeccenpriortype") < header.index("st_masspriortype") \
+                < header.index("pl_fitlabel") < header.index("st_fitlabel")
             # flags: unknown row, EXOFAST without a version, a medium-confidence model
             fit_msgs = [f["message"] for f in flags if f["kind"] == "fit_model"]
             assert any("'HD 99999 b'" in m for m in fit_msgs) and any("EXOFAST" in m for m in fit_msgs)

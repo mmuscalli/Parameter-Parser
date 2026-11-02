@@ -161,10 +161,17 @@ def test_full_run_fills_results():
         assert any("step" in t for t in SkipAllFigures.statuses), SkipAllFigures.statuses
         assert "Fig. 3: skipped" in w.summary_text.toPlainText()
         assert w.rows_table.rowCount() == 42
-        headers = [w.rows_table.horizontalHeaderItem(i).text() for i in range(w.rows_table.columnCount())]
+        header_items = [w.rows_table.horizontalHeaderItem(i) for i in range(w.rows_table.columnCount())]
+        headers = [h.data(Qt.ItemDataRole.UserRole) for h in header_items]
         assert "sampled_2peptide_Gly_%yield" in headers and "full_id" in headers
         assert w.flags_tree.topLevelItemCount() >= 1
-        assert headers[0] == "full_id" and headers.index("sampled_2peptide_Gly_%yield") < headers.index("paper_title")
+        # identifiers, then the categories' blocks: metadata ... starting species, then products (column_order.py)
+        assert headers[:4] == ["entry_number", "full_id", "set_id", "sample_id"]
+        assert headers.index("paper_title") < headers.index("experiment_type") < headers.index("duration_hr") \
+            < headers.index("initial_NaCl_aq_mM") < headers.index("sampled_2peptide_Gly_%yield") < headers.index("source_notes")
+        bands = {label: (first, last) for label, first, last in w.rows_header.groups}
+        assert list(bands)[:3] == ["Row", "Metadata", "Experimental Methodology"] and bands["Row"] == (0, 3)
+        assert header_items[4].text() == "paper_title" and "Metadata" in header_items[4].toolTip()
         tip = w.rows_table.item(0, headers.index("sampled_2peptide_Gly_%yield")).toolTip()
         assert tip.startswith("From: chemistry (high confidence)") and "Table 1" in tip, tip
         groups = [w.flags_tree.topLevelItem(i) for i in range(w.flags_tree.topLevelItemCount())]
