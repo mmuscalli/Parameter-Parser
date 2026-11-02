@@ -71,6 +71,12 @@ class PaperContext:
     # strict-grammar size limit can't take them all -- answers are validated here instead
     tools: Dict[str, type] = field(default_factory=dict)
     _definitions: Optional[list] = None
+    last_used: float = 0.0           # when a request last read or wrote the cached paper (it lives 5 min / 1 h)
+
+    def fresh(self, long_lived: bool = False) -> bool:
+        """The cached paper is probably still there: used within the last 4.5 minutes (55 with the 1-hour
+        cache). A later request would pay to cache the whole paper again."""
+        return bool(self.last_used) and time.time() - self.last_used < (3300 if long_lived else 270)
 
     def tool_definitions(self) -> list:
         if self._definitions is None:
@@ -462,6 +468,7 @@ def call_structured(
     max_tokens: Optional[int] = None,
     paper_text: Optional[str] = None,
     cached_prefix: Optional[str] = None,
+    on_paper: bool = False,
 ) -> T:
     """
     Calls the model, constrains its response to `response_model`'s schema via
@@ -480,7 +487,20 @@ def call_structured(
     shared = (paper_text is not None and ctx.paper is not None and ctx.config.prompt_caching
               and paper_text in user_content)
     _streamed.tool = None
-    if shared:
+    if on_paper and ctx.paper is not None and stage in ctx.paper.tools:
+        # a step that reads the cached paper and adds a cached layer of its own (figure_planner, 2026-11-03):
+        # the paper (cached by the extraction steps), then `cached_prefix` -- the same for every figure of the
+        # paper, cached as a second breakpoint --, then this request's images and text
+        cache = {"type": "ephemeral", "ttl": "1h"} if ctx.config.batch_mode else {"type": "ephemeral"}
+        content = (_paper_blocks(ctx.paper, ctx.config.batch_mode)
+                   + [{"type": "text", "text": f"YOUR TASK: {system_prompt}\n\n{cached_prefix or ''}",
+                       "cache_control": cache}]
+                   + (_image_blocks(image_paths) if image_paths else [])
+                   + [{"type": "text", "text": f"{user_content}\n\nAnswer by calling the `{stage}` tool."}])
+        system_prompt = SHARED_SYSTEM
+        _streamed.tool = (stage, ctx.paper.tool_definitions())
+        shared = True                  # the paper's cache was read: keep it marked fresh
+    elif shared:
         # the paper first, identical in every step and cached; the step's own task after it. With
         # tools (`ctx.paper.tools`), every step sends the same tool list and is made to call its own:
         # the API's cache key includes a request's output schema, so a different schema per step
@@ -521,6 +541,8 @@ def call_structured(
             if response.parsed_output is None and response.stop_reason != "refusal":
                 raise errors.MalformedOutputError(stage, f"no structured output; stop_reason="
                                                          f"{response.stop_reason!r}")
+            if shared and ctx.paper is not None:
+                ctx.paper.last_used = time.time()
             break
         except (errors.OutputTruncatedError, errors.MalformedOutputError) as e:
             if attempt == 2:

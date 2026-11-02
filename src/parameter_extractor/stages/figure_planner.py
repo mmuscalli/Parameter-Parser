@@ -95,6 +95,11 @@ def run_figure_planner(
     ctx: RunContext, figure: FigureCandidate, page_texts: List[str], structure_plan: StructurePlan,
     controlled_vocab: List[str], template_columns: List[str],
 ) -> FigurePlan:
+    # on the paper the extraction steps cached (2026-11-03), while that cache is fresh: the whole paper is
+    # read at a tenth of the price instead of a prompt of passages written to a cache of its own
+    paper = ctx.paper
+    on_paper = bool(paper is not None and "figure_planner" in paper.tools and ctx.config.prompt_caching
+                    and paper.fresh(ctx.config.batch_mode))
     prompt = load_prompt(
         "figure_planner",
         FIGURE_ID=figure.figure_id,
@@ -105,7 +110,8 @@ def run_figure_planner(
         TEMPLATE_COLUMNS_JSON=json.dumps(planner_columns(template_columns)),
         FIGURE_PASSAGES=figure_passages(page_texts, figure.number, figure.supplement, figure.prefix),
         # the same for every figure of the paper (no lines left out per figure): part of the cached prefix
-        COMPOSITION_PASSAGES=composition_passages(page_texts),
+        COMPOSITION_PASSAGES=("(the whole paper is given above -- starting compositions are usually in its "
+                              "Methods)") if on_paper else composition_passages(page_texts),
         THIS_FIGURE=FIGURE_SPLIT,
     )
     # everything before the split is the same for every figure of a paper (instructions, structure
@@ -123,6 +129,7 @@ def run_figure_planner(
             response_model=FigurePlan,
             image_paths=[Path(figure.crop_image)],
             cached_prefix=shared,
+            on_paper=on_paper,
         )
         # a data plot needs its coordinate systems: an answer without them (Riggi2023 Fig. 2 once gave only
         # notes) is asked again, once -- the second call reads the cached prefix

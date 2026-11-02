@@ -69,6 +69,11 @@ class RunConfig:
     # Images kept in the run folder (Mickey, 2026-10-31): a crop of every table (tables/, the Tables tab) and
     # of every digitized figure -- on by default; figures that weren't digitized only with
     # save_all_figure_images (off by default: they're rendered for the review, then removed).
+    # figure suggestions read the extraction's cached paper instead of a prompt of their own (while that cache
+    # is fresh). OFF (2026-11-03, measured on Riggi2023): reading the whole cached paper (~45-52K tokens) per
+    # figure costs more than the figure prompt's own ~14K-token cache from the second figure on, and the figure
+    # tool adds ~3.5K tokens to every run's cached prefix -- 0/1/3 figures: +$0.016 / +$0.005 / +$0.028 input
+    figure_suggestions_on_paper: bool = False
     save_images: bool = True
     save_all_figure_images: bool = False
     # Run the extraction steps after the structure plan this many times (1-3) and keep each value by vote

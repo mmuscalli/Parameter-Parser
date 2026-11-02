@@ -424,7 +424,8 @@ def extract_steps(ex: "Extraction") -> "Extraction":
     text = compact_text(parsed.text) if packs.current().manifest.compact_text else parsed.text
     # every paper-reading step gets the same paper first -- cached once, read at a fraction of the
     # price by the steps after the structure planner (api_client, RunConfig.prompt_caching)
-    ctx.paper = PaperContext(text=text, images=list(table_images), tools=_paper_tools(pack, config, terms))
+    ctx.paper = PaperContext(text=text, images=list(table_images),
+                             tools=_paper_tools(pack, config, terms, has_figures=bool(ex.figures)))
     convert_equations = bool(config.equations_to_latex and equations)
     if convert_equations:
         ctx.total_steps += 1            # optional (RunConfig.equations_to_latex), one small call
@@ -571,7 +572,7 @@ def _paper_wide_methodology(ex: "Extraction"):
     return view
 
 
-def _paper_tools(pack, config: RunConfig, terms) -> dict:
+def _paper_tools(pack, config: RunConfig, terms, has_figures: bool = False) -> dict:
     """Every paper-reading step this run may make, with its answer schema -- sent as the same tool
     list in every request (api_client), so all of them share the cached paper. Fixed before the
     structure is planned: optional stages are included unless switched off, triggered or not."""
@@ -588,6 +589,10 @@ def _paper_tools(pack, config: RunConfig, terms) -> dict:
     for name, spec in load_specs().items():
         if config.optional_stages.get(name, "auto") != "off":
             tools[name] = for_run(spec, config.suggest_new_variables).models()[1]
+    if has_figures and config.figure_suggestions_on_paper:
+        # figure suggestions read the paper the extraction steps cached (stages/figure_planner.py): a
+        # request shares the cache only with the same tool list
+        tools["figure_planner"] = FigurePlan
     return tools
 
 

@@ -1736,3 +1736,19 @@ conditions `other` "ImpA stock concentration".
   still refused (lost superscript). truman Table 2's starting Gly was unread before.
 - Test-harness note: replaying the structure step only (make_replay for that stage, real _send for others)
   is the way to isolate a downstream step; a replay of every step except one sends that step no cached paper.
+
+## Figure suggestions on the cached paper: built, measured, OFF (2026-11-03, Mickey's request)
+
+`RunConfig.figure_suggestions_on_paper` (default False): figure_planner reads the extraction's cached paper
+(api_client `call_structured(on_paper=True)`: paper blocks, then the figure instructions as a 2nd cached layer,
+then the figure image + text; answered via the shared tool list -- `_paper_tools(has_figures=)` adds FigurePlan)
+while `PaperContext.fresh()` (used < 4.5 min ago, 55 with the 1-h cache; every shared request refreshes
+`last_used`); composition passages are dropped on that route (whole paper present).
+Measured live, Riggi2023 Standard, Figs. 2, 3, A2 in turn (figure calls; input-only cost, since output varies):
+own prompt $0.074 / $0.024 / $0.012 per figure; on paper $0.063 / $0.035 / $0.024 -- reading the ~45-52K cached
+paper per figure costs more than the figure prompt's own 14K-token cache from the 2nd figure on, and the
+figure tool adds ~3.5K tokens to EVERY run's cached prefix (+$0.016 with no figures). 0/1/3 figures:
++$0.016 / +$0.005 / +$0.028 on paper. Quality no better (it added Methods-wide conditions like 'ambient' per
+series). Kept as an option; the earlier claim that it would save money was wrong.
+Fixes from the runs: convert_condition reads '72 hr (3 days)' (a bracketed restatement) and 'ambient' /
+'room temperature' -> 25 °C, 'ambient' / 'atmospheric' pressure -> 1 bar.

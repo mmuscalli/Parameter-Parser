@@ -117,6 +117,30 @@ def test_written_out_powers_in_table_cells():
     assert _cell_number("10-4") is None and _cell_number("10−4") is None     # a lost superscript: never guessed
 
 
+def test_figure_suggestions_on_the_cached_paper_are_an_option():
+    """Off by default (measured 2026-11-03: costlier from the 2nd figure on, and +3.5K tokens in every run's
+    cached prefix); when on, the figure tool joins the shared tool list of papers with figures."""
+    from parameter_extractor.config.run_config import RunConfig
+    from parameter_extractor.pipeline import _paper_tools
+    packs.activate("prebiotic_chemistry")
+    off = RunConfig(api_key="x", output_dir=Path("/tmp"))
+    on = RunConfig(api_key="x", output_dir=Path("/tmp"), figure_suggestions_on_paper=True)
+    assert not off.figure_suggestions_on_paper
+    assert "figure_planner" not in _paper_tools(packs.current(), off, [], has_figures=True)
+    assert "figure_planner" in _paper_tools(packs.current(), on, [], has_figures=True)
+    assert "figure_planner" not in _paper_tools(packs.current(), on, [], has_figures=False)
+
+
+def test_series_conditions_with_restatements_and_ambient():
+    from parameter_extractor.ingestion.figure_rows import convert_condition
+    from parameter_extractor.schemas.figures import SeriesCondition
+    packs.activate("prebiotic_chemistry")
+    c = lambda col, v: convert_condition(SeriesCondition(column=col, value=v, source=""))[:2]
+    assert c("duration_hr", "72 hr (3 days)") == ("duration_hr", 72.0)
+    assert c("initial_temperature_C", "ambient") == ("initial_temperature_C", 25.0)
+    assert c("initial_pressure_bar", "1 bar (ambient)") == ("initial_pressure_bar", 1.0)
+
+
 if __name__ == "__main__":
     for name, fn in list(globals().items()):
         if name.startswith("test_") and callable(fn):

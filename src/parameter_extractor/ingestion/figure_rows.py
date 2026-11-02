@@ -114,6 +114,13 @@ def convert_condition(condition: SeriesCondition) -> Tuple[str, object, str]:
     unit = unit_for_column(column)
     if not unit:
         return column, raw, ""                                   # a text column, e.g. headspace_gas_name
+    # '72 hr (3 days)': the value with a restatement in brackets -> the value
+    raw = re.sub(r"\s*\([^()]*\)\s*$", "", raw).strip() or raw
+    # ambient conditions by the paper's convention (calculators/ambient.py): 25 °C, 1 bar
+    if unit in ("°C", "K") and re.fullmatch(r"(?i)(ambient|room)(\s+temperature)?|r\.?\s?t\.?", raw):
+        raw = "25 °C"
+    elif unit == "bar" and re.fullmatch(r"(?i)(ambient|atmospheric)(\s+pressure)?", raw):
+        raw = "1 bar"
     if unit == "pH":
         try:
             return column, float(raw), ""
