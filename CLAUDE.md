@@ -1771,3 +1771,35 @@ Mickey's decision (2026-11-03): Standard stays the default; NEW profile `balance
 Sonnet structure_planner, Haiku "*"; figure_planner/equations exempt -> Sonnet) as the mid option (GUI "Models",
 CLI --models balanced); Economy + 3 passes covers the all-Haiku option. Model / Passes hover texts rewritten short
 with 2026-11-03 costs + accuracy and recommendations (balanced not recommended for exoplanets: teng 2026-10-22).
+
+## Digitizer: clear axis markers, Tab between series, automatic points (2026-11-03, Mickey)
+
+- "Clear all axis markers" (Axes box): every coordinate system's X1/X2/Y1/Y2 + values removed (log kept); one undo
+  step ("calibrations" entry in `_undo`). Tab / Shift+Tab = next / previous series (wraps) when the figure canvas
+  (PlotCanvas.event, focus on click) or the series list (eventFilter; not while renaming) has focus -- text fields
+  keep normal Tab navigation.
+- **Automatic points** (`digitizing/auto_detect.py`, numpy only -- scipy is NOT a dependency: own run-length
+  union-find `label`, disc erosion/dilation by shifted copies). Bars: per column the ink run up from the frame
+  bottom; segments by colour/height; top = median of the middle 60%, flat-top check (a marker on the axis is a
+  dome); hollow bars = two thin equal-height edges + inked top (edges touching a solid bar are anti-aliasing --
+  Riggi Fig. 3 paired two across a gridline). Markers: ink = dark or coloured, enclosed holes filled (open -> disc),
+  opening with a disc of radius 0.5 x 75th-pct core depth (1.5-4 px: alargov's 3-4 px dashed lines had merged with
+  markers at 1.5), components; split touching ones by area (k-means; each part's own fill), drop flat (>1.45 aspect:
+  arrowheads) / small fragments; features filled share, fill ratio and up/down/sideways pointing -> shape_of
+  (circle .77, square 1.0, triangle .64 +-pointing, diamond .56). Search region = frame + 12 px (markers on an
+  axis); centres must be inside; tick numbers drop markers CENTRED on them (blanking their box cut axis markers
+  in half, sakata2010 6d); text_boxes (new FigureCandidate/DigitizedFigure field: text-layer words of 2+ chars --
+  1-char OCR words can be markers) blanked; legend boxes blanked.
+  Grouping by shape/fill/colour/size; `assign_to_series`: one series -> all; bars one per series in order, or by
+  colour groups; markers by the series' marker text (`describe`: open/filled, shape words, ▽ symbols, colours;
+  'cross'/'+' = stroke -> never matched), ambiguous / unmatched kinds left out with a note.
+- GUI: "Find points automatically" (current coordinate system; every panel drawn in the same frame, e.g. a 2nd y
+  axis, together) + "Find points automatically when suggestions arrive" (QSettings digitizer/auto_points, OFF),
+  run after auto-calibrate in apply_plan. Only series WITHOUT points are filled; one undo step ("points" entry).
+  Bars when plan.plot_kind == "bar" or x categorical; markers for scatter*; else auto (>= 2 similar-width bars).
+- Measured: synthetic charts <= 2 px; Riggi Fig. 2 (5 panels, 29 bars) and Fig. 3 all right with auto-calibration
+  (Fig. 3 reads 2.07/4.03: its axis line sits ~3 px below the gridline spacing -- rounding fixes it); live Sonnet
+  suggestions ($0.40 for 6 figures): alargov2002 Fig. 3 26/27 markers right (one triangle on a line read as a
+  circle), sakata2010 Fig. 6 48/48; scans (eder1994 Fig. 1, Zamaraev1996 Fig. 2) partial with mix-ups; Excel-style
+  coloured markers on equally thick lines (kumar2012) and '+'/'x' markers not found -> 'Find similar points'.
+  Corpus run (305 figures with frames) ~0.4 s/figure. tests/test_auto_points.py.

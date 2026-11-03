@@ -18,7 +18,12 @@ either way; drag in Pan mode. Right: tools.
      Only the selected series is editable -- other series' points can't be
      grabbed, so new points can go right on top of them -- and "Show only the
      selected series" hides the others in crowded areas. Shift+click always
-     adds a point, even on top of one of the same series.
+     adds a point, even on top of one of the same series. Tab / Shift+Tab (with the
+     figure or the series list focused) selects the next / previous series.
+  5. Optional automation: auto-calibrate (digitizing/auto_axes.py), 'Find similar
+     points' from one example (auto_points.py), and 'Find points automatically' --
+     bar tops / marker centres sorted into the series (auto_detect.py). 'Clear all
+     axis markers' empties every coordinate system's calibration (Ctrl+Z undoes).
 
 Several coordinate systems ("axes") are supported for multi-panel figures or
 a second y-axis: each has its own calibration and columns, and each series
@@ -179,6 +184,7 @@ class PointItem(QGraphicsEllipseItem):
 class PlotCanvas(QGraphicsView):
     clicked = Signal(float, float, object)     # scene x, scene y, Qt.MouseButton
     hovered = Signal(float, float)
+    cycle_series = Signal(int)                 # Tab: +1, Shift+Tab: -1
 
     def __init__(self):
         super().__init__()
@@ -188,6 +194,14 @@ class PlotCanvas(QGraphicsView):
         self.setMouseTracking(True)
         self.mode = "pan"
         self._pixmap_item: Optional[QGraphicsPixmapItem] = None
+        self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
+
+    def event(self, event) -> bool:
+        """Tab / Shift+Tab select the next / previous series instead of moving the focus."""
+        if event.type() == QEvent.Type.KeyPress and event.key() in (Qt.Key.Key_Tab, Qt.Key.Key_Backtab):
+            self.cycle_series.emit(-1 if event.key() == Qt.Key.Key_Backtab else 1)
+            return True
+        return super().event(event)
 
     def set_image(self, path: str) -> None:
         self.scene().clear()
@@ -227,6 +241,7 @@ class PlotCanvas(QGraphicsView):
         return super().viewportEvent(event)
 
     def mousePressEvent(self, event) -> None:
+        self.setFocus()                                 # so Tab reaches the canvas after a click
         if self.mode == "pan" or event.button() == Qt.MouseButton.MiddleButton:
             return super().mousePressEvent(event)
         item = self.itemAt(event.position().toPoint())
@@ -263,6 +278,7 @@ class DigitizerWidget(QWidget):
         self.canvas.set_image(figure.page_image)
         self.canvas.clicked.connect(self._on_canvas_click)
         self.canvas.hovered.connect(self._on_hover)
+        self.canvas.cycle_series.connect(self.select_next_series)
         self.hover_label = QLabel(" ")
         left = QWidget()
         lv = QVBoxLayout(left)
@@ -430,8 +446,12 @@ class DigitizerWidget(QWidget):
         self.auto_axes_box.toggled.connect(lambda on: QSettings().setValue("digitizer/auto_axes", on))
         self.auto_status = QLabel(wordWrap=True)
         self.auto_status.setStyleSheet("color: palette(placeholder-text);")
+        self.clear_axes_btn = QPushButton("Clear all axis markers", clicked=self.clear_axis_markers)
+        self.clear_axes_btn.setToolTip("Removes X1/X2 and Y1/Y2 and their values in every coordinate system "
+                                       "(Ctrl+Z puts them back). Columns, log scales and points are kept.")
         form.addRow(self.auto_axes_btn)
         form.addRow(self.auto_axes_box)
+        form.addRow(self.clear_axes_btn)
         form.addRow(self.auto_status)
         return box
 
@@ -442,6 +462,8 @@ class DigitizerWidget(QWidget):
         self.series_list.setMaximumHeight(130)
         self.series_list.currentRowChanged.connect(self._on_series_selected)
         self.series_list.itemChanged.connect(self._on_series_renamed)
+        self.series_list.installEventFilter(self)
+        self.series_list.setToolTip("Tab / Shift+Tab (here or on the figure) selects the next / previous series.")
         v.addWidget(self.series_list)
         row = QHBoxLayout()
         row.addWidget(QPushButton("Add series", clicked=lambda: self.add_series()))
@@ -469,6 +491,27 @@ class DigitizerWidget(QWidget):
         frow.addWidget(self.similarity_spin)
         frow.addStretch(1)
         v.addLayout(frow)
+        # optional automation: bar tops / marker centres found in the plot, sorted into the series
+        prow = QHBoxLayout()
+        self.auto_points_btn = QPushButton("Find points automatically", clicked=lambda: self.auto_find_points())
+        self.auto_points_btn.setToolTip(
+            "Finds the tops of bars, or the centres of filled and open markers (circles, squares, triangles, "
+            "diamonds), in this coordinate system's plot and adds them to the series that have no points yet "
+            "-- by bar order, or by matching each kind of marker to the series' marker description "
+            "('open circles'). Works on clean plots; markers drawn as lines (+, x) and markers on lines "
+            "as thick as themselves are missed. Check every point; Ctrl+Z removes them all.")
+        prow.addWidget(self.auto_points_btn)
+        prow.addStretch(1)
+        v.addLayout(prow)
+        self.auto_points_box = QCheckBox("Find points automatically when suggestions arrive")
+        self.auto_points_box.setChecked(QSettings().value("digitizer/auto_points", False, type=bool))  # off
+        self.auto_points_box.toggled.connect(lambda on: QSettings().setValue("digitizer/auto_points", on))
+        self.auto_points_box.setToolTip("After the suggestions are applied (and the axes calibrated, if that's "
+                                        "on): every coordinate system's points, as with the button.")
+        v.addWidget(self.auto_points_box)
+        self.points_status = QLabel(wordWrap=True)
+        self.points_status.setStyleSheet("color: palette(placeholder-text);")
+        v.addWidget(self.points_status)
 
         details = QFormLayout()
         self.series_panel_combo = QComboBox()
@@ -624,13 +667,27 @@ class DigitizerWidget(QWidget):
         if best is None:
             return False
         del self.fig.series[best[1]].points[best[2]]
-        self._undo = [(si, pi) for si, pi in self._undo if (si, pi) != best[1:]]
+        self._undo = [(si, pi) for si, pi in self._undo if isinstance(si, str) or (si, pi) != best[1:]]
         self.redraw()
         return True
 
     def undo(self) -> None:
         while self._undo:
             si, pi = self._undo.pop()
+            if si == "calibrations":            # 'Clear all axis markers': put them back
+                for panel, (x_cal, y_cal) in zip(self.fig.panels, pi):
+                    panel.x_cal, panel.y_cal = x_cal, y_cal
+                self._refresh_calibration()
+                self.redraw()
+                return
+            if si == "points":                  # automatic points in several series: all go at once
+                for sj, idx in pi:
+                    pts = self.fig.series[sj].points if sj < len(self.fig.series) else []
+                    for i in sorted(idx, reverse=True):
+                        if i < len(pts):
+                            del pts[i]
+                self.redraw()
+                return
             if isinstance(pi, list):            # a batch of found points: all go at once
                 pts = self.fig.series[si].points if si < len(self.fig.series) else []
                 for i in sorted(pi, reverse=True):
@@ -722,6 +779,23 @@ class DigitizerWidget(QWidget):
         self._refresh_points_table()
         self._refresh_series_icons()
         self.changed.emit()
+
+    def eventFilter(self, obj, event) -> bool:
+        if obj is self.series_list and event.type() == QEvent.Type.KeyPress and \
+                event.key() in (Qt.Key.Key_Tab, Qt.Key.Key_Backtab) and not self.series_list.state() == \
+                QAbstractItemView.State.EditingState:
+            self.select_next_series(-1 if event.key() == Qt.Key.Key_Backtab else 1)
+            return True
+        return super().eventFilter(obj, event)
+
+    def select_next_series(self, step: int = 1) -> None:
+        """The next series down the list (Tab), or up (Shift+Tab); wraps around."""
+        n = len(self.fig.series)
+        if n == 0:
+            return
+        row = (self.series_idx + step) % n if self.series_idx >= 0 else (0 if step > 0 else n - 1)
+        self.series_list.setCurrentRow(row)          # -> _on_series_selected
+        self.mode_hint.setText(f"Series: {self.fig.series[row].label}  (Tab: next, Shift+Tab: previous)")
 
     # ---- panels (coordinate systems) -------------------------------------------
 
@@ -1081,7 +1155,7 @@ class DigitizerWidget(QWidget):
             notes.append(str(e))
         else:
             for axis, side, var in (("x", x_side, panel.x), ("y", y_side, panel.y)):
-                if axis == "x" and not var.column and not var.tick_labels:
+                if axis == "x" and (var.categorical or not var.column and not var.tick_labels):
                     notes.append("X: categories (bars), no calibration needed")
                     continue
                 try:
@@ -1113,6 +1187,120 @@ class DigitizerWidget(QWidget):
         self.panel_idx = current
         self._refresh_panels()
         self.auto_status.setText("\n".join(messages))
+
+    def clear_axis_markers(self) -> None:
+        """Remove every coordinate system's calibration markers and their values (one undo step)."""
+        saved = [(p.x_cal.model_copy(), p.y_cal.model_copy()) for p in self.fig.panels]
+        if not any(c.p1 or c.p2 for p in self.fig.panels for c in (p.x_cal, p.y_cal)):
+            self.auto_status.setText("No axis markers to clear.")
+            return
+        for p in self.fig.panels:
+            p.x_cal = AxisCalibration(log=p.x_cal.log)
+            p.y_cal = AxisCalibration(log=p.y_cal.log)
+        self._undo.append(("calibrations", saved))
+        self.auto_status.setText(f"Axis markers cleared in {len(self.fig.panels)} coordinate system(s) "
+                                 f"(Ctrl+Z puts them back).")
+        self._refresh_calibration()
+        self.redraw()
+
+    def _rgb(self):
+        if getattr(self, "_rgb_cache", None) is None:
+            import numpy as np
+            from PIL import Image
+            self._rgb_cache = np.asarray(Image.open(self.fig.page_image).convert("RGB"))
+        return self._rgb_cache
+
+    def _frame_of(self, panel_idx: int, use_view: bool):
+        """The plot frame a coordinate system reads from: the one holding its calibration markers, else the
+        one in view, else by its place among the coordinate systems."""
+        from parameter_extractor.digitizing.auto_axes import choose_frame
+        frames = self._frames()
+        panel = self.fig.panels[panel_idx]
+        marks = [(c.px, c.py) for cal in (panel.x_cal, panel.y_cal) for c in (cal.p1, cal.p2) if c]
+        if marks and frames:
+            mx = sum(x for x, _ in marks) / len(marks)
+            my = sum(y for _, y in marks) / len(marks)
+            near = lambda f: max(f.left - mx, 0, mx - f.right) + max(f.top - my, 0, my - f.bottom)
+            best = min(frames, key=near)
+            if near(best) < 40:
+                return best
+        bases = list(dict.fromkeys(self._panel_sides(p.name)[2] for p in self.fig.panels))
+        return choose_frame(frames, self._view_centre() if use_view else None,
+                            bases.index(self._panel_sides(panel.name)[2]))
+
+    def auto_find_points(self, panels: Optional[List[int]] = None, use_view: bool = True) -> str:
+        """Find bar tops / marker centres in the frames of the given coordinate systems (default: the
+        current one) and add them to the series there that have no points yet. One undo step."""
+        from parameter_extractor.digitizing.auto_axes import AutoAxisError, find_boxes_inside
+        from parameter_extractor.digitizing.auto_detect import assign_to_series, detect_points, group_by_appearance
+        panels = [self.panel_idx] if panels is None else panels
+        by_frame = {}
+        notes: List[str] = []
+        for pi in panels:
+            try:
+                frame = self._frame_of(pi, use_view)
+            except AutoAxisError as e:
+                notes.append(f"{self.fig.panels[pi].name}: {e}")
+                continue
+            key = (frame.left, frame.top, frame.right, frame.bottom)
+            by_frame.setdefault(key, (frame, []))[1].append(pi)
+        added: List[Tuple[int, List[int]]] = []
+        for frame, group in by_frame.values():
+            # every coordinate system drawn in this frame (a second y axis shares it)
+            group = sorted(set(group) | {i for i, p in enumerate(self.fig.panels)
+                                         if i not in group and self._frame_key(i) == (frame.left, frame.top,
+                                                                                      frame.right, frame.bottom)})
+            series = [i for i, s in enumerate(self.fig.series) if min(s.panel, len(self.fig.panels) - 1) in group]
+            names = ", ".join(self.fig.panels[i].name for i in group)
+            if not series:
+                notes.append(f"{names}: no series to put points in")
+                continue
+            plot = self.fig.plan.plot_kind if self.fig.plan else ""
+            kind = ("bars" if plot == "bar" or any(self.fig.panels[i].x.categorical for i in group)
+                    else "markers" if plot in ("scatter", "scatter_with_fit") else "auto")
+            found, used = detect_points(self._rgb(), (frame.left, frame.top, frame.right, frame.bottom), kind,
+                                        exclude=find_boxes_inside(self._gray(), frame) + list(self.fig.text_boxes),
+                                        tick_numbers=self.fig.tick_numbers)
+            if not found:
+                notes.append(f"{names}: no {'bars' if used == 'bars' else 'markers'} found")
+                continue
+            assigned, note = assign_to_series(group_by_appearance(found), [self.fig.series[i].label for i in series])
+            existing = [(p.px, p.py) for i in series for p in self.fig.series[i].points]
+            counts = []
+            for k, pts in assigned.items():
+                si = series[k]
+                s = self.fig.series[si]
+                if s.points:
+                    continue                          # the user's points are never touched
+                panel = self.fig.panels[min(s.panel, len(self.fig.panels) - 1)]
+                start = len(s.points)
+                for f in sorted(pts, key=lambda f: (f.x, f.y)):
+                    if any((f.x - x) ** 2 + (f.y - y) ** 2 < max(f.size, 6) ** 2 for x, y in existing):
+                        continue
+                    x, y = snap(panel, f.x, f.y)
+                    s.points.append(DigitizedPoint(px=x, py=y))
+                if len(s.points) > start:
+                    added.append((si, list(range(start, len(s.points)))))
+                    counts.append(f"{len(s.points) - start} to '{s.label}'")
+            what = "bar tops" if used == "bars" else "markers"
+            msg = f"{names}: {len(found)} {what} found" + (f"; added {', '.join(counts)}" if counts else
+                                                           "; none added (series already have points)" if assigned
+                                                           else "")
+            notes.append(msg + (f". {note}" if note else ""))
+        if added:
+            self._undo.append(("points", added))
+        message = "\n".join(notes) + ("\nCheck every point -- right-click removes one, Ctrl+Z removes all "
+                                       "that were added." if added else "")
+        self.points_status.setText(message)
+        self.redraw()
+        return message
+
+    def _frame_key(self, panel_idx: int):
+        try:
+            f = self._frame_of(panel_idx, use_view=False)
+        except Exception:
+            return None
+        return (f.left, f.top, f.right, f.bottom)
 
     def _start_find_points(self) -> None:
         if self.series is None:
@@ -1230,4 +1418,6 @@ class DigitizerWidget(QWidget):
         self._refresh_series_list()
         if self.auto_axes_box.isChecked():
             self.auto_calibrate_all()
+        if self.auto_points_box.isChecked():
+            self.auto_find_points(list(range(len(self.fig.panels))), use_view=False)
         self.redraw()

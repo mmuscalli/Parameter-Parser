@@ -183,6 +183,9 @@ def _find_on_page(page, page_no: int, caption_re=CAPTION_RE) -> List[dict]:
                                max(l["x1"] for l in cap["block"]), cap_bottom)
         cap["caption"] = _caption_text(cap["block"])
         cap["numbers"] = [w for w in words if _NUMBER.fullmatch(w["text"])]    # tick labels of vector plots
+        fx0, ftop, fx1, fbottom = cap["figure_bbox"]
+        cap["words"] = [w for w in words if len(w["text"]) >= 2 and w["x0"] >= fx0 - 30 and w["x1"] <= fx1 + 30
+                        and w["top"] >= ftop - 5 and w["bottom"] <= fbottom + 5]
         results.append(cap)
     return results
 
@@ -256,6 +259,9 @@ def find_figures(pdf_path: str, out_dir: Path, render_scale: float = RENDER_SCAL
                 figure_bbox=figure_bbox, caption_bbox=caption_bbox,
                 tick_numbers=[((x0 + x1) / 2 * render_scale, (t + b) / 2 * render_scale, v)
                               for (x0, t, x1, b), v in _numbers_in(c.get("numbers", []), figure_bbox, offset)],
+                text_boxes=[tuple(round(v * render_scale, 1) for v in to_render_box([w["x0"], w["top"], w["x1"],
+                                                                                    w["bottom"]], offset))
+                            for w in c.get("words", [])],
                 page_image=str(out_dir / f"page-{sp}{page_no}.png"), crop_image=str(crop_path),
                 render_scale=render_scale))
     finally:

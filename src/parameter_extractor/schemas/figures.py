@@ -36,6 +36,10 @@ class FigureCandidate(BaseModel):
     # numbers in the PDF's text layer inside the figure (vector plots' tick labels):
     # (centre x, centre y, value) in page-image pixels; empty for plots that are images
     tick_numbers: List[Tuple[float, float, float]] = Field(default_factory=list)
+    # words of 2+ characters in the PDF's text layer inside the figure (x0, top, x1, bottom), page-image
+    # pixels: automatic point finding skips them (letters with holes look like markers). Single characters
+    # are left out: a scan's OCR layer can read a marker as 'o' or '+'.
+    text_boxes: List[Tuple[float, float, float, float]] = Field(default_factory=list)
     # a figure in the paper's supplementary information (Fig. S1): `page` counts on from the paper's pages,
     # `page_label` is the supplement's own ('S3')
     supplement: bool = False
@@ -261,6 +265,7 @@ class DigitizedFigure(BaseModel):
     page_image: str
     figure_bbox: Optional[BBox] = None              # the detected area, PDF points (for the audit image)
     tick_numbers: List[Tuple[float, float, float]] = Field(default_factory=list)   # see FigureCandidate
+    text_boxes: List[Tuple[float, float, float, float]] = Field(default_factory=list)  # see FigureCandidate
     data_source: str = ""                           # original reference if the plotted data is cited
     panels: List[DigitizedPanel] = Field(default_factory=lambda: [DigitizedPanel()])
     series: List[DigitizedSeries] = Field(default_factory=list)
