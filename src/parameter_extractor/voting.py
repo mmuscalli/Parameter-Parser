@@ -134,10 +134,17 @@ def _species(name: str) -> str:
 def vote_chemistry(results: list) -> Tuple[object, dict, List[Disagreement]]:
     from parameter_extractor.schemas.chemistry import ChemistryExtraction
     step = "Solution chemistry"
+    # the solutions combined, from ONE pass: passes name the same solution differently ('calcium chloride
+    # solution' / 'CaCl2 stock', kim2019 2026-11-03) and a vote per name kept both -- twice the volume, and the
+    # mixing calculation refused. The pass whose volumes most passes agree on (earliest on a tie).
+    shape = lambda r: tuple(sorted((a.set_label or "", getattr(a, "sample_label", "") or "",
+                                    a.volume.replace(" ", "").lower()) for a in r.added_solutions))
+    shapes = Counter(shape(r) for r in results)
+    k = next(i for i, r in enumerate(results) if shapes[shape(r)] == max(shapes.values()))
     solutes, notes = vote_items(
         [r.solutes for r in results],
         key=lambda s: (_species(s.name), s.role, s.set_label or "", s.sample_label or "",
-                       s.concentration_basis, (s.stock_solution or "").strip().lower()),
+                       s.concentration_basis),
         # the number as printed (a pass that left the unit out still agrees -- faisal2005 pass 3); the
         # unit, when different, shows up in the flag
         signature=lambda s: (None if s.concentration_value is None else round(float(s.concentration_value), 6),
@@ -147,11 +154,17 @@ def vote_chemistry(results: list) -> Tuple[object, dict, List[Disagreement]]:
                                         if s.concentration_value is not None else "no value"),
         step=step, what=lambda s: f"{s.name} ({s.role})",
         where=lambda s: " / ".join(x for x in (s.set_label, s.sample_label) if x) or "whole paper")
-    added, n2 = vote_items(
-        [r.added_solutions for r in results],
-        key=lambda a: (a.solution.strip().lower(), a.set_label, getattr(a, "sample_label", "")),
-        signature=lambda a: a.volume.replace(" ", "").lower(), shown=lambda a: a.volume, step=step,
-        what=lambda a: f"volume added: {a.solution}", where=lambda a: a.set_label or "whole paper")
+    added = list(results[k].added_solutions)
+    n2 = [] if len(shapes) == 1 else [Disagreement(
+        step=step, what="solutions combined", where="whole paper",
+        winner=f"pass {k + 1}'s ({len(added)} solutions)", counts={f"{len(s)} solutions": c for s, c in shapes.items()},
+        passes=len(results), present_in=len(results))]
+    # a stock value names its solution as its own pass did: point it at the kept pass's name for that species
+    kept_stock = {(_species(s.name), s.set_label or "", s.sample_label or ""): s.stock_solution
+                  for s in results[k].solutes if s.concentration_basis == "stock" and s.stock_solution}
+    solutes = [s.model_copy(update={"stock_solution": kept_stock.get(
+                   (_species(s.name), s.set_label or "", s.sample_label or ""), s.stock_solution)})
+               if s.concentration_basis == "stock" else s for s in solutes]
     ratios, n3 = vote_items(
         [r.molar_ratios for r in results],
         key=lambda m: (m.set_label, m.species.strip().lower(), m.reference_species.strip().lower()),

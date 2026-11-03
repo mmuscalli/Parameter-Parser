@@ -390,10 +390,33 @@ def _models(spec_json: str, categories: Tuple[str, ...] = ()) -> Tuple[type, typ
         **sample_field,
         values=(List[Item], Field(description="This row's values.")),
     )
+    class _OtherBase(BaseModel):
+        model_config = ConfigDict(populate_by_name=True, json_schema_extra=_required(
+            ["nm", "cat", "v", "q", "src", "c"] if categories else ["nm", "v", "q", "src", "c"]))
+
+        @model_validator(mode="before")
+        @classmethod
+        def _value_as_text(cls, data):
+            """An item written like a parameter value -- `v` a number with `u` its unit, or `txt` the text
+            (Haiku, kim2017, 2026-11-03: the whole step failed validation twice) -- read as the one string
+            an `other` value is: '0.3 mL', or the text."""
+            if not isinstance(data, dict):
+                return data
+            data = dict(data)
+            key = "v" if "v" in data else "value"
+            text, unit = data.pop("txt", None), data.pop("u", None)
+            if text:
+                data[key] = text
+            elif isinstance(data.get(key), (int, float)) and not isinstance(data.get(key), bool):
+                if data[key] == 0 and not unit:          # a placeholder 0: the quote says what it is
+                    data[key] = data.get("q") or data.get("quote") or ""
+                else:
+                    data[key] = f"{data[key]:g} {unit}".strip() if unit else f"{data[key]:g}"
+            return data
+
     Other = create_model(
         f"{name}Other",
-        __config__=ConfigDict(populate_by_name=True, json_schema_extra=_required(
-            ["nm", "cat", "v", "q", "src", "c"] if categories else ["nm", "v", "q", "src", "c"])),
+        __base__=_OtherBase,
         name=(str, Field(alias="nm", description="Short noun phrase naming the quantity or property, e.g. "
                                                  "'stirring rate', 'reaction volume' -- not a sentence.")),
         **({"category": (Literal[categories], Field(default="", alias="cat",   # "" = recorded before categories

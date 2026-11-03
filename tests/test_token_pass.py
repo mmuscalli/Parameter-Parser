@@ -141,6 +141,17 @@ def test_series_conditions_with_restatements_and_ambient():
     assert c("initial_pressure_bar", "1 bar (ambient)") == ("initial_pressure_bar", 1.0)
 
 
+def test_other_items_written_like_parameter_values():
+    """Haiku (kim2017, 2026-11-03) wrote `other` items as v number + u unit / txt: read as the one string."""
+    packs.activate("prebiotic_chemistry")
+    from parameter_extractor.stages.optional import load_specs
+    _, Result = load_specs()["experimental_conditions"].models()
+    item = lambda **kw: dict(nm="x", cat="analysis", q="the quote", src="s", c="high", **kw)
+    r = Result.model_validate({"rows": [], "notes": "", "other": [
+        item(v=0.3, u="mL"), item(v=0, u="", txt="C-18 column"), item(v=0, u=""), item(v="300 rpm")]})
+    assert [o.value for o in r.other] == ["0.3 mL", "C-18 column", "the quote", "300 rpm"]
+
+
 if __name__ == "__main__":
     for name, fn in list(globals().items()):
         if name.startswith("test_") and callable(fn):

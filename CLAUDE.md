@@ -1752,3 +1752,18 @@ figure tool adds ~3.5K tokens to EVERY run's cached prefix (+$0.016 with no figu
 series). Kept as an option; the earlier claim that it would save money was wrong.
 Fixes from the runs: convert_condition reads '72 hr (3 days)' (a bracketed restatement) and 'ambient' /
 'room temperature' -> 25 °C, 'ambient' / 'atmospheric' pressure -> 1 bar.
+
+## Haiku vs Sonnet evaluation for the prebiotic pack (2026-11-03, Mickey)
+
+Full write-up: `eval/model_comparison_2026-11-03.md` (37 live runs, 5 reference papers; configs S = current,
+Hext = Sonnet structure + Haiku chemistry/conditions, Hall = Haiku everything; x1/x2/x3 passes). Mean accuracy
+vs the Sonnet references / mean cost per paper: S 98.8% $0.193; Hext x1 98.6% $0.092; Hall x1 96.5% $0.013;
+Hall x3 98.7% $0.031. Haiku's systematic miss: truman's NaCl stated once in the running text (8/8 runs).
+Handoff mode can't evaluate a model (the answers are Claude Code's). Cost-measurement gotcha: runs of one paper
+back to back read each other's cache -- re-price each model's first cached read as the write (scratch
+haiku_agg.py). No default changed (Mickey decides; prebiotic was "Sonnet must stay" on 2026-10-27).
+Fixes from it: `voting.vote_chemistry` takes the combined solutions from ONE pass (the volume list most passes
+agree on) and points stock values at its names -- per-name voting kept "calcium chloride solution" AND
+"CaCl2 stock" (16 uL), mixing refused (kim2017/kim2019 lost CaCl2 under passes); open-ended `other` items
+written like parameter values (v number + u / txt) are read as text (optional._OtherBase) -- Haiku's kim2017
+conditions step had failed validation twice.

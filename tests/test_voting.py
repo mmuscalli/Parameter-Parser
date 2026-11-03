@@ -75,6 +75,26 @@ def test_tie_goes_to_the_earliest_pass_and_species_names_are_matched():
     assert ChemistryExtraction.model_validate(data).solutes[0].concentration_value == 10
 
 
+def test_solutions_named_differently_by_passes_are_one_list():
+    """kim2019 (2026-11-03): pass 1 says 'calcium chloride solution', pass 2 'CaCl2 stock'; voting per name kept
+    both (16 uL of CaCl2) and the mixing calculation refused. One pass's list is kept, stock values point at it."""
+    from parameter_extractor.calculators.mixing import derive_mixture_concentrations
+    from parameter_extractor.schemas.chemistry import AddedSolution
+    common = dict(phase="aq", quote="q", source="s", confidence="high", conversion_note=None, role="initial",
+                  concentration_basis="stock", concentration_value=15, concentration_unit_raw="mM", concentration_mM=15)
+    def chem(name):
+        return ChemistryExtraction(
+            solutes=[SoluteEntry(name="CaCl2", stock_solution=name, **common)],
+            added_solutions=[AddedSolution(solution=name, volume="8 µL", quote="q", source="s"),
+                             AddedSolution(solution="ribose stock", volume="5 µL", quote="q", source="s")])
+    voted, _, notes = vote_chemistry([chem("calcium chloride solution"), chem("CaCl2 stock"), chem("CaCl2 stock")])
+    assert [a.solution for a in voted.added_solutions] == ["calcium chloride solution", "ribose stock"]
+    assert [s.stock_solution for s in voted.solutes] == ["calcium chloride solution"]
+    derive_mixture_concentrations(voted, [])
+    mixed = [s for s in voted.solutes if s.derived]
+    assert len(mixed) == 1 and abs(mixed[0].concentration_mM - 15 * 8 / 13) < 1e-3
+
+
 def test_three_passes_through_the_pipeline():
     """eder1994's reference answers as every pass: same CSV as one pass, each pass kept, no disagreements."""
     if not (PDF.is_file() and REF.is_dir()):
