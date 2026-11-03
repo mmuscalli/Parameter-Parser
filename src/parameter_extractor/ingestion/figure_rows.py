@@ -142,6 +142,30 @@ def convert_condition(condition: SeriesCondition) -> Tuple[str, object, str]:
     return column, converted.value, ""
 
 
+# a paper-wide value that says something was absent ('none', 'no buffer', 'not stirred')
+_ABSENT = re.compile(r"^\s*(none|no|not\b.*|without\b.*|n/?a|absent|0|no\s+\w+.*|unbuffered|not used)\s*\.?\s*$",
+                     re.IGNORECASE)
+_GENERIC_WORDS = {"initial", "sampled", "total", "name", "type", "used", "agent"}
+
+
+def contradicts_absence(column: str, value, source, texts: List[str]) -> str:
+    """The word in a figure's caption or series that contradicts a paper-wide 'none' for this column
+    (Riggi2023: pH_buffer 'none' from "pH buffers were intentionally excluded from these experiments", but
+    Fig. A2 shows 'pH-buffered control experiments'); '' when nothing does. The column's own words (4+
+    letters, generic ones left out) are looked for as word stems: 'buffer' in 'pH-buffered'."""
+    if not isinstance(value, str) or not _ABSENT.match(value):
+        return ""
+    stems = [w[:5].lower() for w in re.split(r"[_\W]+", column) if len(w) >= 4 and w.lower() not in _GENERIC_WORDS]
+    for text in texts:
+        words = re.findall(r"[A-Za-z][\w-]*", text or "")
+        for i, word in enumerate(words):
+            low = word.lower()
+            negated = re.match(r"^(no|non|un)", low) or (i and words[i - 1].lower() in ("no", "without", "not", "non"))
+            if any(stem in low for stem in stems) and not negated:
+                return word
+    return ""
+
+
 def build_figure_rows(
     figures: List[DigitizedFigure],
     metadata: PaperMetadata,
@@ -155,12 +179,14 @@ def build_figure_rows(
 ) -> Tuple[List[ExtractedRow], List[str], List[NewVariable]]:
     """Returns (rows, problems, new_variables). A series is left out, with a
     reason in `problems`, if its panel isn't calibrated or neither axis has a
-    column. `paper_wide`: {column: (value, CellSource)} -- the conditions steps' values for the whole paper
+    column. A paper-wide 'none' is not copied onto a figure whose caption or series mention the thing (a
+    `figure_problem` says so). `paper_wide`: {column: (value, CellSource)} -- the conditions steps' values for the whole paper
     (controls, solid mass, ...), written where the series doesn't give its own."""
     from parameter_extractor.ingestion.flatten_to_template import base_registry
     registry = registry or base_registry()
     rows: List[ExtractedRow] = []
     problems: List[str] = []
+    contradicted: set = set()          # (figure, column) already reported
     new_vars: List[NewVariable] = []
     set_idx, entry = first_set_index, first_entry_number
 
@@ -320,9 +346,20 @@ def build_figure_rows(
                         origin=f"{fig.figure_id} (reproduces another publication's data)", source=where)
                 row.update(fields)   # axis/series values win over paper-wide defaults
                 row_obj = ExtractedRow(**row)
+                own = {c for c, _, _ in known_conditions}
                 for column, (value, source) in (paper_wide or {}).items():
-                    if not _has_value(row_obj, column):
-                        set_row_value(row_obj, column, value, source)
+                    if _has_value(row_obj, column) or column in own:
+                        continue                # the series' own value is written below
+                    said = contradicts_absence(column, value, source, [fig.caption, series.label, series.notes or ""])
+                    if said:
+                        if (fig.figure_id, column) not in contradicted:
+                            contradicted.add((fig.figure_id, column))
+                            problems.append(
+                                f"{fig.figure_id}: {column} left empty on its rows -- the paper's conditions say "
+                                f"'{value}' for its experiments, but this figure mentions it ('{said}'). Fill in "
+                                f"the figure's value (the series' conditions) if the paper gives one.")
+                        continue
+                    set_row_value(row_obj, column, value, source)
                 # the series' other conditions (pressure, flow rate, ...), also over paper-wide defaults
                 for column, value, note in known_conditions:
                     set_row_value(row_obj, column, value, CellSource(

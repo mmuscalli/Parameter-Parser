@@ -102,6 +102,43 @@ def test_controls_are_parameters_and_reach_digitized_rows():
     assert rows[0].provenance["positive_control"].origin.endswith("(whole paper)")
 
 
+def test_paper_wide_none_not_copied_onto_a_figure_that_contradicts_it():
+    """Riggi2023 (2026-11-03): pH_buffer 'none' ("pH buffers were intentionally excluded from these
+    experiments") had been filled onto Fig. A2's rows -- its caption says 'pH-buffered control experiments'.
+    The rows are left empty with a figure_problem, unless the series gives its own value."""
+    packs.activate("prebiotic_chemistry")
+    from parameter_extractor.ingestion.figure_rows import build_figure_rows, contradicts_absence
+    from parameter_extractor.registry import VariableRegistry
+    from parameter_extractor.schemas.figures import (AxisCalibration, AxisVariable, CalibrationPoint, DigitizedFigure,
+                                                     DigitizedPanel, DigitizedPoint, DigitizedSeries, SeriesCondition)
+    from parameter_extractor.schemas.methodology import empty_methodology
+    from parameter_extractor.schemas.paper_metadata import PaperMetadata
+    from parameter_extractor.schemas.row_schema import CellSource
+    assert contradicts_absence("pH_buffer", "none", None, ["in pH-buffered control experiments"]) == "pH-buffered"
+    assert contradicts_absence("pH_buffer", "none", None, ["no buffer was used", "unbuffered"]) == ""
+    assert contradicts_absence("pH_buffer", "50 mM HEPES", None, ["pH-buffered"]) == ""      # not an absence
+    assert contradicts_absence("stirring_agitation", "none", None, ["solutions were stirred"]) == "stirred"
+    cal = AxisCalibration(p1=CalibrationPoint(px=0, py=100, value=0), p2=CalibrationPoint(px=0, py=0, value=6))
+    xcal = AxisCalibration(p1=CalibrationPoint(px=0, py=100, value=0), p2=CalibrationPoint(px=100, py=100, value=14))
+
+    def figure(fid, caption, conditions=()):
+        panel = DigitizedPanel(x_cal=xcal, y_cal=cal, x=AxisVariable(label="pH", column="initial_pH"),
+                               y=AxisVariable(label="length", column="max_peptide_length"))
+        return DigitizedFigure(figure_id=fid, number=2, page=8, caption=caption, render_scale=1.0, page_image="",
+                               panels=[panel], series=[DigitizedSeries(label="Volclay", conditions=list(conditions),
+                                                                       points=[DigitizedPoint(px=20, py=50)])])
+    src = CellSource(origin="experimental conditions (whole paper)", source="Methods")
+    meta = PaperMetadata(paper_id="p", paper_title="t", authors=["A"], year_published=2023, journal_published="j")
+    rows, problems, _ = build_figure_rows(
+        [figure("Fig. 2", "Results of mineral experiments"), figure("Fig. A2", "Lengths in pH-buffered controls"),
+         figure("Fig. A3", "pH-buffered controls", [SeriesCondition(column="pH_buffer", value="organic pH buffers",
+                                                                     source="caption")])],
+        meta, empty_methodology("p"), "001", 1, 1, registry=VariableRegistry(None),
+        paper_wide={"pH_buffer": ("none", src)})
+    assert [r.extra.get("pH_buffer") for r in rows] == ["none", None, "organic pH buffers"]
+    assert len(problems) == 1 and problems[0].startswith("Fig. A2: pH_buffer left empty") and "'pH-buffered'" in problems[0]
+
+
 if __name__ == "__main__":
     for name, fn in list(globals().items()):
         if name.startswith("test_") and callable(fn):

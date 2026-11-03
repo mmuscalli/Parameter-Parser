@@ -43,7 +43,12 @@ Return a FigurePlan:
     `shared_conditions`; and leave out what the paper states for ALL its
     experiments (the Methods' solvent, reaction time, analysis method,
     controls, vessel ...) -- the app fills those in from the paper's
-    conditions.
+    conditions. But where THIS figure's experiments differ from such a
+    statement -- an appendix control run with a buffer while the Methods say
+    no buffer was used, another temperature, another solid -- give the
+    figure's own value (as printed, e.g. 'organic pH buffers' when the buffer
+    isn't named), on the series or in `shared_conditions`: otherwise the
+    paper-wide value is filled in, and it is wrong for this figure.
     Conditions are physical settings with values: a number with its unit,
     or for a few columns a name (a gas, a material, an instrument). Never put
     a description of the apparatus or method into a condition -- mention it

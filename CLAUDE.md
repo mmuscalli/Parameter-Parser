@@ -1803,3 +1803,21 @@ with 2026-11-03 costs + accuracy and recommendations (balanced not recommended f
   circle), sakata2010 Fig. 6 48/48; scans (eder1994 Fig. 1, Zamaraev1996 Fig. 2) partial with mix-ups; Excel-style
   coloured markers on equally thick lines (kumar2012) and '+'/'x' markers not found -> 'Find similar points'.
   Corpus run (305 figures with frames) ~0.4 s/figure. tests/test_auto_points.py.
+
+## Paper-wide 'none' vs a figure's own experiments (2026-11-03, Mickey's Riggi2023 run)
+
+Fig. A2's rows (pH-buffered control experiments, Appendix B) got pH_buffer 'none' from "pH buffers were
+intentionally excluded from these experiments": the conditions step gave it set '' (= every row, digitized ones
+included) and the figure suggestions named the series "pH-buffered" but gave no pH_buffer condition. Fixes:
+- `figure_rows.contradicts_absence`: a paper-wide value saying absence ('none', 'no ...', 'not ...', 'without
+  ...') is not copied onto a figure whose caption / series label / notes mention the column's subject (5-letter
+  stems of its words, not negated: 'pH-buffered'); one `figure_problem` per figure + column. Columns the series
+  sets itself are skipped (its own value is written after the paper-wide ones).
+- Prompts: generic figure_planner.md -- a figure whose experiments differ from a Methods-wide statement gives its
+  own value; prebiotic figure_planner.rules.md -- pH_buffer for buffered series (as printed, or the paper's
+  description when unnamed); experimental_conditions rule -- set '' fills every row incl. digitized / appendix
+  experiments; name the exceptions in `n`. Live ($0.24): conditions n "except pH-buffered controls with organic
+  buffers, Appendix B"; Fig. A2 series pH_buffer 'pH-buffered (buffer not named)'.
+- Bug found on the way: `observations.unit_for_column('pH_buffer')` was 'pH' (regex matched a leading 'pH_'), so
+  a figure's pH_buffer text was refused as "isn't a number". Now only pH value columns (+ _err/_range/_alt/...)
+  are 'pH'; *_method / *desc columns are text.

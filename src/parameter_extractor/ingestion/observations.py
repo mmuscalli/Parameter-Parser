@@ -54,10 +54,14 @@ _SUFFIX_UNITS = [
     (r"_h$", "h"), (r"_sec$", "s"), (r"_min$", "min"), (r"_bar$", "bar"), (r"_mL$", "mL"),
     (r"_uL$", "µL"), (r"_g$", "g"), (r"_nm$", "nm"), (r"_rpm$", "rpm"), (r"_K$", "K"),
 ]
-_UNITLESS = re.compile(r"(^|_)pH($|_)")
+# a pH value column and its derived ones (initial_pH, initial_pH_err_plus, initial_pH_range); not a column that
+# only starts with the word, like pH_buffer (text: its value was refused as "isn't a number", 2026-11-03)
+_UNITLESS = re.compile(r"(^|_)pH($|_(err|range|alt|avg|mode|lim|prior)|_?\d)")
 
 
 def unit_for_column(column: str) -> str:
+    if re.search(r"(method|desc)$", column):
+        return ""                                  # text about another column's value (initial_pH_alt1_method)
     if _UNITLESS.search(column):
         return "pH"
     for pattern, unit in _SUFFIX_UNITS:

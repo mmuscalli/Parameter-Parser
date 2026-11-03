@@ -15,6 +15,10 @@
   same for every series that shares them; a control run for the whole paper
   is filled in by the app. A control shown as its own bar or line (e.g. the
   grey 'no mineral' bar) is still a series of its own.
+- `pH_buffer`: a series run with a pH buffer (caption or text: "pH-buffered", "in
+  50 mM HEPES") gets it as a condition -- its name and concentration as printed,
+  or the paper's description when it names none ('organic pH buffers') -- even
+  where the Methods say the other experiments used no buffer.
 - Name each species as the paper does throughout: the vocabulary name, else the
   abbreviation the paper defines ("ImpA") -- the same name the chemistry uses.
 - Starting compositions: look in the caption, the passages about the figure,
