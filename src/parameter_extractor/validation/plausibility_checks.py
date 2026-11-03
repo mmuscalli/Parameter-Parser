@@ -200,23 +200,33 @@ def check_extraction(
                                             f"limit or a lost exponent), so nothing was written for them -- {cells}"
                                             + (" ..." if len(entries) > 6 else "") + ". Enter them by hand if needed.",
                           quote=entries[0].quote or None, source=entries[0].source or None))
+    unstated: Dict[str, list] = {}             # species -> starting-mixture entries with no amount (one flag each)
     for s in chemistry.solutes:
         if s.role != "initial":
             continue
         where = f"set '{s.set_label}'" if s.set_label else "every set"
         if s.concentration_value is None and s.concentration_mM is None and s.role == "initial":
-            flags.append(Flag(
-                "concentration_not_stated",
-                f"{s.name} is part of the starting mixture ({where}), but no single concentration was found in "
-                f"the paper" + (f" ({s.conversion_note})" if s.conversion_note else "")   # e.g. given as a range
-                + " -- nothing was written for it. Check the paper or its supplementary information.",
-                quote=s.quote or None, source=s.source or None))
+            unstated.setdefault(s.name, []).append((where, s))
         elif confidence_below(s.confidence, flag_below):
-            value = (f"{s.concentration_value:g} {s.concentration_unit_raw or ''}".strip()
+            high = getattr(s, "concentration_high", None)
+            value = (f"{s.concentration_value:g}{f'-{high:g}' if high and high > s.concentration_value else ''} "
+                     f"{s.concentration_unit_raw or ''}".strip()
                      if s.concentration_value is not None else f"{s.concentration_mM:g} mM")
             if s.derived:
                 value += " (calculated)"
             chem_groups.setdefault((s.variable, s.confidence), []).append((where, value, s.quote, s.source))
+    for name, entries in unstated.items():
+        wheres = [w for w, _ in entries]
+        reasons = list(dict.fromkeys(e.conversion_note for _, e in entries if e.conversion_note))   # e.g. a range
+        where = wheres[0] if len(wheres) == 1 else f"{len(wheres)} sets: " + "; ".join(wheres[:6]) + (
+            " ..." if len(wheres) > 6 else "")
+        first = entries[0][1]
+        flags.append(Flag(
+            "concentration_not_stated",
+            f"{name} is part of the starting mixture ({where}), but no single concentration was found in the paper"
+            + (f" ({'; '.join(reasons[:3])})" if reasons else "")
+            + " -- nothing was written for it. Check the paper or its supplementary information.",
+            quote=first.quote or None, source=first.source or None))
     for (variable, confidence), items in chem_groups.items():
         listed = "; ".join(f"{i[1]} ({i[0]})" for i in items)
         flags.append(Flag("low_confidence", f"initial {variable} = {listed} has confidence '{confidence}'"

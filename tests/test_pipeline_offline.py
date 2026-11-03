@@ -105,10 +105,12 @@ def test_replay_reproduces_committed_csv():
         assert (result.run_dir / "page_images").is_dir()
         assert {f.kind for f in result.paper_flags} == {"low_confidence", "derived_value", "assumed_default",
                                                           "identity_not_quoted"}   # + 'water' -> distilled   # + calculated totals
-        # Table 2's unlabelled '2.50 mol dm-3 80 C' block (Ca2+ vs Ba2+ was settled by hand) and two unquoted
-        # yields; the ion headers ('Na+ 3.33 mol dm-3') and bare table rows named by their column don't count
+        # Table 2's unlabelled '2.50 mol dm-3 80 C' block (Ca2+ vs Ba2+ was settled by hand); the ion headers
+        # ('Na+ 3.33 mol dm-3') and bare table rows named by their column don't count. (Two yields were flagged
+        # until 2026-11-03: the sideways 'Downloaded by ...' stamp interrupted the page text, so their bare-row
+        # quotes couldn't be placed on a page.)
         unnamed = sorted(f.message.split(":")[0] for f in result.paper_flags if f.kind == "identity_not_quoted")
-        assert unnamed == ["2peptide_Gly", "3peptide_Gly", "CaCl2"], unnamed
+        assert unnamed == ["CaCl2"], unnamed
         total = next(f for f in result.paper_flags if f.kind == "derived_value")
         assert "total_sampled_peptides_yield calculated for 42 row(s)" in total.message
 

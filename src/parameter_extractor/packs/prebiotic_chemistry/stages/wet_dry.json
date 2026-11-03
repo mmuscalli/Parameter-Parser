@@ -6,7 +6,8 @@
   "schema_name": "WetDryConditions",
   "system_prompt": "Extract wet-dry cycling conditions. Report only what the paper states.",
   "trigger": {
-    "set_types": ["Evaporation Cycle"]
+    "set_types": ["Evaporation Cycle"],
+    "set_patterns": ["\\b(wet|dry)\\s*[-\u2013\u2212/]\\s*(dry|wet)\\b", "dehydration[-\u2013\u2212 ]rehydration", "evaporation cycl"]
   },
   "per": "sample",
   "set_word": "cycling",

@@ -40,7 +40,14 @@ from parameter_extractor.errors import PdfNotReadableError
 # Formation of Cytidine..."): "Table N." followed by a capitalised title. In-text
 # references like "(Table 1, Fig. 2)" match neither.
 # 'Table S1' too: supplementary information numbers its tables S1, S2, ... (pulletikurti2022_SI)
-TABLE_CAPTION_RE = re.compile(r"(?m)^\s*(?:Table|TABLE)\s+[A-Z]?\d+\b|\b(?:Table|TABLE)\s+[A-Z]?\d+\.\s+[A-Z][a-z]")
+# a caption: 'Table 2' starting a line (not a citation 'Table 1) in each ...'), 'Table 2. Title' anywhere on a
+# line (two-column pages) unless a citation ('see Supplementary Table 1. Nucleobases ...'), Roman numerals
+# (older papers), Nature's 'Extended Data Table 1 | Title' (matreux2024)
+TABLE_CAPTION_RE = re.compile(
+    r"(?m)^\s*(?:Table|TABLE)\s+[A-Z]?\d+\b(?!\s*\))"
+    r"|(?<!Supplementary )(?<!see )(?<!in )(?<!and )(?<!of )\b(?:Table|TABLE)\s+[A-Z]?\d+\.\s+[A-Z][a-z]"
+    r"|^\s*(?:Table|TABLE)\s+[IVX]{1,6}\s*[.:]"
+    r"|^\s*Extended\s+Data\s+Table\s+\d+\s*\|")
 # Word-gap threshold (points) for text extraction. pdfplumber's default (3) runs words
 # together in tightly set papers (kim2019: letter gaps ~0.1 pt, word gaps ~2-3 pt), so a
 # page that comes out with many implausibly long "words" is re-extracted with this.
@@ -154,6 +161,15 @@ def _fix_symbol_font_chars(page) -> int:
 def _merged_word_ratio(text: str) -> float:
     words = re.findall(r"[A-Za-z]{3,}", text)
     return sum(len(w) > MERGED_WORD_LENGTH for w in words) / max(len(words), 1)
+
+
+def _without_sideways(page):
+    """An upright page without its rotated characters: publisher margin stamps ('Downloaded from ... by <reader>
+    on <date> from IP address ...', read backwards into the text and naming the person who downloaded it) and
+    rotated axis titles. paper_source reads the arXiv stamp from the PDF's characters itself."""
+    if all(c.get("upright", True) for c in page.chars):
+        return page
+    return page.filter(lambda o: o.get("object_type") != "char" or o.get("upright", True))
 
 
 def _page_text(page) -> tuple:
@@ -302,7 +318,7 @@ def _table_crops(pdf_path: str, pages: List[int], out_dir: Path, dpi: int, rotat
     other pages are left to the whole-page rendering. A crop wider or taller than the API reads unscaled is
     cut into pieces like a page. Never fails a run: on any problem, nothing is cropped."""
     from PIL import Image
-    from parameter_extractor.ingestion.table_finder import TABLE_RE, find_tables
+    from parameter_extractor.ingestion.table_finder import TABLE_RE, find_tables, table_number
     from parameter_extractor.ingestion.table_tiles import tile
     upright = [p for p in pages if not rotations.get(p)]          # a landscape page goes whole anyway
     if not upright:
@@ -315,7 +331,7 @@ def _table_crops(pdf_path: str, pages: List[int], out_dir: Path, dpi: int, rotat
     out: Dict[int, List[Path]] = {}
     for p in upright:
         here = [t for t in found if t["page"] == p + offset and t["number"]]
-        named = {int(m.group(2)) for c in captions.get(p + offset, [])
+        named = {table_number(m)[1] for c in captions.get(p + offset, [])
                  if (m := TABLE_RE.match(re.sub(r"\s+", "", c)))}
         if not here or not named <= {t["number"] for t in here}:
             continue                                      # a table on it wasn't found: the whole page
@@ -323,8 +339,10 @@ def _table_crops(pdf_path: str, pages: List[int], out_dir: Path, dpi: int, rotat
         for t in here:
             pieces = tile(Image.open(t["image"]).convert("RGB"))
             for k, piece in enumerate(pieces, start=1):
-                name = (f"page-{p}-table{t['prefix']}{t['number']}.jpg" if len(pieces) == 1 else
-                        f"page-{p}-table{t['prefix']}{t['number']}-{k}of{len(pieces)}.jpg")
+                label = (f"ED{t['table_id'].rsplit(' ', 1)[1]}" if t["prefix"] == "ED"   # Extended Data Table 1
+                         else t["table_id"].split(" ", 1)[1])                       # 'IV' as printed, '2', 'S1'
+                name = (f"page-{p}-table{label}.jpg" if len(pieces) == 1 else
+                        f"page-{p}-table{label}-{k}of{len(pieces)}.jpg")
                 piece.save(out_dir / name, "JPEG", quality=85)
                 paths.append(out_dir / name)
         out[p] = paths
@@ -382,7 +400,7 @@ def parse_pdf(pdf_path: str, paper_id: Optional[str] = None) -> ParsedPaper:
                     rotations[i + 1] = angle
                     extracted.append(_turned_page_text(path, i, angle))
                 else:
-                    extracted.append(_page_text(p))
+                    extracted.append(_page_text(_without_sideways(p)))
             page_texts = [_clean(t) for t, _ in extracted]
             tightened = [i for i, (_, tight) in enumerate(extracted, start=1) if tight]
     except Exception as e:  # pdfminer raises a zoo of types for corrupt/encrypted files

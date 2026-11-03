@@ -26,7 +26,31 @@ from parameter_extractor.ingestion.figure_finder import (CAPTION_RE as FIGURE_CA
                                                          _continues_across, _group_lines, _is_body_line,
                                                          drop_overprinted)
 
-TABLE_RE = re.compile(r"^(?:Table|TABLE)\.?([A-Z]?)(\d{1,2})(?![\d(])")    # 'Table 2', 'Table S1', 'Table A1'
+# 'Table 2', 'Table S1', 'Table A1', and Roman numerals in older papers ('Table IV.' -- followed by '.' or ':'
+# once whitespace is removed, so 'TableImpA' isn't read as Table I)
+TABLE_RE = re.compile(r"^(ExtendedData)?(?:Table|TABLE)\.?(?:([A-Z]?)(\d{1,2})(?![\d(])|([IVX]{1,6})(?=[.:]))")
+_ROMAN = {"I": 1, "V": 5, "X": 10}
+
+
+def roman_value(numeral: str) -> int:
+    """'IV' -> 4, 'XII' -> 12."""
+    total = 0
+    for a, b in zip(numeral, numeral[1:] + " "):
+        total += -_ROMAN[a] if _ROMAN.get(b, 0) > _ROMAN[a] else _ROMAN[a]
+    return total
+
+
+def table_number(m) -> tuple:
+    """(letter, number, label as printed) of a TABLE_RE match: ('', 4, 'IV'), ('S', 1, '1'), ('A', 2, '2'),
+    ('ED', 1, '1') for Nature's Extended Data Table 1."""
+    if m.group(4):
+        return "", roman_value(m.group(4)), m.group(4)
+    return ("ED" if m.group(1) else m.group(2)), int(m.group(3)), m.group(3)
+
+
+def table_name(prefix: str, label: str) -> str:
+    """'Table 2', 'Table S1', 'Table IV', 'Extended Data Table 1' (prefix 'ED')."""
+    return f"Extended Data Table {label}" if prefix == "ED" else f"Table {prefix}{label}"
 
 RENDER_SCALE = 2.5          # 180 dpi: readable on screen, small files
 MIN_TABLE_HEIGHT = 18.0     # points below (or above) the caption
@@ -71,6 +95,18 @@ def _running(line: dict, width: float, mid: Optional[float]) -> bool:
         h and _is_running_text(dict(line, words=h, x0=h[0]["x0"], x1=h[-1]["x1"],
                                     compact="".join(w["text"] for w in h)), mid)
         for h in halves)
+
+
+def _rows_continue_beside(rows: List[dict], other: List[dict], top: float, mid: float) -> bool:
+    """A table found in one half whose rows go on in the other half: lines there at the same heights as
+    the table's rows, and no running text beside it (a table in the left column next to the right
+    column's text isn't one)."""
+    beside = [l for l in other if top < l["top"] < rows[-1]["bottom"]]
+    if not beside or any(_is_running_text(l, mid) for l in beside):
+        return False
+    tops = [r["top"] for r in rows]
+    aligned = [l for l in beside if any(abs(l["top"] - t) < 3 for t in tops)]
+    return len(aligned) >= max(2, 0.5 * len(rows))
 
 
 def _block(lines: List[dict], start: int, step: int, width: float, line_h: float,
@@ -142,6 +178,15 @@ def _find_on_page(page, page_no: int) -> List[dict]:
                 caption = _group_lines(cap_band) or caption
             width = page.width if wide else mid
             below = _block(band, 0, 1, width, line_h, mid if wide and not one_column else None)
+            if not wide and below and col in ("left", "right") and _rows_continue_beside(
+                    below, lines["right" if col == "left" else "left"], bottom, mid):
+                # the table's columns continue in the other half with a gap at the middle (liu2026 Table 1:
+                # 'apparent kinetics', 'scaling', ... were cut off): a full-width table
+                wide, width = True, page.width
+                cap_band = [w for w in words if caption[0]["top"] - 2 <= w["top"] <= caption[-1]["bottom"]]
+                caption = _group_lines(cap_band) or caption
+                band = _group_lines([w for w in words if w["top"] > bottom + 0.5])
+                below = _block(band, 0, 1, width, line_h, None if one_column else mid)
             region = below
             if not below or below[-1]["bottom"] - top < MIN_TABLE_HEIGHT + (bottom - top):
                 above = _group_lines([w for w in (words if wide else by_col[col] + by_col["full"])
@@ -154,7 +199,8 @@ def _find_on_page(page, page_no: int) -> List[dict]:
             x1s = [l["x1"] for l in region + caption]
             box = (max(min(x0s) - MARGIN, 0.0), max(min(top, region[0]["top"]) - MARGIN, 0.0),
                    min(max(x1s) + MARGIN, page.width), min(max(bottom, region[-1]["bottom"]) + MARGIN, page.height))
-            found.append({"number": int(m.group(2)), "letter": m.group(1), "page_no": page_no,
+            letter, number, label = table_number(m)
+            found.append({"number": number, "letter": letter, "label": label, "page_no": page_no,
                           "caption": _caption_text(caption), "box": box,
                           "size": statistics.mean(w["size"] for l in caption for w in l["words"]),
                           "height": box[3] - box[1],
@@ -203,9 +249,9 @@ def find_tables(pdf_path: str, pages: List[int], out_dir: Path, supplement: bool
             cols = ink.sum(axis=0).nonzero()[0] if ink.size else []
             if len(cols):
                 box[0], box[2] = min(box[0], lo + int(cols[0]) - 6), max(box[2], lo + int(cols[-1]) + 6)
-            path = out_dir / f"table-{prefix}{number}.png"
+            path = out_dir / f"table-{prefix}{c['label']}.png"
             img.crop(box).save(path)
-            tables.append({"table_id": f"Table {prefix}{number}", "number": number, "prefix": prefix,
+            tables.append({"table_id": table_name(prefix, c["label"]), "number": number, "prefix": prefix,
                            "page": c["page_no"] + page_offset,
                            "page_label": f"S{c['page_no']}" if supplement else str(c["page_no"]),
                            "caption": c["caption"], "image": str(path)})
@@ -216,13 +262,13 @@ def find_tables(pdf_path: str, pages: List[int], out_dir: Path, supplement: bool
             caption = next((c for c in (captions or {}).get(p + page_offset, [])
                             if TABLE_RE.match(re.sub(r"\s+", "", c))), "")
             m = TABLE_RE.match(re.sub(r"\s+", "", caption))
-            number = int(m.group(2)) if m else 0
-            prefix = sp or (m.group(1) if m else "")
+            letter, number, label = table_number(m) if m else ("", 0, "")
+            prefix = sp or letter
             if m and (prefix, number) in best:
                 continue                              # already cropped from an upright page
-            path = out_dir / (f"table-{prefix}{number}.png" if m else f"table-page-{sp}{p}.png")
+            path = out_dir / (f"table-{prefix}{label}.png" if m else f"table-page-{sp}{p}.png")
             img.crop((max(x0 - 10, 0), max(y0 - 10, 0), x1 + 10, y1 + 10)).save(path)
-            tables.append({"table_id": f"Table {prefix}{number}" if m else f"Table on page {sp}{p}",
+            tables.append({"table_id": table_name(prefix, label) if m else f"Table on page {sp}{p}",
                            "number": number, "prefix": prefix, "page": p + page_offset,
                            "page_label": f"S{p}" if supplement else str(p),
                            "caption": (caption + " " if caption else "") + "(landscape page, shown whole)",

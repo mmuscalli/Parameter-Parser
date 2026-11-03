@@ -94,6 +94,8 @@ def collect_new_variables(
             continue
         pct = "%" in (s.concentration_unit_raw or "")
         value = _solute_value(s)
+        if value in (None, ""):
+            continue                 # no amount stated: flagged (concentration_not_stated), nothing to review
         found.append(NewVariable(
             kind="species", name=s.name, alias_name=species_alias_name(s),
             proposed_column=proposed_column_for_solute(s), role=s.role,
@@ -229,8 +231,12 @@ def group_new_variables(new_vars: List[NewVariable]) -> List[VariableGroup]:
     """One group per variable (kind + alias name), sorted by category (the pack's order), first-seen
     order within one."""
     groups: Dict[Tuple[str, str], VariableGroup] = {}
+    from parameter_extractor.ingestion.flatten_to_template import without_range
     for v in new_vars:
-        key = (v.kind, v.alias_name or v.name)
+        alias = v.alias_name or v.name
+        if v.proposed_column and without_range(v.proposed_column) != v.proposed_column and not alias.endswith(" range"):
+            alias += " range"            # a range ('6-13 nt') gets its own '_range_' column, not the single values'
+        key = (v.kind, alias)
         if key not in groups:
             groups[key] = VariableGroup(kind=v.kind, name=v.name, alias_name=key[1],
                                         proposed_column=v.proposed_column or "", values=[],
@@ -300,6 +306,9 @@ def _in_column_unit(v: NewVariable, column: str):
     if raw in (None, "", DETECTED) or not column_unit or column_unit == "pH":
         return raw, ""                       # 'detected' is meant as text
     rng = _printed_range(v.value_text) if v.value is None else None
+    formatted = re.fullmatch(r"([-\d.eE+]+):([-\d.eE+]+)", str(raw)) if v.value is None else None
+    if formatted and not rng:            # already 'low:high' (the chemistry step's ranges: % / ratio as printed)
+        rng = (float(formatted.group(1)), float(formatted.group(2)), v.unit or column_unit)
     if rng:                              # a range: 'low:high' in the column's unit
         from parameter_extractor.units import range_to_column_unit
         converted = range_to_column_unit(rng[0], rng[1], rng[2], column_unit)

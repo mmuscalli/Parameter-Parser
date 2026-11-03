@@ -41,11 +41,12 @@ def _piece_label(path: Path) -> str:
     """'page-9-2of2.jpg' -> a note saying how the pieces of a large table page fit together; a page of
     the supplementary information (rendered into an 'SI' folder) is called 'SI page N'."""
     si = path.parent.name.startswith("SI")
-    crop = re.fullmatch(r"page-(\d+)-table([A-Z]?\d+)(?:-(\d+)of(\d+))?", path.stem)
+    crop = re.fullmatch(r"page-(\d+)-table(ED\d+|[A-Z]?\d+|[IVX]+)(?:-(\d+)of(\d+))?", path.stem)
     if crop:                                  # a table cropped from its page (pdf_parser._table_crops)
         page, table, k, n = crop.groups()
         table = table if not si or table.startswith("S") else f"S{table}"      # a supplement's own 'S' once
-        where = f"{'Supplementary information page S' if si else 'Page '}{page}, Table {table}"
+        name = f"Extended Data Table {table[2:]}" if table.startswith("ED") else f"Table {table}"
+        where = f"{'Supplementary information page S' if si else 'Page '}{page}, {name}"
         return (f"{where}, piece {k} of {n} (a large table is cut into pieces, top to bottom and left to right; "
                 f"a piece that continues the table to the right repeats the row labels on its left):" if k
                 else f"{where} (the table cropped from the page):")

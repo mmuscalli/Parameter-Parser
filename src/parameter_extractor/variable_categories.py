@@ -182,7 +182,9 @@ def guess(value: str, pack: Optional[Pack] = None) -> str:
 _SUFFIX = {"concentration": "_mM", "volume": "_mL", "time": "_hr", "temperature": "_C", "pressure": "_bar",
            "mass": "_g"}
 _UNIT_SUFFIX = {"nm": "_nm", "rpm": "_rpm", "%": "_pct", "mL/min": "_mL_min", "K": "_C", "°F": "_C",
-                "µL": "_uL"}      # microlitre volumes keep a µL column (the dataset's added_*_uL style)
+                "µL": "_uL",      # microlitre volumes keep a µL column (the dataset's added_*_uL style)
+                "µm": "_um", "mm": "_mm", "cm": "_cm",   # lengths: in the unit printed (matreux2024 170 µm)
+                "nt": "_nt"}                            # oligomer lengths (caimi2025, song2024)
 
 
 def unit_suffix(unit: str) -> str:

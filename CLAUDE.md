@@ -1873,3 +1873,38 @@ included) and the figure suggestions named the series "pH-buffered" but gave no 
   Origin), add / remove (own only) / reset to default, warning + one-time confirmation for the app's categories,
   checks ids (format, unique vs the area + Standard / packs + figure/assumed) and descriptions. Checked natively
   (screenshots). tests/test_research_areas.py.
+
+## "Sam Papers" test set via handoff (2026-11-03, Mickey): RNA / nucleotide papers
+
+11 PDFs in `Paper Files/Test Paper List/Sam Papers`, prebiotic pack, answered in handoff mode one by one
+(`runs/handoffs_sam/`, local). Full write-up incl. persistent issues: `eval/sam_papers_2026-11-03.md`. 7/11 have results
+only in figures (or are reviews/perspectives); rows from tables: Caimi 32 (literature comparison Table 1, cited rows
+`ds`), Ferris 1993 19, Hirakawa 27, Song 3.
+- Tables: Roman numerals ("Table IV": `table_finder.TABLE_RE` group 4, `table_number`/`table_name`, crops
+  `page-N-tableIV.jpg`, `api_client._piece_label`, data_location "Table. IV", quotes._TABLE_REF); Nature
+  "Extended Data Table N |" (prefix "ED", "Extended Data Table 1"); `pdf_parser.TABLE_CAPTION_RE` no longer matches
+  citations ('Table 1) in', '... in/see/of/and/Supplementary Table 1. Next sentence'); `_rows_continue_beside`: a table
+  found in one half whose rows continue at the same heights in the other (no running text there) is full width (liu2026
+  T1, hirakawa T2, kumar2012 T2-3, mitsuzawa2004 T2 were half crops). Corpus check (99 PDFs): only those changes.
+- `pdf_parser._without_sideways`: rotated characters left out of upright pages' text -- publisher stamps ("Downloaded
+  from ... by <reader> ... IP address", 5/11 papers + eder1994) were read backwards and sent to the API; also rotated axis
+  titles. paper_source still reads the arXiv stamp from the chars. eder1994's reference observations: 11 quotes now found
+  in the text ("yes", was "table image"); test_pipeline_offline's identity flags now only CaCl2 (the stamp had kept two
+  bare-row quotes from being placed on a page).
+- names._is_abbreviation: the abbreviation's letters must occur in the name ('d-ribose (Wako)' is a supplier).
+- value_types.coerce: 'detected' passes number / integer (regression of the data-type round: products found without an
+  amount were refused in `_mM` columns).
+- Stage triggers `set_patterns` (regexes on set label + what varies); wet_dry matches wet-dry / dry-wet /
+  dehydration-rehydration / evaporation cycl... -- wet-dry sets typed Independent (summary or cited rows) get cycle details.
+- Metadata: year 0 / journal '' when not printed (prompt); an accepted CrossRef match fills them
+  (`CrossRefMatch.matched_journal`); year 0 written blank. Ferris 1986, Morasch 2019 (manuscript) filled correctly.
+- new_variables: species without any amount aren't offered for review (flag only); a value already formatted 'low:high'
+  converts like a printed range; a range value of a suggestion gets its own group/column ('<alias> range').
+- Flags grouped: concentration_not_stated per species, cited_data per publication (`_cited_data_flags`), total split by
+  ratio per ratio (MixingNote species 'total ...'); low-confidence chemistry ranges shown 'lo-hi'.
+- Units: µm / mm / cm column suffixes `_um/_mm/_cm`, `nt` (residues) `_nt`.
+- Prebiotic pack: category `product_properties` (Product Properties, assignable, any <= 12 words, order 72) + conditions
+  hint asks for whole-product results (longest product, average length, linkage ratios).
+- tests/test_sam_papers.py. Persistent issues listed in the eval file (no nucleotide oligomer naming convention /
+  standard columns; caption-only results; composition / rate / property tables; species uncertainties; duration ranges;
+  review papers cost a full run; cross-paper abbreviations).

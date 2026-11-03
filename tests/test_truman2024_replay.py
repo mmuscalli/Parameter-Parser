@@ -50,7 +50,9 @@ def test_truman2024_replay_reproduces_reference():
         assert all(r["dry_phase_temperature_C"] == "120.0" for r in campbell)
 
         flags = json.loads(result.flags_path.read_text())["paper_level"]
-        assert sum(f["kind"] == "cited_data" for f in flags) == 8
+        # one flag per publication the data is reproduced from (2026-11-03; was one per set: 8)
+        refs = {r["original_data_reference"] for r in rows if r["original_data_reference"]}
+        assert sum(f["kind"] == "cited_data" for f in flags) == len(refs) < 8
         assert not any(f["kind"] == "assumed_value" for f in flags)
         # Table 1's stated totals are kept (and match the sums); the Campbell texts state a total but
         # name only the largest peptide, so the sum can't match -- flagged, stated total kept

@@ -19,8 +19,13 @@ def run_metadata_extraction(ctx: RunContext, title_page_text: str) -> PaperMetad
         metadata.doi_source = "paper_text"
     else:
         # Fall back to CrossRef only when the paper itself didn't state one.
-        match = lookup_doi(metadata.paper_title, metadata.authors, metadata.year_published)
+        match = lookup_doi(metadata.paper_title, metadata.authors, metadata.year_published or None)
         if match.accepted:
+            # a year / journal the pages don't print (conference abstracts, reprints): from the same record
+            if not metadata.year_published and match.matched_year:
+                metadata.year_published = int(match.matched_year)
+            if not metadata.journal_published and match.matched_journal:
+                metadata.journal_published = match.matched_journal
             metadata.paper_doi = match.doi
             metadata.doi_source = "crossref_api"
             metadata.doi_confidence = match.title_similarity

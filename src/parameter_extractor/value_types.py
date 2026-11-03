@@ -58,6 +58,8 @@ def coerce(value, value_type: str) -> Tuple[object, str]:
     """(the value as `value_type`, problem). The problem is '' when it fits; the value is None when it doesn't."""
     if value_type in ("", "any", None) or value is None or value == "":
         return value, ""
+    if value_type in ("number", "integer") and str(value).strip().lower() == "detected":
+        return value, ""          # a product found without an amount: the agreed text (flatten_to_template.DETECTED)
     if value_type == "integer":
         n = whole_number(value)
         return (n, "") if n is not None else (None, f"'{value}' isn't a whole number")

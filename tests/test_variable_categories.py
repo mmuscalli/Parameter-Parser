@@ -35,10 +35,10 @@ def _other(name, value, category=""):
 def test_categories_per_pack():
     packs.activate("prebiotic_chemistry")
     ids = [c.id for c in vc.categories()]
-    assert ids == ["starting_species", "products", "solution_prep", "conditions", "analysis", "metadata",
-                   "methodology", "other", "figure", "assumed"]
-    assert [c.id for c in vc.assignable()] == ["solution_prep", "conditions", "analysis", "metadata", "methodology",
-                                               "other"]
+    assert ids == ["starting_species", "products", "solution_prep", "conditions", "product_properties", "analysis",
+                   "metadata", "methodology", "other", "figure", "assumed"]
+    assert [c.id for c in vc.assignable()] == ["solution_prep", "conditions", "product_properties", "analysis",
+                                               "metadata", "methodology", "other"]
     assert vc.for_source("species", "sampled") == "products" and vc.for_source("species", "initial") == "starting_species"
     assert vc.for_source("species") == "starting_species" and vc.for_source("added_solution") == "solution_prep"
     try:
@@ -77,7 +77,8 @@ def test_open_ended_items_carry_a_category_unless_suggestions_are_off():
     spec = load_specs()["experimental_conditions"]
     _, result = spec.models()
     other = next(d for name, d in result.model_json_schema()["$defs"].items() if name.endswith("Other"))
-    assert other["properties"]["cat"]["enum"] == ["solution_prep", "conditions", "analysis", "metadata", "methodology",
+    assert other["properties"]["cat"]["enum"] == ["solution_prep", "conditions", "product_properties", "analysis",
+                                                  "metadata", "methodology",
                                                   "other"]
     assert "cat" in other["required"] and "default" not in other["properties"]["cat"]
     rule = next(r for r in spec._field_rules() if "`cat` its category" in r)

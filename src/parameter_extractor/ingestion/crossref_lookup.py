@@ -36,6 +36,7 @@ class CrossRefMatch:
     matched_title: Optional[str] = None
     matched_authors: Optional[List[str]] = None
     matched_year: Optional[int] = None
+    matched_journal: Optional[str] = None
     crossref_score: Optional[float] = None
     title_similarity: Optional[float] = None
     reason: str = ""
@@ -130,6 +131,7 @@ def lookup_doi(
     return CrossRefMatch(
         accepted=True, doi=best.get("DOI"), matched_title=candidate_title,
         matched_authors=candidate_authors, matched_year=candidate_year,
+        matched_journal=(best.get("container-title") or [None])[0],
         crossref_score=score, title_similarity=sim,
         reason=f"Accepted: title_similarity={sim:.2f}, crossref_score={score}.",
     )

@@ -27,7 +27,9 @@ Spec fields:
   schema_name             name of the generated response model (default: CamelCase name + "Result")
   system_prompt           optional; a sensible default is built from the label
   trigger                 {"set_types": [...], "sample_fields": [...], "keywords": [...],
-                           "always": false} -- any match runs the stage
+                           "set_patterns": [...], "always": false} -- any match runs the stage;
+                           set_patterns are regular expressions matched (case-insensitive) against a
+                           set's label and what varies, e.g. wet-dry cycling sets of type Independent
   set_word                how the prompt and flags refer to the sets it concerns ("cycling")
   intro                   what the stage is about, first lines of the prompt
   parameters              [{"column", "unit", "description"}] in output order
@@ -68,6 +70,7 @@ class StageTrigger(BaseModel):
     set_types: List[str] = Field(default_factory=list)
     sample_fields: List[str] = Field(default_factory=list)
     keywords: List[str] = Field(default_factory=list)
+    set_patterns: List[str] = Field(default_factory=list)   # regexes on a set's label / what varies
     always: bool = False
 
 
@@ -208,8 +211,10 @@ class StageSpec(BaseModel):
 
     def _set_matches(self, s) -> bool:
         t = self.trigger
-        return s.set_type in t.set_types or any(getattr(x, f, None) is not None
-                                               for x in s.samples for f in t.sample_fields)
+        described = f"{s.set_label} {s.varying_condition_summary or ''}"
+        return (s.set_type in t.set_types
+                or any(getattr(x, f, None) is not None for x in s.samples for f in t.sample_fields)
+                or any(re.search(p, described, re.IGNORECASE) for p in t.set_patterns))
 
     def triggered(self, structure: StructurePlan, paper_text: str = "") -> bool:
         t = self.trigger

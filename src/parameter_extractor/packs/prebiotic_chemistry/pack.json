@@ -19,6 +19,8 @@
      "description": "how the starting solutions were made and combined: volumes added, stock solution concentrations, buffers, degassing"},
     {"id": "conditions", "table_order": 30, "label": "Reaction Conditions", "value_type": "number",
      "description": "a quantity the reaction ran under that has no column: reactor or headspace volume, residence time, stirring rate, irradiation wavelength or power (not the reaction time: each row's duration is recorded already)"},
+    {"id": "product_properties", "table_order": 72, "label": "Product Properties", "value_type": "any", "max_words": 12,
+     "description": "measured properties of the products as a whole rather than one species' amount: the longest product detected (in nt or residues), average or typical length, length distribution, linkage ratios (e.g. % 3'-5' bonds), sequence or composition features"},
     {"id": "analysis", "table_order": 40, "label": "Analysis", "value_type": "any", "max_words": 12,
      "description": "how the products were identified and measured, beyond analysis_method: instrument, column, mobile phase or eluent, detection wavelength, standards and calibration, detection limit, sample preparation for analysis"}
   ],

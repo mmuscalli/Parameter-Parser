@@ -930,6 +930,9 @@ def grouped_mixing_flags(notes) -> List[Flag]:
     for (kind, species), ns in by_species.items():
         if len(ns) == 1:
             message = ns[0].message
+        elif kind == "derived" and species.startswith("total "):        # one stated total split by a ratio
+            message = (f"{species[6:]}: split by the pipeline in {len(ns)} places -- " + "; ".join(n.short for n in ns)[:900]
+                       + ". Each share is total x part / sum of parts.")
         elif kind == "derived":
             message = (f"{species}: mixture concentration calculated by the pipeline in {len(ns)} places -- "
                        + "; ".join(n.short for n in ns) + f". How (first): {ns[0].message}")
@@ -1206,12 +1209,22 @@ def finish(
 
 
 def _cited_data_flags(structure: StructurePlan) -> List[Flag]:
-    return [Flag("cited_data",
-                 f"Set '{s.set_label}' ({len(s.samples)} rows) is reproduced from another publication, not "
-                 f"measured in this paper: {s.data_source}. Its rows say so in original_data_reference; "
-                 f"consider extracting this data from the original paper instead.",
-                 source=s.source_table_or_section)
-            for s in structure.experiment_sets if s.data_source]
+    """One flag per publication the paper reproduces data from (its sets listed)."""
+    by_source: Dict[str, list] = {}
+    for s in structure.experiment_sets:
+        if s.data_source:
+            by_source.setdefault(s.data_source, []).append(s)
+    flags = []
+    for source, sets in by_source.items():
+        n = sum(len(s.samples) for s in sets)
+        named = (f"Set '{sets[0].set_label}'" if len(sets) == 1
+                 else "Sets " + ", ".join(f"'{s.set_label}'" for s in sets))
+        flags.append(Flag("cited_data",
+                          f"{named} ({n} rows) {'is' if len(sets) == 1 else 'are'} reproduced from another "
+                          f"publication, not measured in this paper: {source}. Its rows say so in "
+                          f"original_data_reference; consider extracting this data from the original paper instead.",
+                          source=sets[0].source_table_or_section))
+    return flags
 
 
 def _unfound_terms(term_search: Optional[TermSearch]) -> List[str]:

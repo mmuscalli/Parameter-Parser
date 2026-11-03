@@ -29,6 +29,7 @@ _UNITS: Dict[str, Tuple[str, float]] = {
     "nm": ("length", 1.0), "µm": ("length", 1e3), "mm": ("length", 1e6), "cm": ("length", 1e7),
     "mL/min": ("flow", 1.0), "µL/min": ("flow", 1e-3), "L/min": ("flow", 1000.0), "mL/h": ("flow", 1 / 60),
     "rpm": ("rate", 1.0),
+    "nt": ("residues", 1.0),          # oligomer lengths in nucleotides (longest product detected)
     "%": ("fraction", 1.0),
     "mol": ("amount", 1000.0), "mmol": ("amount", 1.0), "µmol": ("amount", 1e-3), "nmol": ("amount", 1e-6),
     "°C": ("temperature", 1.0), "K": ("temperature", 1.0), "°F": ("temperature", 1.0),
@@ -63,7 +64,8 @@ _ALIASES = {
 
 # column unit (observations.unit_for_column) -> canonical unit
 _COLUMN_UNITS = {"mM": "mM", "°C": "°C", "h": "h", "s": "s", "min": "min", "bar": "bar", "mL": "mL",
-                 "µL": "µL", "g": "g", "nm": "nm", "rpm": "rpm", "K": "K", "%": "%", "mL/min": "mL/min"}
+                 "µL": "µL", "g": "g", "nm": "nm", "rpm": "rpm", "K": "K", "%": "%", "mL/min": "mL/min",
+                 "µm": "µm", "mm": "mm", "cm": "cm", "nt": "nt"}
 
 
 def normalise_unit_text(text: str) -> str:

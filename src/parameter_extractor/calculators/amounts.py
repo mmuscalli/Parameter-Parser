@@ -122,7 +122,8 @@ def split_totals(chemistry: ChemistryExtraction, set_labels: List[str]) -> List[
         if done:
             notes.append(MixingNote("derived", f"Total {t.total} split in the ratio {names} "
                                                f"({t.set_label or 'every set'}): {'; '.join(done)[:600]}",
-                                    t.quote, t.source))
+                                    t.quote, t.source, species=f"total {t.total}, ratio {names}",
+                                    short="; ".join(done)[:200]))
     return notes
 
 

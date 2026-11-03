@@ -113,7 +113,7 @@ def is_verbatim(quote: str, paper) -> bool:
     return paper.contains(quote)
 
 
-_TABLE_REF = re.compile(r"\btables?\s*([A-Z]?\d+)", re.IGNORECASE)
+_TABLE_REF = re.compile(r"\btables?\s*([A-Z]?\d+|(?-i:[IVX]{1,6})\b)", re.IGNORECASE)   # 'Table IV' too
 
 
 def image_table_numbers(table_pages: dict) -> set:

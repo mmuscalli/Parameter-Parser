@@ -478,6 +478,8 @@ def row_to_template_dict(row: ExtractedRow) -> dict:
     """{template column: value} for one row, using the template's own names."""
     data = row.model_dump(exclude={"species_mM", "extra", "authors", "provenance"})
     out = {FIELD_TO_TEMPLATE.get(k, k): v for k, v in data.items()}
+    if not out.get("year_published"):
+        out["year_published"] = None            # 0 = the paper doesn't print its year (metadata prompt)
     authors = [a.replace(AUTHOR_SEPARATOR, ", ").strip() for a in row.authors if a and a.strip()]
     if authors:
         out["author_list"] = AUTHOR_SEPARATOR.join(authors)

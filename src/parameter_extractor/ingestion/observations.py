@@ -53,6 +53,8 @@ _SUFFIX_UNITS = [
     (r"_mL_min$", "mL/min"), (r"_%yield$", "%"), (r"_%recovered$", "%"), (r"_pct$", "%"), (r"_mM$", "mM"), (r"_C$", "°C"), (r"_hr$", "h"),
     (r"_h$", "h"), (r"_sec$", "s"), (r"_min$", "min"), (r"_bar$", "bar"), (r"_mL$", "mL"),
     (r"_uL$", "µL"), (r"_g$", "g"), (r"_nm$", "nm"), (r"_rpm$", "rpm"), (r"_K$", "K"),
+    (r"_um$", "µm"), (r"_mm$", "mm"), (r"_cm$", "cm"),        # lengths (chamber thickness, tube diameter)
+    (r"_nt$", "nt"),                                          # oligomer lengths in nucleotides
 ]
 # a pH value column and its derived ones (initial_pH, initial_pH_err_plus, initial_pH_range); not a column that
 # only starts with the word, like pH_buffer (text: its value was refused as "isn't a number", 2026-11-03)

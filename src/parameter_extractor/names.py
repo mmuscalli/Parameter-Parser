@@ -242,8 +242,11 @@ _GLUE = r"(?:\(cid:\d+\)|[^A-Za-z0-9])*"       # anything between a name's words
 
 
 def _is_abbreviation(abbr: str, full: str) -> bool:
+    letters = re.sub(r"[^a-z]", "", abbr.lower())
     return (any(c.isupper() for c in abbr) and len(abbr) < len(full) and " " not in abbr
-            and not re.fullmatch(r"[IVX]+", abbr))       # a roman-numeral compound label isn't one
+            and not re.fullmatch(r"[IVX]+", abbr)        # a roman-numeral compound label isn't one
+            # its letters come from the name: '200 mM d-ribose (Wako)' names the supplier (hirakawa2025)
+            and all(c in full.lower() for c in letters))
 
 
 def abbreviations_in(text: str, names) -> dict:

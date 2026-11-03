@@ -18,7 +18,7 @@ FIGURE, TABLE, TEXT = "Figure. {}", "Table. {}", "Text: {}"
 
 _FIGURE_OR_TABLE = re.compile(
     r"(?:\b(?:supp(?:lementary|l)?\.?|extended\s+data|e?si)\s+)?\b(fig(?:ure)?s?|tab(?:le)?s?)\.?\s*"
-    r"([A-Z]?\d+)\s*(?:\(?([a-h])\)?(?![a-z]))?", re.IGNORECASE)        # S1 (SI), A1 (appendix)
+    r"([A-Z]?\d+|(?-i:[IVX]{1,6})\b)\s*(?:\(?([a-h])\)?(?![a-z]))?", re.IGNORECASE)   # S1 (SI), A1, IV
 
 
 def location(*sources: str) -> str:

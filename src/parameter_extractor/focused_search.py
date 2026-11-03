@@ -97,7 +97,7 @@ def keywords_for(params: Sequence[FocusParameter], search_words: Sequence[str] =
     return list(dict.fromkeys(found))
 
 
-_CAPTION = re.compile(r"\s*Table\s*[A-Z]?\d")
+_CAPTION = re.compile(r"\s*Table\s*(?:[A-Z]?\d|[IVX]{1,6}[.:])")
 
 
 def table_spans(lines: List[str]) -> List[range]:
