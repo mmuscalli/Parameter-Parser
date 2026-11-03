@@ -58,17 +58,20 @@ STEP_LABELS = {"structure_planner": "Experiment structure", "metadata": "Bibliog
                "equations": "Equations to LaTeX"}
 
 
-# (RunConfig.model_profile, label, tooltip) -- costs measured 2026-10-22 (CLAUDE.md)
+# (RunConfig.model_profile, label, tooltip) -- costs and accuracy measured 2026-11-03
+# (eval/model_comparison_2026-11-03.md; prebiotic, accuracy = share of Standard's reference values)
 MODEL_PROFILE_CHOICES = [
     ("standard", "Standard (Claude Sonnet 5.5) -- most accurate",
-     "<b>Standard</b>: Claude Sonnet 5.5 plans the rows and does every extraction step (only the "
-     "bibliographic details from page 1 use Claude Haiku 5.5).<br>Most complete and accurate. "
-     "Measured: about $0.40-$0.90 for a typical paper, ~$2 for a 40-page paper with large tables."),
+     "<b>Standard</b> (recommended): Sonnet 5.5 for every step.<br>"
+     "Most accurate. Chemistry papers ~$0.15-0.25; long exoplanet papers up to ~$1.50."),
+    ("balanced", "Balanced (Sonnet plans, Haiku extracts) -- half price",
+     "<b>Balanced</b>: Sonnet 5.5 plans the rows, Haiku 5.5 extracts the values.<br>"
+     "About half Standard's cost (~$0.07-0.12 per chemistry paper), ~99% of its values. "
+     "Use 1 pass. Not recommended for exoplanets (Economy is cheaper there and as accurate)."),
     ("economy", "Economy (Claude Haiku 5.5) -- cheapest",
-     "<b>Economy</b>: Claude Haiku 5.5 for every step.<br>Roughly 20x cheaper on typical papers (a few cents), "
-     "about 4x on very long ones. On simple papers it matched Standard closely; on complex ones it "
-     "missed more -- e.g. a second fit of a planet, values for each mode of a bimodal result, "
-     "alternative estimates. Good for screening many papers; check flagged values."),
+     "<b>Economy</b>: Haiku 5.5 for every step.<br>"
+     "~1-4 cents per paper; ~96% of Standard's values with 1 pass, ~99% with 3. "
+     "Can miss values stated only in the text. Good for screening many papers."),
 ]
 
 
@@ -213,9 +216,9 @@ class MainWindow(QMainWindow):
             self.passes_combo.addItem(label, n)
         self.passes_combo.setToolTip(
             "Runs the extraction steps after the row plan 2 or 3 times and keeps each value by majority. "
-            "Mostly useful with Economy models: a single Economy pass sometimes drops whole blocks of values "
-            "at random, and a vote recovers them. Each extra pass adds the cost of those steps again (the "
-            "paper itself is read from cache). Disagreements between passes are flagged.")
+            "Recommended: 3 passes with Economy (recovers values a single pass drops at random); 1 pass with "
+            "Standard or Balanced. Each extra pass adds the cost of those steps again (the paper is read from "
+            "cache). Disagreements between passes are flagged.")
         options.addRow("Passes:", self.passes_combo)
         self.batch_box = QCheckBox("Batch mode -- half price, slower")
         self.batch_box.setToolTip("Sends every request through Anthropic's Message Batches API at half the price. "

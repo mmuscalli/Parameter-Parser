@@ -124,6 +124,10 @@ def test_model_profiles():
                 assert family in sent[name][0], (profile, name, sent[name][0])
         cfg = RunConfig.from_settings(api_key="x", model_profile="economy")
         assert "sonnet" in cfg.model_for("figure_planner")                    # asked-for steps keep Sonnet
+        mid = RunConfig.from_settings(api_key="x", model_profile="balanced")
+        assert "sonnet" in mid.model_for("structure_planner") and "sonnet" in mid.model_for("figure_planner")
+        assert all("haiku" in mid.model_for(s) for s in ("chemistry", "experimental_conditions", "metadata",
+                                                         "wet_dry", "fit_models"))
     finally:
         packs.activate("prebiotic_chemistry")
 

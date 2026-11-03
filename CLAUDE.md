@@ -1767,3 +1767,7 @@ agree on) and points stock values at its names -- per-name voting kept "calcium 
 "CaCl2 stock" (16 uL), mixing refused (kim2017/kim2019 lost CaCl2 under passes); open-ended `other` items
 written like parameter values (v number + u / txt) are read as text (optional._OtherBase) -- Haiku's kim2017
 conditions step had failed validation twice.
+Mickey's decision (2026-11-03): Standard stays the default; NEW profile `balanced` (settings.MODEL_PROFILES:
+Sonnet structure_planner, Haiku "*"; figure_planner/equations exempt -> Sonnet) as the mid option (GUI "Models",
+CLI --models balanced); Economy + 3 passes covers the all-Haiku option. Model / Passes hover texts rewritten short
+with 2026-11-03 costs + accuracy and recommendations (balanced not recommended for exoplanets: teng 2026-10-22).

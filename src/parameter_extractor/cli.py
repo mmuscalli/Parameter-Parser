@@ -97,9 +97,10 @@ def main() -> int:
     parser.add_argument("--equations-latex", action="store_true",
                         help="Convert the paper's labelled equations to LaTeX (one small extra API call); "
                              "they're found and cropped either way")
-    parser.add_argument("--models", choices=["standard", "economy"], default="standard",
-                        help="standard: Claude Sonnet 5.5 for every step (most accurate); economy: Claude Haiku "
-                             "5.5 for every step (roughly 4-20x cheaper; misses more on complex papers)")
+    parser.add_argument("--models", choices=["standard", "balanced", "economy"], default="standard",
+                        help="standard: Claude Sonnet 5.5 for every step (most accurate); balanced: Sonnet plans "
+                             "the rows, Claude Haiku 5.5 extracts (about half price); economy: Haiku for every "
+                             "step (cheapest; best with --passes 3)")
     parser.add_argument("--passes", type=int, default=1, choices=[1, 2, 3],
                         help="Run the extraction steps 2 or 3 times and keep each value by vote (cheap runs: "
                              "use with --models economy); disagreements are flagged")
