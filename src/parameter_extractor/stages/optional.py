@@ -548,11 +548,23 @@ def stage_values(spec: StageSpec, item) -> Tuple[Dict[str, StageValue], List[str
                         f"'{item.set_label}' left out -- {lo_note}."]
         note = "; ".join(n for n in (item.note, f"range printed as {item.value:g}-{high:g} {printed}".strip()) if n)
         return {with_range(param.column): StageValue(format_range(lo, hi), note=note, **base)}, []
+    if param.integer and not item.value and (getattr(item, "text", "") or "").strip():
+        # a count written out ('triplicate experiments; lengths averaged'): read as the number
+        from parameter_extractor.value_types import whole_number
+        n = whole_number(item.text)
+        if n is None:
+            return {}, [f"{spec.label}: {param.column} '{item.text}' for '{item.set_label or 'every set'}' left out "
+                        f"-- it must be a whole number."]
+        return {param.column: StageValue(n, note="; ".join(x for x in (item.note, f"read from '{item.text}'") if x),
+                                         **base)}, []
     value, note = convert_printed(item.value, printed, param.unit)
     if value is None:
         return {}, [f"{spec.label}: {param.column} = {item.value:g} {printed} for '{item.set_label}' left out -- {note}."]
     notes = "; ".join(n for n in (item.note, note) if n)
-    if param.integer and float(value).is_integer():
+    if param.integer:
+        if not float(value).is_integer():
+            return {}, [f"{spec.label}: {param.column} = {value:g} for '{item.set_label or 'every set'}' left out "
+                        f"-- it must be a whole number."]
         value = int(value)
     out = {param.column: StageValue(value, note=notes, **base)}
     system = time_system(printed) if spec.time_system_column else ""

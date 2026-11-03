@@ -1071,8 +1071,9 @@ def finish(
     known, pending = split_known(new_vars, registry)
     accepted = []
     conversion_problems = []
+    from parameter_extractor.value_types import column_type
     for column, v in known:
-        conversion_problems += write_values(rows, column, [v])[1]
+        conversion_problems += write_values(rows, column, [v], column_type(column, registry))[1]
         accepted.append({"name": v.name, "kind": v.kind, "column": column, "values": 1,
                          "how": "recognised from an earlier review", "category": v.category})
     groups = group_new_variables(pending)

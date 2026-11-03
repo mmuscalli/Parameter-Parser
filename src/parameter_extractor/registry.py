@@ -167,11 +167,26 @@ class VariableRegistry:
 
     # ---- additions (from the review screen) -----------------------------------
 
-    def add_column(self, column: str, kind: str, note: str = "", category: str = "") -> None:
+    def add_column(self, column: str, kind: str, note: str = "", category: str = "", value_type: str = "") -> None:
         if column not in self._base_set and column not in self.added_columns:
             self.added_columns[column] = {"kind": kind, "added": date.today().isoformat(), "note": note,
-                                          **({"category": category} if category else {})}
+                                          **({"category": category} if category else {}),
+                                          **({"type": value_type} if value_type and value_type != "any" else {})}
             self._changed = True
+        elif value_type:
+            self.set_column_type(column, value_type)
+
+    def set_column_type(self, column: str, value_type: str) -> None:
+        """The data type values of a column the user added are converted to (value_types.py); 'any' clears
+        it. Built-in columns keep theirs."""
+        info = self.added_columns.get(column)
+        if info is None or info.get("type", "any") == (value_type or "any"):
+            return
+        if value_type and value_type != "any":
+            info["type"] = value_type
+        else:
+            info.pop("type", None)
+        self._changed = True
 
     def add_alias(self, kind: str, name: str, column: str) -> None:
         key = _alias_key(kind, name)

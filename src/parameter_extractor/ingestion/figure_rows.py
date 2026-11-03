@@ -94,10 +94,10 @@ def _note(condition: SeriesCondition, value) -> str:
     return "" if str(value) == condition.value.strip() else f"from '{condition.value.strip()}'"
 
 
-def convert_condition(condition: SeriesCondition) -> Tuple[str, object, str]:
+def convert_condition(condition: SeriesCondition, registry=None) -> Tuple[str, object, str]:
     """(column, value to write, problem). The value is converted to the column's unit
-    ("22.2 MPa" -> 222 for initial_pressure_bar); text columns keep the text. `problem`
-    is '' when the value can be written."""
+    ("22.2 MPa" -> 222 for initial_pressure_bar); text columns keep the text, unless the column has a data
+    type (value_types.py: replicates '3' / 'triplicate' -> 3). `problem` is '' when the value can be written."""
     from parameter_extractor.ingestion.observations import unit_for_column
     from parameter_extractor.units import to_column_unit
     column, raw = condition.column.strip(), condition.value.strip()
@@ -113,7 +113,12 @@ def convert_condition(condition: SeriesCondition) -> Tuple[str, object, str]:
         return column, match, ""
     unit = unit_for_column(column)
     if not unit:
-        return column, raw, ""                                   # a text column, e.g. headspace_gas_name
+        from parameter_extractor.value_types import TYPES, coerce, column_type
+        kind = column_type(column, registry)
+        value, problem = coerce(raw, kind)
+        if problem:
+            return column, raw, f"{column} holds {TYPES[kind].lower()}s: {problem}"
+        return column, value, ""                                 # a text column, e.g. headspace_gas_name
     # '72 hr (3 days)': the value with a restatement in brackets -> the value
     raw = re.sub(r"\s*\([^()]*\)\s*$", "", raw).strip() or raw
     # ambient conditions by the paper's convention (calculators/ambient.py): 25 °C, 1 bar
@@ -239,7 +244,7 @@ def build_figure_rows(
             series_row_ids = []
             known_conditions, held_conditions = [], []
             for cond in series.conditions:
-                column, value, problem = convert_condition(cond)
+                column, value, problem = convert_condition(cond, registry)
                 if problem:
                     problems.append(f"{where}: condition {column or '?'} = '{cond.value}' left out -- {problem}.")
                 elif registry.is_known_column(column):

@@ -15,6 +15,7 @@ the rows it applies to.
     new_variables.json.
 """
 from __future__ import annotations
+import re
 from dataclasses import dataclass, field
 from typing import Dict, List, Literal, Optional, Tuple
 
@@ -52,6 +53,7 @@ class VariableDecision:
     action: Action = "ignore"
     column: str = ""
     remember: bool = True          # save to the local registry so later runs don't ask again
+    value_type: str = ""           # value_types.TYPES; '' = the column's own (or any)
 
 
 def row_index(structure: StructurePlan, rows: List[ExtractedRow], paper_prefix: str):
@@ -261,10 +263,32 @@ def _kind_category(kind: str) -> str:
         or categories.for_source(kind) or ""
 
 
-def stored_value(v: NewVariable, column: str):
+def stored_value(v: NewVariable, column: str, value_type: str = ""):
     """(value as it will be written into `column`, note). Converted to the column's
     unit when the column has one ("1 cm3" -> 1 for a _mL column, "45 min" -> 0.75 for
-    _hr); left as-is with note 'not converted' when that can't be done safely."""
+    _hr); left as-is with note 'not converted' when that can't be done safely. With a data type
+    (value_types.py), the value is also converted to it ('triplicate' -> 3 for a whole number); one that
+    can't be is not stored (note 'not stored: ...')."""
+    value, note = _in_column_unit(v, column)
+    # a value that couldn't be put in the column's unit is written as text and flagged, as before
+    is_range = isinstance(value, str) and re.fullmatch(r"[-\d.eE+]+:[-\d.eE+]+", value)   # 'low:high', a range column
+    if value_type and value_type != "any" and value not in (None, "") and not note.startswith("not converted") \
+            and not (is_range and value_type == "number"):
+        from parameter_extractor.value_types import TYPES, coerce
+        typed, problem = coerce(value, value_type)
+        if problem:
+            return value, f"not stored: {column} holds {TYPES[value_type].lower()}s -- {problem}"
+        if typed != value and not note:
+            note = f"read from '{_shown(value)}'" if isinstance(value, str) else ""
+        return typed, note
+    return value, note
+
+
+def _shown(value) -> str:
+    return f"{value:g}" if isinstance(value, float) else str(value)
+
+
+def _in_column_unit(v: NewVariable, column: str):
     from parameter_extractor.ingestion.observations import unit_for_column
     from parameter_extractor.units import to_column_unit
     raw = v.value if v.value is not None else v.value_text
@@ -286,14 +310,18 @@ def stored_value(v: NewVariable, column: str):
     return conversion.value, conversion.note
 
 
-def write_values(rows: List[ExtractedRow], column: str, values: List[NewVariable]) -> Tuple[int, List[str]]:
-    """Write each value into `column` (converted to its unit) on the rows it applies
-    to. Returns (cells written, problems: values that couldn't be converted)."""
+def write_values(rows: List[ExtractedRow], column: str, values: List[NewVariable],
+                 value_type: str = "") -> Tuple[int, List[str]]:
+    """Write each value into `column` (converted to its unit, and to its data type when it has one) on the
+    rows it applies to. Returns (cells written, problems: values that couldn't be converted)."""
     by_id = {r.full_id: r for r in rows}
     n, problems = 0, []
     for v in values:
-        value, note = stored_value(v, column)
+        value, note = stored_value(v, column, value_type)
         if value in (None, ""):
+            continue
+        if note.startswith("not stored"):
+            problems.append(f"'{v.name}' value '{_shown(value)}' left out of {column}: {note[len('not stored: '):]}.")
             continue
         if note.startswith("not converted"):
             problems.append(f"'{v.name}' value '{value}' was written to {column} as text: {note}.")
@@ -319,11 +347,16 @@ def apply_decisions(rows: List[ExtractedRow], groups: List[VariableGroup],
             left_out.append(g)
             continue
         column = d.column.strip()
-        _, problems = write_values(rows, column, g.values)
+        from parameter_extractor.value_types import column_type
+        value_type = d.value_type or column_type(column, registry)
+        _, problems = write_values(rows, column, g.values, value_type)
         apply_decisions.problems += problems
         if d.remember and g.kind != "assumed_value":     # a guess is decided per paper, never remembered
             if d.action == "new_column":
-                registry.add_column(column, g.kind, note=f"accepted for '{g.name}'", category=g.category)
+                registry.add_column(column, g.kind, note=f"accepted for '{g.name}'", category=g.category,
+                                    value_type=d.value_type)
+            elif d.value_type:
+                registry.set_column_type(column, d.value_type)      # only the columns the user added
             registry.add_alias(g.kind, g.alias_name, column)
             cid = next((v.pubchem_cid for v in g.values if v.pubchem_cid), 0)
             if g.kind == "species" and cid:

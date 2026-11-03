@@ -175,8 +175,8 @@
     },
     {
       "column": "replicates",
-      "kind": "text",
-      "description": "how the experiments were replicated, briefly (e.g. 'triplicate, values averaged', 'duplicate runs')."
+      "integer": true,
+      "description": "how many times each experiment was run, as a whole number (in triplicate = 3, in duplicate = 2); how the replicates were combined (averaged, best of) goes in `n`."
     },
     {
       "column": "stirring_agitation",

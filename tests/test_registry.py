@@ -80,7 +80,7 @@ def test_registry_window_save_and_cancel():
         dlg = RegistryDialog(path)
         cols = [dlg.columns_table.item(r, 0).text() for r in range(dlg.columns_table.rowCount())]
         assert cols == ["initial_RbCl_aq_mM", "stirring_rate_rpm"]
-        assert dlg.columns_table.item(0, 3).text() == ("RbCl (starting concentration), "
+        assert dlg.columns_table.item(0, 4).text() == ("RbCl (starting concentration), "
                                                        "rubidium chloride (starting concentration)")
         names = sorted(dlg.alias_table.item(r, 0).text() for r in range(dlg.alias_table.rowCount()))
         assert names == ["RbCl (starting concentration)", "reaction volume",

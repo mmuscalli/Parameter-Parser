@@ -22,6 +22,7 @@ from PySide6.QtWidgets import (QAbstractItemView, QComboBox, QCompleter, QDialog
                                QInputDialog, QLabel, QListWidget, QMessageBox, QPushButton, QTableWidget,
                                QTableWidgetItem, QTabWidget, QVBoxLayout, QWidget)
 
+from parameter_extractor.value_types import TYPES
 from parameter_extractor.registry import VariableRegistry
 
 KIND_LABELS = {"species": "Species", "parameter": "Experimental parameter", "figure_axis": "Figure axis"}
@@ -64,9 +65,9 @@ class RegistryDialog(QDialog):
     def _build_columns_tab(self) -> QWidget:
         w = QWidget()
         v = QVBoxLayout(w)
-        self.columns_table = QTableWidget(0, 4)
-        self.columns_table.setHorizontalHeaderLabels(["Column", "Type", "Added", "Names that map to it"])
-        self.columns_table.horizontalHeader().setSectionResizeMode(3, QHeaderView.ResizeMode.Stretch)
+        self.columns_table = QTableWidget(0, 5)
+        self.columns_table.setHorizontalHeaderLabels(["Column", "Type", "Data type", "Added", "Names that map to it"])
+        self.columns_table.horizontalHeader().setSectionResizeMode(4, QHeaderView.ResizeMode.Stretch)
         self.columns_table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
         self.columns_table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
         v.addWidget(self.columns_table, 1)
@@ -121,9 +122,16 @@ class RegistryDialog(QDialog):
         for r, col in enumerate(cols):
             info = reg.added_columns[col]
             names = ", ".join(reg.display_name(k) for k in reg.aliases_to(col))
-            for c, text in enumerate([col, KIND_LABELS.get(info.get("kind"), info.get("kind", "")),
+            for c, text in enumerate([col, KIND_LABELS.get(info.get("kind"), info.get("kind", "")), "",
                                       info.get("added", ""), names]):
                 t.setItem(r, c, QTableWidgetItem(text))
+            # what the column holds (value_types.py): values are converted to it on later papers
+            dtype = QComboBox()
+            for key, label in TYPES.items():
+                dtype.addItem(label, key)
+            dtype.setCurrentIndex(max(dtype.findData(info.get("type", "any")), 0))
+            dtype.currentIndexChanged.connect(lambda _i, c=col, box=dtype: reg.set_column_type(c, box.currentData()))
+            t.setCellWidget(r, 2, dtype)
         t.resizeColumnsToContents()
         self.columns_empty.setVisible(not cols)
 

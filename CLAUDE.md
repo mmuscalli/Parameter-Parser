@@ -1821,3 +1821,22 @@ included) and the figure suggestions named the series "pH-buffered" but gave no 
 - Bug found on the way: `observations.unit_for_column('pH_buffer')` was 'pH' (regex matched a leading 'pH_'), so
   a figure's pH_buffer text was refused as "isn't a number". Now only pH value columns (+ _err/_range/_alt/...)
   are 'pH'; *_method / *desc columns are text.
+
+## Column data types; replicates as a whole number (2026-11-03, Mickey's Riggi2023 run)
+
+- `value_types.py`: TYPES any / number / integer ("Whole number") / text / yes_no; `whole_number` reads counts
+  ('triplicate' 3, 'in duplicate' 2, 'three runs', 'n = 3'; None for several numbers); `coerce(value, type)` ->
+  (value, problem); `column_type(column, registry)` = the user's choice (registry added_columns[col]["type"]),
+  else the pack's stage parameter (integer -> integer, kind text -> text, else number), else number for a column
+  with a unit, else any.
+- replicates is now `integer` (was text): Riggi had '3' on figure rows and 'triplicate experiments; maximum
+  lengths averaged' (paper-wide) on Fig. 3's rows -> all 3. Integer stage parameters read written-out counts
+  from the item's text; a non-whole number is left out with a problem. Figure conditions on unit-less columns
+  are coerced to the column's type (`convert_condition(condition, registry)`).
+- Review window: "Data type" column (combo) per variable: a built-in column shows its type (fixed); an added
+  column its remembered type (editable); a new column the category's suggestion (number -> Number, else Any).
+  Stored-as preview converts; values that don't fit show ⚠ and block "Build dataset" (`problems`). The type is
+  saved with a new column (`registry.add_column(value_type=)`, `set_column_type` for added columns) and applied
+  to later papers' recognised values (pipeline passes column_type to write_values). Remembered-variables window:
+  "Data type" combo on Added columns. A value that couldn't be put in the column's unit is still written as text
+  + flagged (unchanged); ranges ('low:high') pass under Number. tests/test_value_types.py.

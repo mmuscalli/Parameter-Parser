@@ -9,6 +9,10 @@ found). Nothing here goes into the dataset unless the user adds it:
   - Existing column      -- values go into a column that already exists (the
                             name is treated as a synonym of it from now on)
 
+"Data type" restricts what the column holds (value_types.py: number, whole number, text, yes / no):
+values are converted to it ('triplicate' -> 3) and one that can't be blocks "Build dataset" until it's
+edited or the type changed. Built-in columns show their own type; a new column's type is remembered.
+
 With "Remember" ticked, the choice is saved to the local registry and the
 variable is recognised automatically on later papers. Individual values can
 be edited first (e.g. "300 rpm" -> 300). PaperDataTemplate itself is never
@@ -31,13 +35,16 @@ from PySide6.QtWidgets import (QAbstractItemView, QCheckBox, QComboBox, QComplet
 from parameter_extractor.ingestion.new_variables import VariableDecision, VariableGroup, stored_value
 from parameter_extractor.names import closest_names, vocabulary
 from parameter_extractor.registry import VariableRegistry
+from parameter_extractor.value_types import TYPES, column_type
 from parameter_extractor.variable_categories import by_id
 
 ACTIONS = [("ignore", "Don't add"), ("new_column", "New column"), ("existing_column", "Existing column")]
 KIND_LABELS = {"species": "Species", "parameter": "Experimental parameter", "figure_axis": "Figure axis",
                "assumed_value": "ASSUMED value (not stated in the paper)"}
-COLS = ["Variable", "Type", "Values", "Example", "Similar existing", "Add as", "Column", "Remember"]
-ACTION_COL, COLUMN_COL, REMEMBER_COL = 5, 6, 7
+COLS = ["Variable", "Type", "Values", "Example", "Similar existing", "Add as", "Column", "Data type", "Remember"]
+ACTION_COL, COLUMN_COL, DTYPE_COL, REMEMBER_COL = 5, 6, 7, 8
+# a new column's suggested data type, from its category's format (variable_categories.py)
+CATEGORY_TYPE = {"number": "number", "text": "text"}
 
 
 def _value_text(v) -> str:
@@ -59,6 +66,7 @@ class VariableReviewDialog(QDialog):
         self.setWindowTitle("Review new variables")
         self.resize(1250, 760)
         self.groups, self.registry = groups, registry
+        self._shown = -1
         self._columns = registry.known_columns()
 
         intro = QLabel(
@@ -87,7 +95,7 @@ class VariableReviewDialog(QDialog):
         self.table.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
         self.table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
         self.table.horizontalHeader().setSectionResizeMode(3, QHeaderView.ResizeMode.Stretch)
-        self.action_boxes, self.column_boxes, self.remember_boxes = [], [], []
+        self.action_boxes, self.column_boxes, self.remember_boxes, self.type_boxes = [], [], [], []
         for r, g in enumerate(groups):
             t = self._table_row[r]
             example = next((_value_text(v) for v in g.values if _value_text(v)), "")
@@ -112,6 +120,12 @@ class VariableReviewDialog(QDialog):
             column.setCompleter(completer)
             column.setCurrentText(g.proposed_column)
             column.setEnabled(False)
+            dtype = QComboBox()
+            for key, label in TYPES.items():
+                dtype.addItem(label, key)
+            dtype.setEnabled(False)
+            dtype.setToolTip("What the column holds. Values are converted to it ('triplicate' -> 3 for a whole "
+                             "number); a value that can't be is marked below and must be edited first.")
             remember = QCheckBox()
             remember.setChecked(g.kind != "assumed_value")
             remember.setEnabled(False)
@@ -120,13 +134,18 @@ class VariableReviewDialog(QDialog):
                 for c in range(4):
                     self.table.item(t, c).setForeground(Qt.GlobalColor.darkRed)
             action.currentIndexChanged.connect(lambda i, row=r: self._on_action(row, i))
-            column.currentTextChanged.connect(lambda _t, row=r: self._refresh_preview(row))
+            column.currentTextChanged.connect(lambda _t, row=r: self._on_column(row))
+            dtype.currentIndexChanged.connect(lambda _i, row=r: self._refresh_preview(row))
             self.table.setCellWidget(t, ACTION_COL, action)
             self.table.setCellWidget(t, COLUMN_COL, column)
+            self.table.setCellWidget(t, DTYPE_COL, dtype)
             self.table.setCellWidget(t, REMEMBER_COL, self._centered(remember))
             self.action_boxes.append(action)
             self.column_boxes.append(column)
             self.remember_boxes.append(remember)
+            self.type_boxes.append(dtype)
+        for r in range(len(groups)):
+            self._on_column(r)                              # each data type box shows its column's type
         self.table.resizeColumnsToContents()
         self.table.setColumnWidth(0, min(self.table.columnWidth(0), 320))
         self.table.setColumnWidth(COLUMN_COL, 260)
@@ -134,7 +153,6 @@ class VariableReviewDialog(QDialog):
         for row, category_id in headers:                    # after sizing: spanned text doesn't widen column 0
             self._add_header(row, category_id, sum(1 for g in groups if g.category == category_id))
 
-        self._shown = -1
         self.values_table = QTableWidget(0, 5)
         self.values_table.setHorizontalHeaderLabels(["Applies to", "Value (editable)", "Stored as", "Quote", "From"])
         self.values_table.horizontalHeader().setSectionResizeMode(3, QHeaderView.ResizeMode.Stretch)
@@ -212,7 +230,34 @@ class VariableReviewDialog(QDialog):
         action = ACTIONS[index][0]
         self.column_boxes[row].setEnabled(action != "ignore")
         self.remember_boxes[row].setEnabled(action != "ignore" and self.groups[row].kind != "assumed_value")
+        self._on_column(row)
+
+    def _fixed_type(self, column: str) -> bool:
+        """A built-in column (template or the pack's stages): its data type is shown, not changed here."""
+        return self.registry.is_known_column(column) and column not in self.registry.added_columns
+
+    def _on_column(self, row: int) -> None:
+        """The data type box follows the chosen column: a known column's own type (fixed for built-in
+        ones), else the category's suggestion for a new column."""
+        box = self.type_boxes[row]
+        action = ACTIONS[self.action_boxes[row].currentIndex()][0]
+        column = self.column_boxes[row].currentText().strip()
+        if self.registry.is_known_column(column):
+            kind = column_type(column, self.registry)
+        else:
+            category = by_id(self.groups[row].category)
+            kind = CATEGORY_TYPE.get(category.value_type if category else "", "any")
+        box.blockSignals(True)
+        box.setCurrentIndex(max(box.findData(kind), 0))
+        box.blockSignals(False)
+        box.setEnabled(action != "ignore" and not self._fixed_type(column))
         self._refresh_preview(row)
+
+    def value_type(self, row: int) -> str:
+        return self.type_boxes[row].currentData() or "any"
+
+    def set_value_type(self, row: int, value_type: str) -> None:
+        self.type_boxes[row].setCurrentIndex(self.type_boxes[row].findData(value_type))
 
     def _refresh_preview(self, row: int) -> None:
         if row == self._shown:
@@ -241,16 +286,21 @@ class VariableReviewDialog(QDialog):
         action = ACTIONS[self.action_boxes[row].currentIndex()][0] if values else "ignore"
         column = self.column_boxes[row].currentText().strip() if values else ""
         for i, v in enumerate(values):
+            refused = False
             if action == "ignore" or not column:
                 stored = "(not added)"
             else:
-                value, note = stored_value(v, column)
-                stored = (f"{value:g}" if isinstance(value, (int, float)) else str(value)) + (f"  ({note})" if note else "")
+                value, note = stored_value(v, column, self.value_type(row))
+                refused = note.startswith("not stored")
+                stored = ("⚠ " + note[len("not stored: "):] if refused else
+                          (f"{value:g}" if isinstance(value, float) else str(value)) + (f"  ({note})" if note else ""))
             for c, text in enumerate([_where(v), _value_text(v), stored, v.quote or "", v.origin]):
                 item = QTableWidgetItem(text)
                 item.setToolTip(text)
                 if c != 1:
                     item.setFlags(item.flags() & ~Qt.ItemFlag.ItemIsEditable)
+                if c == 2 and refused:
+                    item.setForeground(Qt.GlobalColor.darkRed)
                 t.setItem(i, c, item)
         t.resizeColumnToContents(0)
         t.blockSignals(False)
@@ -277,7 +327,8 @@ class VariableReviewDialog(QDialog):
             if action == "new_column" and self.registry.is_known_column(column):
                 action = "existing_column"      # typed an existing name: it's a merge
             out.append(VariableDecision(alias_name=g.alias_name, kind=g.kind, action=action, column=column,
-                                        remember=self.remember_boxes[r].isChecked()))
+                                        remember=self.remember_boxes[r].isChecked(),
+                                        value_type="" if self._fixed_type(column) else self.value_type(r)))
         return out
 
     def problems(self) -> List[str]:
@@ -293,11 +344,16 @@ class VariableReviewDialog(QDialog):
                 issues.append(f"'{g.name}': '{d.column}' isn't an existing column -- choose one from the "
                               f"list, or pick 'New column'.")
             else:
-                bad = [str(v.value if v.value is not None else v.value_text) for v in g.values
-                       if stored_value(v, d.column)[1].startswith("not converted")]
+                kind = d.value_type or column_type(d.column, self.registry)
+                notes = [(v, stored_value(v, d.column, kind)[1]) for v in g.values]
+                bad = [_value_text(v) for v, n in notes if n.startswith("not converted")]
+                wrong = [_value_text(v) for v, n in notes if n.startswith("not stored")]
                 if bad:
                     issues.append(f"'{g.name}': {', '.join(repr(b) for b in bad[:3])} can't be converted to the "
                                   f"unit of {d.column}. Edit the value(s) below, or choose another column.")
+                if wrong:
+                    issues.append(f"'{g.name}': {', '.join(repr(b) for b in wrong[:3])} can't be stored as "
+                                  f"{TYPES[kind].lower()}. Edit the value(s) below, or choose another data type.")
         return issues
 
     def _finish(self) -> None:
