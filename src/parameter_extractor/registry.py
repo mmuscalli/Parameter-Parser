@@ -10,6 +10,9 @@ them.
     aliases -- "this extracted name means that column" -- so the same
     variable is recognised automatically on later runs instead of being
     reviewed again.
+  - Research areas (2026-11-03): every added column and synonym belongs to one pack, or to Standard (every
+    pack); a registry object is one pack's view (`for_pack` for another's). The file also keeps the user's
+    choices for built-in columns (data type, category) and their variable-category edits.
 
 Columns added locally are written after the template's block in the CSV.
 """
@@ -25,23 +28,47 @@ from typing import Dict, Optional, Set
 APP_NAME = "Parameter Extractor"
 
 
-def standard_columns() -> list:
+def standard_columns(pack=None) -> list:
     """App-defined standard columns (beyond the template), in their defined order: the
-    ones the active domain pack lists (packs/), then its optional stages' parameter columns
-    that aren't template columns (the pack's stages/*.json), in spec order."""
+    ones the pack (default: the active one) lists (packs/), then its optional stages' parameter
+    columns that aren't template columns (the pack's stages/*.json), in spec order."""
     from parameter_extractor.packs import current
     from parameter_extractor.stages.optional import spec_standard_columns
-    pack = current()
+    pack = pack or current()
     listed = [c["column"] for c in pack.standard_column_entries]
     template = set(pack.template_columns)
-    extra = list(spec_standard_columns())
+    extra = list(spec_standard_columns(pack))
     if pack.uses("fit_models"):                 # exoplanets: how the values were obtained
         from parameter_extractor.calculators.exoplanet_fits import fit_columns
-        extra += fit_columns()
+        extra += fit_columns(pack)
     for column, _ in extra:
         if column not in template and column not in listed:
             listed.append(column)
     return listed
+
+
+# research area of columns, synonyms and categories every pack shares (2026-11-03): the rest belong to one pack
+STANDARD = "standard"
+STANDARD_LABEL = "Standard (every research area)"
+
+
+def area_label(area: str) -> str:
+    if area == STANDARD:
+        return STANDARD_LABEL
+    from parameter_extractor.packs import available
+    pack = available().get(area)
+    return pack.label if pack else area
+
+
+def areas() -> list:
+    """[(id, label)]: Standard first, then every pack."""
+    from parameter_extractor.packs import available
+    return [(STANDARD, STANDARD_LABEL)] + [(p.id, p.label) for p in available().values()]
+
+
+def common_column_names() -> list:
+    from parameter_extractor.packs import common_columns
+    return [c["column"] for c in common_columns()]
 
 
 def default_registry_path() -> Path:
@@ -107,25 +134,85 @@ def suggest_column_name(kind: str, name: str, role: Optional[str] = None) -> str
     return slug.lower()
 
 
-class VariableRegistry:
-    def __init__(self, path: Optional[Path] = None):
-        self.path = Path(path) if path else None
-        from parameter_extractor.packs import current
-        self.template_columns = current().template_columns
-        self.standard_columns = standard_columns()
-        self._template_set: Set[str] = set(self.template_columns)
-        self._base_set: Set[str] = self._template_set | set(self.standard_columns)
-        self.added_columns: Dict[str, dict] = {}     # column -> {kind, added, note}
-        self.aliases: Dict[str, str] = {}            # "kind:name" -> column (name lowercased for matching)
-        self.alias_labels: Dict[str, str] = {}       # same key -> the name as first written, for display
-        self.species_ids: Dict[str, str] = {}        # PubChem CID -> species name accepted in a review
-        self._changed = False
-        if self.path and self.path.is_file():
-            data = json.loads(self.path.read_text())
-            self.added_columns = data.get("columns", {})
+class _Store:
+    """What the registry file holds, shared by every pack's view of it (VariableRegistry.for_pack)."""
+
+    def __init__(self, path: Optional[Path]):
+        self.columns: Dict[str, dict] = {}        # column -> {kind, added, note, pack, category, type}
+        self.aliases: Dict[str, str] = {}         # "kind:name" -> column (name lowercased for matching)
+        self.alias_labels: Dict[str, str] = {}    # same key -> the name as first written, for display
+        self.alias_areas: Dict[str, str] = {}     # same key -> research area (pack id or 'standard')
+        self.species_ids: Dict[str, str] = {}     # PubChem CID -> species name accepted in a review
+        self.builtin: Dict[str, Dict[str, dict]] = {}   # area -> built-in column -> {type, category} chosen
+        self.categories: Dict[str, dict] = {}     # area -> {"added": [...], "changed": {id: {...}}}
+        self.changed = False
+        if path and path.is_file():
+            data = json.loads(path.read_text())
+            self.columns = data.get("columns", {})
             self.aliases = data.get("aliases", {})
             self.alias_labels = data.get("alias_labels", {})
+            self.alias_areas = data.get("alias_areas", {})
             self.species_ids = data.get("species_ids", {})
+            self.builtin = data.get("builtin_columns", {})
+            self.categories = data.get("categories", {})
+
+
+class VariableRegistry:
+    """One research area's view of the registry: the pack's built-in columns, plus the columns and synonyms
+    remembered for that pack or for every pack (STANDARD). Entries remembered before research areas existed
+    count as Standard. `all_columns` / `all_aliases` hold every area's."""
+
+    def __init__(self, path: Optional[Path] = None, pack=None, _store: Optional[_Store] = None):
+        self.path = Path(path) if path else None
+        from parameter_extractor.packs import available, current
+        self.pack = available()[pack] if isinstance(pack, str) else (pack or current())
+        self.pack_id = self.pack.id
+        self.template_columns = self.pack.template_columns
+        self.standard_columns = standard_columns(self.pack)
+        self._template_set: Set[str] = set(self.template_columns)
+        self._base_set: Set[str] = self._template_set | set(self.standard_columns)
+        self._store = _store or _Store(self.path)
+
+    def for_pack(self, pack) -> "VariableRegistry":
+        """Another research area's view of the same registry (edits are shared; one save writes them)."""
+        return VariableRegistry(self.path, pack, _store=self._store)
+
+    # ---- the stored data -------------------------------------------------------
+
+    all_columns = property(lambda self: self._store.columns)
+    all_aliases = property(lambda self: self._store.aliases)
+    alias_labels = property(lambda self: self._store.alias_labels)
+    species_ids = property(lambda self: self._store.species_ids)
+    local_categories = property(lambda self: self._store.categories)
+
+    @property
+    def _changed(self) -> bool:
+        return self._store.changed
+
+    @_changed.setter
+    def _changed(self, value: bool) -> None:
+        self._store.changed = value
+
+    def column_area(self, column: str) -> str:
+        return (self._store.columns.get(column) or {}).get("pack", STANDARD)
+
+    def alias_area(self, key: str) -> str:
+        if key in self._store.alias_areas:
+            return self._store.alias_areas[key]
+        target = self._store.aliases.get(key)
+        return self.column_area(target) if target in self._store.columns else STANDARD
+
+    def in_scope(self, area: str) -> bool:
+        return area in (STANDARD, self.pack_id)
+
+    @property
+    def added_columns(self) -> Dict[str, dict]:
+        """Columns remembered for this pack or for every pack (the info dicts themselves: edits stick)."""
+        return {c: info for c, info in self._store.columns.items() if self.in_scope(info.get("pack", STANDARD))}
+
+    @property
+    def aliases(self) -> Dict[str, str]:
+        return {k: c for k, c in self._store.aliases.items() if self.in_scope(self.alias_area(k))}
 
     # ---- lookups -------------------------------------------------------------
 
@@ -167,42 +254,143 @@ class VariableRegistry:
 
     # ---- additions (from the review screen) -----------------------------------
 
-    def add_column(self, column: str, kind: str, note: str = "", category: str = "", value_type: str = "") -> None:
+    def add_column(self, column: str, kind: str, note: str = "", category: str = "", value_type: str = "",
+                   area: str = "") -> None:
+        """Remember a column accepted in a review, for this pack (or `area`: another pack, or STANDARD). A column
+        another pack already remembers becomes Standard (both use it)."""
+        if column in self._store.columns and column not in self.added_columns:
+            self._store.columns[column]["pack"] = STANDARD
+            self._changed = True
         if column not in self._base_set and column not in self.added_columns:
-            self.added_columns[column] = {"kind": kind, "added": date.today().isoformat(), "note": note,
-                                          **({"category": category} if category else {}),
-                                          **({"type": value_type} if value_type and value_type != "any" else {})}
+            self._store.columns[column] = {"kind": kind, "added": date.today().isoformat(), "note": note,
+                                           "pack": area or self.pack_id,
+                                           **({"category": category} if category else {}),
+                                           **({"type": value_type} if value_type and value_type != "any" else {})}
             self._changed = True
         elif value_type:
             self.set_column_type(column, value_type)
 
-    def set_column_type(self, column: str, value_type: str) -> None:
-        """The data type values of a column the user added are converted to (value_types.py); 'any' clears
-        it. Built-in columns keep theirs."""
-        info = self.added_columns.get(column)
-        if info is None or info.get("type", "any") == (value_type or "any"):
+    def _set_field(self, info: dict, field: str, value: str, empty: str = "") -> None:
+        if info.get(field, empty) == (value or empty):
             return
-        if value_type and value_type != "any":
-            info["type"] = value_type
+        if value and value != empty:
+            info[field] = value
         else:
-            info.pop("type", None)
+            info.pop(field, None)
         self._changed = True
 
-    def add_alias(self, kind: str, name: str, column: str) -> None:
+    def set_column_type(self, column: str, value_type: str) -> None:
+        """The data type values of a column the user added are converted to (value_types.py); 'any' clears
+        it. Built-in columns: set_builtin."""
+        info = self._store.columns.get(column)
+        if info is not None:
+            self._set_field(info, "type", value_type, "any")
+
+    def set_column_category(self, column: str, category: str) -> None:
+        """The variable category an added column is placed under (column_order.py); '' = by its name."""
+        info = self._store.columns.get(column)
+        if info is not None:
+            self._set_field(info, "category", category)
+
+    def set_column_area(self, column: str, area: str) -> None:
+        """Move an added column to another research area (pack id or STANDARD); its synonyms follow."""
+        info = self._store.columns.get(column)
+        if info is None or info.get("pack", STANDARD) == area:
+            return
+        info["pack"] = area
+        for key in self.aliases_to(column):
+            self._store.alias_areas[key] = area
+        self._changed = True
+
+    def set_alias_area(self, key: str, area: str) -> None:
+        if key in self._store.aliases and self.alias_area(key) != area:
+            self._store.alias_areas[key] = area
+            self._changed = True
+
+    def add_alias(self, kind: str, name: str, column: str, area: str = "") -> None:
         key = _alias_key(kind, name)
-        self.aliases[key] = column
+        self._store.aliases[key] = column
+        self._store.alias_areas[key] = area or (self.column_area(column) if column in self._store.columns
+                                                else self.pack_id)
         self.alias_labels.setdefault(key, name.strip())
         self._changed = True
+
+    # ---- built-in columns: the user's choices (the Remembered variables window) --------
+
+    def builtin_area(self, column: str) -> str:
+        """Where a built-in column's choices are kept: STANDARD for the columns every pack has."""
+        return STANDARD if column in common_column_names() else self.pack_id
+
+    def builtin_choice(self, column: str) -> dict:
+        """{type, category} the user chose for a built-in column of this pack (empty: the defaults)."""
+        if column not in self._base_set:
+            return {}
+        return dict(self._store.builtin.get(self.builtin_area(column), {}).get(column, {}))
+
+    def set_builtin(self, column: str, value_type: Optional[str] = None, category: Optional[str] = None) -> None:
+        """Change a built-in column's data type or category ('' = back to the default). Changes how values
+        are stored and where the column sits; the pack's prompts and stages are unchanged."""
+        if column not in self._base_set:
+            raise ValueError(f"'{column}' isn't a built-in column of {self.pack.label}.")
+        area = self.builtin_area(column)
+        info = self._store.builtin.setdefault(area, {}).setdefault(column, {})
+        if value_type is not None:
+            self._set_field(info, "type", value_type)
+        if category is not None:
+            self._set_field(info, "category", category)
+        if not info:
+            del self._store.builtin[area][column]
+            if not self._store.builtin[area]:
+                del self._store.builtin[area]
+
+    def chosen_type(self, column: str) -> str:
+        """The data type the user chose for a column (added or built-in), or ''."""
+        info = self.added_columns.get(column)
+        return (info or self.builtin_choice(column)).get("type", "")
+
+    def chosen_categories(self) -> Dict[str, str]:
+        """{column: category} the user chose for added columns of this pack."""
+        return {c: info["category"] for c, info in self.added_columns.items() if info.get("category")}
+
+    def builtin_categories(self) -> Dict[str, str]:
+        """{column: category} the user chose for built-in columns (these win over the pack's own placement)."""
+        out = {}
+        for area in (STANDARD, self.pack_id):
+            for column, info in self._store.builtin.get(area, {}).items():
+                if info.get("category") and column in self._base_set:
+                    out[column] = info["category"]
+        return out
+
+    def builtin_types(self) -> Dict[str, str]:
+        out = {}
+        for area in (STANDARD, self.pack_id):
+            for column, info in self._store.builtin.get(area, {}).items():
+                if info.get("type") and column in self._base_set:
+                    out[column] = info["type"]
+        return out
+
+    # ---- variable categories (the Variable categories window; variable_categories.py applies them) ----
+
+    def set_local_categories(self, area: str, edits: dict) -> None:
+        """{"added": [category dicts], "changed": {id: {field: value}}} for one area ('standard' or a pack)."""
+        edits = {k: v for k, v in edits.items() if v}
+        if self._store.categories.get(area, {}) != edits:
+            if edits:
+                self._store.categories[area] = edits
+            else:
+                self._store.categories.pop(area, None)
+            self._changed = True
 
     def species_for_cid(self, cid: int) -> Optional[str]:
         """The name a species with this PubChem CID was accepted under, if its
         aliases still exist -- so a different name for the same compound in a
         later paper lands in the same column."""
         name = self.species_ids.get(str(cid))
-        if name and any(self.split_alias(k)[1].split(" ", 1)[-1].removesuffix(" %") == name.lower()
-                        for k in self.aliases if k.startswith("species:")):
-            return name
-        return None
+        return name if name and self._species_named(name, self.aliases) else None
+
+    def _species_named(self, name: str, aliases) -> bool:
+        return any(self.split_alias(k)[1].split(" ", 1)[-1].removesuffix(" %") == name.lower()
+                   for k in aliases if k.startswith("species:"))
 
     def remember_species_id(self, cid: int, name: str) -> None:
         if cid and self.species_ids.get(str(cid)) is None:
@@ -236,44 +424,48 @@ class VariableRegistry:
         return label
 
     def aliases_to(self, column: str) -> list:
-        return sorted(k for k, c in self.aliases.items() if c == column)
+        """Every synonym pointing to `column` (any research area)."""
+        return sorted(k for k, c in self._store.aliases.items() if c == column)
 
     def set_alias_column(self, key: str, column: str) -> None:
-        if self.aliases.get(key) != column:
-            self.aliases[key] = column
+        if self._store.aliases.get(key) != column:
+            self._store.aliases[key] = column
             self._changed = True
 
     def remove_alias(self, key: str) -> None:
-        if self.aliases.pop(key, None) is not None:
+        if self._store.aliases.pop(key, None) is not None:
             self.alias_labels.pop(key, None)
+            self._store.alias_areas.pop(key, None)
             self._changed = True
 
     def remove_column(self, column: str) -> list:
         """Forget an added column and every alias pointing to it (those variables will
         be reviewed again). Template and standard columns can't be removed. Returns
         the aliases removed."""
-        if column not in self.added_columns:
+        if column not in self._store.columns:
             return []
-        del self.added_columns[column]
+        del self._store.columns[column]
         removed = self.aliases_to(column)
         for k in removed:
-            del self.aliases[k]
+            del self._store.aliases[k]
             self.alias_labels.pop(k, None)
+            self._store.alias_areas.pop(k, None)
         # identities whose names no longer point anywhere are forgotten too
-        self.species_ids = {cid: n for cid, n in self.species_ids.items() if self.species_for_cid(int(cid))}
+        self._store.species_ids = {cid: n for cid, n in self.species_ids.items()
+                                   if self._species_named(n, self._store.aliases)}
         self._changed = True
         return removed
 
     def rename_column(self, old: str, new: str) -> None:
         """Rename an added column; aliases follow. Fails if `new` already exists."""
-        if old not in self.added_columns:
+        if old not in self._store.columns:
             raise ValueError(f"'{old}' isn't a column you added.")
-        if self.is_known_column(new):
+        if self.is_known_column(new) or new in self._store.columns:
             raise ValueError(f"A column called '{new}' already exists.")
-        self.added_columns[new] = self.added_columns.pop(old)
-        for k, c in list(self.aliases.items()):
+        self._store.columns[new] = self._store.columns.pop(old)
+        for k, c in list(self._store.aliases.items()):
             if c == old:
-                self.aliases[k] = new
+                self._store.aliases[k] = new
         self._changed = True
 
     def save(self) -> None:
@@ -281,6 +473,12 @@ class VariableRegistry:
         if self.path is None or not self._changed:
             return
         self.path.parent.mkdir(parents=True, exist_ok=True)
-        self.path.write_text(json.dumps({"columns": self.added_columns, "aliases": self.aliases,
-                                         "alias_labels": self.alias_labels, "species_ids": self.species_ids},
-                                        indent=2, ensure_ascii=False, sort_keys=True))
+        st = self._store
+        data = {"columns": st.columns, "aliases": st.aliases, "alias_labels": st.alias_labels,
+                "alias_areas": st.alias_areas, "species_ids": st.species_ids}
+        if st.builtin:
+            data["builtin_columns"] = st.builtin
+        if st.categories:
+            data["categories"] = st.categories
+        self.path.write_text(json.dumps(data, indent=2, ensure_ascii=False, sort_keys=True))
+        self._changed = False

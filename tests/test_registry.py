@@ -78,14 +78,13 @@ def test_registry_window_save_and_cancel():
         before = path.read_text()
 
         dlg = RegistryDialog(path)
-        cols = [dlg.columns_table.item(r, 0).text() for r in range(dlg.columns_table.rowCount())]
+        cols = [i.text(0) for i in dlg.leaves(dlg.columns_tree)]
         assert cols == ["initial_RbCl_aq_mM", "stirring_rate_rpm"]
-        assert dlg.columns_table.item(0, 4).text() == ("RbCl (starting concentration), "
-                                                       "rubidium chloride (starting concentration)")
-        names = sorted(dlg.alias_table.item(r, 0).text() for r in range(dlg.alias_table.rowCount()))
+        assert dlg.leaves(dlg.columns_tree)[0].text(dlg.A_NAMES) == ("RbCl (starting concentration), "
+                                                                     "rubidium chloride (starting concentration)")
+        names = sorted(i.text(0) for i in dlg.leaves(dlg.alias_tree))
         assert names == ["RbCl (starting concentration)", "reaction volume",
                          "rubidium chloride (starting concentration)", "stirring rate"]
-        assert dlg.alias_table.rowCount() == 4
         dlg.remove_column("initial_RbCl_aq_mM")
         dlg.reject()                                                               # Cancel: nothing saved
         assert path.read_text() == before
@@ -94,7 +93,7 @@ def test_registry_window_save_and_cancel():
         dlg.remove_column("initial_RbCl_aq_mM")
         assert dlg.rename_column("stirring_rate_rpm", "stirring_speed_rpm")
         dlg.remove_alias("parameter:reaction volume")
-        assert dlg.alias_table.rowCount() == 1
+        assert len(dlg.leaves(dlg.alias_tree)) == 1
         dlg._save()
         saved = json.loads(path.read_text())
         assert saved["columns"].keys() == {"stirring_speed_rpm"}
@@ -102,7 +101,7 @@ def test_registry_window_save_and_cancel():
         assert saved["alias_labels"] == {"parameter:stirring rate": "stirring rate"}
 
         empty = RegistryDialog(Path(tmp) / "none.json")                           # no file yet
-        assert empty.columns_table.rowCount() == 0 and empty.alias_table.rowCount() == 0
+        assert not empty.leaves(empty.columns_tree) and not empty.leaves(empty.alias_tree)
 
 
 def test_removed_choice_is_reviewed_again():

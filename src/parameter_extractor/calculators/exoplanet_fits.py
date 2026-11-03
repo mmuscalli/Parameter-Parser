@@ -76,15 +76,15 @@ STELLAR_COLUMNS = [
 ]
 
 
-def _parameter_units() -> Dict[str, str]:
+def _parameter_units(pack=None) -> Dict[str, str]:
     """Archive column -> its unit, from the pack's stage specs (numeric parameters)."""
     from parameter_extractor.stages.optional import load_specs
-    return {p.column: p.unit for spec in load_specs().values() for p in spec.parameters if p.kind == "number"}
+    return {p.column: p.unit for spec in load_specs(pack).values() for p in spec.parameters if p.kind == "number"}
 
 
-def fit_columns() -> List[Tuple[str, str]]:
+def fit_columns(pack=None) -> List[Tuple[str, str]]:
     """(column, description) of every fitting-model column, in output order."""
-    priors = [(c + s, f"Prior on {c}: {s[5:]}") for c in _parameter_units() for s in PRIOR_SUFFIXES]
+    priors = [(c + s, f"Prior on {c}: {s[5:]}") for c in _parameter_units(pack) for s in PRIOR_SUFFIXES]
     return PLANET_COLUMNS + STELLAR_COLUMNS + priors
 
 

@@ -10,6 +10,8 @@ A category says what KIND of variable a suggestion is and how its values are rep
 
 Every pack gets packs/variable_categories.json (Metadata, Experimental Methodology); a pack adds
 its own (listed first) -- or replaces a shared one by id -- with "variable_categories" in its pack.json.
+The user can change the bundled ones' label / description / format / order and add their own, per pack or for
+every pack (Variables > Variable categories; kept in the registry file, applied via `use_local`).
 Categories with `sources` are filled from where a value comes from (species with no column,
 added solution volumes); the others (and any with model_assigns) are the ones the model chooses from (`cat` on an open-ended
 stage's `other` items). Two built-in groups end the list: hand-typed figure columns and values
@@ -59,22 +61,82 @@ FIGURE = VariableCategory(id="figure", label="Figure columns (typed in the digit
 ASSUMED = VariableCategory(id="assumed", label="Assumed values (not stated in the paper)", sources=["assumed"])
 
 
-def categories(pack: Optional[Pack] = None) -> List[VariableCategory]:
-    """The pack's own categories (the domain's own kinds of variable first), then the shared ones
-    it doesn't replace (same id), then the built-in groups."""
-    pack = pack or current()
-    shared = [VariableCategory(**c) for c in json.loads(SHARED_FILE.read_text())["categories"]]
-    own = [VariableCategory(**c) for c in pack.manifest.variable_categories]
-    ids = {c.id for c in own}
-    cats = own + [c for c in shared if c.id not in ids]
-    # the pack's columns for any category, shared ones included ("category_columns" in pack.json)
+STANDARD = "standard"          # = registry.STANDARD: the user's edits of the shared categories
+EDITABLE_FIELDS = ("label", "description", "value_type", "max_words", "table_order", "model_assigns")
+RESERVED_IDS = {FIGURE.id, ASSUMED.id}
+
+# the user's category edits (the registry file's "categories": {area: {"added": [...], "changed": {id: {...}}}}),
+# set by pipeline._start from RunConfig.registry_path and by the GUI; empty = the bundled categories only
+_local: dict = {}
+
+
+def use_local(edits: Optional[dict]) -> None:
+    global _local
+    _local = dict(edits or {})
+
+
+def _edited(cats: List[VariableCategory], edits: dict) -> List[VariableCategory]:
+    """The bundled categories with the user's changes, then the user's own."""
+    changed = edits.get("changed", {})
+    out = [c.model_copy(update={k: v for k, v in changed[c.id].items() if k in EDITABLE_FIELDS})
+           if c.id in changed else c for c in cats]
+    return out + [VariableCategory(**c) for c in edits.get("added", [])]
+
+
+def bundled_shared() -> List[VariableCategory]:
+    return [VariableCategory(**c) for c in json.loads(SHARED_FILE.read_text())["categories"]]
+
+
+def bundled_own(pack: Pack) -> List[VariableCategory]:
+    return [VariableCategory(**c) for c in pack.manifest.variable_categories]
+
+
+def _with_added_before_other(cats: List[VariableCategory], added: List[dict]) -> List[VariableCategory]:
+    at = next((i for i, c in enumerate(cats) if c.id == "other"), len(cats))
+    return cats[:at] + [VariableCategory(**c) for c in added] + cats[at:]
+
+
+def shared_categories(local: Optional[dict] = None, pack: Optional[Pack] = None) -> List[VariableCategory]:
+    """The categories every pack gets (minus those `pack` replaces, with its columns for them), with the user's
+    edits; the user's own shared categories go before Other."""
+    local = _local if local is None else local
+    edits = local.get(STANDARD, {})
+    replaced = {c.id for c in bundled_own(pack)} if pack else set()
+    cats = [c for c in bundled_shared() if c.id not in replaced]
+    if pack:
+        _add_pack_columns(cats, pack)
+    cats = _edited(cats, {"changed": edits.get("changed", {})})
+    return _with_added_before_other(cats, edits.get("added", []))
+
+
+def _add_pack_columns(cats: List[VariableCategory], pack: Pack) -> None:
+    """The pack's columns for any category, shared ones included ("category_columns" in pack.json)."""
     for c in cats:
         extra = pack.manifest.category_columns.get(c.id, {})
         c.columns = list(extra.get("columns", [])) + [x for x in c.columns if x not in extra.get("columns", [])]
         c.patterns = list(extra.get("patterns", [])) + c.patterns
         if "table_order" in extra:
             c.table_order = extra["table_order"]
-    return cats + [FIGURE, ASSUMED]
+
+
+def categories(pack: Optional[Pack] = None, local: Optional[dict] = None) -> List[VariableCategory]:
+    """The pack's own categories (the domain's own kinds of variable first; then the user's for this pack),
+    then the shared ones it doesn't replace (same id), then the built-in groups. `local` = the user's edits
+    (default: the ones in use, `use_local`)."""
+    pack = pack or current()
+    local = _local if local is None else local
+    own = bundled_own(pack)
+    _add_pack_columns(own, pack)
+    own = _edited(own, local.get(pack.id, {}))
+    return own + shared_categories(local, pack) + [FIGURE, ASSUMED]
+
+
+def table_categories(pack: Optional[Pack] = None, local: Optional[dict] = None,
+                     area: Optional[str] = None) -> List[VariableCategory]:
+    """Categories a column can be placed under (no built-in review groups). area STANDARD: the shared ones."""
+    if area == STANDARD:
+        return shared_categories(local)
+    return [c for c in categories(pack, local) if c.id not in RESERVED_IDS]
 
 
 def by_id(category_id: str, pack: Optional[Pack] = None) -> Optional[VariableCategory]:

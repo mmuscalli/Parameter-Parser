@@ -452,10 +452,10 @@ def _category_listing() -> str:
     return prompt_listing()
 
 
-def load_specs() -> Dict[str, StageSpec]:
-    """The active domain pack's stage specs (its stages/*.json), by name, in file order."""
+def load_specs(pack=None) -> Dict[str, StageSpec]:
+    """A domain pack's stage specs (its stages/*.json; default the active pack), by name, in file order."""
     from parameter_extractor.packs import current
-    return _specs_in(current().stages_dir)
+    return _specs_in((pack or current()).stages_dir)
 
 
 @lru_cache(maxsize=None)
@@ -467,11 +467,11 @@ def _specs_in(folder: Path) -> Dict[str, StageSpec]:
     return specs
 
 
-def spec_standard_columns() -> List[Tuple[str, str]]:
+def spec_standard_columns(pack=None) -> List[Tuple[str, str]]:
     """(column, description) of every spec parameter, in spec order -- the registry adds
     the ones that aren't template columns to its standard columns."""
     out = []
-    for spec in load_specs().values():
+    for spec in load_specs(pack).values():
         for column in spec.output_columns():
             out.append((column, spec.label))
     return out

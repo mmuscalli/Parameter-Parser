@@ -93,6 +93,7 @@ class MainWindow(QMainWindow):
         self._extraction_ok = False
         self._review: Optional[FigureReviewDialog] = None
         self.registry_path = default_registry_path()     # local additions to the variable list
+        self._load_category_edits()
 
         # inputs above, run controls + results below, with a handle between them the user can
         # drag (Mickey, 2026-10-23: the results were squeezed); the inputs scroll when made small
@@ -148,6 +149,8 @@ class MainWindow(QMainWindow):
         variables_menu = self.menuBar().addMenu("Variables")
         self.registry_action = QAction("Remembered variables…", self, triggered=self.open_registry)
         variables_menu.addAction(self.registry_action)
+        self.categories_action = QAction("Variable categories…", self, triggered=self.open_categories)
+        variables_menu.addAction(self.categories_action)
 
         self._load_preferences()
         self._update_run_enabled()
@@ -809,9 +812,25 @@ class MainWindow(QMainWindow):
         """View / undo what the variable registry remembered from earlier reviews."""
         from parameter_extractor.gui.registry_dialog import RegistryDialog
         RegistryDialog(self.registry_path, parent=self).exec()
+        self._load_category_edits()
+
+    def open_categories(self) -> None:
+        """Create / edit the categories of new variables, per research area."""
+        from parameter_extractor.gui.categories_dialog import CategoriesDialog
+        CategoriesDialog(self.registry_path, parent=self).exec()
+        self._load_category_edits()
+
+    def _load_category_edits(self) -> None:
+        """The user's category edits, for the Rows tab's blocks (runs load them again themselves)."""
+        from parameter_extractor import variable_categories
+        from parameter_extractor.registry import VariableRegistry
+        try:
+            variable_categories.use_local(VariableRegistry(self.registry_path).local_categories)
+        except Exception:                      # a damaged registry file shouldn't stop the window
+            variable_categories.use_local({})
 
     def _set_inputs_enabled(self, enabled: bool) -> None:
-        for w in (self.pdf_edit, self.terms_edit, self.registry_action, self.pack_combo,
+        for w in (self.pdf_edit, self.terms_edit, self.registry_action, self.categories_action, self.pack_combo,
                   self.stages_widget, self.profile_combo, self.passes_combo, self.toggles_btn,
                   *self.option_toggles()):   # the pack is active during a run
             w.setEnabled(enabled)
@@ -851,7 +870,7 @@ class MainWindow(QMainWindow):
         from parameter_extractor.registry import VariableRegistry
         run_pack = packs.available().get(self.pack_combo.currentData() or "")   # locked during the run
         try:
-            order = ColumnOrder(pack=run_pack, registry=VariableRegistry(self.registry_path),
+            order = ColumnOrder(pack=run_pack, registry=VariableRegistry(self.registry_path, pack=run_pack),
                                 chosen={a["column"]: a.get("category", "") for a in result.accepted_variables})
         except Exception:                   # the order is a convenience: never in the way of the results
             order = None

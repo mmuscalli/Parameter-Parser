@@ -201,6 +201,9 @@ def _start(pdf_path, config: RunConfig, total_steps: int,
         ctx.handoff_paper_dir = paper_dir(config.handoff_dir,
                                           pdf_path.stem if pdf_path.suffix.lower() == ".pdf" else pdf_path.name)
     packs.activate(config.pack)           # template, vocabulary, prompts and stages of this domain
+    from parameter_extractor import variable_categories   # the user's category edits (none without a registry)
+    variable_categories.use_local(VariableRegistry(config.registry_path).local_categories
+                                  if config.registry_path else {})
     return pdf_path, ctx
 
 
@@ -1101,6 +1104,9 @@ def finish(
                     source=v.source or None))
     if decisions:
         registry.save()
+    # built-in columns whose data type the user changed (Remembered variables > Built-in)
+    from parameter_extractor.value_types import apply_column_types
+    paper_flags += [Flag("unit_conversion", p) for p in apply_column_types(rows, registry.builtin_types())]
     held_out = [v for g in left_out for v in g.values]
     paper_flags += [Flag("pass_disagreement", m) for m in disagreement_flags(ctx.vote_notes)]
     paper_flags += _new_variable_flags([g for g in left_out if g not in unsuggested])

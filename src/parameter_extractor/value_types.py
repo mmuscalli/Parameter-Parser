@@ -8,7 +8,8 @@ kind don't arrive in several shapes ('3' on some rows, 'triplicate experiments; 
   text     -- text; a number is written as text ('3')
   yes_no   -- 'yes' / 'no' (also from true/false, present/absent, 1/0)
 
-A column's type: the one the user chose in the review (remembered in the registry's added columns), else the
+A column's type: the one the user chose (in the review, remembered with an added column, or for a built-in
+column in the Remembered variables window), else the
 pack's stage parameter (`integer` -> integer, kind text -> text, else number), else 'number' for a column with
 a unit, else 'any'. `coerce` converts a value or says why it can't.
 """
@@ -83,15 +84,17 @@ def coerce(value, value_type: str) -> Tuple[object, str]:
     return value, ""
 
 
-def column_type(column: str, registry=None) -> str:
-    """The data type a column holds (see the module docstring)."""
+def column_type(column: str, registry=None, pack=None) -> str:
+    """The data type a column holds (see the module docstring). The user's choice (an added column's, or one
+    made for a built-in column in the Remembered variables window) wins; without a registry: the default."""
     if registry is not None:
-        chosen = (getattr(registry, "added_columns", {}).get(column) or {}).get("type")
+        chosen = registry.chosen_type(column)
         if chosen:
             return chosen
+        pack = pack or registry.pack
     try:
         from parameter_extractor.stages.optional import load_specs
-        for spec in load_specs().values():
+        for spec in load_specs(pack).values():
             for p in spec.parameters:
                 if p.column == column:
                     return "integer" if p.integer else ("text" if p.kind == "text" else "number")
@@ -99,3 +102,29 @@ def column_type(column: str, registry=None) -> str:
         pass
     from parameter_extractor.ingestion.observations import unit_for_column
     return "number" if unit_for_column(column) else "any"
+
+
+def apply_column_types(rows, types: dict) -> list:
+    """Built-in columns whose data type the user changed (registry.builtin_types(): {column: type}): each
+    row's value converted to it; a value that doesn't fit is left out. Returns one problem per column,
+    listing the values left out."""
+    from parameter_extractor.ingestion.flatten_to_template import row_to_template_dict, set_row_value
+    problems = []
+    for column, value_type in types.items():
+        refused = []
+        for row in rows:
+            value = row_to_template_dict(row).get(column)
+            if value is None or value == "":
+                continue
+            new, problem = coerce(value, value_type)
+            if problem:
+                refused.append(f"{row.full_id}: {value}")
+                set_row_value(row, column, None)
+                row.provenance.pop(column, None)
+            elif new != value or type(new) is not type(value):
+                set_row_value(row, column, new)
+        if refused:
+            problems.append(f"{column} is set to hold {TYPES.get(value_type, value_type).lower()} values "
+                            f"(Remembered variables > Built-in), so {len(refused)} value(s) were left out: "
+                            + "; ".join(refused[:8]) + (" ..." if len(refused) > 8 else ""))
+    return problems

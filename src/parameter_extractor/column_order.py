@@ -8,6 +8,7 @@ Which category a column belongs to is configured, not coded (variable_categories
 `columns` by name and/or `patterns` (regular expressions); a pack adds columns to any category with
 "category_columns" in its pack.json, and can define column-only categories (model_assigns false: never
 offered to the model). A column is placed by, in this order:
+  0. the category the user chose for a built-in column (Remembered variables window);
   1. a category naming it in `columns`;
   2. the category it was accepted under in a review (this run's choices, or the registry's memory);
   3. its base column -- uncertainty / alternative-estimate / mode / range / average columns sit right after
@@ -76,16 +77,15 @@ class ColumnOrder:
                 self.explicit.setdefault(col, (c.id, i))
         self.patterns = [(c.id, re.compile(p)) for c in cats for p in c.patterns]
         self.chosen = dict(chosen or {})
+        # the user's category for a built-in column (Remembered variables window) wins over the pack's own
+        self.forced: Dict[str, str] = {}
         if registry is not None:
-            for col, info in getattr(registry, "added_columns", {}).items():
-                if info.get("category"):
-                    self.chosen.setdefault(col, info["category"])
+            for col, cat in registry.chosen_categories().items():
+                self.chosen.setdefault(col, cat)
+            self.forced = registry.builtin_categories()
         from parameter_extractor.registry import standard_columns
         self.template = {c: i for i, c in enumerate(self.pack.template_columns)}
-        # the active pack's standard columns include its stages' columns; another pack's: its listed ones
-        standard = (standard_columns() if self.pack.id == packs.current().id
-                    else [c["column"] for c in self.pack.standard_column_entries])
-        self.standard = {c: i for i, c in enumerate(standard)}
+        self.standard = {c: i for i, c in enumerate(standard_columns(self.pack))}
         self._cat_cache: Dict[str, str] = {}
         self._base_cache: Dict[str, Optional[str]] = {}
 
@@ -95,6 +95,8 @@ class ColumnOrder:
         return self._cat_cache[column]
 
     def _category_of(self, column: str) -> str:
+        if self.forced.get(column) in self.by_id:
+            return self.forced[column]
         if column in self.explicit:
             return self.explicit[column][0]
         if self.chosen.get(column) in self.by_id:

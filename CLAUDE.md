@@ -1840,3 +1840,36 @@ included) and the figure suggestions named the series "pH-buffered" but gave no 
   to later papers' recognised values (pipeline passes column_type to write_values). Remembered-variables window:
   "Data type" combo on Added columns. A value that couldn't be put in the column's unit is still written as text
   + flagged (unchanged); ranges ('low:high') pass under Number. tests/test_value_types.py.
+
+## Research areas in the registry; built-in column choices; editable categories (2026-11-03, Mickey)
+
+- **Research areas**: every remembered column (`columns[c]["pack"]`) and synonym (`alias_areas[key]`) belongs to a
+  pack or to `registry.STANDARD` ("standard" = every pack). A `VariableRegistry(path, pack=None)` is ONE pack's view:
+  `added_columns` / `aliases` are properties filtered to that pack + Standard (the info dicts themselves, so edits
+  stick); `all_columns` / `all_aliases` hold everything; `for_pack(p)` = another view of the same `_Store` (one
+  save). New columns/synonyms get the active pack; a column another pack already remembers, accepted again, becomes
+  Standard; `set_column_area` moves a column (its synonyms follow). Entries without a tag count as Standard (old
+  behaviour). Mickey's local registry: all 33 columns + 34 synonyms tagged prebiotic_chemistry (backup next to it:
+  variable_registry.before-research-areas-2026-11-03.json). `load_specs / spec_standard_columns / fit_columns /
+  standard_columns / column_type` take a `pack` (no global switching needed for another pack's columns).
+- **Built-in columns** (`builtin_columns` in the file: {area: {column: {type, category}}}, common columns under
+  Standard): `set_builtin(column, value_type, category)` ('' = default), `chosen_type` (column_type uses it),
+  `builtin_categories()` -> ColumnOrder `forced` (wins over the pack's `columns` lists), `builtin_types()` ->
+  `value_types.apply_column_types(rows, ...)` in finish() after the review (unfit values left out, one
+  unit_conversion flag per column). Prompts / stage specs are NOT changed by these choices.
+- **Categories editable** (`categories` in the file: {area: {"added": [...], "changed": {id: {fields}}}}):
+  variable_categories.use_local(edits) (pipeline._start from config.registry_path -- None = bundled only, so tests
+  are unaffected; GUI at start and after either window); `categories(pack, local=None)`: pack's own (+ category
+  columns) with the pack's edits + the user's own, then `shared_categories` (Standard edits; the user's own before
+  Other). EDITABLE_FIELDS label/description/value_type/max_words/table_order/model_assigns; ids of the app's own
+  can't change (pack.json / sources refer to them). A user category with model_assigns is offered to the model
+  (prompt listing + the `cat` enum).
+- **GUI**: `gui/registry_dialog.py` -- Added columns / Synonyms / Built-in as QTreeWidgets with a collapsible group
+  per area (Standard, then packs), filter box, click-to-edit cells via `ChoiceDelegate` (research area, category --
+  the area's table_categories + "(automatic)", data type, synonym column); Built-in shows Source + Default, changed
+  rows bold/amber, a warning label + a one-time confirmation (`builtin_confirmed`), reset selected / all; row
+  identifiers + provenance columns aren't listed (fixed places). `gui/categories_dialog.py` (Variables > Variable
+  categories…): area combo, table (ID, Label, Description, Value format, Max words, Table order, Model may assign,
+  Origin), add / remove (own only) / reset to default, warning + one-time confirmation for the app's categories,
+  checks ids (format, unique vs the area + Standard / packs + figure/assumed) and descriptions. Checked natively
+  (screenshots). tests/test_research_areas.py.
