@@ -8,7 +8,7 @@ grouped by research area (Standard = every pack, then each pack; Mickey, 2026-11
   - Synonyms: "this name in a paper -> that column" mappings -- research area, column; remove.
   - Compounds: each compound's default name, the synonyms PubChem lists for it, and the ACTIVE name its
     columns are written under (compound_names.py); "Convert a dataset CSV…" rewrites an older CSV's columns to
-    the active names (merging columns of the same compound).
+    the active names and the current column format (merging columns of the same compound).
   - Built-in: each pack's template and standard columns -- category and data type can be changed (with a
     warning: the pack's prompts and checks were tested with the defaults); names can't (code depends on them).
 

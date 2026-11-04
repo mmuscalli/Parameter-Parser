@@ -41,7 +41,7 @@ def test_range_columns_and_where_ranges_come_from():
     from parameter_extractor.schemas.figures import SeriesCondition
     from parameter_extractor.schemas.variables import NewVariable
     assert with_range("solid_material_mass_g") == "solid_material_mass_range_g"
-    assert with_range("sampled_2peptide_Gly_%yield") == "sampled_2peptide_Gly_range_%yield"
+    assert with_range("sampled_Gly-Gly_aq_%yield") == "sampled_Gly-Gly_aq_range_%yield"
     assert with_range("initial_pH") == "initial_pH_range" and without_range("initial_pH_range") == "initial_pH"
     registry = VariableRegistry(None)
     assert registry.is_known_column("solid_material_mass_range_g")          # the range of a known quantity
@@ -59,7 +59,7 @@ def test_range_columns_and_where_ranges_come_from():
                                              "q": "0.1-0.5 M NaCl", "src": "Methods", "c": "high"}]}]})
     normalize_chemistry(chem)
     got = {column_for_solute(s): _solute_value(s) for s in chem.solutes}
-    assert got == {"initial_NaCl_aq_range_mM": "100:500", "sampled_2peptide_Gly_range_%yield": "2:4"}
+    assert got == {"initial_NaCl_aq_range_mM": "100:500", "sampled_Gly-Gly_aq_range_%yield": "2:4"}
     assert all(s.concentration_mM is None for s in chem.solutes)           # never used in calculations
     # a suggested variable's value ('10-200 s')
     v = _categorised(NewVariable(kind="parameter", name="residence time", alias_name="residence time",

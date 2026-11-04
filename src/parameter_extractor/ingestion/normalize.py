@@ -2,7 +2,7 @@
 Deterministic clean-up of the chemistry step's output before rows are built:
 
   - species names matched onto the controlled vocabulary (names.py):
-    "sodium chloride" -> NaCl, "diglycine" -> 2peptide_Gly, "Ca2+" -> Ca+2
+    "sodium chloride" -> NaCl, "diglycine" -> Gly-Gly, "Ca2+" -> Ca+2
   - names the rules don't know looked up on PubChem (pubchem.py, optional):
     the same compound (same CID) as a template species, as a species the user
     accepted in an earlier review, or as another name used in this paper gets
@@ -58,7 +58,7 @@ def _identify(chemistry: ChemistryExtraction, pubchem, registry, notes: List[Nor
     from parameter_extractor.compound_names import CompoundNames
     names = CompoundNames(registry)               # PubChem synonyms kept offline (bundled + accepted compounds)
     for s in chemistry.solutes:
-        if s.name in vocab or id(s) in rule_matched:     # the rules' names (e.g. 14peptide_Gly) stand
+        if s.name in vocab or id(s) in rule_matched:     # the rules' names (e.g. (Gly)14) stand
             continue
         cleaned = query_name(s.name)
         if cleaned != s.name:

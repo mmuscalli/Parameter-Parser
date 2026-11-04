@@ -187,10 +187,10 @@ def test_pubchem_identity_matching():
         pc = _fake_pubchem(cache, calls)
         notes = normalize_chemistry(chem, pubchem=pc)
         assert [s.name for s in chem.solutes] == ["2'-CMP", "2'-CMP", "CaCl2", "ribose 1,2-cyclic phosphate",
-                                                  "14peptide_Gly"]
+                                                  "(Gly)14"]
         assert chem.solutes[1].pubchem_cid == 101544 and "CID 101544" in chem.solutes[1].conversion_note
         assert chem.solutes[3].pubchem_cid == 0                       # PubChem doesn't know it: left alone
-        assert "14peptide_Gly" not in calls                           # the rules' names aren't looked up
+        assert "(Gly)14" not in calls                           # the rules' names aren't looked up
         assert sum(n.kind == "name_matched" for n in notes) == 3
         pc.save()
         saved = json.loads(cache.read_text())["names"]

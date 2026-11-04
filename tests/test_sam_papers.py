@@ -124,9 +124,9 @@ def test_values_and_units():
     assert [g.proposed_column for g in groups] == ["max_len_nt", "max_len_range_nt"]
     # a chemistry range arrives formatted already ('68.6:79.1' %): kept, not 'not converted'
     rng = NewVariable(kind="species", name="RNA oligomers", alias_name="sampled RNA oligomers range %",
-                      proposed_column="sampled_RNA_oligomers_range_%yield", value_text="68.6:79.1", unit="%",
+                      proposed_column="sampled_RNA_oligomers_aq_range_%yield", value_text="68.6:79.1", unit="%",
                       row_ids=["r1"], origin="chemistry")
-    assert stored_value(rng, "sampled_RNA_oligomers_range_%yield", "number") == ("68.6:79.1", "range")
+    assert stored_value(rng, "sampled_RNA_oligomers_aq_range_%yield", "number") == ("68.6:79.1", "range")
     row = ExtractedRow(full_id="r1", set_id="s", sample_id="r1", set_type="Independent", entry_number=1,
                        paper_title="t", authors=["A"], year_published=0, journal_published="",
                        experiment_type="Batch", solution_type="Wet")

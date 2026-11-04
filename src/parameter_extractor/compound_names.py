@@ -151,11 +151,15 @@ def renames_for(columns, registry) -> Dict[str, str]:
 
 
 def convert_dataset_csv(path, out_path, registry, to: str = "active") -> Dict[str, str]:
-    """Rewrites a dataset CSV's header with every compound under its active (or default, `to='default'`) name;
-    columns that become the same (one paper wrote 'NaCl', another 'sodium chloride') are merged, the first
-    non-empty cell winning. Returns the renames."""
+    """Rewrites a dataset CSV's header with every compound under its active (or default, `to='default'`) name,
+    in the current column format (columns written before 2026-11-04 -- 'sampled_2peptide_Gly_%yield',
+    'initial_Gly_mM' -- converted first, flatten_to_template.current_column_name); columns that become the same
+    (one paper wrote 'NaCl', another 'sodium chloride') are merged, the first non-empty cell winning. Returns the
+    renames."""
+    from parameter_extractor.ingestion.flatten_to_template import current_column_name
     names = CompoundNames(registry)
-    convert = names.harmonize if to == "active" else names.to_default
+    by_name = names.harmonize if to == "active" else names.to_default
+    convert = lambda c: by_name(current_column_name(c))
     with open(path, newline="", encoding="utf-8") as f:
         rows = list(csv.reader(f))
     if not rows:

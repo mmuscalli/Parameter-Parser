@@ -44,8 +44,8 @@ def test_conversions():
 def test_name_matching():
     cases = {"sodium chloride": "NaCl", "NaCl(aq)": "NaCl", "calcium chloride": "CaCl2",
              "CuCl2·2H2O": "CuCl2", "CuCl₂": "CuCl2", "cupric chloride": "CuCl2", "glycine": "Gly",
-             "L-alanine": "Ala", "diglycine": "2peptide_Gly", "Gly-Gly-Gly": "3peptide_Gly",
-             "(Gly)2": "2peptide_Gly", "Gly14": "14peptide_Gly", "dialanine": "2peptide_Ala",
+             "L-alanine": "Ala", "diglycine": "Gly-Gly", "Gly-Gly-Gly": "Gly-Gly-Gly",
+             "(Gly)2": "Gly-Gly", "Gly14": "(Gly)14", "dialanine": "Ala-Ala",
              "SO4 2-": "SO4-2", "ammonium chloride": "NH4Cl"}
     for name, expected in cases.items():
         got = match_species(name)
@@ -72,7 +72,7 @@ def test_normalisation_pass():
     ])
     notes = normalize_chemistry(chem)
     s = chem.solutes
-    assert [x.name for x in s] == ["NaCl", "Gly", "CuCl2", "2peptide_Gly", "RbCl"]
+    assert [x.name for x in s] == ["NaCl", "Gly", "CuCl2", "Gly-Gly", "RbCl"]
     assert s[1].concentration_mM == 1000.0 and "the model had 100 mM" in s[1].conversion_note
     assert s[2].concentration_mM == 25.0 and "computed by the pipeline" in s[2].conversion_note
     assert s[3].concentration_mM is None

@@ -27,10 +27,10 @@ def test_oligonucleotide_names():
     assert {k: oligonucleotide_match(k) for k in cases} == cases
     assert oligonucleotide_match("poly(A)") is None and oligonucleotide_match("pA3'pA") is None
     assert match_species("(pA)4")[0] == "4mer_A"
-    assert is_oligonucleotide_column("sampled_4mer_A_%yield") and not is_oligonucleotide_column("sampled_A_%yield")
+    assert is_oligonucleotide_column("sampled_4mer_A_aq_%yield") and not is_oligonucleotide_column("sampled_A_aq_%yield")
     reg = VariableRegistry(None)
-    assert reg.is_known_column("sampled_12mer_dT_mM") and reg.is_known_column("initial_Gly_mM_err_plus")
-    assert not reg.is_known_column("initial_Foo_mM_err_plus")
+    assert reg.is_known_column("sampled_12mer_dT_aq_mM") and reg.is_known_column("initial_Gly_aq_mM_err_plus")
+    assert not reg.is_known_column("initial_Foo_aq_mM_err_plus")
 
 
 def test_oligomer_totals():
@@ -42,8 +42,8 @@ def test_oligomer_totals():
     row = ExtractedRow(full_id="r1", set_id="s", sample_id="r1", set_type="Independent", entry_number=1,
                        paper_title="t", authors=["A"], year_published=2024, journal_published="j",
                        experiment_type="Batch", solution_type="Wet")
-    for c, v in (("sampled_1mer_A_%yield", 50.0), ("sampled_2mer_A_%yield", 10.5), ("sampled_3mer_A_%yield", 4.25),
-                 ("sampled_5mer_A_%yield", "detected")):
+    for c, v in (("sampled_1mer_A_aq_%yield", 50.0), ("sampled_2mer_A_aq_%yield", 10.5), ("sampled_3mer_A_aq_%yield", 4.25),
+                 ("sampled_5mer_A_aq_%yield", "detected")):
         set_row_value(row, c, v)
     totals, lengths, differing = fill_oligomer_totals([row])
     record = row_to_template_dict(row)
@@ -70,10 +70,10 @@ def test_species_uncertainties_and_rates():
     e = SoluteEntry(name="Gly", phase="aq", role="initial", concentration_value=0.1, concentration_unit_raw="M",
                     concentration_mM=100.0, err_plus=0.01, err_minus=0.01, quote="0.1 ± 0.01 M", source="T1",
                     confidence="high")
-    assert error_cells(e, "initial_Gly_mM") == {"initial_Gly_mM_err_plus": 10.0, "initial_Gly_mM_err_minus": -10.0}
+    assert error_cells(e, "initial_Gly_aq_mM") == {"initial_Gly_aq_mM_err_plus": 10.0, "initial_Gly_aq_mM_err_minus": -10.0}
     pct = SoluteEntry(name="RCP", phase="aq", role="sampled", concentration_value=29.18, concentration_unit_raw="%",
                       err_plus=2.4, err_minus=2.4, quote="29.18 ± 2.40", source="T1", confidence="high")
-    assert error_cells(pct, "sampled_RCP_%yield")["sampled_RCP_%yield_err_minus"] == -2.4
+    assert error_cells(pct, "sampled_RCP_aq_%yield")["sampled_RCP_aq_%yield_err_minus"] == -2.4
     rate = SoluteEntry(name="RCP", phase="aq", role="sampled", concentration_value=0.5, concentration_unit_raw="mM/min",
                        measure="rate", quote="0.5 mM min-1", source="T2", confidence="high")
     column = proposed_column_for_solute(rate)
@@ -161,7 +161,7 @@ def test_active_compound_names():
         reg = VariableRegistry(path)
         assert reg.compounds()["ImpZ"]["synonyms"] == ["imidazolide Z"]
         columns = ["initial_NaCl_aq_mM", "initial_NaCl_aq_mM_err_plus", "stock_NaCl_aq_mM", "initial_NaClO4_aq_mM",
-                   "sampled_2peptide_Gly_mM", "initial_Gly_mM"]
+                   "sampled_Gly-Gly_aq_mM", "initial_Gly_aq_mM"]
         assert renames_for(columns, reg) == {"initial_NaCl_aq_mM": "initial_sodium_chloride_aq_mM",
                                              "initial_NaCl_aq_mM_err_plus": "initial_sodium_chloride_aq_mM_err_plus",
                                              "stock_NaCl_aq_mM": "stock_sodium_chloride_aq_mM"}

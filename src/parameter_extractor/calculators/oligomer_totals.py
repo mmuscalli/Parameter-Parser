@@ -2,7 +2,7 @@
 Nucleic-acid oligomers per row (Mickey, 2026-11-03; the counterpart of peptide_totals.py):
 
   total_sampled_oligomers_yield -- the sum of the row's oligomer % yields, 2-mers and longer, of the naming
-      convention ('sampled_<n>mer_<letters>_%yield', names.oligonucleotide_name). Monomers (1mer) don't count.
+      convention ('sampled_<n>mer_<letters>_aq_%yield', names.oligonucleotide_name). Monomers (1mer) don't count.
   max_oligomer_length_nt -- the longest '<n>mer' with a value on the row (a yield or concentration above zero,
       or 'detected').
 
@@ -48,7 +48,7 @@ def fill_oligomer_totals(rows: List[ExtractedRow]):
                  and int(_LENGTH.match(c).group(1)) >= 2}
         if parts:
             total = round(sum(parts.values()), max(_decimals(v) for v in parts.values()))
-            listed = " + ".join(f"{c.removeprefix('sampled_').removesuffix('_%yield')} {v:g}" for c, v in parts.items())
+            listed = " + ".join(f"{c.removeprefix('sampled_').removesuffix('_%yield').removesuffix('_aq')} {v:g}" for c, v in parts.items())
             stated = record.get(TOTAL_OLIGOMERS_COLUMN)
             if stated not in (None, ""):
                 if isinstance(stated, (int, float)) and abs(stated - total) > CHECK_TOLERANCE:

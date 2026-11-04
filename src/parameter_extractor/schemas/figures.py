@@ -83,7 +83,7 @@ class AxisVariable(BaseModel):
     label: str = Field(description="Axis title exactly as printed, e.g. 't/h' or '% Gly-Gly'.")
     column: Optional[str] = Field(
         description="The template column this axis's values belong in (e.g. 'duration_hr', "
-                    "'sampled_2peptide_Gly_%yield'), chosen from the provided column list; null "
+                    "'sampled_Gly-Gly_aq_%yield'), chosen from the provided column list; null "
                     "if no column fits (e.g. a derived rate or a hydration enthalpy).")
     multiplier: float = Field(
         default=1.0,

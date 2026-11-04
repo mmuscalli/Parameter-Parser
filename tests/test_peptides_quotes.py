@@ -28,8 +28,8 @@ from parameter_extractor.validation.quotes import PaperText, check_flag_quotes
 def test_peptide_names():
     cases = {"Gly-Ala-Ala": "Gly-Ala-Ala", "H-Gly-L-Ala-OH": "Gly-Ala", "glycylalanine": "Gly-Ala",
              "Ala-Gly": "Ala-Gly", "GlyAla": "Gly-Ala", "alanylglycylvaline": "Ala-Gly-Val",
-             "glycylglycylglycine": "3peptide_Gly", "Gly-Gly": "2peptide_Gly", "L-alanyl-L-alanine": "2peptide_Ala",
-             "Gly14": "14peptide_Gly", "dialanine": "2peptide_Ala", "14peptide_Gly": "14peptide_Gly",
+             "glycylglycylglycine": "Gly-Gly-Gly", "Gly-Gly": "Gly-Gly", "L-alanyl-L-alanine": "Ala-Ala",
+             "Gly14": "(Gly)14", "dialanine": "Ala-Ala", "(Gly)14": "(Gly)14",
              # cyclic, homo- or heteromeric: cyclo_<AA1>-<AA2>-..., the template's DKP_<AA> included
              "DKP_Gly": "cyclo_Gly-Gly", "cyclo(Val-Gly)": "cyclo_Val-Gly", "c(L-Ala-L-Gly)": "cyclo_Ala-Gly",
              "glycine anhydride": "cyclo_Gly-Gly", "alanine diketopiperazine": "cyclo_Ala-Ala",
@@ -42,19 +42,21 @@ def test_peptide_names():
 
 def test_peptide_columns_are_constructed_not_listed():
     reg = VariableRegistry(None)
-    for col in ("sampled_14peptide_Gly_%yield", "sampled_Gly-Ala-Ala_%yield", "initial_Ala-Gly_mM",
-                "sampled_cyclo_Gly-Gly_%yield", "sampled_cyclo_Val-Gly_mM",
-                "sampled_2peptide_Gly_%yield", "stock_Gly-Ala_mM"):
+    for col in ("sampled_(Gly)14_aq_%yield", "sampled_Gly-Ala-Ala_aq_%yield", "initial_Ala-Gly_aq_mM",
+                "sampled_cyclo_Gly-Gly_aq_%yield", "sampled_cyclo_Val-Gly_aq_mM",
+                "sampled_Gly-Gly_aq_%yield", "stock_Gly-Ala_aq_mM"):
         assert reg.is_known_column(col), col
-    for col in ("sampled_1peptide_Gly_mM", "sampled_Gly-Gly_mM", "sampled_Gly-Foo_mM", "sampled_Gly-Ala_aq_mM"):
+    # not the convention: one residue, an unknown residue, a run of 4 not written '(Gly)4', the old format
+    for col in ("sampled_Gly_aq_mM", "sampled_Gly-Foo_aq_mM", "sampled_Gly-Gly-Gly-Gly_aq_mM",
+                "sampled_2peptide_Gly_%yield", "sampled_Gly-Ala_mM"):
         assert not is_peptide_column(col), col
 
     def entry(name, unit="%", role="sampled"):
         return SoluteEntry(name=name, in_controlled_vocab=False, phase="aq", role=role, concentration_value=1.0,
                            concentration_unit_raw=unit, quote="q", source="Table 1", confidence="high")
-    assert column_for_solute(entry("Gly-Ala-Ala")) == "sampled_Gly-Ala-Ala_%yield"
-    assert column_for_solute(entry("Gly-Ala", unit="mM")) == "sampled_Gly-Ala_mM"
-    assert proposed_column_for_solute(entry("Ala-Gly", unit="mM", role="initial")) == "initial_Ala-Gly_mM"
+    assert column_for_solute(entry("Gly-Ala-Ala")) == "sampled_Gly-Ala-Ala_aq_%yield"
+    assert column_for_solute(entry("Gly-Ala", unit="mM")) == "sampled_Gly-Ala_aq_mM"
+    assert proposed_column_for_solute(entry("Ala-Gly", unit="mM", role="initial")) == "initial_Ala-Gly_aq_mM"
     assert column_for_solute(entry("Total Gly in peptides")) == "total_sampled_peptides_yield"
     assert column_for_solute(entry("total peptide yield")) == "total_sampled_peptides_yield"
 
@@ -69,19 +71,19 @@ def _row(values: dict, full_id="001001001") -> ExtractedRow:
 
 
 def test_total_peptide_yield_is_summed_or_checked():
-    calc = _row({"sampled_2peptide_Gly_%yield": 2.77, "sampled_3peptide_Gly_%yield": 0.064,
-                 "sampled_Gly-Ala-Ala_%yield": 0.5, "sampled_DKP_Gly_%yield": 9.0})
-    stated_ok = _row({"sampled_2peptide_Gly_%yield": 1.0, "sampled_3peptide_Gly_%yield": 2.0,
+    calc = _row({"sampled_Gly-Gly_aq_%yield": 2.77, "sampled_Gly-Gly-Gly_aq_%yield": 0.064,
+                 "sampled_Gly-Ala-Ala_aq_%yield": 0.5, "sampled_cyclo_Gly-Gly_aq_%yield": 9.0})
+    stated_ok = _row({"sampled_Gly-Gly_aq_%yield": 1.0, "sampled_Gly-Gly-Gly_aq_%yield": 2.0,
                       "total_sampled_peptides_yield": 3.01}, "001002001")
-    stated_partial = _row({"sampled_6peptide_Gly_%yield": 0.05, "total_sampled_peptides_yield": 2.56}, "001003001")
-    none = _row({"sampled_2peptide_Gly_mM": 0.1}, "001004001")
+    stated_partial = _row({"sampled_(Gly)6_aq_%yield": 0.05, "total_sampled_peptides_yield": 2.56}, "001003001")
+    none = _row({"sampled_Gly-Gly_aq_mM": 0.1}, "001004001")
     filled, differing = fill_total_peptide_yield([calc, stated_ok, stated_partial, none])
     assert filled == ["001001001"]
     d = row_to_template_dict(calc)
     assert d["total_sampled_peptides_yield"] == 12.334                   # cyclic (DKP) counts too
-    assert d["sampled_cyclo_Gly-Gly_%yield"] == 9.0 and "sampled_DKP_Gly_%yield" not in d   # old name moved
+    assert d["sampled_cyclo_Gly-Gly_aq_%yield"] == 9.0 and "sampled_DKP_Gly_%yield" not in d   # old name moved
     prov = calc.provenance["total_sampled_peptides_yield"]
-    assert prov.origin == "calculated" and "2peptide_Gly 2.77 + 3peptide_Gly 0.064" in prov.source
+    assert prov.origin == "calculated" and "Gly-Gly 2.77 + Gly-Gly-Gly 0.064" in prov.source
     assert "Gly-Ala-Ala 0.5" in prov.source and "cyclo_Gly-Gly 9" in prov.source
     assert row_to_template_dict(stated_ok)["total_sampled_peptides_yield"] == 3.01      # stated: kept
     assert [x[0] for x in differing] == ["001003001"]                    # 0.05 listed vs 2.56 stated
@@ -164,7 +166,7 @@ def test_quotes_must_name_the_species():
     from parameter_extractor.schemas.chemistry import ChemistryExtraction
     from parameter_extractor.pipeline import _identity_flags
     named = [("isobutyric acid", "isobutyric acid 5 and cyclohexylamine 6"), ("Ala", "1 L-Alanine AA"),
-             ("Phe-Ala", "FF, FA, AF, AA"), ("2peptide_Phe", "FF, FA, AF"), ("2peptide_Gly", "Gly2 yield 1.2"),
+             ("Phe-Ala", "FF, FA, AF, AA"), ("Phe-Phe", "FF, FA, AF"), ("Gly-Gly", "Gly2 yield 1.2"),
              ("K3[Fe(CN)6]", "potassium ferricyanide (30 mmol)"), ("Na2CO3", "sodium carbonate buffer"),
              ("CaCl2", "calcium chloride 2.5 mol dm-3"), ("NaCl", "3.33 mol dm-3 NaCl")]
     unnamed = [("N-isobutylisobutyramide", "Entry 1 ... Yield (%) 2"),
@@ -195,7 +197,7 @@ def test_table_results_expand_to_species_entries():
     from parameter_extractor.schemas.chemistry import ChemistryExtraction
     chem = ChemistryExtraction.model_validate({"tables": [{"src": "Table 1", "c": "medium", "cols": [
         {"nm": "Gly", "r": "initial", "ph": "aq", "u": "M", "lbl": "[Gly]start"},
-        {"nm": "2peptide_Gly", "r": "sampled", "ph": "aq", "u": "%", "lbl": "% (Gly)2"},
+        {"nm": "Gly-Gly", "r": "sampled", "ph": "aq", "u": "%", "lbl": "% (Gly)2"},
         {"nm": "cyclo_Gly-Gly", "r": "sampled", "ph": "aq", "u": "%", "lbl": "DKP", "how": "DKP = cyclo(Gly-Gly)"}],
         "rows": [{"set": "S", "sample": "a", "row": "1", "v": ["10\u22124", "2.77a", "nd"]},
                  {"set": "S", "sample": "b", "row": "2", "v": ["0.1", "\u22120.5", "detected"]},
@@ -205,15 +207,15 @@ def test_table_results_expand_to_species_entries():
         "unmapped_species": [], "added_solutions": [], "molar_ratios": [], "mixture_totals": []})
     by = {(s.name, s.sample_label): s for s in chem.solutes}
     assert by[("NaCl", None)].concentration_value == 0.25                          # groups still work
-    gly2 = by[("2peptide_Gly", "a")]
+    gly2 = by[("Gly-Gly", "a")]
     assert (gly2.concentration_value, gly2.concentration_unit_raw) == (2.77, "%")   # footnote letter dropped
     assert gly2.quote == "1 2.77a" and gly2.source == "Table 1, row 1, column % (Gly)2"
     assert gly2.confidence == "medium" and gly2.set_label == "S"
-    assert by[("2peptide_Gly", "b")].concentration_value == -0.5                   # unicode minus
+    assert by[("Gly-Gly", "b")].concentration_value == -0.5                   # unicode minus
     dkp = by[("cyclo_Gly-Gly", "a")]
     assert dkp.concentration_value is None and dkp.detection == "not detected" and dkp.identified_by
     assert by[("cyclo_Gly-Gly", "b")].detection == "detected" and by[("cyclo_Gly-Gly", "c")].detection == "not detected"
-    assert ("2peptide_Gly", "c") not in by and ("Gly", "c") not in by               # '-' and '' are no values
+    assert ("Gly-Gly", "c") not in by and ("Gly", "c") not in by               # '-' and '' are no values
     assert by[("Gly", "b")].role == "initial" and by[("Gly", "b")].detection == ""   # per-sample start
     assert chem.tables == [] and chem.groups == []                                  # kept once, in solutes
     from parameter_extractor.schemas.chemistry import _cell_number

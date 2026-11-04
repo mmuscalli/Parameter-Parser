@@ -30,16 +30,24 @@ don't name the species, `ep` / `em` an uncertainty, `det` for a product reported
 (see below).
 
 For each species:
+- `ph` is part of the species' column name, so choose it carefully: "aq"
+  for anything dissolved or measured in solution -- including products of a
+  dry-down or wet-dry experiment analysed after the residue was taken up in
+  water (HPLC, MS, NMR of a solution); "gas" only for an amount of a gas
+  (a headspace partial pressure or gas volume); "solid" only for an amount of
+  an undissolved solid phase (a mineral, a precipitate weighed as a solid).
+  When unsure, "aq".
 - Use the controlled vocabulary list provided below when the compound is
   already tracked (same name, e.g. "NaCl" not "sodium chloride"). If a
   species isn't in the list, still extract it -- name it the way the paper
   does, with ordinary spaces and punctuation (e.g. "cytidine 2'-phosphate",
   "ribose 1,2-cyclic phosphate"), and add the name to `unmapped_species`.
   Never silently drop a species.
-- Peptides: name a homopolymer "<n>peptide_<AA>" ("3peptide_Gly" for
-  triglycine) and a peptide of different amino acids by its sequence in
-  three-letter codes, N- to C-terminus, joined by "-" ("Gly-Ala-Ala") --
-  order matters there, so keep it exactly as the paper gives it.
+- Peptides: name a peptide by its sequence in three-letter codes, N- to
+  C-terminus, joined by "-": "Gly-Gly" (diglycine), "Gly-Gly-Gly"
+  (triglycine), "Gly-Ala-Ala" -- order matters, so keep it exactly as the
+  paper gives it. A run of 4 or more of one residue is written "(Gly)4":
+  "(Gly)4" for tetraglycine, "(Gly)10", "Gly-(Ala)4".
   A cyclic peptide (including diketopiperazines) is "cyclo_" plus its
   residues the same way: "cyclo_Gly-Gly" for the glycine DKP,
   "cyclo_Val-Gly".

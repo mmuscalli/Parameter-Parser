@@ -25,7 +25,8 @@ from parameter_extractor.ingestion.data_location import COLUMN as DATA_LOCATION,
 from parameter_extractor.ingestion.flatten_to_template import with_average
 from parameter_extractor.digitizing.calibration import is_categorical, pixel_to_data, pixel_to_y, rounded
 from parameter_extractor.ingestion.flatten_to_template import (
-    FIELD_TO_TEMPLATE, UNRECOGNIZED_SUFFIX, resolve_template_column, set_row_value, current_column_name)
+    FIELD_TO_TEMPLATE, UNRECOGNIZED_SUFFIX, resolve_template_column, set_row_value, current_column_name,
+    species_column)
 from parameter_extractor.schemas.figures import DigitizedFigure, SeriesCondition
 from parameter_extractor.schemas.methodology import Methodology
 from parameter_extractor.schemas.paper_metadata import PaperMetadata
@@ -246,9 +247,9 @@ def build_figure_rows(
                 matched = match_species(sp.name)
                 if matched and matched[0] != sp.name:
                     sp = sp.model_copy(update={"name": matched[0]})
-                candidates = (f"initial_{sp.name}_aq_mM", f"initial_{sp.name}_mM")
+                own = species_column("initial", sp.name)
                 col = (registry.alias_for("species", f"initial {sp.name}")
-                       or next((c for c in candidates if registry.is_known_column(c)), None))
+                       or (own if registry.is_known_column(own) else None))
                 if col is None:
                     held_species.append(NewVariable(
                         kind="species", name=sp.name, alias_name=f"initial {sp.name}",

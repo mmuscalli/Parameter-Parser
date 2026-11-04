@@ -2,7 +2,7 @@
 
 Deliberately modeled as a LIST of (name, concentration) pairs rather than one
 field per compound. This mirrors how POLO's own variable mapping treats it:
-every initial_<X>_aq_mM / sampled_<X>_aq_mM column in the wide template maps
+every initial_<X>_<phase>_mM / sampled_<X>_<phase>_mM column in the wide template maps
 to the SAME ontology pattern (status == 'pattern_direct' in
 POLO_variable_mapping.csv) -- a repeated soluteName/soluteConcentration pair
 on a LiquidPhase node, not 150 distinct ontology properties. Extracting into
@@ -18,6 +18,9 @@ from parameter_extractor.schemas.common import QUOTE_DESC, SOURCE_DESC
 from pydantic.json_schema import SkipJsonSchema
 
 Phase = Literal["aq", "gas", "solid"]
+# part of the column name since 2026-11-04 ('<role>_<name>_<phase>_<unit>')
+PHASE_DESC = ("'aq' dissolved or measured in solution (also products of a dried residue analysed after taking it up "
+              "in water); 'gas' an amount of a gas; 'solid' an undissolved solid phase. When unsure, 'aq'.")
 Role = Literal["initial", "sampled"]
 ConcentrationBasis = Literal["mixture", "stock"]
 
@@ -101,7 +104,7 @@ class SoluteEntry(BaseModel):
                                               "(e.g. 'NaCl', 'Gly'), else as the paper writes it.")
     # not asked of the model (nothing reads it); kept for older recordings and calculators/mixing.py
     in_controlled_vocab: SkipJsonSchema[bool] = False
-    phase: Phase = Field(alias="ph")
+    phase: Phase = Field(alias="ph", description=PHASE_DESC)
     role: Role = Field(alias="r")
     # from the group (SoluteGroup) -- or, in older recordings, from the entry itself
     set_label: SkipJsonSchema[Optional[str]] = None
@@ -251,7 +254,7 @@ class TableColumn(BaseModel):
     model_config = ConfigDict(populate_by_name=True, json_schema_extra=_required(["nm", "r", "ph", "u", "lbl"]))
     name: str = Field(alias="nm", description="Species name, as for a species entry's `nm`.")
     role: Role = Field(alias="r")
-    phase: Phase = Field(alias="ph")
+    phase: Phase = Field(alias="ph", description=PHASE_DESC)
     unit: str = Field(alias="u", description="The column's unit exactly as printed, e.g. '%', 'mmol/L'.")
     label: str = Field(alias="lbl", description="The column header as printed, e.g. '% (Gly)2'.")
     identified_by: str = Field(default="", alias="how",

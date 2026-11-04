@@ -65,7 +65,7 @@ def test_figure_planner_columns_and_shared_conditions():
     from parameter_extractor.stages.figure_planner import planner_columns
     cols = planner_columns(list(dict.fromkeys(packs.current().vocab["all_columns"]
                                               + VariableRegistry(None).known_columns())))
-    assert {"initial_temperature_C", "solid_material_name", "sampled_2peptide_Gly_%yield", "negative_control",
+    assert {"initial_temperature_C", "solid_material_name", "sampled_Gly-Gly_aq_%yield", "negative_control",
             "pH_buffer"} <= set(cols)
     assert not {"full_id", "paper_title", "data_location", "initial_temperature_C_err_plus",
                 "initial_temperature_C_alt1", "source_notes"} & set(cols)

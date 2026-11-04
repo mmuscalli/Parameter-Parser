@@ -78,16 +78,16 @@ def test_averages_have_their_own_columns_and_set_type():
     from parameter_extractor.registry import is_peptide_column
     from parameter_extractor.schemas.chemistry import ChemistryExtraction, SoluteEntry
     from parameter_extractor.schemas.structure_plan import PlannedSet
-    assert with_average("sampled_2peptide_Gly_mM") == "sampled_2peptide_Gly_avg_mM"
-    assert with_average("sampled_2peptide_Gly_%yield") == "sampled_2peptide_Gly_avg_%yield"
+    assert with_average("sampled_Gly-Gly_aq_mM") == "sampled_Gly-Gly_aq_avg_mM"
+    assert with_average("sampled_Gly-Gly_aq_%yield") == "sampled_Gly-Gly_aq_avg_%yield"
     assert with_average("max_oligomer_length_nt") == "max_oligomer_length_avg_nt"
-    assert with_average("sampled_2peptide_Gly_avg_mM") == "sampled_2peptide_Gly_avg_mM"   # not twice
-    avg = SoluteEntry(name="2peptide_Gly", role="sampled", phase="aq", concentration_value=1.2,
+    assert with_average("sampled_Gly-Gly_aq_avg_mM") == "sampled_Gly-Gly_aq_avg_mM"   # not twice
+    avg = SoluteEntry(name="Gly-Gly", role="sampled", phase="aq", concentration_value=1.2,
                       concentration_unit_raw="mM", quote="q", source="s", confidence="high", average=True)
     single = avg.model_copy(update={"average": False})
-    assert column_for_solute(avg) == "sampled_2peptide_Gly_avg_mM" and is_peptide_column(column_for_solute(avg))
-    assert column_for_solute(single) == "sampled_2peptide_Gly_mM"
-    assert species_alias_name(avg) == "sampled 2peptide_Gly avg" and avg.variable != single.variable
+    assert column_for_solute(avg) == "sampled_Gly-Gly_aq_avg_mM" and is_peptide_column(column_for_solute(avg))
+    assert column_for_solute(single) == "sampled_Gly-Gly_aq_mM"
+    assert species_alias_name(avg) == "sampled Gly-Gly avg" and avg.variable != single.variable
     assert proposed_column_for_solute(avg.model_copy(update={"name": "ribose"})) == "sampled_ribose_aq_avg_mM"
     c = ChemistryExtraction.model_validate({"tables": [{"src": "Table 1", "c": "high", "cols": [
         {"nm": "Gly", "r": "sampled", "ph": "aq", "u": "mM", "lbl": "mean Gly (mM)", "avg": True}],
@@ -107,7 +107,7 @@ def test_digitized_averages():
     from parameter_extractor.schemas.paper_metadata import PaperMetadata
     y_cal = AxisCalibration(p1=CalibrationPoint(px=0, py=100, value=0), p2=CalibrationPoint(px=0, py=0, value=10))
     panel = DigitizedPanel(y_cal=y_cal, x=AxisVariable(label="mineral", column=None),
-                           y=AxisVariable(label="avg. % Gly-Gly", column="sampled_2peptide_Gly_%yield", average=True))
+                           y=AxisVariable(label="avg. % Gly-Gly", column="sampled_Gly-Gly_aq_%yield", average=True))
                                                             # bars of categories: no x calibration
     fig = DigitizedFigure(figure_id="Fig. 2", number=2, page=7, caption="c", render_scale=1.0, page_image="",
                           panels=[panel], series=[
@@ -116,7 +116,7 @@ def test_digitized_averages():
     rows, problems, new_vars = build_figure_rows([fig], meta, empty_methodology("p"), "001", 1, 1,
                                                  registry=VariableRegistry(None))
     assert not problems and rows[0].set_type == "Average"
-    assert rows[0].species_mM == {} and rows[0].extra.get("sampled_2peptide_Gly_avg_%yield") == 4.0
+    assert rows[0].species_mM == {} and rows[0].extra.get("sampled_Gly-Gly_aq_avg_%yield") == 4.0
 
 
 def test_axes_no_column_fits_are_named_from_their_labels():

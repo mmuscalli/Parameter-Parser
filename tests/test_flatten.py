@@ -39,12 +39,12 @@ def test_per_sample_initial_concentrations_and_ph_override():
 
     rows = build_rows(meta, structure, meth, chem, "001")
     set1 = [row_to_template_dict(r) for r in rows if r.set_id == "001001"]
-    assert [round(d["initial_Ala_mM"], 6) for d in set1] == [0.1, 1.0, 10.0][:len(set1)]
+    assert [round(d["initial_Ala_aq_mM"], 6) for d in set1] == [0.1, 1.0, 10.0][:len(set1)]
     assert all(d["initial_pH"] == 9.8 for d in set1)
     others = [row_to_template_dict(r) for r in rows if r.set_id == "001002"]
-    assert all("initial_Ala_mM" not in d and "initial_pH" not in d for d in others)   # untouched
-    assert all(d["initial_Gly_mM"] == 1000.0 for d in set1 + others)
-    assert rows[0].provenance["initial_Ala_mM"].source == "Table 2"
+    assert all("initial_Ala_aq_mM" not in d and "initial_pH" not in d for d in others)   # untouched
+    assert all(d["initial_Gly_aq_mM"] == 1000.0 for d in set1 + others)
+    assert rows[0].provenance["initial_Ala_aq_mM"].source == "Table 2"
     assert rows[0].provenance["initial_pH"].origin == "methodology (per set)"
 
 
@@ -61,7 +61,7 @@ def test_unlabelled_differing_initial_values_are_left_out_and_flagged():
             concentration_value=v / 1000, concentration_unit_raw="mol dm-3", concentration_mM=v,
             quote="q", source="Table 2", confidence="high"))
     rows = build_rows(meta, structure, meth, chem, "001")
-    assert all("initial_Ala_mM" not in row_to_template_dict(r) for r in rows)
+    assert all("initial_Ala_aq_mM" not in row_to_template_dict(r) for r in rows)
     flags = [f for f in check_extraction(meth, chem) if f.kind == "conflicting_values"]
     assert len(flags) == 1 and "Ala" in flags[0].message
 
@@ -72,7 +72,7 @@ def test_proposed_column_names_are_csv_safe():
     e = SoluteEntry(name="cytidine 2'-phosphate", in_controlled_vocab=False, phase="aq", role="sampled",
                     concentration_value=1.7, concentration_unit_raw="%", quote="q", source="Table 1",
                     confidence="high")
-    assert proposed_column_for_solute(e) == "sampled_cytidine_2'-phosphate_%yield"
+    assert proposed_column_for_solute(e) == "sampled_cytidine_2'-phosphate_aq_%yield"
     e.name, e.role, e.concentration_unit_raw = "ribose 1,2-cyclic phosphate", "initial", "mM"
     assert proposed_column_for_solute(e) == "initial_ribose_1_2-cyclic_phosphate_aq_mM"
 

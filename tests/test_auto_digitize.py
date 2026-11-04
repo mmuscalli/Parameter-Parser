@@ -130,11 +130,11 @@ def test_digitizer_calibrates_on_suggestions():
             panels.append(PlannedPanel(
                 name=name, x=AxisVariable(label="T", column="sampled_temperature_C",
                                           tick_labels=TICKS[idx]["bottom"]),
-                y=AxisVariable(label="c", column="sampled_Gly_mM", tick_labels=TICKS[idx][side]),
+                y=AxisVariable(label="c", column="sampled_Gly_aq_mM", tick_labels=TICKS[idx][side]),
                 series=[PlannedSeries(label=f"s{len(panels)}")]))
         plan = FigurePlan(figure_id="Fig. 3", is_data_plot=True, plot_kind="scatter", panels=panels,
                           duplicates_tabulated_data=False)
-        w = DigitizerWidget(fig, ["sampled_temperature_C", "sampled_Gly_mM"])
+        w = DigitizerWidget(fig, ["sampled_temperature_C", "sampled_Gly_aq_mM"])
         w.auto_axes_box.setChecked(True)
         w.apply_plan(plan)
         assert all(p.x_cal.complete() and p.y_cal.complete() for p in fig.panels), w.auto_status.text()

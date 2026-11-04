@@ -3,7 +3,7 @@ Combine StructurePlan + Methodology + ChemistryExtraction (+ calculators) into
 one ExtractedRow per planned sample, and flatten a list of ExtractedRow into
 the wide, PaperDataTemplate-shaped CSV your existing pipeline expects -- with
 the template's own column names (e.g. paper_DOI, author_list,
-sampled_2peptide_Gly_%yield) and column order.
+sampled_Gly-Gly_aq_%yield) and the column order of column_order.py.
 
 This is the one place that's allowed to know about the wide template's column
 names -- every stage upstream of this deliberately stays schema-narrow.
@@ -23,7 +23,6 @@ from parameter_extractor.schemas.methodology import Methodology
 from parameter_extractor.schemas.paper_metadata import PaperMetadata
 from parameter_extractor.schemas.row_schema import CellSource, ExtractedRow
 from parameter_extractor.schemas.structure_plan import StructurePlan
-from parameter_extractor.calculators.peptide_yield import peptide_mM_from_yield_pct
 
 def template_columns() -> List[str]:
     """The active domain pack's columns, in template order (packs/)."""
@@ -42,24 +41,53 @@ def _template_set() -> set:
 UNRECOGNIZED_SUFFIX = "__UNRECOGNIZED_COLUMN"
 
 
+# ---- compound columns (Mickey, 2026-11-04): ONE format for every compound -- salts, amino acids, peptides,
+# nucleotides alike: '<role>_<name>_<phase>_<measure>' ('initial_NaCl_aq_mM', 'initial_Gly_aq_mM',
+# 'sampled_Gly-Gly_aq_%yield', 'sampled_4mer_A_aq_mM', 'initial_CO_gas_mM'). PaperDataTemplate.xlsx (frozen)
+# wrote amino acids and peptides without the phase and peptides as '<n>peptide_<AA>'; `current_column_name`
+# converts those (old datasets, saved digitizations, the registry).
+PHASE_CODES = {"aq": "aq", "gas": "gas", "solid": "s"}
+SPECIES_ROLES = ("initial", "sampled", "stock")
+SPECIES_MEASURES = ("rate_mM_hr", "mM", "%yield", "%recovered", "ratio")
+_LEGACY = re.compile(r"(?P<role>initial|sampled|stock)_(?P<body>.+?)_(?P<measure>rate_mM_hr|mM|%yield|%recovered|ratio)"
+                     r"(?P<tail>_err_(?:plus|minus))?")
+_MARKERS = re.compile(r"((?:_(?:avg|range))+)$")
+_PHASE_AT_END = re.compile(r"_(aq|gas|s)$")
+
+
+def species_column(role: str, name: str, phase: str = "aq", measure: str = "mM") -> str:
+    """The column of a compound's value: 'initial_NaCl_aq_mM', 'sampled_Gly-Gly_aq_%yield'."""
+    return f"{role}_{column_safe_name(name)}_{PHASE_CODES.get(phase or 'aq', 'aq')}_{measure}"
+
+
+def current_column_name(column: str) -> str:
+    """A compound column in the current format: old peptide names ('sampled_2peptide_Gly_%yield' ->
+    'sampled_Gly-Gly_aq_%yield', 'sampled_DKP_Gly_mM' -> 'sampled_cyclo_Gly-Gly_aq_mM') and a missing phase
+    ('initial_Gly_mM' -> 'initial_Gly_aq_mM'); averages / ranges / uncertainties kept. Anything else unchanged."""
+    m = _LEGACY.fullmatch(column or "")
+    if not m:
+        return column
+    body, markers, phase = m.group("body"), "", ""
+    if (mk := _MARKERS.search(body)):
+        markers, body = mk.group(1), body[:mk.start()]
+    if (ph := _PHASE_AT_END.search(body)):
+        phase, body = ph.group(1), body[:ph.start()]
+    if not body:
+        return column
+    from parameter_extractor.names import cyclic_codes, cyclic_name, _oligomer
+    old = re.fullmatch(r"(\d+)peptide_([A-Z][a-z]{2})", body)
+    if old:
+        body = column_safe_name(_oligomer(int(old.group(1)), old.group(2)))
+    elif re.fullmatch(r"DKP_[A-Z][a-z]{2}", body) and (codes := cyclic_codes(body)):
+        body = cyclic_name(codes)
+    return f"{m.group('role')}_{body}_{phase or 'aq'}{markers}_{m.group('measure')}{m.group('tail') or ''}"
+
+
 def resolve_template_column(species_name: str, role: str) -> str:
-    """
-    The real template is NOT uniform: salts/ions use '<role>_<name>_aq_mM'
-    (e.g. initial_NaCl_aq_mM) while amino acids/peptides use '<role>_<name>_mM'
-    with no '_aq_' infix (e.g. initial_Gly_mM, sampled_2peptide_Gly_mM) --
-    confirmed against PaperDataTemplate.xlsx's own headers, not guessed. Try
-    the real column name patterns in order; if neither exists yet, fall back
-    to the _aq_mM form and mark it so a human can decide whether it's a new
-    column or a naming mismatch, rather than silently writing a column the
-    template will never recognize.
-    """
-    aq_form = f"{role}_{species_name}_aq_mM"
-    plain_form = f"{role}_{species_name}_mM"
-    if aq_form in _template_set():
-        return aq_form
-    if plain_form in _template_set():
-        return plain_form
-    return f"{aq_form}{UNRECOGNIZED_SUFFIX}"
+    """A compound's starting / measured concentration column; marked with UNRECOGNIZED_SUFFIX when the pack
+    doesn't have it (a new variable for the review)."""
+    column = species_column(role, species_name)
+    return column if column in _template_set() else f"{column}{UNRECOGNIZED_SUFFIX}"
 
 
 def is_range(entry) -> bool:
@@ -95,7 +123,7 @@ _RECOVERED_HEADER = re.compile(r"\b(recovered|recovery|unreacted|remaining|resid
                                re.IGNORECASE)
 
 
-# '<name>_avg_<unit>' for averaged values (Mickey, 2026-10-31): 'sampled_2peptide_Gly_avg_mM'
+# '<name>_avg_<unit>' for averaged values (Mickey, 2026-10-31): 'sampled_Gly-Gly_aq_avg_mM'
 _UNIT_SUFFIX = re.compile(r"(_(?:mM_hr|per_M_hr|per_hr|kJ_mol|mM|uM|%yield|%recovered|ratio|pct|mL_min|mL|uL|hr|h|min|sec|d|C|K|bar|MPa|g|mg|nm|rpm|nt|mer))$")
 
 
@@ -187,14 +215,7 @@ def column_for_solute(entry, registry=None) -> Optional[str]:
         initial = registry.column_for("species", f"initial {entry.name}")
         if initial and initial.startswith("initial_") and registry.is_known_column("stock_" + initial[8:]):
             return "stock_" + initial[8:]
-    if is_rate(entry):
-        candidates = (f"sampled_{entry.name}_rate_mM_hr", f"sampled_{entry.name}_aq_rate_mM_hr")
-    elif entry.role == "sampled" and is_percent(entry):
-        suffix = percent_suffix(entry)
-        candidates = (f"sampled_{entry.name}_{suffix}", f"sampled_{entry.name}_aq_{suffix}")
-    else:
-        role = _column_role(entry)
-        candidates = (f"{role}_{entry.name}_aq_mM", f"{role}_{entry.name}_mM")
+    candidates = (_species_column_of(entry),)
     if getattr(entry, "average", False):
         candidates = tuple(with_average(c) for c in candidates)
     if is_range(entry):
@@ -202,14 +223,18 @@ def column_for_solute(entry, registry=None) -> Optional[str]:
     return next((c for c in candidates if registry.is_known_column(c)), None)
 
 
-_OLD_DKP = re.compile(r"(initial|sampled)_DKP_([A-Z][a-z]{2})_(mM|%yield)")
+def _measure_of(entry) -> str:
+    if is_rate(entry):
+        return "rate_mM_hr"
+    if entry.role == "sampled" and is_percent(entry):
+        return percent_suffix(entry)
+    return "mM"
 
 
-def current_column_name(column: str) -> str:
-    """The template's DKP_<AA> columns follow the cyclic naming now:
-    sampled_DKP_Gly_%yield -> sampled_cyclo_Gly-Gly_%yield (e.g. chosen as a figure axis)."""
-    m = _OLD_DKP.fullmatch(column)
-    return f"{m.group(1)}_cyclo_{m.group(2)}-{m.group(2)}_{m.group(3)}" if m else column
+def _species_column_of(entry) -> str:
+    """The column of an entry's value, without average / range markers."""
+    role = "sampled" if is_rate(entry) else _column_role(entry)
+    return species_column(role, entry.name, getattr(entry, "phase", "aq"), _measure_of(entry))
 
 
 def set_row_value(row: ExtractedRow, column: str, value, source: Optional[CellSource] = None) -> None:
@@ -258,18 +283,7 @@ def proposed_column_for_solute(entry) -> str:
 
 
 def _proposed_column(entry) -> str:
-    name = column_safe_name(entry.name)
-    if is_rate(entry):
-        return f"sampled_{name}_rate_mM_hr"
-    if entry.role == "sampled" and is_percent(entry):
-        return f"sampled_{name}_{percent_suffix(entry)}"
-    if _column_role(entry) != "stock" and (is_peptide_column(f"{entry.role}_{name}_mM")
-                                          or is_oligonucleotide_column(f"{entry.role}_{name}_mM")):
-        return f"{entry.role}_{name}_mM"           # peptides, oligonucleotides: no _aq_ infix, as in the template
-    if _column_role(entry) == "stock":
-        initial = resolve_template_column(name, "initial").removesuffix(UNRECOGNIZED_SUFFIX)
-        return "stock_" + initial.removeprefix("initial_")
-    return resolve_template_column(name, entry.role).removesuffix(UNRECOGNIZED_SUFFIX)
+    return _species_column_of(entry)
 
 
 DETECTED = "detected"          # a result the paper names without an amount (calculators/amounts.py)
@@ -430,7 +444,7 @@ def build_rows(
             sampled_here = [s for s in sampled_for_set if s.sample_label == sample.sample_label
                             or (not s.sample_label and getattr(s, "average", False))]
             sampled_kept = [s for s in sampled_here if _kept(s.confidence)]
-            sampled_mM, extra, yield_fields, prov = {}, dict(range_cells), {}, dict(species_prov)
+            sampled_mM, extra, prov = {}, dict(range_cells), dict(species_prov)
             row_species = dict(species_mM)
             for s in per_sample_initial:
                 if s.sample_label != sample.sample_label or not (col := column_for_solute(s, registry)):
@@ -451,8 +465,6 @@ def build_rows(
                     extra.update(error_cells(s, col))
                 if isinstance(value, str):              # 'detected': text, in extra (wins over a field)
                     extra[col] = value
-                elif col in _FIELD_FOR_TEMPLATE:        # e.g. the Gly 2-/3-peptide % yields
-                    yield_fields[_FIELD_FOR_TEMPLATE[col]] = value
                 elif col.endswith("_mM"):
                     sampled_mM[col] = value
                 else:
@@ -528,7 +540,6 @@ def build_rows(
                     "sampled_temperature_C", _method_value(methodology.sampled_temperature_C)),
                 species_mM={**row_species, **sampled_mM},
                 extra=extra,
-                **yield_fields,
                 # lowest confidence among this row's MEASURED values, including any
                 # dropped by drop_below, so check_row still flags them
                 extraction_confidence=_lowest_confidence(sampled_here),
@@ -546,8 +557,6 @@ def build_rows(
 FIELD_TO_TEMPLATE = {
     "paper_doi": "paper_DOI",
     "headspace_gas": "headspace_gas_name",
-    "sampled_2peptide_Gly_pct_yield": "sampled_2peptide_Gly_%yield",
-    "sampled_3peptide_Gly_pct_yield": "sampled_3peptide_Gly_%yield",
 }
 _FIELD_FOR_TEMPLATE = {col: field for field, col in FIELD_TO_TEMPLATE.items()}
 # every author in one column (Mickey, 2026-10-22; was author1..author7): "; " between names, so

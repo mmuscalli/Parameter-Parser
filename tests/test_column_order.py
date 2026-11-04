@@ -23,7 +23,7 @@ def test_prebiotic_blocks_and_derived_columns():
     from parameter_extractor.registry import standard_columns
     order = ColumnOrder(chosen={"light_conditions": "methodology", "mixing_rate_rpm": "conditions"})
     extra = ["initial_ImpA_aq_mM", "stock_ImpA_aq_mM", "added_ImpA_stock_volume_uL", "light_conditions",
-             "mixing_rate_rpm", "solid_material_mass_range_g", "sampled_2peptide_Gly_avg_%yield",
+             "mixing_rate_rpm", "solid_material_mass_range_g", "sampled_Gly-Gly_aq_avg_%yield",
              "max_linear_oligomer_length_avg_nt", "unclaimed_thing", "source_notes", "extraction_confidence"]
     cols = order.ordered(template_columns() + standard_columns() + extra)
     assert cols[:4] == ["entry_number", "full_id", "set_id", "sample_id"]
@@ -36,7 +36,7 @@ def test_prebiotic_blocks_and_derived_columns():
     assert block["mixing_rate_rpm"] == block["solid_material_mass_range_g"] == "Reaction Conditions"
     assert block["initial_ImpA_aq_mM"] == block["initial_NaCl_aq_mM"] == "Starting Species"
     assert block["stock_ImpA_aq_mM"] == "Solution Preparation"        # how the solution was made
-    assert block["sampled_2peptide_Gly_avg_%yield"] == block["max_linear_oligomer_length_avg_nt"] == "Products"
+    assert block["sampled_Gly-Gly_aq_avg_%yield"] == block["max_linear_oligomer_length_avg_nt"] == "Products"
     assert block["added_ImpA_stock_volume_uL"] == "Solution Preparation" and block["unclaimed_thing"] == "Other"
     i = cols.index("initial_temperature_C")      # a value, its uncertainties, then other estimates
     assert cols[i:i + 4] == ["initial_temperature_C", "initial_temperature_C_err_plus",
@@ -118,7 +118,7 @@ def test_categories_in_the_files():
         obs = list(csv.DictReader(open(result.observations_path)))
         by_column = {o["column"]: o["category"] for o in obs}
         assert by_column["paper_title"] == "Metadata" and by_column["initial_NaCl_aq_mM"] == "Starting Species"
-        assert by_column["sampled_2peptide_Gly_%yield"] == "Products"
+        assert by_column["sampled_Gly-Gly_aq_%yield"] == "Products"
         listed = list(csv.reader(open(result.run_dir / "eder1994_columns.csv")))
         header = next(csv.reader(open(result.csv_path)))
         assert listed[0] == ["column", "category"] and [c for c, _ in listed[1:]] == header

@@ -31,7 +31,7 @@ def test_prebiotic_pack_carries_the_old_defaults():
     # PaperDataTemplate's 280 columns, less 65 Mickey removed and author1..7 -> author_list (2026-10-22)
     assert len(pack.template_columns) == 208 and len(pack.species_names) == 129
     assert "author_list" in pack.template_columns and "author1" not in pack.template_columns
-    assert not {"cycle_number", "cycle_duration_hr", "initial_Na+_mM", "isModeled"} & set(pack.template_columns)
+    assert not {"cycle_number", "cycle_duration_hr", "initial_Na+_aq_mM", "isModeled"} & set(pack.template_columns)
     # methodology became the configurable experimental_conditions stage (2026-10-22)
     assert not pack.uses("methodology") and pack.uses("chemistry") and pack.uses("peptide_totals")
     assert pack.uses("water_type") and pack.uses("results_check")

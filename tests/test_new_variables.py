@@ -44,7 +44,7 @@ def _add_extras(ex):
         SoluteEntry(name="RbCl", in_controlled_vocab=False, role="initial", set_label=SET1,
                     concentration_value=0.2, concentration_unit_raw="mol dm-3", concentration_mM=200.0,
                     **common),                               # doesn't
-        SoluteEntry(name="4peptide_Gly", in_controlled_vocab=True, role="sampled", set_label=SET1,
+        SoluteEntry(name="(Gly)4", in_controlled_vocab=True, role="sampled", set_label=SET1,
                     sample_label=first_sample, concentration_value=0.012, concentration_unit_raw="% (Gly)4",
                     **common),
         SoluteEntry(name="Foo", in_controlled_vocab=False, role="sampled", set_label=SET1,
@@ -80,7 +80,7 @@ def test_without_review_nothing_new_is_written():
         header, rows = _csv(result)
         assert not any("RbCl" in c or "Foo" in c or "UNRECOGNIZED" in c or "stirring" in c for c in header)
         assert rows[0]["initial_Na2HPO4_aq_mM"] == "100.0"                # known columns: written
-        assert rows[0]["sampled_4peptide_Gly_%yield"] == "0.012"
+        assert rows[0]["sampled_(Gly)4_aq_%yield"] == "0.012"
         record = json.loads((result.run_dir / "new_variables.json").read_text())
         assert {(v["kind"], v["name"]) for v in record["left_out"]} == {
             ("species", "RbCl"), ("species", "Foo"), ("parameter", "stirring rate")}
@@ -100,7 +100,7 @@ def test_review_decisions_and_registry_memory():
         stirring.values[0].value_text = "300"                                # user edits the value
         return [VariableDecision("initial RbCl", "species", "new_column", "initial_RbCl_aq_mM"),
                 VariableDecision("stirring rate", "parameter", "new_column", "stirring_rate_rpm"),
-                VariableDecision("sampled Foo %", "species", "existing_column", "sampled_DKP_Gly_%yield")]
+                VariableDecision("sampled Foo %", "species", "existing_column", "sampled_cyclo_Gly-Gly_aq_%yield")]
 
     with tempfile.TemporaryDirectory() as tmp:
         reg_path = Path(tmp) / "registry.json"
@@ -112,25 +112,25 @@ def test_review_decisions_and_registry_memory():
         # accepted columns sit in their category's block (column_order.py): the new species with the starting
         # species, the stirring rate with the reaction conditions
         assert header.index("stirring_rate_rpm") < header.index("initial_NaCl_aq_mM") \
-            < header.index("initial_RbCl_aq_mM") < header.index("sampled_DKP_Gly_%yield")
+            < header.index("initial_RbCl_aq_mM") < header.index("sampled_cyclo_Gly-Gly_aq_%yield")
         set1 = [r for r in rows if r["set_id"] == "001001"]
         assert all(r["initial_RbCl_aq_mM"] == "200.0" for r in set1)
         assert all(r["initial_RbCl_aq_mM"] == "" for r in rows if r["set_id"] != "001001")
         assert all(r["stirring_rate_rpm"] == "300.0" for r in rows)         # paper-wide: every row; numeric
         # merged into an existing column -- the template's DKP_Gly column, written in the cyclic naming
-        assert rows[0]["sampled_cyclo_Gly-Gly_%yield"] == "1.5" and rows[0]["sampled_DKP_Gly_%yield"] == ""
+        assert rows[0]["sampled_cyclo_Gly-Gly_aq_%yield"] == "1.5"
         assert result.new_variables == [] and len(result.accepted_variables) == 3
 
         saved = json.loads(reg_path.read_text())
         assert set(saved["columns"]) == {"initial_RbCl_aq_mM", "stirring_rate_rpm"}
-        assert saved["aliases"]["species:sampled foo %"] == "sampled_DKP_Gly_%yield"
+        assert saved["aliases"]["species:sampled foo %"] == "sampled_cyclo_Gly-Gly_aq_%yield"
 
         # second run: the registry recognises all three; the review isn't even called
         seen.clear()
         result2 = _run(Path(tmp), reg_path, review=lambda *a: seen.setdefault("called", []) or [])
         assert "called" not in seen
         header2, rows2 = _csv(result2)
-        assert rows2[0]["initial_RbCl_aq_mM"] == "200.0" and rows2[0]["sampled_DKP_Gly_%yield"] == "1.5"
+        assert rows2[0]["initial_RbCl_aq_mM"] == "200.0" and rows2[0]["sampled_cyclo_Gly-Gly_aq_%yield"] == "1.5"
         assert rows2[0]["stirring_rate_rpm"] == "300.0"                      # the paper's "300 rpm", read into the rpm column
         assert all("earlier review" in a["how"] for a in result2.accepted_variables)
 
@@ -195,6 +195,8 @@ def test_eder1994_has_no_new_variables():
     from parameter_extractor.schemas.chemistry import ChemistryExtraction
     _, meth = _meta_and_method()
     chem = ChemistryExtraction.model_validate_json((REPLAY_DIR / "chemistry.output.json").read_text())
+    from parameter_extractor.ingestion.normalize import normalize_chemistry
+    normalize_chemistry(chem)                 # as finish() does: names recorded as '2peptide_Gly' -> 'Gly-Gly'
     assert collect_new_variables(meth, chem) == []
 
 

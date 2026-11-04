@@ -31,7 +31,7 @@ from parameter_extractor.schemas.paper_metadata import PaperMetadata
 from test_pipeline_offline import PDF, REPLAY_DIR, _replay_send
 
 
-def _panel(x_col="duration_hr", y_col="sampled_2peptide_Gly_%yield", y_mult=1.0, log_y=False):
+def _panel(x_col="duration_hr", y_col="sampled_Gly-Gly_aq_%yield", y_mult=1.0, log_y=False):
     # x: 0..30 over px 100..400; y: 0..1.2 over py 500..200 (pixel y grows downward)
     return DigitizedPanel(
         name="main",
@@ -125,9 +125,10 @@ def test_rows_from_a_digitized_figure():
     r1, r2 = rows                                   # sorted by x: (15 h, 0.6 %) then (30 h, 1.0 %)
     assert (r1.set_id, r1.full_id, r1.entry_number) == ("001014", "001014001", 43)
     assert r1.set_type == "Time Series"
-    assert (r1.duration_hr, r1.sampled_2peptide_Gly_pct_yield) == (15.0, 0.6)
-    assert (r2.duration_hr, r2.sampled_2peptide_Gly_pct_yield) == (30.0, 1.0)
-    assert r1.species_mM == {"initial_NaCl_aq_mM": 3000, "initial_Gly_mM": 1000}
+    gg = "sampled_Gly-Gly_aq_%yield"                # a compound column like any other (2026-11-04)
+    assert (r1.duration_hr, r1.extra.pop(gg)) == (15.0, 0.6)
+    assert (r2.duration_hr, r2.extra[gg]) == (30.0, 1.0)
+    assert r1.species_mM == {"initial_NaCl_aq_mM": 3000, "initial_Gly_aq_mM": 1000}
     assert r1.extra == {"initial_pH": 2.6, "data_location": "Figure. 5"} and r1.initial_temperature_C == 80.0
     assert r1.extraction_confidence == "digitized" and "Fig. 5" in r1.source_notes
     assert r1.paper_title == meta.paper_title
@@ -135,11 +136,11 @@ def test_rows_from_a_digitized_figure():
 
 def test_multiplier_other_columns_and_unusable_series():
     meta, meth = _meta_and_method()
-    fig = _figure(y_col="sampled_4peptide_Gly_%yield", y_mult=0.001)
+    fig = _figure(y_col="sampled_(Gly)4_aq_%yield", y_mult=0.001)
     fig.panels.append(DigitizedPanel(name="uncalibrated"))
     fig.series.append(DigitizedSeries(label="orphan", panel=1, points=[DigitizedPoint(px=1, py=1)]))
     rows, problems, new_vars = build_figure_rows([fig], meta, meth, "001", 1, 1)
-    assert rows[0].extra["sampled_4peptide_Gly_%yield"] == 0.0006
+    assert rows[0].extra["sampled_(Gly)4_aq_%yield"] == 0.0006
     assert len(problems) == 1 and "orphan" in problems[0]
 
 
@@ -149,13 +150,13 @@ def test_series_conditions_and_own_y_column():
     from parameter_extractor.ingestion.flatten_to_template import row_to_template_dict
     from parameter_extractor.schemas.figures import SeriesCondition
     meta, meth = _meta_and_method()
-    fig = _figure(y_col="sampled_2peptide_Gly_mM")
+    fig = _figure(y_col="sampled_Gly-Gly_aq_mM")
     na = fig.series[0]
     na.conditions = [SeriesCondition(column="initial_pressure_bar", value="22.2 MPa", source="caption"),
                      SeriesCondition(column="flow_rate_mL_min", value="10 mL min-1"),
                      SeriesCondition(column="experiment_type", value="hand-operated injection system"),
                      SeriesCondition(column="injection_volume_mL", value="12 mL")]
-    dkp = na.model_copy(update=dict(label="DKP", y_column="sampled_DKP_Gly_mM", conditions=[]))
+    dkp = na.model_copy(update=dict(label="DKP", y_column="sampled_cyclo_Gly-Gly_aq_mM", conditions=[]))
     fig.series = [na, dkp]
     rows, problems, new_vars = build_figure_rows([fig], meta, meth, "001", 1, 1)
     gg, dk = row_to_template_dict(rows[0]), row_to_template_dict(rows[2])
@@ -164,8 +165,8 @@ def test_series_conditions_and_own_y_column():
     assert gg["experiment_type"] == meth.experiment_type.value                 # not overwritten by text
     assert any("experiment_type takes only Batch or Flowthrough" in p for p in problems)
     assert [v.name for v in new_vars] == ["injection_volume_mL"]              # unknown column: review
-    assert gg["sampled_2peptide_Gly_mM"] is not None and dk.get("sampled_2peptide_Gly_mM") is None
-    assert dk["sampled_cyclo_Gly-Gly_mM"] is not None                         # its own column (new name)
+    assert gg["sampled_Gly-Gly_aq_mM"] is not None and dk.get("sampled_Gly-Gly_aq_mM") is None
+    assert dk["sampled_cyclo_Gly-Gly_aq_mM"] is not None                         # its own column (new name)
     assert dk.get("initial_pressure_bar") == meth.initial_pressure_bar.value  # no condition: paper-wide
 
 

@@ -30,7 +30,7 @@ def _panel(**axes):
 
 def test_points_snap_to_each_axis_precision():
     panel = _panel(x=AxisVariable(label="n", column="duration_hr", decimals=0),
-                   y=AxisVariable(label="y", column="sampled_Gly_mM", decimals=1))
+                   y=AxisVariable(label="y", column="sampled_Gly_aq_mM", decimals=1))
     px, py = snap(panel, 10.18, 100 - 33.37)                       # x = 1.018, y = 3.337
     x, y = pixel_to_data(panel, px, py)
     assert (round(x, 9), round(y, 9)) == (1.0, 3.3)

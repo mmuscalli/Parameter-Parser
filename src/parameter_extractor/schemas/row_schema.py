@@ -62,10 +62,6 @@ class ExtractedRow(BaseModel):
     # template column name -> value, e.g. {"initial_NaCl_aq_mM": 3330.0}
     species_mM: Dict[str, float] = {}
 
-    sampled_2peptide_Gly_mM: Optional[float] = None
-    sampled_3peptide_Gly_mM: Optional[float] = None
-    sampled_2peptide_Gly_pct_yield: Optional[float] = None
-    sampled_3peptide_Gly_pct_yield: Optional[float] = None
     yield_below_threshold_note: Optional[str] = None
 
     # any other column -> value (e.g. {"initial_pH": 2.6}, {"stirring": "none"}): template

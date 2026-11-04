@@ -125,7 +125,7 @@ def _without_empty_category(item: dict) -> dict:
 # ---- chemistry ------------------------------------------------------------------------------------------
 
 def _species(name: str) -> str:
-    """One name per species across passes ('Gly-Gly', 'glycylglycine' -> '2peptide_Gly')."""
+    """One name per species across passes ('diglycine', 'glycylglycine' -> 'Gly-Gly')."""
     from parameter_extractor.names import match_species
     matched = match_species(name or "")
     return matched[0] if matched else (name or "").strip().lower()

@@ -88,10 +88,10 @@ def check_row(
     if row.initial_pressure_bar is not None and row.initial_pressure_bar < 0:
         out_of_range("initial_pressure_bar is negative -- not physically possible.")
 
-    for pct_field in ("sampled_2peptide_Gly_pct_yield", "sampled_3peptide_Gly_pct_yield"):
-        val = getattr(row, pct_field)
-        if val is not None and not (0 <= val <= 100):
-            out_of_range(f"{pct_field}={val} is outside 0-100%.")
+    for column, val in row.extra.items():            # every compound's % yield / % recovered
+        if (column.endswith(("_%yield", "_%recovered")) and isinstance(val, (int, float))
+                and not isinstance(val, bool) and not (0 <= val <= 100)):
+            out_of_range(f"{column}={val} is outside 0-100%.")
 
     for name, conc in row.species_mM.items():
         if conc is not None and conc < 0:

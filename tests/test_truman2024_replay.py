@@ -41,9 +41,9 @@ def test_truman2024_replay_reproduces_reference():
         assert len(rows) == 11
         assert all(r["original_data_reference"] for r in rows)            # all reproduced from other papers
         table1 = [r for r in rows if r["set_id"] == "001001"]
-        assert [r["sampled_2peptide_Gly_%yield"] for r in table1] == ["13.96", "10.26", "9.42", "8.36"]
+        assert [r["sampled_Gly-Gly_aq_%yield"] for r in table1] == ["13.96", "10.26", "9.42", "8.36"]
         assert all(r["initial_pH"] == "9.8" for r in table1) and "cycle_number" not in rows[0]
-        starting = sorted(float(r["initial_Gly_mM"]) for r in rows if r["sampled_2peptide_Gly_mM"])
+        starting = sorted(float(r["initial_Gly_aq_mM"]) for r in rows if r["sampled_Gly-Gly_aq_mM"])
         assert starting == [0.1, 1.0, 10.0, 100.0]                         # Table 2, per sample
         campbell = [r for r in rows if r["wet_phase_relative_humidity_pct"]]
         assert sorted(r["wet_phase_relative_humidity_pct"] for r in campbell) == ["30.0", "50.0", "70.0"]
@@ -59,7 +59,7 @@ def test_truman2024_replay_reproduces_reference():
         assert [r["total_sampled_peptides_yield"] for r in table1] == ["47.15", "39.42", "33.45", "28.9"]
         conflicting = [f["message"] for f in flags if f["kind"] == "conflicting_values"]
         assert len(conflicting) == 3 and all("total peptide yield" in m for m in conflicting)
-        assert rows[0]["sampled_13peptide_Gly_%yield"] == "0.11"            # constructed column, no review
+        assert rows[0]["sampled_(Gly)13_aq_%yield"] == "0.11"            # constructed column, no review
 
 
 if __name__ == "__main__":

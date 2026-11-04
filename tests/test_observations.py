@@ -28,7 +28,7 @@ from test_pipeline_offline import PDF, REPLAY_DIR, _replay_send
 
 
 def test_units_from_column_names():
-    cases = {"initial_NaCl_aq_mM": "mM", "sampled_2peptide_Gly_%yield": "%", "initial_temperature_C": "°C",
+    cases = {"initial_NaCl_aq_mM": "mM", "sampled_Gly-Gly_aq_%yield": "%", "initial_temperature_C": "°C",
              "duration_hr": "h", "initial_pressure_bar": "bar", "solvent_volume_mL": "mL",
              "flow_rate_mL_min": "mL/min", "flow_cycle_duration_sec": "s", "initial_pH": "pH",
              "stirring_rate_rpm": "rpm", "vessel_material": "", "paper_title": ""}
@@ -49,7 +49,7 @@ def test_every_value_has_provenance_and_csv_round_trips():
         assert all(o["origin"] == "calculated" for o in totals) and totals[0]["value"] == "2.834"
 
         by = {(o["full_id"], o["column"]): o for o in obs}
-        y = by[("001001001", "sampled_2peptide_Gly_%yield")]
+        y = by[("001001001", "sampled_Gly-Gly_aq_%yield")]
         assert (y["value"], y["unit"], y["origin"], y["confidence"]) == ("2.77", "%", "chemistry", "high")
         assert "2.77" in y["quote"] and y["source"].startswith("Table 1")
         t = by[("001001001", "initial_temperature_C")]

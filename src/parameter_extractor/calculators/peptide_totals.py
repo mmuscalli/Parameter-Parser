@@ -46,9 +46,9 @@ def fill_total_peptide_yield(rows: List[ExtractedRow]):
         if not parts:
             continue
         total = round(sum(parts.values()), max(_decimals(v) for v in parts.values()))
-        listed = " + ".join(f"{c.removeprefix('sampled_').removesuffix('_%yield')} {v:g}"
+        listed = " + ".join(f"{c.removeprefix('sampled_').removesuffix('_%yield').removesuffix('_aq')} {v:g}"
                             for c, v in parts.items())
-        unquantified = [c.removeprefix("sampled_").removesuffix("_%yield") for c, v in record.items()
+        unquantified = [c.removeprefix("sampled_").removesuffix("_%yield").removesuffix("_aq") for c, v in record.items()
                         if c.startswith("sampled_") and c.endswith("_%yield") and "_avg_" not in c and is_peptide_column(c)
                         and isinstance(v, str) and v]            # 'detected': not in the sum
         if unquantified:

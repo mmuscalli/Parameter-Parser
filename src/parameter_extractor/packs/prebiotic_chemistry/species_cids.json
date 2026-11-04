@@ -32,7 +32,7 @@
     "Ammonium Phosphate"
    ]
   },
-  "10peptide_Gly": {
+  "(Gly)10": {
    "cid": 173561,
    "title": "Decaglycine",
    "formula": "C20H32N10O11",
@@ -75,7 +75,7 @@
     "4H-1,2,4-Triazole (VAN)"
    ]
   },
-  "2peptide_Ala": {
+  "Ala-Ala": {
    "cid": 5484352,
    "title": "L-Alanyl-L-alanine",
    "formula": "C6H12N2O3",
@@ -105,7 +105,7 @@
     "Alanine Alanine dipeptide"
    ]
   },
-  "2peptide_Asp": {
+  "Asp-Asp": {
    "cid": 471583,
    "title": "Aspartyl-aspartic acid",
    "formula": "C8H12N2O7",
@@ -135,7 +135,7 @@
     "2-(2-Amino-3-carboxy-propionylamino)-succinic acid"
    ]
   },
-  "2peptide_Gly": {
+  "Gly-Gly": {
    "cid": 11163,
    "title": "Glycylglycine",
    "formula": "C4H8N2O3",
@@ -166,7 +166,7 @@
     "alpha-Glycylglycine"
    ]
   },
-  "2peptide_His": {
+  "His-His": {
    "cid": 6993105,
    "title": "His-His",
    "formula": "C12H16N6O3",
@@ -192,7 +192,7 @@
     "DA-53988"
    ]
   },
-  "2peptide_Met": {
+  "Met-Met": {
    "cid": 6993082,
    "title": "H-Met-met-OH",
    "formula": "C10H20N2O3S2",
@@ -215,7 +215,7 @@
     "F996217"
    ]
   },
-  "2peptide_Phe": {
+  "Phe-Phe": {
    "cid": 6993090,
    "title": "L-Phenylalanyl-L-phenylalanine",
    "formula": "C18H20N2O3",
@@ -245,7 +245,7 @@
     "L-Phenylalanyl-L-phenylalanine (H-L-Phe-L-Phe-OH)"
    ]
   },
-  "2peptide_Ser": {
+  "Ser-Ser": {
    "cid": 7019105,
    "title": "L-seryl-L-serine",
    "formula": "C6H12N2O5",
@@ -272,7 +272,7 @@
     "S-S"
    ]
   },
-  "2peptide_Trp": {
+  "Trp-Trp": {
    "cid": 88656,
    "title": "Tryptophyltryptophan",
    "formula": "C22H22N4O3",
@@ -299,7 +299,7 @@
     "F549435"
    ]
   },
-  "2peptide_Val": {
+  "Val-Val": {
    "cid": 107475,
    "title": "L-Valyl-L-valine",
    "formula": "C10H20N2O3",
@@ -330,7 +330,7 @@
     "N-(2-Amino-1-hydroxy-3-methylbutylidene)valine"
    ]
   },
-  "3peptide_Ala": {
+  "Ala-Ala-Ala": {
    "cid": 5478845,
    "title": "Ala-Ala-Ala",
    "formula": "C9H17N3O4",
@@ -353,7 +353,7 @@
     "F572234"
    ]
   },
-  "3peptide_Asp": {
+  "Asp-Asp-Asp": {
    "cid": 44271674,
    "title": "H-Asp-Asp-Asp-OH",
    "formula": "C12H17N3O10",
@@ -367,7 +367,7 @@
     "DA-53848"
    ]
   },
-  "3peptide_Gly": {
+  "Gly-Gly-Gly": {
    "cid": 11161,
    "title": "Glycylglycylglycine",
    "formula": "C6H11N3O4",
@@ -398,7 +398,7 @@
     "I<<-Diglycylglycin"
    ]
   },
-  "3peptide_Phe": {
+  "Phe-Phe-Phe": {
    "cid": 75739,
    "title": "Phenylalanyl-phenylalanyl-phenylalanine",
    "formula": "C27H29N3O4",
@@ -416,7 +416,7 @@
     "L-Phenylalanine, L-phenylalanyl-L-phenylalanyl-"
    ]
   },
-  "4peptide_Ala": {
+  "(Ala)4": {
    "cid": 5478846,
    "title": "Alanyl-alanyl-alanyl-alanine",
    "formula": "C12H22N4O5",
@@ -437,7 +437,7 @@
     "L-Alanine, L-alanyl-L-alanyl-L-alanyl-"
    ]
   },
-  "4peptide_Asp": {
+  "(Asp)4": {
    "cid": 4432006,
    "title": "Asp-Asp-Asp-Asp",
    "formula": "C16H22N4O13",
@@ -448,7 +448,7 @@
     "H54907"
    ]
   },
-  "4peptide_Gly": {
+  "(Gly)4": {
    "cid": 69481,
    "title": "Glycyl-glycyl-glycyl-glycine",
    "formula": "C8H14N4O5",
@@ -479,7 +479,7 @@
     "BS-23865"
    ]
   },
-  "5peptide_Asp": {
+  "(Asp)5": {
    "cid": 10210640,
    "title": "Asp-Asp-Asp-Asp-Asp",
    "formula": "C20H27N5O16",
@@ -490,7 +490,7 @@
     "TP1791"
    ]
   },
-  "5peptide_Gly": {
+  "(Gly)5": {
    "cid": 81537,
    "title": "Pentaglycine",
    "formula": "C10H17N5O6",
@@ -520,7 +520,7 @@
     "F300021"
    ]
   },
-  "6peptide_Asp": {
+  "(Asp)6": {
    "cid": 10462481,
    "title": "Asp-Asp-Asp-Asp-Asp-Asp",
    "formula": "C24H32N6O19",
@@ -531,7 +531,7 @@
     "T76415"
    ]
   },
-  "6peptide_Gly": {
+  "(Gly)6": {
    "cid": 138069,
    "title": "Hexaglycine",
    "formula": "C12H20N6O7",
@@ -1226,7 +1226,7 @@
     "L Cysteine"
    ]
   },
-  "DKP_Ala": {
+  "cyclo_Ala-Ala": {
    "cid": 165356,
    "title": "Cyclo(alanylalanyl)",
    "formula": "C6H10N2O2",
@@ -1256,7 +1256,7 @@
     "F493178"
    ]
   },
-  "DKP_Gly": {
+  "cyclo_Gly-Gly": {
    "cid": 7817,
    "title": "2,5-Piperazinedione",
    "formula": "C4H6N2O2",

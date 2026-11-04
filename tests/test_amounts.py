@@ -57,14 +57,14 @@ def test_detected_and_not_detected():
     row = ExtractedRow(full_id="1", set_id="1", sample_id="1", set_type="Independent", entry_number=1,
                        paper_title="t", authors=["a"], year_published=2000, journal_published="j",
                        experiment_type="Batch", solution_type="Wet")
-    set_row_value(row, column_for_solute(fa) or "sampled_Phe-Ala_%yield", DETECTED)
-    set_row_value(row, "sampled_2peptide_Gly_%yield", 1.5)
+    set_row_value(row, column_for_solute(fa) or "sampled_Phe-Ala_aq_%yield", DETECTED)
+    set_row_value(row, "sampled_Gly-Gly_aq_%yield", 1.5)
     filled, _ = fill_total_peptide_yield([row])
     assert filled == ["1"] and row.extra["total_sampled_peptides_yield"] == 1.5
     assert "detected without an amount, not counted: Phe-Ala" in row.provenance["total_sampled_peptides_yield"].source
     nv = NewVariable(kind="species", name="Phe2Ala", alias_name="sampled Phe2Ala %", proposed_column="c",
                      value_text=DETECTED, unit="%", origin="chemistry")
-    assert stored_value(nv, "sampled_Phe2Ala_%yield") == (DETECTED, "")
+    assert stored_value(nv, "sampled_Phe2Ala_aq_%yield") == (DETECTED, "")
 
 
 def test_amounts_to_mM():

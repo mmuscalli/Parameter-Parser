@@ -163,16 +163,16 @@ def test_full_run_fills_results():
         assert w.rows_table.rowCount() == 42
         header_items = [w.rows_table.horizontalHeaderItem(i) for i in range(w.rows_table.columnCount())]
         headers = [h.data(Qt.ItemDataRole.UserRole) for h in header_items]
-        assert "sampled_2peptide_Gly_%yield" in headers and "full_id" in headers
+        assert "sampled_Gly-Gly_aq_%yield" in headers and "full_id" in headers
         assert w.flags_tree.topLevelItemCount() >= 1
         # identifiers, then the categories' blocks: metadata ... starting species, then products (column_order.py)
         assert headers[:4] == ["entry_number", "full_id", "set_id", "sample_id"]
         assert headers.index("paper_title") < headers.index("experiment_type") < headers.index("duration_hr") \
-            < headers.index("initial_NaCl_aq_mM") < headers.index("sampled_2peptide_Gly_%yield") < headers.index("source_notes")
+            < headers.index("initial_NaCl_aq_mM") < headers.index("sampled_Gly-Gly_aq_%yield") < headers.index("source_notes")
         bands = {label: (first, last) for label, first, last in w.rows_band.groups}
         assert list(bands)[:3] == ["Row", "Metadata", "Experimental Methodology"] and bands["Row"] == (0, 3)
         assert header_items[4].text() == "paper_title" and "Metadata" in header_items[4].toolTip()
-        tip = w.rows_table.item(0, headers.index("sampled_2peptide_Gly_%yield")).toolTip()
+        tip = w.rows_table.item(0, headers.index("sampled_Gly-Gly_aq_%yield")).toolTip()
         assert tip.startswith("From: chemistry (high confidence)") and "Table 1" in tip, tip
         groups = [w.flags_tree.topLevelItem(i) for i in range(w.flags_tree.topLevelItemCount())]
         assert not any(g.isExpanded() for g in groups)                   # categories start collapsed
@@ -294,6 +294,8 @@ def test_variable_review_window():
             patch.object(main_window.QMessageBox, "warning", lambda parent, title, msg: shown.append(msg)):
         ex = extract(PDF, RunConfig.from_settings(api_key="replay", output_dir=Path(tmp)))
         _add_extras(ex)
+        from parameter_extractor.ingestion.normalize import normalize_chemistry
+        normalize_chemistry(ex.chemistry)               # as finish() does: recorded '2peptide_Gly' -> 'Gly-Gly'
         groups = group_new_variables(collect_new_variables(ex.methodology, ex.chemistry))
         dlg = VariableReviewDialog(groups, ["flowthrough recirculation time"], VariableRegistry(Path(tmp) / "r.json"))
         dlg.show(); _pump()
@@ -312,13 +314,13 @@ def test_variable_review_window():
         dlg.set_action(2, "new_column", "stirring_rate_rpm")
         dlg._finish()
         assert shown and "isn't an existing column" in shown[0] and dlg.isVisible()
-        dlg.set_action(1, "existing_column", "sampled_DKP_Gly_%yield")
+        dlg.set_action(1, "existing_column", "sampled_cyclo_Gly-Gly_aq_%yield")
         _pump(); _screenshot(dlg, "6_variable_review")
         dlg._finish()
         assert dlg.result() == dlg.DialogCode.Accepted
         d = {x.alias_name: (x.action, x.column) for x in dlg.decisions()}
         assert d == {"initial RbCl": ("new_column", "initial_RbCl_aq_mM"),
-                     "sampled Foo %": ("existing_column", "sampled_DKP_Gly_%yield"),
+                     "sampled Foo %": ("existing_column", "sampled_cyclo_Gly-Gly_aq_%yield"),
                      "stirring rate": ("new_column", "stirring_rate_rpm")}
         assert groups[2].values[0].value == 300.0
 
@@ -358,7 +360,7 @@ def test_digitize_a_figure_by_clicking():
                       duplicates_tabulated_data=False, panels=[PlannedPanel(
                           name="main",
                           x=AxisVariable(label="t/h", column="duration_hr"),
-                          y=AxisVariable(label="% Gly-Gly", column="sampled_2peptide_Gly_%yield"),
+                          y=AxisVariable(label="% Gly-Gly", column="sampled_Gly-Gly_aq_%yield"),
                           series=[PlannedSeries(label="Na+", marker="plus", initial_temperature_C=80,
                                                 initial_species=[SpeciesAmount(name="NaCl", concentration_mM=3000)]),
                                   PlannedSeries(label="K+", marker="open circle", initial_temperature_C=80,
@@ -366,7 +368,7 @@ def test_digitize_a_figure_by_clicking():
     with tempfile.TemporaryDirectory() as tmp:
         figures = [f for f in find_figures(str(PDF), Path(tmp)) if f.number in (3, 5)]
         bridge = InstantPlans(plan)
-        dlg = FigureReviewDialog(figures, ["duration_hr", "sampled_2peptide_Gly_%yield"], plan_bridge=bridge)
+        dlg = FigureReviewDialog(figures, ["duration_hr", "sampled_Gly-Gly_aq_%yield"], plan_bridge=bridge)
         dlg.show(); _pump()
         assert "Fig. 3" in dlg.header.text()
         dlg.skip_btn.click()                                  # skip Fig. 3
@@ -404,7 +406,7 @@ def test_digitize_a_figure_by_clicking():
         rows, problems, new_vars = build_figure_rows(dlg.digitized, meta, meth, "001", 14, 43)
         assert problems == [] and len(rows) == 1
         r = rows[0]
-        assert (round(r.duration_hr, 6), round(r.sampled_2peptide_Gly_pct_yield, 6)) == (20.0, 0.4)
+        assert (round(r.duration_hr, 6), round(r.extra["sampled_Gly-Gly_aq_%yield"], 6)) == (20.0, 0.4)
         assert r.species_mM == {"initial_KCl_aq_mM": 3000} and "K+" in r.source_notes
 
 

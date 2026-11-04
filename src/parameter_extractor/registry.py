@@ -83,46 +83,37 @@ def default_registry_path() -> Path:
     return base / "variable_registry.json"
 
 
-def _peptide_column_re():
-    from parameter_extractor.names import AMINO_ACIDS
-    aa = "(?:" + "|".join(AMINO_ACIDS) + ")"
-    return re.compile(rf"(?:initial|sampled)_(?:(?P<n>\d+)peptide_{aa}|(?P<cyclo>cyclo_{aa}(?:-{aa})+)|"
-                      rf"(?P<seq>{aa}(?:-{aa})+))(?:_avg)?_(?:mM|%yield)")
-
-
-_PEPTIDE_COLUMN = None
+_COMPOUND_COLUMN = re.compile(r"(?:initial|sampled)_(?P<name>.+)_(?:aq|gas|s)(?:_avg)?_(?:mM|%yield|%recovered)")
 
 
 def is_peptide_column(column: str) -> bool:
-    """Columns built by the peptide naming convention (names.peptide_name) are standard,
-    for any length and sequence -- not only the lengths PaperDataTemplate happened to
-    need: '<role>_<n>peptide_<AA>_<mM|%yield>' (homopolymer, n >= 2) and
-    '<role>_<AA1>-<AA2>-..._<mM|%yield>' (heteropolymer: in order, not all the same),
-    '<role>_cyclo_<AA1>-<AA2>-..._<mM|%yield>' (cyclic, homo- or heteromeric)."""
-    global _PEPTIDE_COLUMN
-    _PEPTIDE_COLUMN = _PEPTIDE_COLUMN or _peptide_column_re()
-    m = _PEPTIDE_COLUMN.fullmatch(column)
+    """A compound column of a peptide named by the convention (names.peptide_name; Mickey, 2026-11-04):
+    '<role>_<sequence>_<phase>_<mM|%yield>' -- 'sampled_Gly-Gly_aq_%yield', 'sampled_(Gly)10_aq_mM',
+    'sampled_Gly-Ala-Ala_aq_mM', 'sampled_cyclo_Gly-Gly_aq_mM' -- any length >= 2 and any sequence, written in
+    the convention's own form. Known without a review: the name is fixed by the structure, like stock_."""
+    from parameter_extractor.names import cyclic_name, peptide_codes, peptide_name
+    m = _COMPOUND_COLUMN.fullmatch(column or "")
     if not m:
         return False
-    if m.group("n"):
-        return int(m.group("n")) >= 2
-    if m.group("cyclo"):
-        return True                     # cyclic: homo- or heteromeric
-    return len(set(m.group("seq").split("-"))) > 1
+    name = m.group("name")
+    cyclic = name.startswith("cyclo_")
+    codes = peptide_codes(name.removeprefix("cyclo_"))
+    if not codes or len(codes) < 2:
+        return False
+    return name == (cyclic_name(codes) if cyclic else peptide_name(codes))
 
 
-_OLIGO_COLUMN = re.compile(r"(?:initial|sampled)_\d{1,3}mer_d?[ACGTU]+(?:_avg)?_(?:mM|%yield)")
+_OLIGO_COLUMN = re.compile(r"(?:initial|sampled)_\d{1,3}mer_(?P<letters>d?[ACGTU]+)_(?:aq|gas|s)(?:_avg)?_(?:mM|%yield)")
 
 
 def is_oligonucleotide_column(column: str) -> bool:
     """Columns of the nucleic-acid naming convention (names.oligonucleotide_name; Mickey, 2026-11-03):
-    '<role>_<n>mer_<letters>_<mM|%yield>' -- 'sampled_4mer_A_%yield', 'sampled_12mer_dT_mM'."""
-    m = _OLIGO_COLUMN.fullmatch(column)
+    '<role>_<n>mer_<letters>_<phase>_<mM|%yield>' -- 'sampled_4mer_A_aq_%yield', 'sampled_12mer_dT_aq_mM'."""
+    m = _OLIGO_COLUMN.fullmatch(column or "")
     if not m:
         return False
     from parameter_extractor.names import oligonucleotide_match
-    letters = column.split("mer_", 1)[1].rsplit("_", 1)[0].removesuffix("_avg")
-    return oligonucleotide_match(f"1mer_{letters}") is not None
+    return oligonucleotide_match(f"1mer_{m.group('letters')}") is not None
 
 
 def default_arxiv_cache_dir() -> Path:
@@ -161,6 +152,8 @@ class _Store:
         self.categories: Dict[str, dict] = {}     # area -> {"added": [...], "changed": {id: {...}}}
         self.compounds: Dict[str, Dict[str, dict]] = {}   # area -> name -> {cid, synonyms, active} (compound_names)
         self.changed = False
+        self.migrated = False
+        self.path = path
         if path and path.is_file():
             data = json.loads(path.read_text())
             self.columns = data.get("columns", {})
@@ -171,6 +164,28 @@ class _Store:
             self.builtin = data.get("builtin_columns", {})
             self.categories = data.get("categories", {})
             self.compounds = data.get("compounds", {})
+            self.migrated = self._migrate_compound_columns()
+
+    def _migrate_compound_columns(self) -> bool:
+        """Columns remembered before 2026-11-04 in the old compound format ('sampled_2peptide_Gly_%yield',
+        'initial_Gly_mM', 'sampled_Foo_%yield') -> the current one (flatten_to_template.current_column_name);
+        old peptide names of compounds -> sequences. True when something changed (saved with a backup)."""
+        from parameter_extractor.ingestion.flatten_to_template import current_column_name as new
+        from parameter_extractor.names import match_species
+        def name(n):
+            if re.fullmatch(r"\d+peptide_[A-Z][a-z]{2}|DKP_[A-Z][a-z]{2}", n or ""):
+                return (match_species(n) or (n,))[0]
+            return n
+        before = json.dumps([self.columns, self.aliases, self.builtin, self.compounds, self.species_ids], sort_keys=True)
+        self.columns = {new(c): info for c, info in self.columns.items()}
+        self.aliases = {k: new(c) for k, c in self.aliases.items()}
+        self.builtin = {a: {new(c): v for c, v in cols.items()} for a, cols in self.builtin.items()}
+        self.compounds = {a: {name(n): v for n, v in names.items()} for a, names in self.compounds.items()}
+        self.species_ids = {cid: name(n) for cid, n in self.species_ids.items()}
+        changed = before != json.dumps([self.columns, self.aliases, self.builtin, self.compounds, self.species_ids],
+                                       sort_keys=True)
+        self.changed = self.changed or changed
+        return changed
 
 
 class VariableRegistry:
@@ -528,6 +543,11 @@ class VariableRegistry:
             return
         self.path.parent.mkdir(parents=True, exist_ok=True)
         st = self._store
+        if st.migrated and self.path.is_file():      # the file before the compound-column migration, kept once
+            backup = self.path.with_name(self.path.stem + ".before-compound-columns-2026-11-04.json")
+            if not backup.exists():
+                backup.write_text(self.path.read_text())
+            st.migrated = False
         data = {"columns": st.columns, "aliases": st.aliases, "alias_labels": st.alias_labels,
                 "alias_areas": st.alias_areas, "species_ids": st.species_ids}
         if st.builtin:

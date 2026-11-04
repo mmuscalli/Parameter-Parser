@@ -2,7 +2,7 @@
 Species name matching: map the names papers (and the model) use onto the
 controlled vocabulary's names, so the same chemical always lands in the same
 column -- "sodium chloride" / "NaCl(aq)" -> NaCl, "glycine" -> Gly,
-"diglycine" / "Gly-Gly" / "(Gly)2" / "Gly2" -> 2peptide_Gly, "Ca2+" -> Ca+2,
+"diglycine" / "(Gly)2" / "Gly2" -> Gly-Gly, "tetraglycine" -> (Gly)4, "Ca2+" -> Ca+2,
 "CuCl2·2H2O" -> CuCl2, ...
 
 Deterministic and conservative: only exact rules and a curated synonym table,
@@ -61,17 +61,35 @@ _AA_CODE = "(?:" + "|".join(AMINO_ACIDS) + ")"
 _STEREO = re.compile(r"(?<![A-Za-z])(?:DL|L|D)-(?=[A-Z])")
 
 
+COMPACT_RUN = 4        # a run of this many of one residue is written '(Gly)4' (Mickey, 2026-11-04)
+
+
 def peptide_name(codes: List[str]) -> str:
-    """The naming convention for peptides (Mickey, 2026-10-15): a homopolymer's order
-    doesn't matter -> '<n>peptide_<AA>' ('3peptide_Gly'); a heteropolymer's does ->
-    residues N- to C-terminus joined by '-' ('Gly-Ala-Ala')."""
-    return _oligomer(len(codes), codes[0]) if len(set(codes)) == 1 else "-".join(codes)
+    """A peptide's name (Mickey, 2026-11-04; replaces '<n>peptide_<AA>'): its sequence, N- to C-terminus, in
+    three-letter codes joined by '-' -- 'Gly-Gly', 'Gly-Gly-Gly', 'Gly-Ala-Ala' -- with a run of 4 or more of one
+    residue written '(Gly)n': '(Gly)4', '(Gly)10', 'Gly-(Ala)4'. A peptide is then a compound like any other: its
+    columns are '<role>_<name>_<phase>_<unit>' and it can be shown under a PubChem synonym (compound_names.py)."""
+    parts, i = [], 0
+    while i < len(codes):
+        j = i
+        while j < len(codes) and codes[j] == codes[i]:
+            j += 1
+        n = j - i
+        parts += [f"({codes[i]}){n}"] if n >= COMPACT_RUN else [codes[i]] * n
+        i = j
+    return "-".join(parts)
+
+
+def peptide_length(name: str) -> Optional[int]:
+    """Residues in a peptide named by the convention ('Gly-Gly' 2, '(Gly)10' 10, 'cyclo_Gly-Gly' 2), else None."""
+    codes = peptide_codes(name.removeprefix("cyclo_"))
+    return len(codes) if codes else None
 
 
 def cyclic_name(codes: List[str]) -> str:
-    """Cyclic peptides, homo- or heteromeric (Mickey, 2026-10-15): 'cyclo_<AA1>-<AA2>-...',
+    """Cyclic peptides, homo- or heteromeric (Mickey, 2026-10-15): 'cyclo_' + the sequence,
     residues as given ('cyclo_Gly-Gly' = the glycine diketopiperazine, 'cyclo_Val-Gly')."""
-    return "cyclo_" + "-".join(codes)
+    return "cyclo_" + peptide_name(codes)
 
 
 def _aa_code(text: str) -> Optional[str]:
@@ -81,7 +99,7 @@ def _aa_code(text: str) -> Optional[str]:
 
 def cyclic_codes(name: str) -> Optional[List[str]]:
     """Residues of a cyclic peptide: 'cyclo(Gly-Ala)', 'c(Gly-Gly)', 'cyclo-Gly-Ala',
-    'DKP_Gly', 'glycine diketopiperazine', 'Ala-DKP', 'alanine anhydride',
+    'DKP_Gly' (the old template name), 'glycine diketopiperazine', 'Ala-DKP', 'alanine anhydride',
     '2,5-diketopiperazine' / '2,5-piperazinedione' (the glycine one)."""
     t = name.strip()
     if t.startswith("cyclo_"):                   # already in the app's naming
@@ -106,10 +124,11 @@ def cyclic_codes(name: str) -> Optional[List[str]]:
 
 def peptide_codes(name: str) -> Optional[List[str]]:
     """Residue codes of a linear peptide written as a sequence: 'Gly-Ala-Ala',
-    'GlyAlaAla', 'H-Gly-L-Ala-OH', 'glycylalanylalanine', 'glycyl-alanine'.
+    'GlyAlaAla', 'H-Gly-L-Ala-OH', 'glycylalanylalanine', 'glycyl-alanine', '(Gly)4', 'Gly-(Ala)4'.
     None if it isn't one (or has a single residue)."""
     t = _STEREO.sub("", name.strip())
     t = re.sub(r"^H-|-OH$", "", t)
+    t = re.sub(rf"\(({_AA_CODE})\)(\d{{1,3}})", lambda m: "-".join([m.group(1)] * int(m.group(2))), t)
     if re.fullmatch(rf"{_AA_CODE}(?:-?{_AA_CODE})+", t):
         return re.findall(_AA_CODE, t)
     low = re.sub(r"(?<![a-z])(?:dl|l|d)-", "", t.lower()).replace("-", "").replace(" ", "")
@@ -202,13 +221,13 @@ def _salt_formula(cation: str, anion: str) -> List[str]:
 
 
 def _oligomer(n: int, aa: str) -> str:
-    return f"{n}peptide_{aa}"
+    return peptide_name([aa] * n)
 
 
 def match_species(name: str, vocab: Optional[Tuple[str, ...]] = None) -> Optional[Tuple[str, str]]:
     """(canonical name, how it was matched), or None if no rule applies. Returns the
-    canonical form even when it isn't in the vocabulary for oligopeptides (e.g.
-    '14peptide_Gly'), so new variables still get consistent names."""
+    canonical form even when it isn't in the vocabulary for peptides (e.g.
+    '(Gly)14'), so new variables still get consistent names."""
     vocab = vocab or vocabulary()
     vocab_set = set(vocab)
     if not name:
@@ -220,9 +239,9 @@ def match_species(name: str, vocab: Optional[Tuple[str, ...]] = None) -> Optiona
     oligo = oligonucleotide_match(raw)            # nucleic-acid oligomers: '(pA)4' -> '4mer_A'
     if oligo:
         return oligo, "exact" if oligo == raw else "oligonucleotide"
-    m = re.fullmatch(r"(\d+)peptide_([A-Z][a-z]{2})", raw)   # the convention's own names, any length
+    m = re.fullmatch(r"(\d+)peptide_([A-Z][a-z]{2})", raw)   # the old convention ('3peptide_Gly', before 2026-11-04)
     if m and int(m.group(1)) >= 2 and m.group(2) in AMINO_ACIDS:
-        return raw, "exact" if raw in vocab_set else "peptide name"
+        return _oligomer(int(m.group(1)), m.group(2)), "peptide name (old naming)"
     if raw in vocab_set:
         return raw, "exact"
 

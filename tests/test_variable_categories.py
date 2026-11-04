@@ -220,10 +220,10 @@ def test_recovered_starting_material_is_not_a_yield():
     by_header = SoluteEntry(name="nicotinamide", source="Table 1, row 1, column Recovered Nicotinamide (%)", **c)
     by_model = SoluteEntry(name="nicotinamide", source="Table 1", measure="recovered", **c)
     product = SoluteEntry(name="nicotinamide ribose 2'-phosphate", source="Table 1, row 1, column Yield of 7 (%)", **c)
-    assert proposed_column_for_solute(by_header) == proposed_column_for_solute(by_model) == "sampled_nicotinamide_%recovered"
-    assert proposed_column_for_solute(product) == "sampled_nicotinamide_ribose_2'-phosphate_%yield"
+    assert proposed_column_for_solute(by_header) == proposed_column_for_solute(by_model) == "sampled_nicotinamide_aq_%recovered"
+    assert proposed_column_for_solute(product) == "sampled_nicotinamide_ribose_2'-phosphate_aq_%yield"
     assert species_alias_name(by_model) == "sampled nicotinamide % recovered" and unit_for_column(
-        "sampled_nicotinamide_%recovered") == "%"
+        "sampled_nicotinamide_aq_%recovered") == "%"
     assert VariableRegistry(None).display_name("species:sampled nicotinamide % recovered") == \
         "nicotinamide (measured, % recovered)"
 
