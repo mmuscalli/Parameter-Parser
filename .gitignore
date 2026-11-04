@@ -12,3 +12,4 @@ scripts/.pubchem_build_cache.json
 runs/
 tests/fixtures/arxiv_nielsen2019/*.html.gz
 .claude/
+tests/.last_times.json

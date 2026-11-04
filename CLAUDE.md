@@ -2019,3 +2019,12 @@ on EVERY compound (also amino acids, peptides, oligonucleotides, which had none)
   new_variable flag), all unticked = not added. Review window: merged line named "<name>   (in Table 1 and Fig. 3)",
   count tooltip per source, "Include values from:" one checkbox per source above the values, an Include column per
   value ("(left out)" in Stored as); problems() checks only included values. Checked natively.
+
+## Running the test suite (2026-11-04)
+
+`python scripts/run_tests.py` runs every tests/test_*.py in its own process, one per CPU core (`-j N` to change;
+words after it pick files by name), slowest first (last run's times in tests/.last_times.json, gitignored), and
+lists FAILED and SKIPPED files with their output tails (exit 1 on either). The files are independent: temp folders
+only, registry_path None / tmp registries, and test_gui_offline keeps QSettings under "ParameterExtractorTests".
+Measured on Mickey's 8-core Mac: ~95-110 s vs ~6-7 min one at a time; the floor is the slowest file
+(test_teng2023_replay ~1 min). A new test file must keep that independence (no shared output paths, no user prefs).
