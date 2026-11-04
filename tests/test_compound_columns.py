@@ -215,6 +215,87 @@ def test_new_peptide_on_a_figure_axis():
     assert [row_to_template_dict(r)["sampled_(Lys)4_aq_%yield"] for r in rows] == [4.0, 7.0]
 
 
+def _merged_review_case():
+    """A figure reading two points of (Lys)4 + a table giving it for one row: (rows, groups, registry)."""
+    packs.activate("prebiotic_chemistry")
+    from parameter_extractor.ingestion.figure_rows import build_figure_rows
+    from parameter_extractor.ingestion.new_variables import collect_new_variables, group_new_variables
+    from parameter_extractor.registry import VariableRegistry
+    from parameter_extractor.schemas.chemistry import ChemistryExtraction, SoluteEntry
+    from parameter_extractor.schemas.figures import (AxisCalibration, AxisVariable, CalibrationPoint, DigitizedFigure,
+                                                     DigitizedPanel, DigitizedPoint, DigitizedSeries)
+    from parameter_extractor.schemas.methodology import empty_methodology
+    from parameter_extractor.schemas.paper_metadata import PaperMetadata
+    from parameter_extractor.schemas.row_schema import ExtractedRow
+    cal = lambda a, b: AxisCalibration(p1=CalibrationPoint(px=a[0], py=a[1], value=0),
+                                       p2=CalibrationPoint(px=b[0], py=b[1], value=10))
+    panel = DigitizedPanel(x_cal=cal((0, 100), (100, 100)), y_cal=cal((0, 100), (0, 0)),
+                           x=AxisVariable(label="time (h)", column="duration_hr"),
+                           y=AxisVariable(label="% Lys4", column=None, new_column="sampled_Lys-Lys-Lys-Lys_aq_%yield"))
+    fig = DigitizedFigure(figure_id="Fig. 3", number=3, page=4, caption="c", render_scale=1.0, page_image="",
+                          panels=[panel], series=[DigitizedSeries(label="80 C", points=[
+                              DigitizedPoint(px=20, py=60), DigitizedPoint(px=50, py=30)])])
+    meta = PaperMetadata(paper_id="p", paper_title="t", authors=["A"], year_published=2023, journal_published="j")
+    reg = VariableRegistry(None)
+    rows, _, fig_vars = build_figure_rows([fig], meta, empty_methodology("p"), "001", 2, 2, registry=reg)
+    table_row = ExtractedRow(full_id="001001001", set_id="001001", sample_id="001", set_type="Independent",
+                             entry_number=1, paper_title="t", authors=["A"], year_published=2023,
+                             journal_published="j", experiment_type="Batch", solution_type="Wet")
+    entry = SoluteEntry(name="Lys-Lys-Lys-Lys", role="sampled", phase="aq", set_label="A", concentration_value=3.5,
+                        concentration_unit_raw="%", quote="3.5", source="Table 1, row 1, column Lys4 (%)",
+                        confidence="high")
+    table_vars = collect_new_variables(empty_methodology("p"), ChemistryExtraction(solutes=[entry]), reg,
+                                       ({"A": ["001001001"]}, {}, ["001001001"]))
+    return [table_row] + rows, group_new_variables(table_vars + fig_vars), reg
+
+
+def test_table_and_figure_values_of_one_compound_share_a_review_line():
+    from parameter_extractor.ingestion.flatten_to_template import row_to_template_dict
+    from parameter_extractor.ingestion.new_variables import VariableDecision, apply_decisions
+    col = "sampled_(Lys)4_aq_%yield"
+    rows, groups, reg = _merged_review_case()
+    assert len(groups) == 1 and groups[0].merged and groups[0].kind == "species"
+    assert groups[0].sources == {"Table 1": 1, "Fig. 3": 2} and groups[0].proposed_column == col
+    accept = [VariableDecision(groups[0].alias_name, "species", "new_column", col, remember=False)]
+    apply_decisions(rows, groups, accept, reg)                            # one decision: every value
+    assert [row_to_template_dict(r).get(col) for r in rows] == [3.5, 4.0, 7.0]
+    # leaving out the figure's readings: only the table's value goes in; the rest is kept as left out
+    rows, groups, reg = _merged_review_case()
+    for v in groups[0].values:
+        v.include = v.kind != "figure_axis"
+    left_out = apply_decisions(rows, groups, accept, reg)
+    assert [row_to_template_dict(r).get(col) for r in rows] == [3.5, None, None]
+    assert [len(g.values) for g in left_out] == [2] and all(v.kind == "figure_axis" for v in left_out[0].values)
+    # every value unticked: as good as not added
+    rows, groups, reg = _merged_review_case()
+    for v in groups[0].values:
+        v.include = False
+    assert apply_decisions(rows, groups, accept, reg) == groups
+
+
+def test_review_window_shows_one_line_with_both_sources():
+    import os
+    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+    from PySide6.QtCore import Qt
+    from PySide6.QtWidgets import QApplication
+    app = QApplication.instance() or QApplication([])
+    from parameter_extractor.gui.variable_review import INCLUDE_COL, VariableReviewDialog
+    rows, groups, reg = _merged_review_case()
+    dlg = VariableReviewDialog(groups, [], reg)
+    dlg.show(); app.processEvents()
+    assert dlg.table.item(dlg._table_row[0], 0).text() == "Lys-Lys-Lys-Lys   (in Table 1 and Fig. 3)" or \
+        dlg.table.item(dlg._table_row[0], 0).text() == "(Lys)4   (in Table 1 and Fig. 3)"
+    assert list(dlg.source_checks) == ["Table 1", "Fig. 3"] and dlg.source_box.isVisible()
+    dlg.source_checks["Fig. 3"].setChecked(False)                         # a whole source at once
+    app.processEvents()
+    assert [v.include for v in groups[0].values] == [True, False, False]
+    assert dlg.values_table.item(1, 2).text() == "(left out)"
+    dlg.values_table.item(0, INCLUDE_COL).setCheckState(Qt.CheckState.Unchecked)    # one value
+    app.processEvents()
+    assert not groups[0].values[0].include
+    dlg.reject()
+
+
 if __name__ == "__main__":
     for name, fn in list(globals().items()):
         if name.startswith("test_") and callable(fn):

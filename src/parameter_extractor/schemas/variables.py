@@ -36,6 +36,7 @@ class NewVariable(BaseModel):
     pubchem_cid: int = 0                        # species identity, if PubChem knows the name
     pubchem_title: str = ""
     pubchem_synonyms: List[str] = Field(default_factory=list)
+    include: bool = True                        # ticked in the review's value list; False = left out of the CSV
     category: str = ""                          # variable_categories.py id ('' = none)
     format_note: str = ""                       # value doesn't follow its category's format
     err_plus: float = 0.0                       # uncertainty in the value's unit (written as <column>_err_plus /

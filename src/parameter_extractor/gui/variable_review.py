@@ -23,6 +23,11 @@ Species, then Metadata / Experimental Methodology, then figure columns and assum
 with a header line saying what belongs there and in what format; a value that doesn't follow its
 category's format is marked with ⚠. Methods taking `row` mean the variable's index in `groups`;
 the table has the header lines in between (`_table_row`, `_group_at`).
+
+A compound found both in a table (or the text) and on a figure axis is ONE line (new_variables
+`_merge_figure_axes_into_compounds`), named with both sources; every value has an Include box, and such a line
+has one switch per source above its values (e.g. leave out Fig. 3's readings). Unticked values stay out of the CSV
+(kept as left out in new_variables.json).
 """
 from __future__ import annotations
 from typing import List
@@ -43,6 +48,7 @@ KIND_LABELS = {"species": "Species", "parameter": "Experimental parameter", "fig
                "assumed_value": "ASSUMED value (not stated in the paper)"}
 COLS = ["Variable", "Type", "Values", "Example", "Similar existing", "Add as", "Column", "Data type", "Remember"]
 ACTION_COL, COLUMN_COL, DTYPE_COL, REMEMBER_COL = 5, 6, 7, 8
+INCLUDE_COL = 5                    # in the values table
 # a new column's suggested data type, from its category's format (variable_categories.py)
 CATEGORY_TYPE = {"number": "number", "text": "text"}
 
@@ -102,10 +108,17 @@ class VariableReviewDialog(QDialog):
             notes = sorted({v.format_note for v in g.values if v.format_note})
             similar = self._similar(g)
             identity = next((v for v in g.values if v.pubchem_cid), None)
-            for c, text in enumerate([g.name, KIND_LABELS[g.kind], str(len(g.values)),
+            sources = g.sources
+            name = g.name + (f"   (in {' and '.join(sources)})" if g.merged else "")
+            for c, text in enumerate([name, KIND_LABELS[g.kind], str(len(g.values)),
                                       ("⚠ " if notes else "") + example, similar]):
                 item = QTableWidgetItem(text)
                 item.setToolTip(text + ("\n\nFormat: " + "; ".join(notes) if c == 3 and notes else ""))
+                if c == 2 and len(sources) > 1:
+                    item.setToolTip("\n".join(f"{label}: {n} value(s)" for label, n in sources.items()))
+                if c == 0 and g.merged:
+                    item.setToolTip(f"{g.name} appears in {' and '.join(sources)}: one decision adds all of its "
+                                    "values. To keep only some, untick them (or a whole source) in the list below.")
                 if c == 0 and identity:
                     item.setToolTip(f"{text}\nPubChem: {identity.pubchem_title} (CID {identity.pubchem_cid})")
                 self.table.setItem(t, c, item)
@@ -153,15 +166,27 @@ class VariableReviewDialog(QDialog):
         for row, category_id in headers:                    # after sizing: spanned text doesn't widen column 0
             self._add_header(row, category_id, sum(1 for g in groups if g.category == category_id))
 
-        self.values_table = QTableWidget(0, 5)
-        self.values_table.setHorizontalHeaderLabels(["Applies to", "Value (editable)", "Stored as", "Quote", "From"])
+        self.values_table = QTableWidget(0, 6)
+        self.values_table.setHorizontalHeaderLabels(["Applies to", "Value (editable)", "Stored as", "Quote", "From",
+                                                     "Include"])
         self.values_table.horizontalHeader().setSectionResizeMode(3, QHeaderView.ResizeMode.Stretch)
         self.values_table.itemChanged.connect(self._on_value_edited)
         self.table.currentCellChanged.connect(self._on_current_cell)
 
+        # one switch per source for a line found in several (a table and a figure)
+        self.source_row = QHBoxLayout()
+        self.source_box = QWidget()
+        self.source_box.setLayout(self.source_row)
+        self.source_box.hide()
+        self.source_checks = {}
+        values_panel = QWidget()
+        vp = QVBoxLayout(values_panel)
+        vp.setContentsMargins(0, 0, 0, 0)
+        vp.addWidget(self.source_box)
+        vp.addWidget(self.values_table, 1)
         split = QSplitter(Qt.Orientation.Vertical)
         split.addWidget(self.table)
-        split.addWidget(self.values_table)
+        split.addWidget(values_panel)
         split.setSizes([380, 260])
         layout.addWidget(split, 1)
 
@@ -285,9 +310,12 @@ class VariableReviewDialog(QDialog):
         t.setRowCount(len(values))
         action = ACTIONS[self.action_boxes[row].currentIndex()][0] if values else "ignore"
         column = self.column_boxes[row].currentText().strip() if values else ""
+        self._fill_source_checks(values)
         for i, v in enumerate(values):
             refused = False
-            if action == "ignore" or not column:
+            if not v.include:
+                stored = "(left out)"
+            elif action == "ignore" or not column:
                 stored = "(not added)"
             else:
                 value, note = stored_value(v, column, self.value_type(row))
@@ -301,11 +329,56 @@ class VariableReviewDialog(QDialog):
                     item.setFlags(item.flags() & ~Qt.ItemFlag.ItemIsEditable)
                 if c == 2 and refused:
                     item.setForeground(Qt.GlobalColor.darkRed)
+                if not v.include:
+                    item.setForeground(Qt.GlobalColor.gray)
                 t.setItem(i, c, item)
+            box = QTableWidgetItem()
+            box.setFlags(Qt.ItemFlag.ItemIsEnabled | Qt.ItemFlag.ItemIsUserCheckable)
+            box.setCheckState(Qt.CheckState.Checked if v.include else Qt.CheckState.Unchecked)
+            box.setToolTip("Unticked: this value stays out of the CSV (kept as left out)")
+            t.setItem(i, INCLUDE_COL, box)
         t.resizeColumnToContents(0)
         t.blockSignals(False)
 
+    def _fill_source_checks(self, values) -> None:
+        """'Include: [x] Table 1 (4)  [x] Fig. 3 (8)' above the values of a line found in several sources."""
+        from parameter_extractor.ingestion.new_variables import source_label
+        while self.source_row.count():
+            w = self.source_row.takeAt(0).widget()
+            if w is not None:
+                w.deleteLater()
+        self.source_checks = {}
+        by_source = {}
+        for v in values:
+            by_source.setdefault(source_label(v), []).append(v)
+        merged = any(v.kind == "figure_axis" for v in values) and any(v.kind != "figure_axis" for v in values)
+        self.source_box.setVisible(merged)
+        if not merged:
+            return
+        self.source_row.addWidget(QLabel("Include values from:"))
+        for label, vs in by_source.items():
+            box = QCheckBox(f"{label} ({len(vs)})")
+            box.setTristate(False)
+            box.setChecked(all(v.include for v in vs))
+            box.toggled.connect(lambda on, vs=vs: self._set_included(vs, on))
+            self.source_row.addWidget(box)
+            self.source_checks[label] = box
+        self.source_row.addStretch(1)
+
+    def _set_included(self, values, on: bool) -> None:
+        for v in values:
+            v.include = on
+        self._show_values(self._shown)
+
     def _on_value_edited(self, item: QTableWidgetItem) -> None:
+        if item.column() == INCLUDE_COL and 0 <= self._shown < len(self.groups):
+            v = self.groups[self._shown].values[item.row()]
+            on = item.checkState() == Qt.CheckState.Checked
+            if v.include != on:
+                v.include = on
+                from PySide6.QtCore import QTimer
+                QTimer.singleShot(0, lambda: self._show_values(self._shown))   # not inside the item's signal
+            return
         if item.column() != 1 or not (0 <= self._shown < len(self.groups)):
             return
         v = self.groups[self._shown].values[item.row()]
@@ -345,7 +418,7 @@ class VariableReviewDialog(QDialog):
                               f"list, or pick 'New column'.")
             else:
                 kind = d.value_type or column_type(d.column, self.registry)
-                notes = [(v, stored_value(v, d.column, kind)[1]) for v in g.values]
+                notes = [(v, stored_value(v, d.column, kind)[1]) for v in g.values if v.include]
                 bad = [_value_text(v) for v, n in notes if n.startswith("not converted")]
                 wrong = [_value_text(v) for v, n in notes if n.startswith("not stored")]
                 if bad:

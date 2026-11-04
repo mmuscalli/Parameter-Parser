@@ -2010,3 +2010,12 @@ on EVERY compound (also amino acids, peptides, oligonucleotides, which had none)
   ONE column ('sampled_Lys-Lys-Lys-Lys_aq_%yield' -> 'sampled_(Lys)4_aq_%yield'). A figure axis whose compound has no
   column still gets its rows built (conditions, durations); the values wait in the review (kind figure_axis, row_ids)
   and land on those rows when accepted (tests/test_compound_columns.test_new_peptide_on_a_figure_axis).
+- **One review line per compound (same day, Mickey):** `new_variables._merge_figure_axes_into_compounds` (in
+  group_new_variables) puts a figure_axis group's values into the species group proposing the same compound column
+  -- one decision for table/text AND plot values (before: accepting one and rejecting the other left the column half
+  filled in this paper and filled automatically in later ones, since an accepted column is known). VariableGroup
+  `.sources` ({'Table 1': 4, 'Fig. 3': 8}, `source_label`) / `.merged`; NewVariable `include` (default True):
+  apply_decisions writes only included values, the unticked ones become a left-out group (new_variables.json +
+  new_variable flag), all unticked = not added. Review window: merged line named "<name>   (in Table 1 and Fig. 3)",
+  count tooltip per source, "Include values from:" one checkbox per source above the values, an Include column per
+  value ("(left out)" in Stored as); problems() checks only included values. Checked natively.

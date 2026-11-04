@@ -45,6 +45,31 @@ class VariableGroup:
     def __post_init__(self):
         self.category = self.category or _kind_category(self.kind)
 
+    @property
+    def sources(self) -> Dict[str, int]:
+        """Where the line's values come from, in order: {'Table 1': 4, 'Fig. 3': 8}."""
+        out: Dict[str, int] = {}
+        for v in self.values:
+            label = source_label(v)
+            out[label] = out.get(label, 0) + 1
+        return out
+
+    @property
+    def merged(self) -> bool:
+        """Values of one compound from a table (or the text) AND a figure, shown as one line (2026-11-04)."""
+        return any(v.kind == "figure_axis" for v in self.values) and any(v.kind != "figure_axis" for v in self.values)
+
+
+_TABLE_IN_SOURCE = re.compile(r"\b(?:SI\s+)?Table\.?\s*(?:S|A|ED)?[IVXLC\d]+\b", re.IGNORECASE)
+
+
+def source_label(v: NewVariable) -> str:
+    """'Fig. 3' for a value read off a figure, the table for a table value ('Table 1'), else 'text'."""
+    if v.kind == "figure_axis" or (v.origin or "").startswith("Fig"):
+        return v.origin or "figure"
+    m = _TABLE_IN_SOURCE.search(v.source or "")
+    return re.sub(r"\s+", " ", m.group(0)).replace("Table.", "Table") if m else "text"
+
 
 @dataclass
 class VariableDecision:
@@ -246,8 +271,24 @@ def group_new_variables(new_vars: List[NewVariable]) -> List[VariableGroup]:
         groups[key].values.append(v)
     for g in groups.values():
         g.values = _without_repeated_calculations(g.values)
+    _merge_figure_axes_into_compounds(groups)
     order = {c.id: i for i, c in enumerate(categories.categories())}
     return sorted(groups.values(), key=lambda g: order.get(g.category, len(order)))
+
+
+def _merge_figure_axes_into_compounds(groups: Dict[Tuple[str, str], "VariableGroup"]) -> None:
+    """A compound read off a figure axis and the same compound from a table / the text propose ONE column
+    (flatten_to_template.canonical_compound_column): their values go on one review line, decided together
+    (Mickey, 2026-11-04 -- accepting one and rejecting the other left the column half filled in this paper and
+    filled automatically in later ones)."""
+    by_column = {}
+    for key, g in groups.items():
+        if g.kind == "species" and action_is_species_column(g.proposed_column):
+            by_column.setdefault(g.proposed_column, key)
+    for key in [k for k, g in groups.items() if g.kind == "figure_axis"]:
+        target = by_column.get(groups[key].proposed_column)
+        if target is not None:
+            groups[target].values += groups.pop(key).values
 
 
 def _without_repeated_calculations(values: List[NewVariable]) -> List[NewVariable]:
@@ -375,13 +416,17 @@ def apply_decisions(rows: List[ExtractedRow], groups: List[VariableGroup],
     apply_decisions.problems = []
     for g in groups:
         d = by_key.get((g.kind, g.alias_name))
-        if d is None or d.action == "ignore" or not d.column.strip():
-            left_out.append(g)
+        if d is None or d.action == "ignore" or not d.column.strip() or not any(v.include for v in g.values):
+            left_out.append(g)                # (every value unticked: as good as not added)
             continue
         column = d.column.strip()
         from parameter_extractor.value_types import column_type
         value_type = d.value_type or column_type(column, registry)
-        _, problems = write_values(rows, column, g.values, value_type)
+        excluded = [v for v in g.values if not v.include]
+        if excluded:                         # values unticked in the review: kept as left out (new_variables.json)
+            left_out.append(VariableGroup(kind=g.kind, name=g.name, alias_name=g.alias_name,
+                                          proposed_column=g.proposed_column, values=excluded, category=g.category))
+        _, problems = write_values(rows, column, [v for v in g.values if v.include], value_type)
         apply_decisions.problems += problems
         if d.remember and g.kind != "assumed_value":     # a guess is decided per paper, never remembered
             if d.action == "new_column":

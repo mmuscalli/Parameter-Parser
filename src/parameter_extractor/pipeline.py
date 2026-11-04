@@ -1125,7 +1125,7 @@ def finish(
         d = by_key.get((g.kind, g.alias_name))
         if g not in left_out and d:
             accepted.append({"name": g.name, "kind": g.kind, "column": d.column.strip(),
-                             "values": len(g.values), "how": f"accepted in review ({d.action})",
+                             "values": sum(v.include for v in g.values), "how": f"accepted in review ({d.action})",
                              "category": g.category})
             if g.kind == "assumed_value":
                 v = g.values[0]
