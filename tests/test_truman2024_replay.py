@@ -54,12 +54,15 @@ def test_truman2024_replay_reproduces_reference():
         refs = {r["original_data_reference"] for r in rows if r["original_data_reference"]}
         assert sum(f["kind"] == "cited_data" for f in flags) == len(refs) < 8
         assert not any(f["kind"] == "assumed_value" for f in flags)
-        # Table 1's stated totals are kept (and match the sums); the Campbell texts state a total but
-        # name only the largest peptide, so the sum can't match -- flagged, stated total kept
+        # Table 1's stated totals are kept. Peptides outside the vocabulary await the review (2026-11-04: (Gly)7,
+        # (Gly)9-13 % yields have no column), so before it the accepted yields don't add up to the stated
+        # totals -- each row flagged; the Campbell sets name only such lengths, so they have nothing to check
         assert [r["total_sampled_peptides_yield"] for r in table1] == ["47.15", "39.42", "33.45", "28.9"]
         conflicting = [f["message"] for f in flags if f["kind"] == "conflicting_values"]
-        assert len(conflicting) == 3 and all("total peptide yield" in m for m in conflicting)
-        assert rows[0]["sampled_(Gly)13_aq_%yield"] == "0.11"            # constructed column, no review
+        assert len(conflicting) == 4 and all("total peptide yield" in m for m in conflicting)
+        assert "sampled_(Gly)13_aq_%yield" not in rows[0]                # a new compound: reviewed first
+        new_vars = json.loads((result.run_dir / "new_variables.json").read_text())["left_out"]
+        assert "sampled_(Gly)13_aq_%yield" in {v["proposed_column"] for v in new_vars}
 
 
 if __name__ == "__main__":

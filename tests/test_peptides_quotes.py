@@ -41,11 +41,15 @@ def test_peptide_names():
 
 
 def test_peptide_columns_are_constructed_not_listed():
+    """Peptides are named by the convention (is_peptide_column finds them, e.g. for the totals) but, since
+    2026-11-04, only the pack's own are known -- a new one is reviewed like any compound."""
     reg = VariableRegistry(None)
-    for col in ("sampled_(Gly)14_aq_%yield", "sampled_Gly-Ala-Ala_aq_%yield", "initial_Ala-Gly_aq_mM",
-                "sampled_cyclo_Gly-Gly_aq_%yield", "sampled_cyclo_Val-Gly_aq_mM",
-                "sampled_Gly-Gly_aq_%yield", "stock_Gly-Ala_aq_mM"):
+    for col in ("sampled_(Gly)13_aq_mM", "sampled_cyclo_Gly-Gly_aq_%yield", "sampled_Gly-Gly_aq_%yield",
+                "stock_Gly-Gly_aq_mM"):
         assert reg.is_known_column(col), col
+    for col in ("sampled_(Gly)14_aq_%yield", "sampled_Gly-Ala-Ala_aq_%yield", "initial_Ala-Gly_aq_mM",
+                "sampled_cyclo_Val-Gly_aq_mM", "stock_Gly-Ala_aq_mM"):
+        assert is_peptide_column(col.replace("stock_", "initial_")) and not reg.is_known_column(col), col
     # not the convention: one residue, an unknown residue, a run of 4 not written '(Gly)4', the old format
     for col in ("sampled_Gly_aq_mM", "sampled_Gly-Foo_aq_mM", "sampled_Gly-Gly-Gly-Gly_aq_mM",
                 "sampled_2peptide_Gly_%yield", "sampled_Gly-Ala_mM"):
@@ -54,8 +58,9 @@ def test_peptide_columns_are_constructed_not_listed():
     def entry(name, unit="%", role="sampled"):
         return SoluteEntry(name=name, in_controlled_vocab=False, phase="aq", role=role, concentration_value=1.0,
                            concentration_unit_raw=unit, quote="q", source="Table 1", confidence="high")
-    assert column_for_solute(entry("Gly-Ala-Ala")) == "sampled_Gly-Ala-Ala_aq_%yield"
-    assert column_for_solute(entry("Gly-Ala", unit="mM")) == "sampled_Gly-Ala_aq_mM"
+    assert proposed_column_for_solute(entry("Gly-Ala-Ala")) == "sampled_Gly-Ala-Ala_aq_%yield"
+    assert column_for_solute(entry("Gly-Ala-Ala")) is None                   # reviewed first (2026-11-04)
+    assert proposed_column_for_solute(entry("Gly-Ala", unit="mM")) == "sampled_Gly-Ala_aq_mM"
     assert proposed_column_for_solute(entry("Ala-Gly", unit="mM", role="initial")) == "initial_Ala-Gly_aq_mM"
     assert column_for_solute(entry("Total Gly in peptides")) == "total_sampled_peptides_yield"
     assert column_for_solute(entry("total peptide yield")) == "total_sampled_peptides_yield"

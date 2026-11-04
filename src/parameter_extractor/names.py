@@ -61,23 +61,35 @@ _AA_CODE = "(?:" + "|".join(AMINO_ACIDS) + ")"
 _STEREO = re.compile(r"(?<![A-Za-z])(?:DL|L|D)-(?=[A-Z])")
 
 
-COMPACT_RUN = 4        # a run of this many of one residue is written '(Gly)4' (Mickey, 2026-11-04)
+COMPACT_RUN = 4        # 4 or more identical hyphen-joined units are written '(X)n' (Mickey, 2026-11-04)
+
+
+def compact_repeats(name: str) -> str:
+    """Any compound name built of identical hyphen-joined units (Mickey, 2026-11-04: polymers of every kind, to
+    keep variable names short): a run of COMPACT_RUN or more of one unit becomes '(unit)n' -- 'Gly-Gly-Gly-Gly-Gly'
+    -> '(Gly)5', 'TEST-TEST-TEST-TEST' -> '(TEST)4', 'Gly-Ala-Ala-Ala-Ala' -> 'Gly-(Ala)4'. Runs of 2-3 stay
+    written out ('Gly-Gly-Gly'); names without such a run are returned unchanged."""
+    units = (name or "").split("-")
+    if len(units) < COMPACT_RUN or any(not u.strip() for u in units):
+        return name
+    parts, i = [], 0
+    while i < len(units):
+        j = i
+        while j < len(units) and units[j] == units[i]:
+            j += 1
+        n = j - i
+        parts += [f"({units[i]}){n}"] if n >= COMPACT_RUN else units[i:j]
+        i = j
+    return "-".join(parts)
 
 
 def peptide_name(codes: List[str]) -> str:
     """A peptide's name (Mickey, 2026-11-04; replaces '<n>peptide_<AA>'): its sequence, N- to C-terminus, in
-    three-letter codes joined by '-' -- 'Gly-Gly', 'Gly-Gly-Gly', 'Gly-Ala-Ala' -- with a run of 4 or more of one
-    residue written '(Gly)n': '(Gly)4', '(Gly)10', 'Gly-(Ala)4'. A peptide is then a compound like any other: its
-    columns are '<role>_<name>_<phase>_<unit>' and it can be shown under a PubChem synonym (compound_names.py)."""
-    parts, i = [], 0
-    while i < len(codes):
-        j = i
-        while j < len(codes) and codes[j] == codes[i]:
-            j += 1
-        n = j - i
-        parts += [f"({codes[i]}){n}"] if n >= COMPACT_RUN else [codes[i]] * n
-        i = j
-    return "-".join(parts)
+    three-letter codes joined by '-' -- 'Gly-Gly', 'Gly-Gly-Gly', 'Gly-Ala-Ala' -- shortened like any repeated
+    name (compact_repeats): '(Gly)4', '(Gly)10', 'Gly-(Ala)4'. A peptide is a compound like any other: its
+    columns are '<role>_<name>_<phase>_<unit>', a new one is reviewed, and it can be shown under a PubChem synonym
+    (compound_names.py)."""
+    return compact_repeats("-".join(codes))
 
 
 def peptide_length(name: str) -> Optional[int]:

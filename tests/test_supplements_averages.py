@@ -85,7 +85,8 @@ def test_averages_have_their_own_columns_and_set_type():
     avg = SoluteEntry(name="Gly-Gly", role="sampled", phase="aq", concentration_value=1.2,
                       concentration_unit_raw="mM", quote="q", source="s", confidence="high", average=True)
     single = avg.model_copy(update={"average": False})
-    assert column_for_solute(avg) == "sampled_Gly-Gly_aq_avg_mM" and is_peptide_column(column_for_solute(avg))
+    assert proposed_column_for_solute(avg) == "sampled_Gly-Gly_aq_avg_mM" and is_peptide_column("sampled_Gly-Gly_aq_avg_mM")
+    assert column_for_solute(avg) is None                 # an average is reviewed, as for any compound (2026-11-04)
     assert column_for_solute(single) == "sampled_Gly-Gly_aq_mM"
     assert species_alias_name(avg) == "sampled Gly-Gly avg" and avg.variable != single.variable
     assert proposed_column_for_solute(avg.model_copy(update={"name": "ribose"})) == "sampled_ribose_aq_avg_mM"
@@ -116,7 +117,10 @@ def test_digitized_averages():
     rows, problems, new_vars = build_figure_rows([fig], meta, empty_methodology("p"), "001", 1, 1,
                                                  registry=VariableRegistry(None))
     assert not problems and rows[0].set_type == "Average"
-    assert rows[0].species_mM == {} and rows[0].extra.get("sampled_Gly-Gly_aq_avg_%yield") == 4.0
+    # an average column is a new variable, reviewed like any compound's (2026-11-04)
+    assert rows[0].species_mM == {} and "sampled_Gly-Gly_aq_avg_%yield" not in rows[0].extra
+    assert [(v.proposed_column, v.value) for v in new_vars if v.proposed_column.startswith("sampled_")] == \
+        [("sampled_Gly-Gly_aq_avg_%yield", 4.0)]
 
 
 def test_axes_no_column_fits_are_named_from_their_labels():

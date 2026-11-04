@@ -57,7 +57,8 @@ _PHASE_AT_END = re.compile(r"_(aq|gas|s)$")
 
 def species_column(role: str, name: str, phase: str = "aq", measure: str = "mM") -> str:
     """The column of a compound's value: 'initial_NaCl_aq_mM', 'sampled_Gly-Gly_aq_%yield'."""
-    return f"{role}_{column_safe_name(name)}_{PHASE_CODES.get(phase or 'aq', 'aq')}_{measure}"
+    from parameter_extractor.names import compact_repeats
+    return f"{role}_{column_safe_name(compact_repeats(name))}_{PHASE_CODES.get(phase or 'aq', 'aq')}_{measure}"
 
 
 def current_column_name(column: str) -> str:

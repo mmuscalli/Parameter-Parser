@@ -247,6 +247,9 @@ def build_figure_rows(
                 matched = match_species(sp.name)
                 if matched and matched[0] != sp.name:
                     sp = sp.model_copy(update={"name": matched[0]})
+                from parameter_extractor.names import compact_repeats
+                if compact_repeats(sp.name) != sp.name:
+                    sp = sp.model_copy(update={"name": compact_repeats(sp.name)})
                 own = species_column("initial", sp.name)
                 col = (registry.alias_for("species", f"initial {sp.name}")
                        or (own if registry.is_known_column(own) else None))

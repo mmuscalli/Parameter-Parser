@@ -47,7 +47,9 @@ For each species:
   C-terminus, joined by "-": "Gly-Gly" (diglycine), "Gly-Gly-Gly"
   (triglycine), "Gly-Ala-Ala" -- order matters, so keep it exactly as the
   paper gives it. A run of 4 or more of one residue is written "(Gly)4":
-  "(Gly)4" for tetraglycine, "(Gly)10", "Gly-(Ala)4".
+  "(Gly)4" for tetraglycine, "(Gly)10", "Gly-(Ala)4". The same holds for any
+  compound whose name repeats one unit 4 or more times with hyphens (other
+  polymers too): "X-X-X-X" is written "(X)4".
   A cyclic peptide (including diketopiperazines) is "cyclo_" plus its
   residues the same way: "cyclo_Gly-Gly" for the glycine DKP,
   "cyclo_Val-Gly".

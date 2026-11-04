@@ -44,13 +44,14 @@ def test_one_column_format():
         name=name, role=role, phase=phase, concentration_value=1.0, concentration_unit_raw=unit,
         concentration_mM=None if unit == "%" else 1.0, quote="q", source="T1", confidence="high", **kw)
     assert column_for_solute(e("Gly-Gly")) == "sampled_Gly-Gly_aq_%yield"
-    assert column_for_solute(e("(Gly)14")) == "sampled_(Gly)14_aq_%yield"          # any length: a known column
+    assert column_for_solute(e("(Gly)14")) is None                                 # not in the vocabulary: reviewed
     assert column_for_solute(e("Gly", "initial", "mM")) == "initial_Gly_aq_mM"
     assert column_for_solute(e("CO", "initial", "mM", "gas")) == "initial_CO_gas_mM"
     assert column_for_solute(e("CO", "initial", "mM")) is None                   # dissolved CO: a new variable
     assert proposed_column_for_solute(e("CO", "initial", "mM")) == "initial_CO_aq_mM"
     assert proposed_column_for_solute(e("4mer_A")) == "sampled_4mer_A_aq_%yield"
-    assert column_for_solute(e("Gly-Gly", average=True)) == "sampled_Gly-Gly_aq_avg_%yield"
+    assert column_for_solute(e("Gly-Gly", average=True)) is None              # averages: reviewed, as for any compound
+    assert proposed_column_for_solute(e("Gly-Gly", average=True)) == "sampled_Gly-Gly_aq_avg_%yield"
 
 
 def test_old_columns_convert():
@@ -88,7 +89,7 @@ def test_vocabulary_is_consistent():
     assert not is_peptide_column("sampled_Gly-Gly-Gly-Gly_aq_mM")       # not the convention's form: '(Gly)4'
     assert not is_peptide_column("sampled_Gly_aq_mM") and not is_peptide_column("sampled_2peptide_Gly_%yield")
     reg = VariableRegistry(None)
-    assert reg.is_known_column("stock_Gly-Gly_aq_mM") and reg.is_known_column("sampled_(Gly)14_aq_mM_err_minus")
+    assert reg.is_known_column("stock_Gly-Gly_aq_mM") and reg.is_known_column("sampled_(Gly)13_aq_mM_err_minus")
     cids = json.loads(pack.species_cids_path.read_text())["species"]
     assert cids["Gly-Gly"]["cid"] == 11163 and "2peptide_Gly" not in cids
 
@@ -130,6 +131,42 @@ def test_old_dataset_converts_and_active_names_follow():
         assert (Path(tmp) / "new.csv").read_text().splitlines() == \
             ["full_id,initial_Gly_aq_mM,sampled_glycylglycine_aq_%yield", "1,5,2.77", "2,,3.1"]
         assert renames["sampled_2peptide_Gly_%yield"] == "sampled_glycylglycine_aq_%yield"
+
+
+def test_repeated_units_are_shortened_for_any_compound():
+    """Mickey, 2026-11-04: the peptide rule for every polymer -- 4 or more identical hyphen-joined units."""
+    packs.activate("prebiotic_chemistry")
+    from parameter_extractor.ingestion.flatten_to_template import species_column
+    from parameter_extractor.ingestion.normalize import normalize_chemistry
+    from parameter_extractor.names import compact_repeats
+    from parameter_extractor.schemas.chemistry import ChemistryExtraction, SoluteEntry
+    assert [compact_repeats(n) for n in ("TEST-TEST-TEST-TEST", "TEST-TEST-TEST", "A-B-B-B-B-C", "2-amino-2-methyl",
+                                         "Gly-Gly-Gly-Gly-Gly", "NaCl")] == \
+        ["(TEST)4", "TEST-TEST-TEST", "A-(B)4-C", "2-amino-2-methyl", "(Gly)5", "NaCl"]
+    assert species_column("sampled", "Lys-Lys-Lys-Lys") == "sampled_(Lys)4_aq_mM"
+    e = SoluteEntry(name="EG-EG-EG-EG-EG", role="sampled", phase="aq", concentration_value=1.0,
+                    concentration_unit_raw="%", quote="q", source="T1", confidence="high")
+    notes = normalize_chemistry(ChemistryExtraction(solutes=[e]))
+    assert e.name == "(EG)5" and any("repeated units" in n.message for n in notes)
+
+
+def test_new_peptides_are_reviewed():
+    """Mickey, 2026-11-04: peptides outside the vocabulary are new compounds -- reviewed, not written directly."""
+    packs.activate("prebiotic_chemistry")
+    from parameter_extractor.ingestion.flatten_to_template import column_for_solute
+    from parameter_extractor.ingestion.new_variables import collect_new_variables
+    from parameter_extractor.registry import VariableRegistry
+    from parameter_extractor.schemas.chemistry import ChemistryExtraction, SoluteEntry
+    from parameter_extractor.schemas.methodology import empty_methodology
+    reg = VariableRegistry(None)
+    assert reg.is_known_column("sampled_Gly-Gly_aq_%yield")                  # in the pack's vocabulary
+    assert not reg.is_known_column("sampled_(Gly)14_aq_%yield") and not reg.is_known_column("sampled_Gly-Ala_aq_mM")
+    e = lambda name: SoluteEntry(name=name, role="sampled", phase="aq", set_label="A", concentration_value=2.0,
+                                 concentration_unit_raw="%", quote="q", source="T1", confidence="high")
+    assert column_for_solute(e("Gly-Ala")) is None
+    found = collect_new_variables(empty_methodology("p"), ChemistryExtraction(solutes=[e("Gly-Ala"), e("Gly-Gly")]),
+                                  reg, None)
+    assert [(v.name, v.proposed_column) for v in found] == [("Gly-Ala", "sampled_Gly-Ala_aq_%yield")]
 
 
 if __name__ == "__main__":

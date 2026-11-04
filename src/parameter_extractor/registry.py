@@ -90,7 +90,8 @@ def is_peptide_column(column: str) -> bool:
     """A compound column of a peptide named by the convention (names.peptide_name; Mickey, 2026-11-04):
     '<role>_<sequence>_<phase>_<mM|%yield>' -- 'sampled_Gly-Gly_aq_%yield', 'sampled_(Gly)10_aq_mM',
     'sampled_Gly-Ala-Ala_aq_mM', 'sampled_cyclo_Gly-Gly_aq_mM' -- any length >= 2 and any sequence, written in
-    the convention's own form. Known without a review: the name is fixed by the structure, like stock_."""
+    the convention's own form. Used to find a row's peptides (calculators/peptide_totals.py); NOT a reason to
+    accept the column -- a peptide outside the pack's vocabulary is reviewed like any new compound (2026-11-04)."""
     from parameter_extractor.names import cyclic_name, peptide_codes, peptide_name
     m = _COMPOUND_COLUMN.fullmatch(column or "")
     if not m:
@@ -252,7 +253,7 @@ class VariableRegistry:
             return False
         if column in self._base_set or column in self.added_columns:
             return True
-        if is_peptide_column(column) or is_oligonucleotide_column(column):
+        if is_oligonucleotide_column(column):        # peptides: reviewed like any compound (Mickey, 2026-11-04)
             return True
         # the uncertainty of a known value ('<column>_err_plus' / '_err_minus', the prebiotic pack's naming)
         m = re.fullmatch(r"(.+)_err_(?:plus|minus)", column)

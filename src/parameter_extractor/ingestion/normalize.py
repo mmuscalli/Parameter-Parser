@@ -143,6 +143,11 @@ def normalize_chemistry(chemistry: ChemistryExtraction, pubchem=None, registry=N
             rule_matched.add(id(s))
             if matched[0] != s.name:
                 _rename(s, matched[0], matched[1], notes)
+    from parameter_extractor.names import compact_repeats
+    for s in chemistry.solutes:                   # 'TEST-TEST-TEST-TEST' -> '(TEST)4' (any repeated unit)
+        short = compact_repeats(s.name)
+        if short != s.name:
+            _rename(s, short, "repeated units shortened", notes)
     _identify(chemistry, pubchem, registry, notes, rule_matched)
     _rename_ratio_species(chemistry, original)
     for s in chemistry.solutes:

@@ -11,7 +11,8 @@
   'sampled_4mer_A_aq_%yield', 'sampled_10mer_G_aq_mM'. Every compound's
   column is '<role>_<name>_<phase>_<unit>' (phase aq, gas or s): a peptide is
   named by its sequence ('sampled_Gly-Gly_aq_%yield', 'sampled_(Gly)4_aq_mM',
-  'sampled_cyclo_Gly-Gly_aq_mM' for the glycine diketopiperazine). An axis of oligomer lengths
+  'sampled_cyclo_Gly-Gly_aq_mM' for the glycine diketopiperazine); any name
+  repeating one unit 4 or more times is written '(X)n'. An axis of oligomer lengths
   like 8, 12, 16 nt, or any other quantity no column fits, gets a null column
   and a `new_column` (e.g. 'RNA_length_nt'); the user reviews it as a new
   variable. Bar charts of minerals: x `categorical`, column 'solid_material_name'.
