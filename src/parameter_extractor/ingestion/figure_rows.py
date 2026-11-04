@@ -171,6 +171,24 @@ def contradicts_absence(column: str, value, source, texts: List[str]) -> str:
     return ""
 
 
+def _error_bar(pt, y: float, to_data, axis) -> dict:
+    """{'_err_plus': +e, '_err_minus': -e} from a point's marked error-bar ends, in the axis's values (after its
+    multiplier); {} when the point has none."""
+    out = {}
+    for end, suffix, sign in ((getattr(pt, "err_hi_py", None), "_err_plus", 1), (getattr(pt, "err_lo_py", None),
+                                                                                "_err_minus", -1)):
+        if end is None:
+            continue
+        try:
+            _, y_end = to_data(type(pt)(px=pt.px, py=end))
+        except Exception:
+            continue
+        e = round(abs(y_end - y) * axis.multiplier, 6)
+        if e:
+            out[suffix] = sign * e
+    return out
+
+
 def build_figure_rows(
     figures: List[DigitizedFigure],
     metadata: PaperMetadata,
@@ -296,19 +314,30 @@ def build_figure_rows(
                 if getattr(x_axis, "average", False) and x_axis.column:
                     x_axis = x_axis.model_copy(update={"column": with_average(x_axis.column)})
                 # a category axis has no number: its value is the series' category (below)
+                errors = _error_bar(pt, y, to_data, y_axis)
                 for axis, value in ([(y_axis, y)] if categorical else [(x_axis, x), (y_axis, y)]):
                     value = round(rounded(value, getattr(axis, "decimals", None)) * axis.multiplier, 6)
                     read = CellSource(origin=f"{fig.figure_id} (digitized)", confidence=DIGITIZED,
                                       source=f"{where}, point {sample_idx} (page {fig.page_label or fig.page}), read off axis "
                                              f"'{axis.label}'"
                                              + (f" x {axis.multiplier:g}" if axis.multiplier != 1 else ""))
-                    if not _assign(fields, row_species, extra, axis.column, value, registry, prov, read):
+                    point_errors = errors if axis is y_axis else {}
+                    if _assign(fields, row_species, extra, axis.column, value, registry, prov, read):
+                        resolved = (registry.alias_for("figure_axis", axis.column) or axis.column) if axis.column \
+                            else None
+                        if not resolved:
+                            continue
+                        for suffix, e in point_errors.items():       # the error bar, beside its value
+                            _assign(fields, row_species, extra, resolved + suffix, e, registry, prov,
+                                    read.model_copy(update={"source": read.source + ", error bar"}))
+                    else:
                         new_vars.append(NewVariable(
                             kind="figure_axis", name=axis.column, alias_name=axis.column,
                             proposed_column=axis.column, value=value,
                             set_label=where, sample_label=f"point {sample_idx}", source=where,
                             quote=f"axis '{axis.label}'", origin=fig.figure_id,
-                            row_ids=[f"{set_id}{sample_idx:03d}"]))
+                            row_ids=[f"{set_id}{sample_idx:03d}"],
+                            err_plus=point_errors.get("_err_plus", 0.0), err_minus=point_errors.get("_err_minus", 0.0)))
 
                 if categorical and x_axis.column and not any(c.column == x_axis.column for c in series.conditions):
                     # the category goes in the x axis's column (Riggi2023: solid_material_name = 'kaolinite')

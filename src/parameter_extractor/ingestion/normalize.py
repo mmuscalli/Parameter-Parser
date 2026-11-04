@@ -55,17 +55,26 @@ def _identify(chemistry: ChemistryExtraction, pubchem, registry, notes: List[Nor
     vocab = set(vocabulary())
     template_cids = template_species_cids()
     seen_in_paper = {}                            # CID -> first name used for it in this paper
+    from parameter_extractor.compound_names import CompoundNames
+    names = CompoundNames(registry)               # PubChem synonyms kept offline (bundled + accepted compounds)
     for s in chemistry.solutes:
         if s.name in vocab or id(s) in rule_matched:     # the rules' names (e.g. 14peptide_Gly) stand
             continue
         cleaned = query_name(s.name)
         if cleaned != s.name:
             s.name = cleaned                      # cosmetic: no note needed
+        known = names.default_for(s.name)
+        if known:
+            if known != s.name:
+                _rename(s, known, f"a PubChem synonym of {known}", notes)
+            continue
         found = pubchem.lookup(s.name) if pubchem else None
         if found is None:
             continue
         s.pubchem_cid, s.pubchem_title = found.cid, found.title
         how = f"same compound on PubChem, CID {found.cid}"
+        if found.cid not in template_cids:        # the vocabulary's synonyms are bundled
+            s.pubchem_synonyms = pubchem.synonyms(found.cid)
         if found.cid in template_cids:
             _rename(s, template_cids[found.cid], how, notes)
         elif registry is not None and (known := registry.species_for_cid(found.cid)) and known != s.name:

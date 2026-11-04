@@ -563,3 +563,94 @@ def _appearance(g: List[Found]) -> str:
     name = min(COLOURS, key=lambda c: _colour_distance(COLOURS[c], f.color))
     fill = "filled" if f.filled > SOLID else "open"
     return f"{len(g)} {fill} {name} {shape_of(f)}" + ("s" if len(g) > 1 else "")
+
+
+# ---- error bars (Mickey, 2026-11-03) ------------------------------------------------------------------------------
+# From a marker's top / bottom edge (a bar's top), follow a thin vertical line of ink; its end counts as an error
+# bar only where a short horizontal cap crosses it -- so a gridline, a connecting line or a neighbouring marker
+# isn't taken for one. Bars: the upper whisker only (the lower one is hidden in, or drawn over, the bar).
+
+MIN_WHISKER = 3              # pixels beyond the marker / bar edge
+MAX_LINE_WIDTH = 4           # the whisker itself: a thin line
+MIN_CAP, MAX_CAP_FACTOR = 4, 4.0
+
+
+def _cap_at(mask: np.ndarray, x: int, y: int, size: float) -> bool:
+    """A short horizontal line through (x, y): ink to both sides, not a long gridline."""
+    h, w = mask.shape
+    for yy in (y - 1, y, y + 1):
+        if not 0 <= yy < h or not mask[yy, x]:
+            continue
+        left = right = 0
+        while x - left - 1 >= 0 and mask[yy, x - left - 1]:
+            left += 1
+        while x + right + 1 < w and mask[yy, x + right + 1]:
+            right += 1
+        if left >= 2 and right >= 2 and MIN_CAP <= left + right + 1 <= max(MAX_CAP_FACTOR * max(size, 6), 12):
+            return True
+    return False
+
+
+def _whisker(mask: np.ndarray, x: int, start: int, step: int, limit: Tuple[int, int], size: float) -> Optional[int]:
+    """The end (pixel y) of a capped whisker going from `start` in direction `step`, or None."""
+    return _whisker_from(mask, x, start, step, limit, size)
+
+
+def _whisker_from(mask, x, start, step, limit, size):
+    lo, hi = limit
+    # the whisker's column: the inked one nearest the centre within 3 px (a bar's centre can be a pixel or two off)
+    probe = [start + step * k for k in range(1, 5) if lo <= start + step * k <= hi]
+    if probe:
+        hits = [(abs(dx), x + dx) for dx in range(-3, 4) if 0 <= x + dx < mask.shape[1]
+                and sum(mask[yy, x + dx] for yy in probe) >= len(probe) - 1]
+        if hits:
+            x = min(hits)[1]
+    y, last, gap, rows, wide = start, None, 0, 0, 0
+    while lo <= y <= hi:
+        if mask[y, max(x - 1, 0):x + 2].any():
+            last, gap = y, 0
+            rows += 1
+            wide += int(mask[y, max(x - 5, 0):x + 6].sum() > MAX_LINE_WIDTH)
+        else:
+            gap += 1
+            if gap > 1:              # a whisker is continuous; a gridline two rows past its cap isn't part of it
+                break
+        y += step
+    if last is None or abs(last - start) < MIN_WHISKER:
+        return None
+    if wide > 0.4 * rows + 2:          # mostly wide ink: a filled shape, not a line (the cap rows are allowed)
+        return None
+    return last if _cap_at(mask, x, last, size) else None
+
+
+WHISKER_LUMINANCE = 215      # error bars are often thin grey lines (Riggi2023 Fig. 2: ~199), lighter than ink
+
+
+def whisker_mask(rgb: np.ndarray) -> np.ndarray:
+    c = rgb.astype(np.int16)
+    lum = 0.299 * c[..., 0] + 0.587 * c[..., 1] + 0.114 * c[..., 2]
+    chroma = c.max(axis=2) - c.min(axis=2)
+    return (lum < WHISKER_LUMINANCE) | ((chroma > INK_CHROMA) & (lum < 235))
+
+
+def find_error_bars(rgb: np.ndarray, frame: Box, found: Sequence[Found]) -> Dict[int, Tuple[Optional[float], Optional[float]]]:
+    """{index in `found`: (upper end y, lower end y)} for the points that have a capped error bar (either end may
+    be None)."""
+    mask = whisker_mask(rgb)
+    x0, y0, x1, y1 = (int(round(v)) for v in frame)
+    top, bottom = max(y0 - 6, 0), min(y1 + 6, mask.shape[0] - 1)
+    out = {}
+    for i, f in enumerate(found):
+        x = int(round(f.x))
+        if not 0 <= x < mask.shape[1]:
+            continue
+        bx0, by0, bx1, by1 = f.box if any(f.box) else (f.x - f.size / 2, f.y - f.size / 2, f.x + f.size / 2,
+                                                         f.y + f.size / 2)
+        start_up = int(round(f.y if f.kind == "bar" else by0)) - 1
+        up = _whisker(mask, x, start_up, -1, (top, bottom), f.size)
+        down = None
+        if f.kind != "bar":
+            down = _whisker(mask, x, int(round(by1)) + 1, 1, (top, bottom), f.size)
+        if up is not None or down is not None:
+            out[i] = (float(up) if up is not None else None, float(down) if down is not None else None)
+    return out

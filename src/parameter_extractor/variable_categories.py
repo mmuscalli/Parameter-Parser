@@ -165,12 +165,12 @@ def for_source(source: str, role: Optional[str] = None, pack: Optional[Pack] = N
 
 def guess(value: str, pack: Optional[Pack] = None) -> str:
     """A category for a value nobody categorised (a targeted search finding, an answer recorded
-    before categories): a quantity -> the first assignable number category, else methodology (or
-    the first assignable one)."""
+    before categories): a quantity -> the assignable number category earliest in the table (the reaction
+    conditions, not a later specialised block like kinetics), else methodology (or the first assignable one)."""
     from parameter_extractor.units import parse_quantity
     options = assignable(pack)
     if parse_quantity(value) is not None:
-        number = next((c for c in options if c.value_type == "number"), None)
+        number = min((c for c in options if c.value_type == "number"), key=lambda c: c.table_order, default=None)
         if number:
             return number.id
     fallback = next((c for c in options if c.id == "methodology"), options[0] if options else None)
@@ -180,11 +180,13 @@ def guess(value: str, pack: Optional[Pack] = None) -> str:
 # canonical unit -> the column suffix of that dimension's usual column unit (the template's style:
 # times in hours, temperatures in °C, volumes in mL; observations.unit_for_column reads them back)
 _SUFFIX = {"concentration": "_mM", "volume": "_mL", "time": "_hr", "temperature": "_C", "pressure": "_bar",
-           "mass": "_g"}
+           "mass": "_g", "inverse_time": "_per_hr", "second_order": "_per_M_hr", "conc_rate": "_mM_hr",
+           "molar_energy": "_kJ_mol"}
 _UNIT_SUFFIX = {"nm": "_nm", "rpm": "_rpm", "%": "_pct", "mL/min": "_mL_min", "K": "_C", "°F": "_C",
                 "µL": "_uL",      # microlitre volumes keep a µL column (the dataset's added_*_uL style)
                 "µm": "_um", "mm": "_mm", "cm": "_cm",   # lengths: in the unit printed (matreux2024 170 µm)
-                "nt": "_nt"}                            # oligomer lengths (caimi2025, song2024)
+                "nt": "_nt",                            # oligomer lengths (caimi2025, song2024)
+                "h-1": "_per_hr", "M-1h-1": "_per_M_hr", "mM/h": "_mM_hr", "kJ/mol": "_kJ_mol"}
 
 
 def unit_suffix(unit: str) -> str:

@@ -72,13 +72,31 @@ def is_percent(entry) -> bool:
     return "%" in (entry.concentration_unit_raw or "") or getattr(entry, "measure", "yield") == "ratio"
 
 
+def is_rate(entry) -> bool:
+    """A rate of change of the species' concentration (Mickey, 2026-11-03; hirakawa2025 Tables 2, 4):
+    'sampled_<name>_rate_mM_hr', converted to mM/h."""
+    return getattr(entry, "measure", "yield") == "rate"
+
+
+RATE_UNIT = "mM/h"
+
+
+def rate_value(entry) -> Optional[float]:
+    """A rate in mM/h, or None if its unit can't be converted."""
+    from parameter_extractor.units import to_column_unit
+    if entry.concentration_value is None:
+        return None
+    c = to_column_unit(entry.concentration_value, entry.concentration_unit_raw or RATE_UNIT, RATE_UNIT)
+    return c.value if c else None
+
+
 # a % of a STARTING material left over, not a product yield (kim2017's "Recovered Nicotinamide (%)")
 _RECOVERED_HEADER = re.compile(r"\b(recovered|recovery|unreacted|remaining|residual|left over|unconsumed)\b",
                                re.IGNORECASE)
 
 
 # '<name>_avg_<unit>' for averaged values (Mickey, 2026-10-31): 'sampled_2peptide_Gly_avg_mM'
-_UNIT_SUFFIX = re.compile(r"(_(?:mM|uM|%yield|%recovered|ratio|pct|mL_min|mL|uL|hr|h|min|sec|d|C|K|bar|MPa|g|mg|nm|rpm|nt|mer))$")
+_UNIT_SUFFIX = re.compile(r"(_(?:mM_hr|per_M_hr|per_hr|kJ_mol|mM|uM|%yield|%recovered|ratio|pct|mL_min|mL|uL|hr|h|min|sec|d|C|K|bar|MPa|g|mg|nm|rpm|nt|mer))$")
 
 
 def with_average(column: str) -> str:
@@ -143,6 +161,12 @@ def _column_role(entry) -> str:
 
 
 _TOTAL_PEPTIDES = re.compile(r"\btotal\b.*\bpeptides?\b", re.IGNORECASE)
+# all oligomers of a nucleic acid together ('RNA oligomers', 'total oligomer yield', 'oligomerization yield', 'DNA
+# oligomers') -- not one length ('4mer_A')
+_TOTAL_OLIGOMERS = re.compile(r"^(?:(?:total|all|rna|dna|nucleic acid)\s+)*(?:oligomers?|oligonucleotides?|"
+                              r"oligomeri[sz]ation(?:\s+yield)?|oligomer\s+yield|polymers?)(?:\s+yield)?$", re.IGNORECASE)
+TOTAL_OLIGOMERS_COLUMN = "total_sampled_oligomers_yield"
+MAX_OLIGOMER_COLUMN = "max_oligomer_length_nt"
 
 
 def column_for_solute(entry, registry=None) -> Optional[str]:
@@ -156,11 +180,16 @@ def column_for_solute(entry, registry=None) -> Optional[str]:
         return alias
     if entry.role == "sampled" and is_percent(entry) and _TOTAL_PEPTIDES.search(entry.name):
         return "total_sampled_peptides_yield"      # "Total Gly in peptides", "total peptide yield"
+    if entry.role == "sampled" and (is_percent(entry) or getattr(entry, "detection", "") == DETECTED) \
+            and _TOTAL_OLIGOMERS.match(entry.name.strip()) and not getattr(entry, "average", False):
+        return TOTAL_OLIGOMERS_COLUMN               # "RNA oligomers" (caimi2025's oligomerization yield)
     if _column_role(entry) == "stock":         # follows wherever the starting concentration was mapped
         initial = registry.column_for("species", f"initial {entry.name}")
         if initial and initial.startswith("initial_") and registry.is_known_column("stock_" + initial[8:]):
             return "stock_" + initial[8:]
-    if entry.role == "sampled" and is_percent(entry):
+    if is_rate(entry):
+        candidates = (f"sampled_{entry.name}_rate_mM_hr", f"sampled_{entry.name}_aq_rate_mM_hr")
+    elif entry.role == "sampled" and is_percent(entry):
         suffix = percent_suffix(entry)
         candidates = (f"sampled_{entry.name}_{suffix}", f"sampled_{entry.name}_aq_{suffix}")
     else:
@@ -216,6 +245,11 @@ def is_peptide_column(column: str) -> bool:
     return check(column)
 
 
+def is_oligonucleotide_column(column: str) -> bool:
+    from parameter_extractor.registry import is_oligonucleotide_column as check
+    return check(column)
+
+
 def proposed_column_for_solute(entry) -> str:
     """What the column would be called if this new variable were accepted."""
     column = _proposed_column(entry)
@@ -225,10 +259,13 @@ def proposed_column_for_solute(entry) -> str:
 
 def _proposed_column(entry) -> str:
     name = column_safe_name(entry.name)
+    if is_rate(entry):
+        return f"sampled_{name}_rate_mM_hr"
     if entry.role == "sampled" and is_percent(entry):
         return f"sampled_{name}_{percent_suffix(entry)}"
-    if _column_role(entry) != "stock" and is_peptide_column(f"{entry.role}_{name}_mM"):
-        return f"{entry.role}_{name}_mM"           # peptides: no _aq_ infix, as in the template
+    if _column_role(entry) != "stock" and (is_peptide_column(f"{entry.role}_{name}_mM")
+                                          or is_oligonucleotide_column(f"{entry.role}_{name}_mM")):
+        return f"{entry.role}_{name}_mM"           # peptides, oligonucleotides: no _aq_ infix, as in the template
     if _column_role(entry) == "stock":
         initial = resolve_template_column(name, "initial").removesuffix(UNRECOGNIZED_SUFFIX)
         return "stock_" + initial.removeprefix("initial_")
@@ -241,10 +278,41 @@ DETECTED = "detected"          # a result the paper names without an amount (cal
 def _solute_value(entry):
     if is_range(entry):
         return entry.concentration_range
+    if is_rate(entry):
+        return rate_value(entry)
     value = entry.concentration_value if is_percent(entry) else entry.concentration_mM
     if value is None and entry.role == "sampled" and getattr(entry, "detection", "") == "detected":
         return DETECTED
     return value
+
+
+ERROR_SUFFIXES = ("_err_plus", "_err_minus")   # the prebiotic pack's uncertainty columns (as its conditions step's)
+
+
+def error_cells(entry, column: str) -> dict:
+    """{column_err_plus: x, column_err_minus: -y} for a value with an uncertainty, in the column's unit (the same
+    conversion as the value: mM from the printed unit, % as printed); {} without one."""
+    plus, minus = getattr(entry, "err_plus", 0.0) or 0.0, getattr(entry, "err_minus", 0.0) or 0.0
+    if not (plus or minus) or entry.concentration_value in (None, 0) or is_range(entry):
+        return {}
+    if is_percent(entry) or getattr(entry, "measure", "yield") == "ratio":
+        factor = 1.0
+    elif is_rate(entry):
+        converted = rate_value(entry)
+        if converted is None:
+            return {}
+        factor = converted / entry.concentration_value
+    elif entry.concentration_mM is not None:
+        factor = entry.concentration_mM / entry.concentration_value
+    else:
+        return {}
+    from parameter_extractor.units import _tidy
+    out = {}
+    if plus:
+        out[column + ERROR_SUFFIXES[0]] = _tidy(abs(plus) * factor)
+    if minus:
+        out[column + ERROR_SUFFIXES[1]] = -_tidy(abs(minus) * factor)
+    return out
 
 
 def _lowest_confidence(entries) -> Optional[str]:
@@ -340,6 +408,7 @@ def build_rows(
             if s.concentration_mM is not None and (col := column_for_solute(s, registry)):
                 species_mM[col] = s.concentration_mM
                 species_prov[col] = _from_solute(s)
+                range_cells.update(error_cells(s, col))
             elif is_range(s) and (col := column_for_solute(s, registry)):
                 range_cells[col] = s.concentration_range
                 species_prov[col] = _from_solute(s)
@@ -369,6 +438,7 @@ def build_rows(
                 if s.concentration_mM is not None:
                     row_species[col] = s.concentration_mM
                     prov[col] = _from_solute(s)
+                    extra.update(error_cells(s, col))
                 elif is_range(s):
                     extra[col] = s.concentration_range
                     prov[col] = _from_solute(s)
@@ -377,6 +447,8 @@ def build_rows(
                 if col is None or value is None:
                     continue
                 prov[col] = _from_solute(s)
+                if not isinstance(value, str):
+                    extra.update(error_cells(s, col))
                 if isinstance(value, str):              # 'detected': text, in extra (wins over a field)
                     extra[col] = value
                 elif col in _FIELD_FOR_TEMPLATE:        # e.g. the Gly 2-/3-peptide % yields
@@ -410,6 +482,13 @@ def build_rows(
             structure_src = CellSource(origin="structure", source=sample.source)
             prov["set_type"] = CellSource(origin="structure", source=pset.source_table_or_section)
             prov["duration_hr"] = structure_src
+            duration = sample.duration_hr
+            high = getattr(sample, "duration_hr_high", None)
+            if duration is not None and high is not None and high > duration:   # '3-7 days' (Mickey, 2026-11-03)
+                from parameter_extractor.units import format_range
+                extra["duration_range_hr"] = format_range(duration, high)
+                prov["duration_range_hr"] = structure_src
+                duration = None
             stage_cells = {}                     # written after the row exists: some have dedicated fields
             for spec, values in stage_values:
                 # whole-set values first, so a value for this sample (row) wins
@@ -436,7 +515,7 @@ def build_rows(
                 journal_published=metadata.journal_published,
                 experiment_type=_method_value(methodology.experiment_type) or "",
                 solution_type=_method_value(methodology.solution_type) or "",
-                duration_hr=sample.duration_hr,
+                duration_hr=duration,
                 vessel_material=_method_value(methodology.vessel_material),
                 solvent_name=_method_value(methodology.solvent_name),
                 analysis_method=_method_value(methodology.analysis_method),
@@ -512,12 +591,17 @@ def ordered_columns(present: set, column_categories: Optional[dict] = None, regi
 
 def write_template_csv(records: List[dict], out_path: Path, column_categories: Optional[dict] = None,
                        registry=None) -> None:
+    """Ordered with the default compound names (template places kept), then written with each compound's ACTIVE
+    name (compound_names.py; only when the user chose one)."""
+    from parameter_extractor.compound_names import renames_for
     present = {k for r in records for k, v in r.items() if v not in (None, "")}
     header = ordered_columns(present, column_categories, registry)
-    write_template_csv.header = header          # for the column list written next to it
+    renames = renames_for(header, registry)
+    write_template_csv.header = [renames.get(c, c) for c in header]   # for the column list written next to it
+    write_template_csv.renames = renames
     with open(out_path, "w", newline="") as f:
         writer = csv.writer(f)
-        writer.writerow(header)
+        writer.writerow(write_template_csv.header)
         for r in records:
             writer.writerow(["" if r.get(c) is None else r.get(c) for c in header])
 

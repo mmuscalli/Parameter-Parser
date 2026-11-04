@@ -28,7 +28,8 @@ import urllib.request
 from dataclasses import asdict, dataclass
 from datetime import date
 from pathlib import Path
-from typing import Dict, Optional
+import re
+from typing import Dict, List, Optional
 
 BASE = "https://pubchem.ncbi.nlm.nih.gov/rest/pug"
 MIN_INTERVAL_SEC = 0.25
@@ -69,6 +70,30 @@ def template_species_cids() -> Dict[int, str]:
     return {int(v["cid"]): (match_species(name) or (name,))[0] for name, v in data["species"].items()}
 
 
+# synonyms worth offering as a column name: not registry numbers or database codes (Mickey, 2026-11-03)
+_CODE = re.compile(r"^\d+-\d+-\d$|^(UNII|EINECS|CHEBI|CHEMBL|DTXSID|DTXCID|NSC|SCHEMBL|MFCD|AKOS|ZINC|HSDB|BRN|"
+                   r"AI3|EC|CAS|InChI|SMR|MLS|HMS|BDBM|NCGC|CCRIS|FEMA|RTECS|KS|AC|AS|BP|CS|SY|DB|HY|Q|D)"
+                   r"[-: ]?\w*\d", re.IGNORECASE)
+MAX_SYNONYMS = 25
+
+
+def useful_synonyms(names, limit: int = MAX_SYNONYMS) -> List[str]:
+    """PubChem's synonyms, best first, without registry numbers, database codes and very long systematic names;
+    case-insensitive duplicates dropped."""
+    out, seen = [], set()
+    for n in names or []:
+        n = " ".join(str(n).split())
+        if (not n or len(n) > 50 or _CODE.match(n) or re.fullmatch(r"[\d\W]+", n) or n.lower() in seen
+                or re.fullmatch(r"[A-Z0-9]{8,12}", n) and re.search(r"\d", n)      # UNII-style codes
+                or re.match(r"\w+:\w", n) or re.fullmatch(r"[A-Z]{14}-[A-Z]{10}-[A-Z]", n)):  # prefixes, InChIKeys
+            continue
+        seen.add(n.lower())
+        out.append(n)
+        if len(out) >= limit:
+            break
+    return out
+
+
 class PubChem:
     def __init__(self, cache_path: Optional[Path] = None, fetch=None):
         """`fetch(name) -> Optional[Compound]` replaces the network call (tests)."""
@@ -77,10 +102,13 @@ class PubChem:
         self.unavailable_reason: str = ""
         self._last_call = 0.0
         self._cache: Dict[str, Optional[dict]] = {}
+        self._synonyms: Dict[str, List[str]] = {}       # CID -> useful synonyms (also cached on disk)
         self._dirty = False
         if self.cache_path and self.cache_path.is_file():
             try:
-                self._cache = json.loads(self.cache_path.read_text()).get("names", {})
+                data = json.loads(self.cache_path.read_text())
+                self._cache = data.get("names", {})
+                self._synonyms = data.get("synonyms", {})
             except (OSError, ValueError):
                 self._cache = {}
 
@@ -101,6 +129,34 @@ class PubChem:
         self._cache[key] = dict(asdict(found), checked=date.today().isoformat()) if found else None
         self._dirty = True
         return found
+
+    def synonyms(self, cid: int) -> List[str]:
+        """A compound's names on PubChem (useful_synonyms); [] when unknown or PubChem can't be reached."""
+        key = str(int(cid))
+        if key in self._synonyms:
+            return list(self._synonyms[key])
+        if self.unavailable_reason or not cid:
+            return []
+        wait = MIN_INTERVAL_SEC - (time.time() - self._last_call)
+        if wait > 0:
+            time.sleep(wait)
+        self._last_call = time.time()
+        req = urllib.request.Request(f"{BASE}/compound/cid/{key}/synonyms/JSON", headers={"User-Agent": "ParameterExtractor"})
+        try:
+            with urllib.request.urlopen(req, timeout=TIMEOUT_SEC) as resp:
+                info = json.load(resp)["InformationList"]["Information"][0]
+        except urllib.error.HTTPError as e:
+            if e.code != 404:
+                self.unavailable_reason = f"PubChem could not be reached ({e})"
+                return []
+            info = {}
+        except (urllib.error.URLError, TimeoutError, OSError, ValueError, KeyError, IndexError) as e:
+            self.unavailable_reason = f"PubChem could not be reached ({getattr(e, 'reason', e)})"
+            return []
+        found = useful_synonyms(info.get("Synonym", []))
+        self._synonyms[key] = found
+        self._dirty = True
+        return list(found)
 
     def _fetch_online(self, name: str) -> Optional[Compound]:
         wait = MIN_INTERVAL_SEC - (time.time() - self._last_call)
@@ -128,5 +184,6 @@ class PubChem:
         if not (self.cache_path and self._dirty):
             return
         self.cache_path.parent.mkdir(parents=True, exist_ok=True)
-        self.cache_path.write_text(json.dumps({"names": self._cache}, indent=1, sort_keys=True))
+        self.cache_path.write_text(json.dumps({"names": self._cache, "synonyms": self._synonyms}, indent=1,
+                                              sort_keys=True))
         self._dirty = False

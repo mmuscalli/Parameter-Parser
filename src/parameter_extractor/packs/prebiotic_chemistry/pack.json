@@ -7,12 +7,15 @@
   "standard_columns": "standard_columns.json",
   "species_cids": "species_cids.json",
   "builtin_stages": ["chemistry"],
-  "postprocess": ["normalize_species", "mixing", "molar_ratios", "amounts", "peptide_totals", "water_type", "ambient_conditions", "atmospheric_start", "results_check"],
+  "postprocess": ["normalize_species", "mixing", "molar_ratios", "amounts", "peptide_totals", "oligomer_totals", "water_type", "ambient_conditions", "atmospheric_start", "results_check"],
   "units": {"set": "experiment set", "sample": "sample"},
   "focused_row_plan": true,
   "variable_categories": [
     {"id": "starting_species", "table_order": 60, "label": "Starting Species", "sources": ["species:initial", "species"], "value_type": "number",
      "description": "species in the starting solution (reactants, salts, catalysts, buffers; stock and mixture concentrations) with no column of their own, in mM"},
+    {"id": "kinetics", "table_order": 74, "label": "Kinetics", "value_type": "number",
+     "description": "rate constants, rates and half-lives of the reactions, activation energies -- one entry per constant, named by the constant and the reaction it describes",
+     "patterns": ["^rate_constant", "^half_life", "^activation_energy", "^kinetic_model", "_rate_mM_hr$", "_rate_avg_mM_hr$"]},
     {"id": "products", "table_order": 70, "label": "Products", "sources": ["species:sampled"], "value_type": "number",
      "description": "measured products with no column of their own: concentrations in mM, yields in %, or 'detected'"},
     {"id": "solution_prep", "table_order": 50, "label": "Solution Preparation", "sources": ["added_solution", "species:stock"], "model_assigns": true, "value_type": "any", "max_words": 10,
@@ -32,6 +35,6 @@
     "analysis": {"columns": ["analysis_method"]},
     "solution_prep": {"columns": ["pH_buffer"], "patterns": ["^(added|stock)_"]},
     "starting_species": {"columns": ["unique_AA", "name_AA", "form_AA", "is_balanced_by"], "patterns": ["^initial_"]},
-    "products": {"columns": ["total_sampled_peptides_yield", "total_sampled_peptides_mM", "max_peptide_length", "is_max_peptide_yield", "is_last_sample"], "patterns": ["^(total_)?sampled_", "^max_.*length"]}
+    "products": {"columns": ["total_sampled_peptides_yield", "total_sampled_peptides_mM", "max_peptide_length", "total_sampled_oligomers_yield", "max_oligomer_length_nt", "is_max_peptide_yield", "is_last_sample"], "patterns": ["^(total_)?sampled_", "^max_.*length"]}
   }
 }

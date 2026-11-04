@@ -101,11 +101,13 @@ def collect_new_variables(
             proposed_column=proposed_column_for_solute(s), role=s.role,
             value=value if not isinstance(value, str) else None,
             value_text=value if isinstance(value, str) else None,
-            unit="%" if pct else ("mM" if s.concentration_mM is not None else s.concentration_unit_raw),
+            unit=("mM/h" if getattr(s, "measure", "") == "rate" else "%" if pct
+                  else "mM" if s.concentration_mM is not None else s.concentration_unit_raw),
             set_label=s.set_label, sample_label=s.sample_label, quote=s.quote, source=_from_solute(s).source,
             confidence=s.confidence, origin="calculated" if s.derived else "chemistry",
             row_ids=rows_for(s.set_label, s.sample_label), pubchem_cid=s.pubchem_cid,
-            pubchem_title=s.pubchem_title,
+            pubchem_title=s.pubchem_title, pubchem_synonyms=list(getattr(s, "pubchem_synonyms", []) or []),
+            **_errors(s),
             # a stock solution's concentration is how the solution was prepared (Mickey, 2026-11-02)
             category=categories.for_source("species", "stock" if s.concentration_basis == "stock" else s.role) or ""))
     for sol in chemistry.added_solutions:
@@ -319,6 +321,13 @@ def _in_column_unit(v: NewVariable, column: str):
     return conversion.value, conversion.note
 
 
+def _errors(s) -> dict:
+    """A species value's uncertainty in the unit of the value offered for review (mM, or % as printed)."""
+    from parameter_extractor.ingestion.flatten_to_template import error_cells
+    cells = error_cells(s, "x")
+    return {"err_plus": cells.get("x_err_plus", 0.0), "err_minus": cells.get("x_err_minus", 0.0)}
+
+
 def write_values(rows: List[ExtractedRow], column: str, values: List[NewVariable],
                  value_type: str = "") -> Tuple[int, List[str]]:
     """Write each value into `column` (converted to its unit, and to its data type when it has one) on the
@@ -336,11 +345,25 @@ def write_values(rows: List[ExtractedRow], column: str, values: List[NewVariable
             problems.append(f"'{v.name}' value '{value}' was written to {column} as text: {note}.")
         source = CellSource(origin=f"{v.origin} (new variable '{v.name}')", quote=v.quote or "",
                             source=(v.source or "") + (f" [{note}]" if note else ""), confidence=v.confidence)
+        errors = {}
+        if (v.err_plus or v.err_minus) and isinstance(value, (int, float)) and isinstance(v.value, (int, float)) \
+                and v.value:                     # the uncertainty, converted like the value (2026-11-03)
+            factor = value / v.value
+            from parameter_extractor.units import _tidy
+            errors = {column + suffix: _tidy(e * factor) for suffix, e in (("_err_plus", v.err_plus),
+                                                                          ("_err_minus", v.err_minus)) if e}
         for rid in v.row_ids:
             if rid in by_id:
                 set_row_value(by_id[rid], column, value, source)
+                for col, e in errors.items():
+                    set_row_value(by_id[rid], col, e, source)
                 n += 1
     return n, problems
+
+
+def action_is_species_column(column: str) -> bool:
+    """A starting / measured / stock species column (its compound can get an active name)."""
+    return bool(re.match(r"(initial|sampled|stock)_", column or ""))
 
 
 def apply_decisions(rows: List[ExtractedRow], groups: List[VariableGroup],
@@ -370,4 +393,7 @@ def apply_decisions(rows: List[ExtractedRow], groups: List[VariableGroup],
             cid = next((v.pubchem_cid for v in g.values if v.pubchem_cid), 0)
             if g.kind == "species" and cid:
                 registry.remember_species_id(cid, g.name)
+            if g.kind == "species" and action_is_species_column(column):
+                synonyms = next((v.pubchem_synonyms for v in g.values if v.pubchem_synonyms), [])
+                registry.remember_compound(g.name, cid, synonyms)
     return left_out

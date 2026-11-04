@@ -35,7 +35,11 @@ def _answer_all(err: AnswersNeededError) -> list:
     stages = []
     for key in err.keys:
         stage = key.rsplit("-", 1)[0]
-        shutil.copy(REF / f"{stage}.output.json", Path(err.folder) / "answers" / f"{key}.json")
+        answer = Path(err.folder) / "answers" / f"{key}.json"
+        if (REF / f"{stage}.output.json").is_file():
+            shutil.copy(REF / f"{stage}.output.json", answer)
+        else:                       # a step added after the reference was recorded (kinetics): it found nothing
+            answer.write_text("{}")
         stages.append(stage)
     return sorted(stages)
 
@@ -73,7 +77,7 @@ def test_rounds_of_requests_reproduce_the_reference_run():
         else:
             raise AssertionError("never finished")
         packs.activate("prebiotic_chemistry")
-        assert rounds == [["metadata", "structure_planner"], ["chemistry", "experimental_conditions"]], rounds
+        assert rounds == [["metadata", "structure_planner"], ["chemistry", "experimental_conditions", "kinetics"]], rounds
         assert any((folder / "images").iterdir())                         # table pages, for reading tables
         assert result.csv_path.read_text() == (REF / "expected_extracted.csv").read_text()
         assert result.cost_usd in (None, 0)                               # nothing billed

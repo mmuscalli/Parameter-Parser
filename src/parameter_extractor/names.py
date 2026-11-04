@@ -128,6 +128,69 @@ def peptide_codes(name: str) -> Optional[List[str]]:
     return None
 
 
+# ---- nucleic-acid oligomers (Mickey, 2026-11-03; the counterpart of the peptide convention) ----
+# '<n>mer_<nucleotide>': n = chain length, the nucleotide by its base letter (RNA A C G U; DNA dA dC dG dT):
+# '4mer_A' (adenylate tetramer, (pA)4), '43mer_U', '12mer_dT'; a mixed oligomer by its letters as the paper gives
+# them -- a sequence, or a composition when the order wasn't determined -- '3mer_AAU', '3mer_dATG'.
+NUCLEOTIDE_LETTERS = {"A": "adenylate", "C": "cytidylate", "G": "guanylate", "U": "uridylate", "T": "thymidylate"}
+_BASE = r"(?:d[ACGT]|[ACGU])"
+_NT_WORDS = {"adenylate": "A", "adenylic acid": "A", "adenosine": "A", "cytidylate": "C", "cytidylic acid": "C",
+             "cytidine": "C", "guanylate": "G", "guanylic acid": "G", "guanosine": "G", "uridylate": "U",
+             "uridylic acid": "U", "uridine": "U", "thymidylate": "dT", "thymidylic acid": "dT", "thymidine": "dT",
+             "deoxyadenylate": "dA", "deoxyadenosine": "dA", "deoxycytidylate": "dC", "deoxycytidine": "dC",
+             "deoxyguanylate": "dG", "deoxyguanosine": "dG"}
+_MER_WORDS = {"monomer": 1, "dimer": 2, "trimer": 3, "tetramer": 4, "pentamer": 5, "hexamer": 6, "heptamer": 7,
+              "octamer": 8, "nonamer": 9, "decamer": 10, "undecamer": 11, "dodecamer": 12}
+
+
+def oligonucleotide_name(n: int, letters: str) -> str:
+    """'4mer_A', '3mer_AAU', '12mer_dT', '3mer_dATG' (see above)."""
+    return f"{n}mer_{letters}"
+
+
+def _letters(text: str) -> Optional[str]:
+    """'A', 'dT', 'AAU' or 'dATG' when `text` is a base letter / letters, else None."""
+    t = text.strip()
+    if re.fullmatch(_BASE, t):
+        return t
+    if re.fullmatch(r"[ACGU]{2,}", t):
+        return t
+    if re.fullmatch(r"d[ACGT]{2,}", t):
+        return t
+    return None
+
+
+def oligonucleotide_match(name: str) -> Optional[str]:
+    """The convention's name for an oligonucleotide written another way: '(pA)4', '(Ap)3', '(dT)12', 'A 4-mer',
+    '4-mer of A', 'oligo(A) 10-mer', '10-mer (G)', 'U43', 'adenylate tetramer', 'tetraadenylate', '3mer_AAU'.
+    None otherwise (also for poly(A) of no stated length, and for linkage-specific isomers like pA3'pA)."""
+    t = re.sub(r"\s+", " ", name.strip())
+    m = re.fullmatch(rf"(\d{{1,3}})mer_(d?[ACGTU]+)", t)
+    if m and _letters(m.group(2)):
+        return t
+    m = re.fullmatch(rf"\(\s*p?({_BASE})p?\s*\)\s*_?(\d{{1,3}})", t)                     # (pA)4, (Ap)3, (dT)12
+    if m:
+        return oligonucleotide_name(int(m.group(2)), m.group(1))
+    m = re.fullmatch(rf"(?:oligo\s*\(\s*)?(d?[ACGTU]+)(?:\s*\))?[\s_-]*(\d{{1,3}})\s*-?\s*mers?", t, re.IGNORECASE) or \
+        re.fullmatch(rf"(\d{{1,3}})\s*-?\s*mers?\s*(?:of\s+|\(\s*)?(?:oligo\s*\(\s*)?(d?[ACGTU]+)\s*\)?\)?", t)
+    if m:
+        a, b = m.groups()
+        letters, n = (a, b) if not a.isdigit() else (b, a)
+        if _letters(letters):
+            return oligonucleotide_name(int(n), letters)
+    m = re.fullmatch(r"([ACGU])(\d{2,3})", t)                       # 'U43' (Song 2024: U43 by MS)
+    if m:
+        return oligonucleotide_name(int(m.group(2)), m.group(1))
+    low = t.lower()
+    m = re.fullmatch(r"(?:oligo)?([a-z ]+?)\s+(" + "|".join(_MER_WORDS) + r")", low)    # adenylate tetramer
+    if m and m.group(1).strip() in _NT_WORDS:
+        return oligonucleotide_name(_MER_WORDS[m.group(2)], _NT_WORDS[m.group(1).strip()])
+    m = re.fullmatch(r"(di|tri|tetra|penta|hexa|hepta|octa|nona|deca)([a-z ]+)", low)   # tetraadenylate
+    if m and m.group(2).strip() in _NT_WORDS and m.group(2).strip().endswith(("ate", "ic acid")):
+        return oligonucleotide_name(_OLIGO_PREFIX[m.group(1)], _NT_WORDS[m.group(2).strip()])
+    return None
+
+
 def vocabulary() -> Tuple[str, ...]:
     from parameter_extractor.packs import current
     return tuple(current().species_names)
@@ -154,6 +217,9 @@ def match_species(name: str, vocab: Optional[Tuple[str, ...]] = None) -> Optiona
     cyclic = cyclic_codes(raw)                    # before the exact match: the template's DKP_Gly too
     if cyclic:
         return cyclic_name(cyclic), "cyclic peptide"
+    oligo = oligonucleotide_match(raw)            # nucleic-acid oligomers: '(pA)4' -> '4mer_A'
+    if oligo:
+        return oligo, "exact" if oligo == raw else "oligonucleotide"
     m = re.fullmatch(r"(\d+)peptide_([A-Z][a-z]{2})", raw)   # the convention's own names, any length
     if m and int(m.group(1)) >= 2 and m.group(2) in AMINO_ACIDS:
         return raw, "exact" if raw in vocab_set else "peptide name"

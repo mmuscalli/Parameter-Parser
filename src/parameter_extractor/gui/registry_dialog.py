@@ -6,6 +6,9 @@ grouped by research area (Standard = every pack, then each pack; Mickey, 2026-11
     (removing also forgets the names that pointed to it, so those variables will be asked about again in the
     next review).
   - Synonyms: "this name in a paper -> that column" mappings -- research area, column; remove.
+  - Compounds: each compound's default name, the synonyms PubChem lists for it, and the ACTIVE name its
+    columns are written under (compound_names.py); "Convert a dataset CSV…" rewrites an older CSV's columns to
+    the active names (merging columns of the same compound).
   - Built-in: each pack's template and standard columns -- category and data type can be changed (with a
     warning: the pack's prompts and checks were tested with the defaults); names can't (code depends on them).
 
@@ -102,6 +105,7 @@ class RegistryDialog(QDialog):
     A_COLUMN, A_AREA, A_CATEGORY, A_TYPE, A_KIND, A_ADDED, A_NAMES = range(7)
     S_NAME, S_AREA, S_COLUMN, S_KIND = range(4)
     B_COLUMN, B_SOURCE, B_CATEGORY, B_TYPE, B_DEFAULT = range(5)
+    C_NAME, C_ACTIVE, C_CID, C_SOURCE, C_SYNONYMS = range(5)
 
     def __init__(self, registry_path: Path, parent=None):
         super().__init__(parent)
@@ -131,6 +135,7 @@ class RegistryDialog(QDialog):
         self.tabs = QTabWidget()
         self.tabs.addTab(self._build_columns_tab(), "Added columns")
         self.tabs.addTab(self._build_aliases_tab(), "Synonyms")
+        self.tabs.addTab(self._build_compounds_tab(), "Compounds")
         self.tabs.addTab(self._build_builtin_tab(), "Built-in")
         layout.addWidget(self.tabs, 1)
 
@@ -246,6 +251,25 @@ class RegistryDialog(QDialog):
         v.addWidget(self.alias_empty)
         return w
 
+    def _build_compounds_tab(self) -> QWidget:
+        w = QWidget()
+        v = QVBoxLayout(w)
+        v.addWidget(QLabel("The name each compound's columns are written under. Click an Active name to choose "
+                           "another of its names (from PubChem). Only the files change: matching and the review "
+                           "use the default name.", wordWrap=True))
+        self.compound_tree = _tree(["Compound (default name)", "Active name", "PubChem CID", "Source", "Synonyms"],
+                                   self.C_SYNONYMS)
+        self.compound_tree.setItemDelegate(ChoiceDelegate(self, self.compound_tree))
+        v.addWidget(self.compound_tree, 1)
+        row = QHBoxLayout()
+        row.addWidget(QPushButton("Reset selected to default", clicked=self._reset_selected_compounds))
+        row.addWidget(QPushButton("Convert a dataset CSV…", clicked=self._convert_csv))
+        row.addStretch(1)
+        self.compound_count = QLabel()
+        row.addWidget(self.compound_count)
+        v.addLayout(row)
+        return w
+
     def _build_builtin_tab(self) -> QWidget:
         w = QWidget()
         v = QVBoxLayout(w)
@@ -271,6 +295,7 @@ class RegistryDialog(QDialog):
         try:
             self._fill_columns()
             self._fill_aliases()
+            self._fill_compounds()
             self._fill_builtin()
         finally:
             self._filling = False
@@ -373,9 +398,62 @@ class RegistryDialog(QDialog):
             t.setColumnWidth(c, width)          # groups start closed: sizing to contents would see nothing
         self.builtin_count.setText(f"{changed} built-in column(s) changed" if changed else "All at their defaults")
 
+    def compound_names(self, pack_id: str):
+        from parameter_extractor.compound_names import CompoundNames
+        return CompoundNames(self.view(pack_id), self.packs[pack_id])
+
+    def _fill_compounds(self) -> None:
+        t = self.compound_tree
+        open_ = self._expanded(t)
+        t.clear()
+        changed = 0
+        bold = QFont()
+        bold.setBold(True)
+        for pack_id in self.packs:
+            compounds = sorted(self.compound_names(pack_id).compounds.values(), key=lambda c: c.name.lower())
+            if not compounds:
+                continue
+            group = self._group(t, pack_id, len(compounds))
+            for c in compounds:
+                item = self._row(group, "compound", pack_id, c.name,
+                                 [c.name, c.shown, str(c.cid or ""), "Built-in" if c.builtin else "Accepted",
+                                  ", ".join(c.synonyms)], (self.C_ACTIVE,) if len(c.names) > 1 else ())
+                item.setToolTip(self.C_SYNONYMS, "\n".join(c.synonyms) or "No synonyms stored")
+                if c.active:
+                    changed += 1
+                    item.setFont(self.C_ACTIVE, bold)
+                    item.setForeground(self.C_ACTIVE, CHANGED_BRUSH)
+            group.setExpanded(open_.get(pack_id, False))
+        for col, width in ((self.C_NAME, 220), (self.C_ACTIVE, 240), (self.C_CID, 90), (self.C_SOURCE, 80)):
+            t.setColumnWidth(col, width)
+        self.compound_count.setText(f"{changed} compound(s) shown under another name" if changed
+                                    else "All under their default names")
+
+    def _reset_selected_compounds(self) -> None:
+        for item in self.compound_tree.selectedItems():
+            what, area, key = item.data(0, ROLE)
+            if what == "compound":
+                self.view(area).set_active_name(key, "")
+        self._refresh()
+
+    def _convert_csv(self) -> None:
+        from PySide6.QtWidgets import QFileDialog
+        from parameter_extractor.compound_names import convert_dataset_csv
+        path, _ = QFileDialog.getOpenFileName(self, "Dataset CSV to convert", "", "CSV files (*.csv)")
+        if not path:
+            return
+        pack_id, ok = QInputDialog.getItem(self, "Research area", "Compounds of:",
+                                           list(self.packs), 0, False)
+        if not ok:
+            return
+        out = Path(path).with_name(Path(path).stem + "_active_names.csv")
+        renames = convert_dataset_csv(path, out, self.view(pack_id))
+        QMessageBox.information(self, "Converted", f"{len(renames)} column(s) renamed (using the names as "
+                                f"shown here, saved or not).\nWritten: {out}")
+
     def _apply_filter(self) -> None:
         text = self.filter_edit.text().strip().lower()
-        for tree in (self.columns_tree, self.alias_tree, self.builtin_tree):
+        for tree in (self.columns_tree, self.alias_tree, self.compound_tree, self.builtin_tree):
             for i in range(tree.topLevelItemCount()):
                 group = tree.topLevelItem(i)
                 shown = 0
@@ -406,6 +484,9 @@ class RegistryDialog(QDialog):
             return [(DEFAULT, "")] + self.category_options(area), False
         if (what, column) == ("alias", self.S_COLUMN):
             return [(c, c) for c in self.alias_targets(area)], True
+        if (what, column) == ("compound", self.C_ACTIVE):
+            c = self.compound_names(area).compounds.get(key)
+            return ([(n + ("  (default)" if n == key else ""), n) for n in c.names] if c else []), False
         return [], False
 
     def alias_targets(self, area: str) -> List[str]:
@@ -424,6 +505,9 @@ class RegistryDialog(QDialog):
                     self.A_TYPE: info.get("type", "any")}.get(column)
         if what == "alias":
             return area if column == self.S_AREA else reg.all_aliases.get(key, "")
+        if what == "compound":
+            c = self.compound_names(area).compounds.get(key)
+            return c.shown if c else key
         if what == "builtin":
             choice = self.view(packs.current().id if area == STANDARD else area).builtin_choice(key)
             return choice.get("category" if column == self.B_CATEGORY else "type", "")
@@ -444,6 +528,8 @@ class RegistryDialog(QDialog):
                 self.registry.set_alias_area(key, value)
             elif value.strip():
                 self.registry.set_alias_column(key, value.strip())
+        elif what == "compound":
+            self.view(area).set_active_name(key, value or key)
         elif what == "builtin":
             if not self.confirm_builtin_change():
                 QTimer.singleShot(0, self._refresh)

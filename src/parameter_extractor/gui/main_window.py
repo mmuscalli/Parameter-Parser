@@ -260,6 +260,13 @@ class MainWindow(QMainWindow):
         self.all_figures_box.setToolTip("Figures are rendered for the figure review; normally only the ones you "
                                         "digitize are kept. Tick to keep every figure's image.")
         self.images_box.toggled.connect(self.all_figures_box.setEnabled)
+        self.auto_figures_box = QCheckBox("Digitize easy figures automatically")
+        self.auto_figures_box.setChecked(False)
+        self.auto_figures_box.setToolTip(
+            "Figures you choose to digitize are first parsed from their suggestions: a bar chart or scatter plot whose "
+            "axes calibrate and whose points all sort into the suggested series is saved without opening the "
+            "digitizer (flagged, so you can check it). Anything else opens in the digitizer as usual. Paper queues "
+            "and command-line runs also try every figure (one suggestion request each).")
         # the on/off options in one dropdown (it will grow); checkboxes inside keep the menu open
         self.toggles_btn = QToolButton()
         self.toggles_btn.setPopupMode(QToolButton.ToolButtonPopupMode.InstantPopup)
@@ -317,14 +324,15 @@ class MainWindow(QMainWindow):
     def option_toggles(self) -> List[QCheckBox]:
         """The on/off run options in the Options dropdown, in menu order."""
         return [self.batch_box, self.arxiv_box, self.equations_box, self.suggest_box, self.si_box,
-                self.images_box, self.all_figures_box]
+                self.images_box, self.all_figures_box, self.auto_figures_box]
 
     def _update_options_summary(self, *_args) -> None:
         """One line for the collapsed run options: what this run will do (and the dropdown's
         own text: the options that are on)."""
         short = {self.batch_box: "Batch", self.arxiv_box: "arXiv text", self.equations_box: "LaTeX",
                  self.suggest_box: "Variable suggestions", self.si_box: "SI",
-                 self.images_box: "Images", self.all_figures_box: "All figure images"}
+                 self.images_box: "Images", self.all_figures_box: "All figure images",
+                 self.auto_figures_box: "Auto figures"}
         on = [short[b] for b in self.option_toggles() if b.isChecked()]
         self.toggles_btn.setText(", ".join(on) if on else "None on")
         stages = [b for b in self.stage_boxes.values()]
@@ -460,6 +468,7 @@ class MainWindow(QMainWindow):
         self.si_box.setChecked(self._settings.value("include_supplements", True, type=bool))
         self.images_box.setChecked(self._settings.value("save_images", True, type=bool))
         self.all_figures_box.setChecked(self._settings.value("save_all_figure_images", False, type=bool))
+        self.auto_figures_box.setChecked(self._settings.value("auto_digitize_figures", False, type=bool))
         self.all_figures_box.setEnabled(self.images_box.isChecked())
         self.passes_combo.setCurrentIndex(max(0, self.passes_combo.findData(self._settings.value("passes", 1, type=int))))
         if self.settings_dialog.handoff_box is not None:
@@ -533,6 +542,7 @@ class MainWindow(QMainWindow):
         self._settings.setValue("include_supplements", self.si_box.isChecked())
         self._settings.setValue("save_images", self.images_box.isChecked())
         self._settings.setValue("save_all_figure_images", self.all_figures_box.isChecked())
+        self._settings.setValue("auto_digitize_figures", self.auto_figures_box.isChecked())
         self._settings.setValue("passes", self.passes_combo.currentData() or 1)
         if self.settings_dialog.handoff_box is not None:
             self._settings.setValue("dev/handoff", self.settings_dialog.handoff_box.isChecked())
@@ -637,6 +647,7 @@ class MainWindow(QMainWindow):
                          include_supplements=self.si_box.isChecked(),
                          save_images=self.images_box.isChecked(),
                          save_all_figure_images=self.images_box.isChecked() and self.all_figures_box.isChecked(),
+                         auto_digitize_figures=self.auto_figures_box.isChecked(),
                          passes=self.passes_combo.currentData() or 1,
                          handoff_dir=self.settings_dialog.handoff_dir(),
                          pubchem_cache_path=default_pubchem_cache_path(), arxiv_cache_dir=default_arxiv_cache_dir())
@@ -721,7 +732,8 @@ class MainWindow(QMainWindow):
             return
         bridge = PlanBridge(lambda fig: plan_figure(extraction, fig), parent=self)
         self._review = FigureReviewDialog(extraction.figures, extraction.vocab["all_columns"],
-                                          plan_bridge=bridge, parent=self)
+                                          plan_bridge=bridge, parent=self,
+                                          auto_digitize=extraction.ctx.config.auto_digitize_figures)
         self._review.finished.connect(self._on_review_closed)
         self._review.set_background_status("Text extraction running in the background…")
         self._review.show()
@@ -874,6 +886,11 @@ class MainWindow(QMainWindow):
                                 chosen={a["column"]: a.get("category", "") for a in result.accepted_variables})
         except Exception:                   # the order is a convenience: never in the way of the results
             order = None
+        try:                                # columns written under a compound's active name: provenance is kept
+            from parameter_extractor.compound_names import CompoundNames      # under the default name
+            default_of = CompoundNames(VariableRegistry(self.registry_path, pack=run_pack)).to_default
+        except Exception:
+            default_of = lambda c: c
         t = self.rows_table
         t.clear()
         t.setColumnCount(len(keep))
@@ -913,7 +930,7 @@ class MainWindow(QMainWindow):
                 item = QTableWidgetItem(row[i])
                 if c in tinted:
                     item.setBackground(QBrush(GROUP_TINT))
-                tip = self._provenance_tip(prov.get(header[i])) if row[i] else ""
+                tip = self._provenance_tip(prov.get(header[i]) or prov.get(default_of(header[i]))) if row[i] else ""
                 if not tip and len(row[i]) > 30:            # no provenance (source_notes ...): the full text
                     tip = row[i]
                 if flags:
@@ -1022,11 +1039,12 @@ class MainWindow(QMainWindow):
         identity_flags = [f for f in result.paper_flags if f.kind == "identity_not_quoted"]
         source_flags = [f for f in result.paper_flags if f.kind == "paper_source"]
         vote_flags = [f for f in result.paper_flags if f.kind == "pass_disagreement"]
+        auto_fig_flags = [f for f in result.paper_flags if f.kind == "auto_digitized"]
         other_paper_flags = [f for f in result.paper_flags
                              if f.kind not in ("new_variable", "cited_data", "derived_value", "duplicate_removed",
                                                "archive_check", "archive_match", "fit_model",
                                                "multimodal", "other_estimates", "identity_not_quoted",
-                                               "paper_source", "pass_disagreement")]
+                                               "paper_source", "pass_disagreement", "auto_digitized")]
         if source_flags:
             add_group("Where the text came from", source_flags)
         if cited_flags:
@@ -1045,6 +1063,8 @@ class MainWindow(QMainWindow):
             add_group("Left out as repeats of the solution chemistry", repeat_flags)
         if vote_flags:
             add_group("Passes disagreed (value kept by vote)", vote_flags)
+        if auto_fig_flags:
+            add_group("Figures digitized automatically (check their points)", auto_fig_flags)
         if other_paper_flags:
             add_group("Whole paper", other_paper_flags)
         for row_id, flags in result.row_flags.items():

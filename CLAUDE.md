@@ -1908,3 +1908,55 @@ only in figures (or are reviews/perspectives); rows from tables: Caimi 32 (liter
 - tests/test_sam_papers.py. Persistent issues listed in the eval file (no nucleotide oligomer naming convention /
   standard columns; caption-only results; composition / rate / property tables; species uncertainties; duration ranges;
   review papers cost a full run; cross-paper abbreviations).
+
+## Mickey's answers to the Sam Papers issues (2026-11-03)
+
+- **Nucleic-acid naming** (`names.oligonucleotide_match/oligonucleotide_name`): `<n>mer_<bases>` ('4mer_A', '3mer_AAU',
+  '12mer_dT') from (pA)4, (Ap)3, (dT)12, 'A 4-mer', 'oligo(A) 10-mer', U43, 'adenylate tetramer', 'tetraadenylate';
+  poly(A) without a length and linkage isomers (pA3'pA) stay unmatched. Columns `(initial|sampled)_<n>mer_<bases>_(mM|
+  %yield)` are KNOWN (registry `is_oligonucleotide_column`, no `_aq_`). Standard columns `total_sampled_oligomers_yield`
+  (sum of 2-mers and longer) + `max_oligomer_length_nt` (longest with a value) filled by postprocess "oligomer_totals"
+  (`calculators/oligomer_totals.py`, a stated value kept + checked); conditions spec parameter max_oligomer_length_nt.
+- **Rows from text / captions** when they carry complete conditions (composition AND temperature AND duration) -- the
+  tables-only rule was about mostly empty rows. Kinetics tables are rows (intervals hr/hi); molecule properties and
+  fraction compositions stay excluded.
+- **Paper kind** (`StructurePlan.paper_kind`, alias `kind`: experimental/review/perspective/theory/abstract/other):
+  not experimental + no sets -> extract_steps skips methodology/chemistry/fit_models/spec stages (`ex.skipped_kind`,
+  a `no_results` flag saying why).
+- **Duration ranges**: `PlannedSample.duration_hr_high` (alias `hi`) -> `duration_range_hr` 'low:high', duration_hr blank.
+- **Species uncertainties**: SoluteEntry `err_plus/err_minus` (ep/em; table cells '29.18 ± 2.40' via `_cell_error`) ->
+  `<column>_err_plus` / `_err_minus` (prebiotic naming like the conditions stage; minus stored negative, like the
+  archive's err2), converted like the value (`error_cells`); known wherever the value's column is.
+- **Rates**: `measure` "rate" -> `sampled_<name>_rate_mM_hr` (mM/h). Units: inverse_time (h-1...), second_order
+  (M-1 h-1), conc_rate (mM/h), molar_energy (kJ/mol, kcal/mol). Optional spec stage `kinetics` (keyword trigger: rate
+  constant, half-life, Arrhenius, ...; per sample; uncertainties; table images; open-ended -> category Kinetics, order
+  74): rate_constant_first_order_per_hr, rate_constant_second_order_per_M_hr, half_life_hr, activation_energy_kJ_mol,
+  rate_constant_reaction, kinetic_model. eder1994 triggers it (step count 6 -> 7); recordings made before it existed
+  replay it as an empty answer (`make_replay`: unrecorded spec stage -> `response_model()`, 0 tokens).
+- **Whole numbers within N px** (Riggi bars: averages 3.45 next to whole 2, 3): `AxisVariable.whole_within_px`
+  (hidden from the model); `calibration._snapped_fraction` snaps to the whole number when it is within that many
+  pixels, else rounds to `decimals`. Digitizer "round:" offers "whole if within 3 px, else 1 / 2 decimals"; automatic
+  digitizing uses 2 decimals + 3 px when the user hasn't chosen.
+- **Error bars**: `DigitizedPoint.err_hi_py/err_lo_py`; digitizer mode "Error bars" (click above/below a point; points
+  table shows +a/-b; undo); `auto_detect.find_error_bars` (capped whiskers, lighter grey allowed via `whisker_mask`;
+  bars: upper whisker) with "Also find error bars" (QSettings digitizer/auto_errors); `figure_rows._error_bar` ->
+  `<column>_err_plus/_err_minus` (after the axis multiplier). Riggi Fig. 2: kaolinite +0.49, chabazite +0.52, no false.
+- **Automatic figure parsing** (`digitizing/auto_figure.py`, RunConfig/Options "Digitize easy figures automatically",
+  CLI --auto-figures, off by default): only bar / scatter data plots that don't repeat a table, when the axes calibrate,
+  points are found and assigned without notes; else the reasons are shown and the figure goes to the editor.
+  `DigitizedFigure.auto_digitized` -> `auto_digitized` flags (GUI group "Figures digitized automatically"); unattended
+  runs (`run_pipeline`, queues) use `pipeline.auto_digitize_figures` (no SI figures).
+- **PubChem synonyms + active names** (`compound_names.py`): `pubchem.synonyms(cid)` (PUG REST /cid/<cid>/synonyms,
+  cached under "synonyms" in pubchem_cache.json; `useful_synonyms` drops CAS / UNII / InChIKey / database codes, > 50
+  chars; 25 max). Bundled: species_cids.json entries have `synonyms` (`scripts/add_species_synonyms.py`, network).
+  Accepted compounds: review acceptance -> `registry.remember_compound(paper name, cid, synonyms)` (synonyms fetched in
+  normalize when PubChem identifies a new compound). Registry `compounds` {area: {name: {cid, synonyms, active}}}; the
+  default name = the vocabulary's / the paper's; `set_active_name`. ONLY the files use the active name:
+  write_template_csv orders with default names (template places kept) then renames the header (`renames_for`);
+  observations' `column` too; queue combined CSV with the registry; Rows tab maps back for provenance
+  (`CompoundNames.to_default`). Interconversion: `harmonize` (any of a compound's names -> active), `to_default`,
+  `convert_dataset_csv` (merges columns of one compound). Offline matching: normalize renames a name equal to a stored
+  synonym (unique to one compound) before PubChem ('Trisodium trimetaphosphate' -> sodium_triMP). GUI: Remembered
+  variables -> tab "Compounds" (per research area; Active name drop-down of default + synonyms; Reset; "Convert a
+  dataset CSV…" -> <name>_active_names.csv).
+- tests/test_sam_answers.py.

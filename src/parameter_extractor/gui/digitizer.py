@@ -49,6 +49,10 @@ from PySide6.QtWidgets import (
 )
 
 from parameter_extractor.digitizing.annotate import CALIBRATION_COLOR, SERIES_COLORS
+from parameter_extractor.digitizing.auto_figure import (FigureImage, apply_plan as apply_plan_to, calibrate_panel,
+                                                        fill_concentrations, find_points, frame_of, panel_sides,
+                                                        with_new_column as _with_new_column,
+                                                        with_shared as _with_shared)
 from parameter_extractor.gui.widgets import ExpandingLineEdit
 from parameter_extractor.digitizing.calibration import (
     CalibrationError, is_categorical, pixel_to_y, snap, try_pixel_to_data)
@@ -66,9 +70,15 @@ MODES = [("pan", "Pan / zoom", "Drag to move around; scroll to zoom."),
          ("points", "Add points", "Click each data point of the selected series. Drag to adjust; "
                                   "right-click to remove; Shift+click adds a point on top of an "
                                   "existing one; Ctrl+Z undoes."),
-         ("delete", "Delete points", "Click a point of the selected series to remove it.")]
+         ("delete", "Delete points", "Click a point of the selected series to remove it."),
+         ("errors", "Error bars", "Click the top and then the bottom of a point's error bar: the selected series' "
+                                  "point nearest in x gets it (a click above the point sets the upper end, below the "
+                                  "lower). Right-click near a point removes its error bar; Ctrl+Z undoes.")]
 NONE_COLUMN = "(none -- not stored)"
-ROUND_CHOICES = [("exact", None), ("whole numbers", 0), ("1 decimal", 1), ("2 decimals", 2), ("3 decimals", 3)]
+# (label, decimals, snap to a whole number within this many pixels)
+ROUND_CHOICES = [("exact", None, 0.0), ("whole numbers", 0, 0.0), ("1 decimal", 1, 0.0), ("2 decimals", 2, 0.0),
+                 ("3 decimals", 3, 0.0), ("whole if within 3 px, else 1 decimal", 1, 3.0),
+                 ("whole if within 3 px, else 2 decimals", 2, 3.0)]
 
 
 def read_values(panel: DigitizedPanel, px: float, py: float) -> Optional[Tuple[Optional[float], float]]:
@@ -80,33 +90,6 @@ def read_values(panel: DigitizedPanel, px: float, py: float) -> Optional[Tuple[O
             return None
     return try_pixel_to_data(panel, px, py)
 FIXED_CONDITION_ROWS = 2     # temperature and pH head the Conditions table
-
-
-def fill_concentrations(series: List[DigitizedSeries], found) -> None:
-    """Fill each series' species that have no concentration from the plan's list of
-    concentrations found in the paper (converted to mM here, never by the model);
-    adds the species if the series doesn't list it yet."""
-    from parameter_extractor.units import to_column_unit
-    for c in found:
-        conv = to_column_unit(c.value, None, "mM")
-        if conv is None:
-            continue
-        labels = {l.strip().lower() for l in c.series}
-        for s in series:
-            base = re.sub(r"\s*\[[^\]]*\]$", "", s.label).strip().lower()   # label without " [marker]"
-            if labels and base not in labels and s.label.strip().lower() not in labels:
-                continue
-            source = f"{'indirect -- ' if c.basis == 'indirect' else ''}{c.source or 'stated in the paper'} " \
-                     f"('{c.value}')"
-            for i, sp in enumerate(s.initial_species):
-                if sp.name.strip().lower() == c.species.strip().lower():
-                    if sp.concentration_mM is None:
-                        s.initial_species[i] = sp.model_copy(update=dict(
-                            concentration_mM=conv.value, basis=c.basis, source=source))
-                    break
-            else:
-                s.initial_species.append(SpeciesAmount(name=c.species, concentration_mM=conv.value,
-                                                       basis=c.basis, source=source))
 
 
 class _ColumnDelegate(QStyledItemDelegate):
@@ -137,20 +120,6 @@ def _parse_float(text: str) -> Optional[float]:
         return None
 
 
-
-def _with_shared(own: list, shared: list) -> list:
-    """A series' conditions: its own, plus the figure's shared ones it doesn't set itself."""
-    columns = {c.column for c in own}
-    return [c.model_copy() for c in own] + [c.model_copy() for c in shared if c.column not in columns]
-
-
-def _with_new_column(var: AxisVariable) -> AxisVariable:
-    """A suggested axis with the NEW column the model proposed when none fits, loaded into the column field
-    (averaged values: '_avg' added) -- the user sees it while digitizing, and the review asks to accept it."""
-    if var.column or not var.new_column or var.categorical:
-        return var.model_copy()
-    from parameter_extractor.ingestion.flatten_to_template import with_average
-    return var.model_copy(update={"column": with_average(var.new_column) if var.average else var.new_column})
 
 class PointItem(QGraphicsEllipseItem):
     """A data point marker: constant on-screen size, draggable."""
@@ -381,7 +350,7 @@ class DigitizerWidget(QWidget):
             self.cal_edits[(axis, "log")] = log
             h.addWidget(log)
             rounding = QComboBox()
-            for text, _ in ROUND_CHOICES:
+            for text, _, _ in ROUND_CHOICES:
                 rounding.addItem(text)
             rounding.setToolTip(f"Round {axis} values: points snap to this precision when placed or dragged "
                                 f"(e.g. whole numbers for an oligomer length), and the stored values are rounded.")
@@ -509,6 +478,13 @@ class DigitizerWidget(QWidget):
         self.auto_points_box.setToolTip("After the suggestions are applied (and the axes calibrated, if that's "
                                         "on): every coordinate system's points, as with the button.")
         v.addWidget(self.auto_points_box)
+        self.auto_errors_box = QCheckBox("Also find error bars")
+        self.auto_errors_box.setChecked(QSettings().value("digitizer/auto_errors", True, type=bool))
+        self.auto_errors_box.toggled.connect(lambda on: QSettings().setValue("digitizer/auto_errors", on))
+        self.auto_errors_box.setToolTip("With the points: a thin vertical line from a marker (or a bar's top) "
+                                        "ending in a short cap is taken as its error bar. Check them; 'Error "
+                                        "bars' mode sets or corrects one by hand.")
+        v.addWidget(self.auto_errors_box)
         self.points_status = QLabel(wordWrap=True)
         self.points_status.setStyleSheet("color: palette(placeholder-text);")
         v.addWidget(self.points_status)
@@ -620,6 +596,46 @@ class DigitizerWidget(QWidget):
                 self.add_point(x, y)
         elif self.canvas.mode == "delete" and button == Qt.MouseButton.LeftButton:
             self.delete_point_near(x, y)
+        elif self.canvas.mode == "errors":
+            if button == Qt.MouseButton.RightButton:
+                self.clear_error_bar_near(x, y)
+            elif button == Qt.MouseButton.LeftButton:
+                self.set_error_end(x, y)
+
+    def _point_nearest_in_x(self, x: float):
+        """(series index, point index) of the selected series' point nearest in x, or None."""
+        s = self.series
+        if s is None or not s.points:
+            return None
+        pi = min(range(len(s.points)), key=lambda i: abs(s.points[i].px - x))
+        return self.series_idx, pi
+
+    def set_error_end(self, x: float, y: float) -> bool:
+        """An error bar's end for the selected series' point nearest in x: above the point the upper end,
+        below it the lower. One undo step each."""
+        found = self._point_nearest_in_x(x)
+        if found is None:
+            return False
+        si, pi = found
+        p = self.fig.series[si].points[pi]
+        field = "err_hi_py" if y < p.py else "err_lo_py"     # pixel y grows downwards
+        self._undo.append(("errors", (si, pi, p.err_hi_py, p.err_lo_py)))
+        self.fig.series[si].points[pi] = p.model_copy(update={field: y})
+        self.redraw()
+        return True
+
+    def clear_error_bar_near(self, x: float, y: float) -> bool:
+        found = self._point_nearest_in_x(x)
+        if found is None:
+            return False
+        si, pi = found
+        p = self.fig.series[si].points[pi]
+        if p.err_hi_py is None and p.err_lo_py is None:
+            return False
+        self._undo.append(("errors", (si, pi, p.err_hi_py, p.err_lo_py)))
+        self.fig.series[si].points[pi] = p.model_copy(update={"err_hi_py": None, "err_lo_py": None})
+        self.redraw()
+        return True
 
     def place_calibration(self, axis: str, x: float, y: float) -> None:
         """Place X1/X2 (or Y1/Y2): fills the first empty slot, otherwise moves the
@@ -680,6 +696,20 @@ class DigitizerWidget(QWidget):
                 self._refresh_calibration()
                 self.redraw()
                 return
+            if si == "errors":                  # an error-bar end set or cleared: the old ends back
+                sj, pj, hi, lo = pi
+                if sj < len(self.fig.series) and pj < len(self.fig.series[sj].points):
+                    pts = self.fig.series[sj].points
+                    pts[pj] = pts[pj].model_copy(update={"err_hi_py": hi, "err_lo_py": lo})
+                self.redraw()
+                return
+            if si == "error bars":              # automatic error bars: all go at once
+                for sj, pj, hi, lo in pi:
+                    if sj < len(self.fig.series) and pj < len(self.fig.series[sj].points):
+                        pts = self.fig.series[sj].points
+                        pts[pj] = pts[pj].model_copy(update={"err_hi_py": hi, "err_lo_py": lo})
+                self.redraw()
+                return
             if si == "points":                  # automatic points in several series: all go at once
                 for sj, idx in pi:
                     pts = self.fig.series[sj].points if sj < len(self.fig.series) else []
@@ -702,7 +732,12 @@ class DigitizerWidget(QWidget):
 
     def _on_point_moved(self, si: int, pi: int, pos: QPointF) -> None:
         if si < len(self.fig.series) and pi < len(self.fig.series[si].points):
-            self.fig.series[si].points[pi] = DigitizedPoint(px=pos.x(), py=pos.y())
+            old = self.fig.series[si].points[pi]
+            dy = pos.y() - old.py                  # its error bar moves with it
+            self.fig.series[si].points[pi] = old.model_copy(update={
+                "px": pos.x(), "py": pos.y(),
+                "err_hi_py": old.err_hi_py + dy if old.err_hi_py is not None else None,
+                "err_lo_py": old.err_lo_py + dy if old.err_lo_py is not None else None})
             self._refresh_points_table()
 
     def _on_hover(self, x: float, y: float) -> None:
@@ -772,6 +807,18 @@ class DigitizerWidget(QWidget):
                 color.setAlpha(130)
             for pi, p in enumerate(s.points):
                 panel = self.fig.panels[min(s.panel, len(self.fig.panels) - 1)]
+                if p.err_hi_py is not None or p.err_lo_py is not None:     # the error bar, with caps
+                    top = p.err_hi_py if p.err_hi_py is not None else p.py
+                    bottom = p.err_lo_py if p.err_lo_py is not None else p.py
+                    bar = QPainterPath()
+                    bar.moveTo(p.px, top); bar.lineTo(p.px, bottom)
+                    for end in (p.err_hi_py, p.err_lo_py):
+                        if end is not None:
+                            bar.moveTo(p.px - 5, end); bar.lineTo(p.px + 5, end)
+                    whisker = QGraphicsPathItem(bar)
+                    whisker.setPen(QPen(color, 0))
+                    whisker.setZValue(2)
+                    scene.addItem(whisker)
                 item = PointItem(si, pi, color, self._on_point_moved, editable=selected,
                                  snap_to=lambda pos, pn=panel: QPointF(*snap(pn, pos.x(), pos.y())))
                 item.setPos(p.px, p.py)
@@ -850,7 +897,8 @@ class DigitizerWidget(QWidget):
             combo.setCurrentText(var.column or ("" if var.store else NONE_COLUMN))
             mult.setText(_fmt(var.multiplier))
             self.cal_edits[(axis, "round")].setCurrentIndex(
-                next((i for i, (_, d) in enumerate(ROUND_CHOICES) if d == var.decimals), 0))
+                next((i for i, (_, d, w) in enumerate(ROUND_CHOICES)
+                      if d == var.decimals and w == getattr(var, "whole_within_px", 0.0)), 0))
             self._update_column_hint(axis)
         self.cal_edits[("x", "categories")].setChecked(bool(p.x.categorical))
         self._updating = False
@@ -872,11 +920,13 @@ class DigitizerWidget(QWidget):
     def _on_rounding(self, axis: str, index: int) -> None:
         if self._updating:
             return
-        getattr(self.panel, axis).decimals = ROUND_CHOICES[index][1]
+        var = getattr(self.panel, axis)
+        _, var.decimals, var.whole_within_px = ROUND_CHOICES[index]
         # points already placed in this coordinate system snap too
         for s in self.fig.series:
             if self.fig.panels[min(s.panel, len(self.fig.panels) - 1)] is self.panel:
-                s.points = [DigitizedPoint(px=q[0], py=q[1]) for q in (snap(self.panel, p.px, p.py) for p in s.points)]
+                s.points = [p.model_copy(update={"px": q[0], "py": q[1]})
+                            for p, q in ((p, snap(self.panel, p.px, p.py)) for p in s.points)]
         self.redraw()
 
     def _on_categories(self, on: bool) -> None:
@@ -1104,39 +1154,22 @@ class DigitizerWidget(QWidget):
 
     # ---- optional automation ------------------------------------------------------
 
-    def _gray(self):
-        if getattr(self, "_gray_cache", None) is None:
-            import numpy as np
-            from PIL import Image
-            self._gray_cache = np.asarray(Image.open(self.fig.page_image).convert("L"))
-        return self._gray_cache
+    @property
+    def _image(self) -> FigureImage:
+        if getattr(self, "_image_cache", None) is None:
+            self._image_cache = FigureImage(self.fig)
+        return self._image_cache
 
-    def _figure_region(self):
-        g = self._gray()
-        if self.fig.figure_bbox:
-            s = self.fig.render_scale
-            x0, y0, x1, y1 = (v * s for v in self.fig.figure_bbox)
-            pad = 30
-            return (max(int(x0) - pad, 0), max(int(y0) - pad, 0), min(int(x1) + pad, g.shape[1]),
-                    min(int(y1) + pad, g.shape[0]))
-        return 0, 0, g.shape[1], g.shape[0]
+    def _gray(self):
+        return self._image.gray
+
+    def _rgb(self):
+        return self._image.rgb
 
     def _frames(self):
-        if getattr(self, "_frames_cache", None) is None:
-            from parameter_extractor.digitizing.auto_axes import find_frames
-            self._frames_cache = find_frames(self._gray(), self._figure_region())
-        return self._frames_cache
+        return self._image.frames
 
-    @staticmethod
-    def _panel_sides(name: str):
-        """Which frame sides a coordinate system reads from, and its base name: '(a) right
-        y-axis' -> ('bottom', 'right', '(a)')."""
-        low = name.lower()
-        # whole words: "diketopiperazine" contains "top" (a planner panel name, alargov2002)
-        y_side = "right" if re.search(r"\bright\b", low) else "left"
-        x_side = "top" if re.search(r"\btop\b", low) else "bottom"
-        base = re.sub(r"\b(left|right|top|bottom|secondary|primary)\b|\b[xy][- ]?axis\b|\baxis\b", "", low)
-        return x_side, y_side, re.sub(r"[\s,;:-]+", " ", base).strip()
+    _panel_sides = staticmethod(panel_sides)
 
     def _view_centre(self):
         c = self.canvas.mapToScene(self.canvas.viewport().rect().center())
@@ -1144,32 +1177,8 @@ class DigitizerWidget(QWidget):
 
     def auto_calibrate(self, _checked=False, use_view: bool = True) -> str:
         """Place the current coordinate system's calibration markers automatically."""
-        from parameter_extractor.digitizing.auto_axes import AutoAxisError, calibrate_axis, choose_frame
-        panel = self.panel
-        x_side, y_side, base = self._panel_sides(panel.name)
-        bases = list(dict.fromkeys(self._panel_sides(p.name)[2] for p in self.fig.panels))
-        notes = []
-        try:
-            frame = choose_frame(self._frames(), self._view_centre() if use_view else None, bases.index(base))
-        except AutoAxisError as e:
-            notes.append(str(e))
-        else:
-            for axis, side, var in (("x", x_side, panel.x), ("y", y_side, panel.y)):
-                if axis == "x" and (var.categorical or not var.column and not var.tick_labels):
-                    notes.append("X: categories (bars), no calibration needed")
-                    continue
-                try:
-                    (ax, ay, av), (bx, by, bv), is_log = calibrate_axis(
-                        self._gray(), frame, side, list(var.tick_labels), self.fig.tick_numbers)
-                except AutoAxisError as e:
-                    notes.append(f"{axis.upper()}: {e}")
-                    continue
-                cal: AxisCalibration = getattr(panel, f"{axis}_cal")
-                setattr(panel, f"{axis}_cal", AxisCalibration(
-                    p1=CalibrationPoint(px=float(ax), py=float(ay), value=float(av)),
-                    p2=CalibrationPoint(px=float(bx), py=float(by), value=float(bv)), log=cal.log or is_log))
-                notes.append(f"{axis.upper()}: {av:g} to {bv:g} placed")
-        message = f"{panel.name}: " + "; ".join(notes) + " -- check the markers."
+        message, _ = calibrate_panel(self.fig, self._image, self.panel_idx,
+                                     self._view_centre() if use_view else None)
         self.auto_status.setText(message)
         self._refresh_calibration()
         self.redraw()
@@ -1203,104 +1212,22 @@ class DigitizerWidget(QWidget):
         self._refresh_calibration()
         self.redraw()
 
-    def _rgb(self):
-        if getattr(self, "_rgb_cache", None) is None:
-            import numpy as np
-            from PIL import Image
-            self._rgb_cache = np.asarray(Image.open(self.fig.page_image).convert("RGB"))
-        return self._rgb_cache
-
     def _frame_of(self, panel_idx: int, use_view: bool):
-        """The plot frame a coordinate system reads from: the one holding its calibration markers, else the
-        one in view, else by its place among the coordinate systems."""
-        from parameter_extractor.digitizing.auto_axes import choose_frame
-        frames = self._frames()
-        panel = self.fig.panels[panel_idx]
-        marks = [(c.px, c.py) for cal in (panel.x_cal, panel.y_cal) for c in (cal.p1, cal.p2) if c]
-        if marks and frames:
-            mx = sum(x for x, _ in marks) / len(marks)
-            my = sum(y for _, y in marks) / len(marks)
-            near = lambda f: max(f.left - mx, 0, mx - f.right) + max(f.top - my, 0, my - f.bottom)
-            best = min(frames, key=near)
-            if near(best) < 40:
-                return best
-        bases = list(dict.fromkeys(self._panel_sides(p.name)[2] for p in self.fig.panels))
-        return choose_frame(frames, self._view_centre() if use_view else None,
-                            bases.index(self._panel_sides(panel.name)[2]))
+        return frame_of(self.fig, self._image, panel_idx, self._view_centre() if use_view else None)
 
     def auto_find_points(self, panels: Optional[List[int]] = None, use_view: bool = True) -> str:
-        """Find bar tops / marker centres in the frames of the given coordinate systems (default: the
-        current one) and add them to the series there that have no points yet. One undo step."""
-        from parameter_extractor.digitizing.auto_axes import AutoAxisError, find_boxes_inside
-        from parameter_extractor.digitizing.auto_detect import assign_to_series, detect_points, group_by_appearance
+        """Find bar tops / marker centres (and their error bars) in the frames of the given coordinate systems
+        (default: the current one) and add them to the series there that have no points yet. One undo step."""
         panels = [self.panel_idx] if panels is None else panels
-        by_frame = {}
-        notes: List[str] = []
-        for pi in panels:
-            try:
-                frame = self._frame_of(pi, use_view)
-            except AutoAxisError as e:
-                notes.append(f"{self.fig.panels[pi].name}: {e}")
-                continue
-            key = (frame.left, frame.top, frame.right, frame.bottom)
-            by_frame.setdefault(key, (frame, []))[1].append(pi)
-        added: List[Tuple[int, List[int]]] = []
-        for frame, group in by_frame.values():
-            # every coordinate system drawn in this frame (a second y axis shares it)
-            group = sorted(set(group) | {i for i, p in enumerate(self.fig.panels)
-                                         if i not in group and self._frame_key(i) == (frame.left, frame.top,
-                                                                                      frame.right, frame.bottom)})
-            series = [i for i, s in enumerate(self.fig.series) if min(s.panel, len(self.fig.panels) - 1) in group]
-            names = ", ".join(self.fig.panels[i].name for i in group)
-            if not series:
-                notes.append(f"{names}: no series to put points in")
-                continue
-            plot = self.fig.plan.plot_kind if self.fig.plan else ""
-            kind = ("bars" if plot == "bar" or any(self.fig.panels[i].x.categorical for i in group)
-                    else "markers" if plot in ("scatter", "scatter_with_fit") else "auto")
-            found, used = detect_points(self._rgb(), (frame.left, frame.top, frame.right, frame.bottom), kind,
-                                        exclude=find_boxes_inside(self._gray(), frame) + list(self.fig.text_boxes),
-                                        tick_numbers=self.fig.tick_numbers)
-            if not found:
-                notes.append(f"{names}: no {'bars' if used == 'bars' else 'markers'} found")
-                continue
-            assigned, note = assign_to_series(group_by_appearance(found), [self.fig.series[i].label for i in series])
-            existing = [(p.px, p.py) for i in series for p in self.fig.series[i].points]
-            counts = []
-            for k, pts in assigned.items():
-                si = series[k]
-                s = self.fig.series[si]
-                if s.points:
-                    continue                          # the user's points are never touched
-                panel = self.fig.panels[min(s.panel, len(self.fig.panels) - 1)]
-                start = len(s.points)
-                for f in sorted(pts, key=lambda f: (f.x, f.y)):
-                    if any((f.x - x) ** 2 + (f.y - y) ** 2 < max(f.size, 6) ** 2 for x, y in existing):
-                        continue
-                    x, y = snap(panel, f.x, f.y)
-                    s.points.append(DigitizedPoint(px=x, py=y))
-                if len(s.points) > start:
-                    added.append((si, list(range(start, len(s.points)))))
-                    counts.append(f"{len(s.points) - start} to '{s.label}'")
-            what = "bar tops" if used == "bars" else "markers"
-            msg = f"{names}: {len(found)} {what} found" + (f"; added {', '.join(counts)}" if counts else
-                                                           "; none added (series already have points)" if assigned
-                                                           else "")
-            notes.append(msg + (f". {note}" if note else ""))
-        if added:
-            self._undo.append(("points", added))
-        message = "\n".join(notes) + ("\nCheck every point -- right-click removes one, Ctrl+Z removes all "
-                                       "that were added." if added else "")
+        result = find_points(self.fig, self._image, panels, self._view_centre() if use_view else None,
+                             error_bars=self.auto_errors_box.isChecked())
+        if result.added:
+            self._undo.append(("points", result.added))
+        message = result.message + ("\nCheck every point and error bar -- right-click removes a point, Ctrl+Z "
+                                    "removes all that were added." if result.added else "")
         self.points_status.setText(message)
         self.redraw()
         return message
-
-    def _frame_key(self, panel_idx: int):
-        try:
-            f = self._frame_of(panel_idx, use_view=False)
-        except Exception:
-            return None
-        return (f.left, f.top, f.right, f.bottom)
 
     def _start_find_points(self) -> None:
         if self.series is None:
@@ -1341,7 +1268,13 @@ class DigitizerWidget(QWidget):
             xy = read_values(panel, p.px, p.py)
             self.points_table.setItem(i, 0, QTableWidgetItem("category" if xy and xy[0] is None
                                                              else f"{xy[0]:.4g}" if xy else "—"))
-            self.points_table.setItem(i, 1, QTableWidgetItem(f"{xy[1]:.4g}" if xy else "—"))
+            text = f"{xy[1]:.4g}" if xy else "—"
+            if xy and (p.err_hi_py is not None or p.err_lo_py is not None):     # the error bar, as read
+                ends = [read_values(panel, p.px, e) for e in (p.err_hi_py, p.err_lo_py)]
+                plus = f"+{ends[0][1] - xy[1]:.3g}" if ends[0] else ""
+                minus = f"−{xy[1] - ends[1][1]:.3g}" if ends[1] else ""
+                text += f" ({'/'.join(x for x in (plus, minus) if x)})"
+            self.points_table.setItem(i, 1, QTableWidgetItem(text))
 
     # ---- suggestions -------------------------------------------------------------
 
@@ -1385,34 +1318,10 @@ class DigitizerWidget(QWidget):
             self.apply_plan_btn.setVisible(False)
 
     def apply_plan(self, plan: FigurePlan) -> None:
-        old_panels, old_series = self.fig.panels, self.fig.series
-        panels, series = [], []
-        for i, pp in enumerate(plan.panels or []):
-            base = old_panels[i] if i < len(old_panels) else DigitizedPanel()
-            x_cal = base.x_cal.model_copy(update={"log": pp.x.scale == "log"})
-            y_cal = base.y_cal.model_copy(update={"log": pp.y.scale == "log"})
-            panels.append(DigitizedPanel(name=pp.name, x_cal=x_cal, y_cal=y_cal, x=_with_new_column(pp.x),
-                                         y=_with_new_column(pp.y)))
-            for ps in pp.series:
-                label = ps.label + (f" [{ps.marker}]" if ps.marker and ps.marker not in ps.label else "")
-                series.append(DigitizedSeries(
-                    label=label, panel=i, initial_species=list(ps.initial_species),
-                    initial_temperature_C=ps.initial_temperature_C, initial_pH=ps.initial_pH,
-                    conditions=_with_shared(ps.conditions, plan.shared_conditions), y_column=ps.y_column,
-                    notes=ps.notes))
-        if not panels:
+        if not apply_plan_to(self.fig, plan):
             return
-        fill_concentrations(series, plan.concentrations)
-        # keep any points the user already clicked, by position in the list
-        for i, s in enumerate(old_series):
-            if s.points:
-                if i < len(series):
-                    series[i].points = s.points
-                else:
-                    series.append(s.model_copy(update={"panel": min(s.panel, len(panels) - 1)}))
-        self.fig.panels, self.fig.series = panels, series
         self.panel_idx = 0
-        self.series_idx = 0 if series else -1
+        self.series_idx = 0 if self.fig.series else -1
         self._undo.clear()
         self._refresh_panels()
         self._refresh_series_list()

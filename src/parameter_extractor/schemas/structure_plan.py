@@ -13,6 +13,8 @@ from pydantic.json_schema import SkipJsonSchema
 
 # "Average" (Mickey, 2026-10-31): a result averaged over several runs whose individual values the paper doesn't give
 SetType = Literal["Independent", "Time Series", "Evaporation Cycle", "Average"]
+# what kind of paper it is (Mickey, 2026-11-03): anything but 'experimental' with no rows skips the extraction steps
+PaperKind = Literal["experimental", "review", "perspective", "theory", "abstract", "other"]
 
 
 # The model answers with short field names (aliases; 2026-11-03: the plan's field names were ~20% of its output
@@ -26,6 +28,9 @@ class PlannedSample(BaseModel):
     model_config = _SHORT
     sample_label: str = Field(alias="label", description="Short human-readable label, e.g. 't = 97.3 h'")
     duration_hr: Optional[float] = Field(default=None, alias="hr", description="The sample's duration in hours.")
+    # a duration stated as a range ('3-7 days'): hr the lower end, hi the upper (both in hours) -> duration_range_hr
+    duration_hr_high: Optional[float] = Field(default=None, alias="hi",
+                                              description="Upper end of a duration given as a range, in hours.")
     source: str = Field(alias="src", description="e.g. 'Table 1, Na+ 3.33 mol dm-3 row, 1st time point'")
 
 
@@ -51,6 +56,11 @@ class PlannedSet(BaseModel):
 class StructurePlan(BaseModel):
     model_config = _SHORT
     paper_id: SkipJsonSchema[str] = ""            # not used; not asked of the model
+    paper_kind: PaperKind = Field(
+        default="experimental", alias="kind",
+        description="'experimental' if the paper reports experiments of its own (results in tables, figures or "
+                    "text); 'review', 'perspective', 'theory' (models / calculations only), 'abstract' (a short "
+                    "conference abstract without data) or 'other' otherwise.")
     experiment_sets: List[PlannedSet] = Field(alias="sets")
     total_planned_rows: int = Field(alias="n_rows", description="Sum of len(samples) across all sets -- sanity check.")
     excluded_data: List[str] = Field(

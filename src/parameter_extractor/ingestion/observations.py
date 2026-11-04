@@ -50,6 +50,7 @@ QUOTE_IN_PAPER = {"in text": "yes", "table image": "table image", "not found": "
 # Unit from the column name, following the template's naming conventions.
 # Compound units first: "_mL_min" must win over "_min".
 _SUFFIX_UNITS = [
+    (r"_per_M_hr$", "M-1h-1"), (r"_per_hr$", "h-1"), (r"_mM_hr$", "mM/h"), (r"_kJ_mol$", "kJ/mol"),   # kinetics
     (r"_mL_min$", "mL/min"), (r"_%yield$", "%"), (r"_%recovered$", "%"), (r"_pct$", "%"), (r"_mM$", "mM"), (r"_C$", "°C"), (r"_hr$", "h"),
     (r"_h$", "h"), (r"_sec$", "s"), (r"_min$", "min"), (r"_bar$", "bar"), (r"_mL$", "mL"),
     (r"_uL$", "µL"), (r"_g$", "g"), (r"_nm$", "nm"), (r"_rpm$", "rpm"), (r"_K$", "K"),
@@ -64,6 +65,7 @@ _UNITLESS = re.compile(r"(^|_)pH($|_(err|range|alt|avg|mode|lim|prior)|_?\d)")
 def unit_for_column(column: str) -> str:
     if re.search(r"(method|desc)$", column):
         return ""                                  # text about another column's value (initial_pH_alt1_method)
+    column = re.sub(r"_err_(?:plus|minus)$", "", column)    # an uncertainty is in its value's unit
     if _UNITLESS.search(column):
         return "pH"
     for pattern, unit in _SUFFIX_UNITS:
@@ -106,8 +108,11 @@ def observations_to_records(observations: List[Observation]) -> List[dict]:
     return list(records.values())
 
 
-def write_observations_csv(observations: List[Observation], out_path: Path, order=None) -> None:
-    """One line per value; `order` (column_order.ColumnOrder) fills each value's category."""
+def write_observations_csv(observations: List[Observation], out_path: Path, order=None,
+                           renames: Optional[dict] = None) -> None:
+    """One line per value; `order` (column_order.ColumnOrder) fills each value's category; `renames` = columns
+    written under a compound's active name (compound_names.renames_for)."""
+    renames = renames or {}
     with open(out_path, "w", newline="") as f:
         writer = csv.writer(f)
         writer.writerow(OBSERVATION_FIELDS)
@@ -115,4 +120,5 @@ def write_observations_csv(observations: List[Observation], out_path: Path, orde
             d = o.model_dump()
             if order is not None:
                 d["category"] = order.label_of(o.column)
+            d["column"] = renames.get(o.column, o.column)
             writer.writerow(["" if d[k] is None else d[k] for k in OBSERVATION_FIELDS])

@@ -214,8 +214,9 @@ class QueueWindow(QDialog):
         from parameter_extractor.pipeline import plan_figure
         extraction = paper.extraction
         bridge = PlanBridge(lambda fig, ex=extraction: plan_figure(ex, fig), parent=self)
-        self._review, self._review_paper = FigureReviewDialog(extraction.figures, extraction.vocab["all_columns"],
-                                                              plan_bridge=bridge, parent=self), paper
+        self._review, self._review_paper = FigureReviewDialog(
+            extraction.figures, extraction.vocab["all_columns"], plan_bridge=bridge, parent=self,
+            auto_digitize=extraction.ctx.config.auto_digitize_figures), paper
         self._review.setWindowTitle(f"Figures -- {paper.label} ({paper.prefix})")
         self._review.finished.connect(self._review_closed)
         self._review.set_background_status("The papers' text extraction runs in the background.")

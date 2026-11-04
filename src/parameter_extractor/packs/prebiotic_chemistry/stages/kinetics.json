@@ -1,0 +1,80 @@
+{
+  "name": "kinetics",
+  "label": "Kinetics",
+  "description": "Rate constants, half-lives and activation energies the paper reports for its experiments (runs when the paper mentions them).",
+  "origin": "kinetics",
+  "schema_name": "KineticsResults",
+  "system_prompt": "Extract reaction kinetics. Report only what the paper states.",
+  "trigger": {
+    "keywords": [
+      "rate constant",
+      "rate constants",
+      "half-life",
+      "half-lives",
+      "half life",
+      "kobs",
+      "k_obs",
+      "activation energy",
+      "Arrhenius",
+      "pseudo-first-order",
+      "first-order rate",
+      "second-order rate",
+      "rate coefficient",
+      "rate coefficients"
+    ]
+  },
+  "per": "sample",
+  "set_word": "experiment",
+  "intro": "This paper reports reaction kinetics. For each experiment set (and sample) in the structure plan below, extract the kinetic quantities the paper states for it: rate constants, half-lives, activation energies, and what they describe.",
+  "error_suffixes": [
+    "_err_plus",
+    "_err_minus"
+  ],
+  "suffix_separator": "_",
+  "table_images": true,
+  "open_ended": true,
+  "open_ended_hint": "Further rate constants of a model with several reactions (k1, k2, ... or a1, b1, ...): one entry each, named by the constant and what it describes as the paper writes it (e.g. 'k1 Gly -> GlyGly', 'a2 (GG -> DKP)'), value with its unit as printed, category kinetics. Not concentrations or yields (another step records them), not the experimental conditions.",
+  "parameters": [
+    {
+      "column": "rate_constant_first_order_per_hr",
+      "unit": "h-1",
+      "uncertainties": true,
+      "description": "the observed (pseudo-)first-order rate constant of the row's main reaction (k, k_obs), in its printed unit (s-1, min-1, h-1)."
+    },
+    {
+      "column": "rate_constant_second_order_per_M_hr",
+      "unit": "M-1 h-1",
+      "uncertainties": true,
+      "description": "a second-order rate constant of the row's main reaction (M-1 s-1, L mol-1 s-1)."
+    },
+    {
+      "column": "half_life_hr",
+      "unit": "h",
+      "uncertainties": true,
+      "description": "the half-life of the reactant or product the paper names (say which in n)."
+    },
+    {
+      "column": "activation_energy_kJ_mol",
+      "unit": "kJ/mol",
+      "uncertainties": true,
+      "description": "activation energy (Ea, from an Arrhenius plot), kJ/mol or kcal/mol as printed."
+    },
+    {
+      "column": "rate_constant_reaction",
+      "unit": "",
+      "kind": "text",
+      "description": "which reaction or species the rate constant / half-life above describes, as the paper names it (at most 10 words), e.g. 'ImpA hydrolysis', 'Gly dimerization'."
+    },
+    {
+      "column": "kinetic_model",
+      "unit": "",
+      "kind": "text",
+      "description": "the rate law or model the values come from, briefly (e.g. 'pseudo-first-order fit', 'consecutive reactions A -> B -> C, fitted', 'initial rates')."
+    }
+  ],
+  "rules": [
+    "Give rate constants in the unit printed (`u`), e.g. 's-1' or 'M-1 s-1'; the app converts. A rate constant whose order isn't 1 or 2 (or isn't stated) goes in `other` with its unit.",
+    "A rate measured per time interval for one species (mM/h) is a concentration change, not a rate constant: leave it out (the chemistry step records it).",
+    "Values of a fitted model of several reactions: the main or first constant in the parameters, the rest in `other`, one entry each, with the reaction they describe."
+  ]
+}

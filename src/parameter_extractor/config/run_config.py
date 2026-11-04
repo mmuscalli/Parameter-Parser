@@ -76,6 +76,11 @@ class RunConfig:
     figure_suggestions_on_paper: bool = False
     save_images: bool = True
     save_all_figure_images: bool = False
+    # Digitize EASY figures without the editor (Mickey, 2026-11-03; digitizing/auto_figure.py): a figure chosen for
+    # digitizing whose suggestions parse cleanly (bar chart or scatter plot, axes calibrated, every point sorted
+    # into a series) is saved as it is; the rest open in the digitizer. Unattended runs (CLI, paper queue) then
+    # request suggestions for every figure (about $0.03-0.10 each on Standard) and keep the easy ones.
+    auto_digitize_figures: bool = False
     # Run the extraction steps after the structure plan this many times (1-3) and keep each value by vote
     # (voting.py): another lever for cheap runs -- Economy with 2-3 passes recovers values a single pass
     # drops at random. Each extra pass adds the cost of those steps again (the paper is read from cache).

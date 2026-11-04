@@ -36,17 +36,27 @@ STAGE_FOR_MODEL = {"StructurePlan": "structure_planner", "PaperMetadata": "metad
                    "WetDryConditions": "wet_dry", "TermSearch": "term_search"}
 
 
+def _spec_stages() -> dict:
+    """{schema name: stage name} of the active pack's optional stages."""
+    from parameter_extractor.stages.optional import load_specs
+    return {spec.schema_name: name for name, spec in load_specs().items()}
+
+
 def make_replay(replay_dir: Path):
     """An api_client._send stand-in that returns the saved responses from a reference run."""
     def send(ctx, *, model, system_prompt, content, response_model, stop_reason="end_turn"):
         name = response_model.__name__        # optional stages: PlanetParametersResult -> planet_parameters
-        stage = STAGE_FOR_MODEL.get(name) or re.sub(r"(?<!^)(?=[A-Z])", "_", name.removesuffix("Result")).lower()
+        stage = STAGE_FOR_MODEL.get(name) or _spec_stages().get(name) or re.sub(r"(?<!^)(?=[A-Z])", "_", name.removesuffix("Result")).lower()
         if stage == "experimental_conditions" and not (replay_dir / f"{stage}.output.json").is_file():
             # recorded before the methodology step became the experimental_conditions stage (2026-10-22)
             from parameter_extractor.stages.conditions_migration import conditions_from_methodology
             audit = json.loads((replay_dir / "methodology.audit.json").read_text())
             output = json.dumps(conditions_from_methodology(
                 json.loads((replay_dir / "methodology.output.json").read_text())))
+        elif not (replay_dir / f"{stage}.audit.json").is_file() and stage in _spec_stages().values():
+            # an optional stage added after the run was recorded (kinetics, 2026-11-03): it found nothing then
+            audit = {"raw_response": {}, "input_tokens": 0, "output_tokens": 0}
+            output = response_model().model_dump_json()
         else:
             audit = json.loads((replay_dir / f"{stage}.audit.json").read_text())
             output = (replay_dir / f"{stage}.output.json").read_text()
@@ -88,12 +98,15 @@ def test_replay_reproduces_committed_csv():
         # metadata runs alongside the structure step, then conditions and chemistry together;
         # each is reported as it finishes, so their order varies -- the step count doesn't
         steps = [e for e in events if e.stage != "parallel"]
-        assert [e.step for e in steps] == [1, 2, 3, 4, 5, 6] and all(e.total_steps == 6 for e in events)
+        # (+ the kinetics step since 2026-11-03: eder1994 reports rate constants; recorded before it existed, so
+        # replayed as finding nothing)
+        # (the count grows to 7 once the structure plan shows the keyword-triggered step will run)
+        assert [e.step for e in steps] == [1, 2, 3, 4, 5, 6, 7] and [e.total_steps for e in steps] == [6, 6] + [7] * 5
         assert [e.stage for e in steps][:2] == ["parse", "structure_planner"] and steps[-1].stage == "assemble"
-        assert sorted(e.stage for e in steps[2:5]) == ["chemistry", "experimental_conditions", "metadata"]
+        assert sorted(e.stage for e in steps[2:6]) == ["chemistry", "experimental_conditions", "kinetics", "metadata"]
         assert any(e.stage == "parallel" and "experimental conditions" in e.message for e in events)
         assert [u.stage for u in result.usage] == ["structure_planner", "metadata", "experimental_conditions",
-                                               "chemistry"]
+                                               "kinetics", "chemistry"]
 
         audits = [json.loads((REPLAY_DIR / f"{s}.audit.json").read_text())
                   for s in STAGE_FOR_MODEL.values() if (REPLAY_DIR / f"{s}.audit.json").exists()]

@@ -108,7 +108,7 @@ def test_structure_plan_short_names():
     assert StructurePlan.model_validate(saved) == plan                         # full names load too
     schema = StructurePlan.model_json_schema()
     assert schema["required"] == ["sets", "n_rows"] and "paper_id" not in schema["properties"]
-    assert set(schema["$defs"]["PlannedSample"]["properties"]) == {"label", "hr", "src"}
+    assert set(schema["$defs"]["PlannedSample"]["properties"]) == {"label", "hr", "hi", "src"}
 
 
 def test_written_out_powers_in_table_cells():

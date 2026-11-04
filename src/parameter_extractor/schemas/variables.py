@@ -35,8 +35,11 @@ class NewVariable(BaseModel):
     row_ids: List[str] = Field(default_factory=list)   # rows (full_id) the value applies to
     pubchem_cid: int = 0                        # species identity, if PubChem knows the name
     pubchem_title: str = ""
+    pubchem_synonyms: List[str] = Field(default_factory=list)
     category: str = ""                          # variable_categories.py id ('' = none)
     format_note: str = ""                       # value doesn't follow its category's format
+    err_plus: float = 0.0                       # uncertainty in the value's unit (written as <column>_err_plus /
+    err_minus: float = 0.0                      # _err_minus when the variable is accepted); 0 = none
 
 
 # ---- targeted search for the user's "parameters to look for" ---------------

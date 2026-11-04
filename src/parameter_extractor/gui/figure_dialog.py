@@ -72,8 +72,13 @@ class PlanBridge(QObject):
 
 class FigureReviewDialog(QDialog):
     def __init__(self, figures: List[FigureCandidate], template_columns: List[str],
-                 plan_bridge: Optional[PlanBridge] = None, parent=None):
+                 plan_bridge: Optional[PlanBridge] = None, parent=None, auto_digitize: bool = False):
         super().__init__(parent)
+        # "Digitize easy figures automatically" (Mickey, 2026-11-03): a chosen figure whose suggestions parse
+        # cleanly (digitizing/auto_figure.py) is saved without opening the editor; the others open as usual
+        self.auto_digitize = auto_digitize
+        self.auto_done: List[str] = []
+        self._auto_reasons: Dict[str, List[str]] = {}
         self.setWindowTitle("Figures")
         self.resize(1400, 900)
         self.figures = figures
@@ -242,6 +247,10 @@ class FigureReviewDialog(QDialog):
             self._plans[fid] = (kind, value)
             self._plan_requests.pop(fid, None)
             if self.editor is not None and self.editor.fig.figure_id == fid:
+                if kind == "plan" and self.auto_digitize and self.editor._untouched() \
+                        and fid not in self._auto_reasons and self._try_auto(self.figure, value):
+                    self._next_to_digitize()
+                    return
                 self._apply_plan(fid)
         self._plan_requests[f.figure_id] = self.bridge.request(
             f, lambda plan: done("plan", plan), lambda msg: done("error", msg))
@@ -249,14 +258,35 @@ class FigureReviewDialog(QDialog):
     def _apply_plan(self, figure_id: str) -> None:
         kind, value = self._plans[figure_id]
         (self.editor.offer_plan(value) if kind == "plan" else self.editor.show_plan_error(value))
+        reasons = self._auto_reasons.get(figure_id)
+        if reasons:
+            self.editor.suggestion_label.setText(
+                "Not digitized automatically: " + "; ".join(reasons) + ".\n\n" + self.editor.suggestion_label.text())
+
+    def _try_auto(self, f: FigureCandidate, plan) -> bool:
+        """Digitize a figure from its suggestions alone; True (saved, editor skipped) when it's easy."""
+        from parameter_extractor.digitizing.auto_figure import auto_digitize, figure_for
+        try:
+            result = auto_digitize(figure_for(f), plan)
+        except Exception as e:                    # never in the way of digitizing by hand
+            self._auto_reasons[f.figure_id] = [f"automatic parsing failed ({e})"]
+            return False
+        if not result.easy:
+            self._auto_reasons[f.figure_id] = result.reasons
+            return False
+        self.digitized.append(result.figure)
+        self.auto_done.append(f.figure_id)
+        return True
 
     def _start_digitizing(self) -> None:
         f = self.figure
-        model = DigitizedFigure(figure_id=f.figure_id, number=f.number, page=f.page, caption=f.caption,
-                                render_scale=f.render_scale, page_image=f.page_image,
-                                figure_bbox=f.figure_bbox, tick_numbers=list(f.tick_numbers),
-                                text_boxes=list(f.text_boxes),
-                                supplement=f.supplement, page_label=f.page_label, prefix=f.prefix)
+        plan = self._plans.get(f.figure_id)
+        if self.auto_digitize and plan and plan[0] == "plan" and f.figure_id not in self._auto_reasons \
+                and self._try_auto(f, plan[1]):
+            self._next_to_digitize()
+            return
+        from parameter_extractor.digitizing.auto_figure import figure_for
+        model = figure_for(f)
         self.editor = DigitizerWidget(model, self.columns)
         self.digitize_layout.insertWidget(0, self.editor, 1)
         self.stack.setCurrentIndex(1)

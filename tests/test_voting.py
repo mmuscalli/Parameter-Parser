@@ -111,7 +111,8 @@ def test_three_passes_through_the_pipeline():
         result = run_pipeline(PDF, RunConfig.from_settings(api_key="x", output_dir=Path(tmp), registry_path=None,
                                                            passes=3))
         assert result.csv_path.read_text() == (REF / "expected_extracted.csv").read_text()
-        assert sorted(s for s in seen if s) == sorted([".pass1", ".pass2", ".pass3"] * 2)   # chemistry + conditions
+        # chemistry, conditions + kinetics (eder1994 mentions rate constants; recorded before that step: empty)
+        assert sorted(s for s in seen if s) == sorted([".pass1", ".pass2", ".pass3"] * 3)
         for stage in ("chemistry", "experimental_conditions"):
             assert all((result.run_dir / f"{stage}.pass{i}.output.json").is_file() for i in (1, 2, 3))
             assert json.loads((result.run_dir / f"{stage}.audit.json").read_text())["voted_from"] == 3

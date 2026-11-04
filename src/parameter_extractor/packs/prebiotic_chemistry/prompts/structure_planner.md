@@ -9,13 +9,13 @@ distinct condition is a "set"; each time point or replicate within a set is a
 "sample". Getting this grouping right matters more than any individual value,
 because every later stage builds rows on top of this skeleton.
 
-Answer format (short field names): `sets` -- one entry per set: `set` its
+Answer format (short field names): `kind` what the paper is (below), `sets` -- one entry per set: `set` its
 label, `type` the set type, `varies` what distinguishes it from the other
 sets, `src` the table or section it comes from, `ds` the original reference
 when the data is reproduced from another publication ('' otherwise), and
-`samples` -- one per row: `label`, `hr` its duration in hours, `src` where
-it is, briefly ('Table 1, row 3'). Then `n_rows`, `excluded` (each a short
-reason) and `notes`.
+`samples` -- one per row: `label`, `hr` its duration in hours (`hi` the upper
+end when the duration is a range), `src` where it is, briefly ('Table 1, row
+3'). Then `n_rows`, `excluded` (each a short reason) and `notes`.
 
 Guidance:
 - A table with repeated sub-blocks (e.g. "Conditions: Na+ 3.33 mol dm-3, 81 C"
@@ -37,7 +37,9 @@ Guidance:
   the whole table or experiment (a caption's "heated at 90 °C for 3 hours").
   For wet-dry cycles it is the TOTAL time up to the end of that cycle: 24 h
   cycles -> Cycle 1 = 24, Cycle 2 = 48, Cycle 3 = 72 (cycles of different
-  lengths add up).
+  lengths add up). A duration printed as a range ("3-7 days", "20-144 h"):
+  `hr` the lower end and `hi` the upper end, both in hours -- never one end
+  alone or the midpoint.
 - `ds`: for each set, '' if the data was measured in this paper.
   If the paper presents data from another publication -- a review, a
   comparison table, a redrawn figure, or results quoted from earlier work
@@ -45,18 +47,43 @@ Guidance:
   the original reference as the paper's reference list states it (authors,
   year, journal, reference number). This matters: those values aren't this
   paper's measurements.
-- Plan rows ONLY for results given in the paper's TABLES. Results that
-  appear only in the running text ("after 10 cycles at 70% RH the total
-  yield was 17.33%") get no row: such statements usually lack most of the
-  experimental context the paper's tabulated experiments have. List them in
-  `excluded` with a short reason. Results that only exist as points in
-  a figure are out of scope for this pass too -- the user digitizes figures
-  separately -- so list them in `excluded` as well.
+- Plan rows for results given in the paper's TABLES. Results stated only in
+  the running text or in a figure caption get rows too, but ONLY when the
+  paper gives that experiment's conditions completely enough for a useful row:
+  its starting composition (what reacted, at what concentration or amount)
+  AND its temperature AND its duration (or a sampling time), stated for that
+  experiment or for all of the paper's experiments. "Over 12 h, the CMP yield
+  was 1.1 % ± 0.73 % (12 repeats) at 60 °C with 240 mM cytidine & ammonium
+  dihydrogen phosphate, 2.4 M urea" is a row (an Average set when repeats are
+  averaged); "after 10 cycles at 70% RH the total yield was 17.33%" with no
+  composition is not. A text result's `src` is its section and paragraph or
+  the caption ('Figure 7 caption'). List text results without complete
+  conditions in `excluded` with a short reason. Results that only exist as
+  points in a figure are out of scope for this pass -- the user digitizes
+  figures separately -- so list them in `excluded` as well.
+- Kinetics are results: a table (or a text result with complete conditions)
+  of reaction rates, rate constants, half-lives or activation energies
+  measured for the paper's experiments gets rows like any other result --
+  one per condition, or per time interval when the table gives rates per
+  interval (`hr` the interval's start, `hi` its end). Rates from a fitted
+  model of several reactions (k1, k2, ... for one experiment) are one row for
+  that experiment.
+- Tables of properties of single molecules (diffusion or Soret coefficients,
+  pKa values, extinction coefficients) and compositions of product fractions
+  analysed after a reaction (% of each isomer within the dimer fraction) are
+  not rows: list them in `excluded`.
+- `kind`: "experimental" when the paper reports experiments of its own (even
+  if only in figures); "review", "perspective", "theory" (models or
+  calculations only), "abstract" (a short conference abstract without data)
+  or "other" otherwise. A paper that isn't experimental gets no sets (data it
+  reproduces from other papers is listed in `excluded`) -- the extraction
+  steps are then skipped. A comparison table inside an experimental paper is
+  planned as usual, with `ds` for the rows from other publications.
 - Compound numbers and citations: a bold number after a compound name is its label ("nicotinamide
   6"), and digits printed inline after a word are usually reference citations ("ammonia.14") -- not
   conditions or samples. In set labels name compounds by name, not by number.
-- If NO table in the paper reports results (e.g. all results are in
-  figures), return no sets; the user can still digitize the figures.
+- If no table or text result qualifies (e.g. all results are in figures),
+  return no sets; the user can still digitize the figures.
 - If you are not confident a figure doesn't duplicate tabulated data, say so
   in `notes` rather than guessing.
 - If page images are attached, they are rasterized renders of the pages

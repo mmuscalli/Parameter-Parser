@@ -111,6 +111,20 @@ def is_peptide_column(column: str) -> bool:
     return len(set(m.group("seq").split("-"))) > 1
 
 
+_OLIGO_COLUMN = re.compile(r"(?:initial|sampled)_\d{1,3}mer_d?[ACGTU]+(?:_avg)?_(?:mM|%yield)")
+
+
+def is_oligonucleotide_column(column: str) -> bool:
+    """Columns of the nucleic-acid naming convention (names.oligonucleotide_name; Mickey, 2026-11-03):
+    '<role>_<n>mer_<letters>_<mM|%yield>' -- 'sampled_4mer_A_%yield', 'sampled_12mer_dT_mM'."""
+    m = _OLIGO_COLUMN.fullmatch(column)
+    if not m:
+        return False
+    from parameter_extractor.names import oligonucleotide_match
+    letters = column.split("mer_", 1)[1].rsplit("_", 1)[0].removesuffix("_avg")
+    return oligonucleotide_match(f"1mer_{letters}") is not None
+
+
 def default_arxiv_cache_dir() -> Path:
     """arXiv lookups and full texts kept between runs (ingestion/arxiv_source.LookupCache)."""
     return default_registry_path().parent / "arxiv_cache"
@@ -145,6 +159,7 @@ class _Store:
         self.species_ids: Dict[str, str] = {}     # PubChem CID -> species name accepted in a review
         self.builtin: Dict[str, Dict[str, dict]] = {}   # area -> built-in column -> {type, category} chosen
         self.categories: Dict[str, dict] = {}     # area -> {"added": [...], "changed": {id: {...}}}
+        self.compounds: Dict[str, Dict[str, dict]] = {}   # area -> name -> {cid, synonyms, active} (compound_names)
         self.changed = False
         if path and path.is_file():
             data = json.loads(path.read_text())
@@ -155,6 +170,7 @@ class _Store:
             self.species_ids = data.get("species_ids", {})
             self.builtin = data.get("builtin_columns", {})
             self.categories = data.get("categories", {})
+            self.compounds = data.get("compounds", {})
 
 
 class VariableRegistry:
@@ -221,7 +237,11 @@ class VariableRegistry:
             return False
         if column in self._base_set or column in self.added_columns:
             return True
-        if is_peptide_column(column):
+        if is_peptide_column(column) or is_oligonucleotide_column(column):
+            return True
+        # the uncertainty of a known value ('<column>_err_plus' / '_err_minus', the prebiotic pack's naming)
+        m = re.fullmatch(r"(.+)_err_(?:plus|minus)", column)
+        if m and self.is_known_column(m.group(1)):
             return True
         # a range of a known quantity ('<name>_range_<unit>', 'low:high') is the same variable (2026-10-31)
         if "_range" in column:
@@ -397,6 +417,40 @@ class VariableRegistry:
             self.species_ids[str(cid)] = name
             self._changed = True
 
+    # ---- compound names (compound_names.py; the Compounds tab) ----------------------
+
+    def compounds(self) -> Dict[str, dict]:
+        """{default name: {cid, synonyms, active, area}} remembered for this pack or every pack."""
+        out = {}
+        for area in (STANDARD, self.pack_id):
+            for name, info in self._store.compounds.get(area, {}).items():
+                out[name] = {**info, "area": area}
+        return out
+
+    def remember_compound(self, name: str, cid: int = 0, synonyms=None, area: str = "") -> None:
+        """A compound accepted in a review: its paper name stays the default (and active) name; PubChem's
+        synonyms are kept as the other names it can be shown under."""
+        if not name:
+            return
+        entry = self._store.compounds.setdefault(area or self.pack_id, {}).setdefault(name, {})
+        before = dict(entry)
+        if cid:
+            entry["cid"] = int(cid)
+        if synonyms:
+            entry["synonyms"] = [n for n in dict.fromkeys(synonyms) if n.lower() != name.lower()]
+        if entry != before:
+            self._changed = True
+
+    def set_active_name(self, name: str, active: str) -> None:
+        """The name compound `name` is written under in column names ('' or the default name = the default)."""
+        area = next((a for a in (self.pack_id, STANDARD) if name in self._store.compounds.get(a, {})), self.pack_id)
+        entry = self._store.compounds.setdefault(area, {}).setdefault(name, {})
+        self._set_field(entry, "active", "" if active == name else active)
+        if not entry:
+            del self._store.compounds[area][name]
+            if not self._store.compounds[area]:
+                del self._store.compounds[area]
+
     # ---- managing local additions (the "Remembered variables" window) ------------
 
     @staticmethod
@@ -480,5 +534,7 @@ class VariableRegistry:
             data["builtin_columns"] = st.builtin
         if st.categories:
             data["categories"] = st.categories
+        if st.compounds:
+            data["compounds"] = st.compounds
         self.path.write_text(json.dumps(data, indent=2, ensure_ascii=False, sort_keys=True))
         self._changed = False

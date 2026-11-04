@@ -109,6 +109,9 @@ class AxisVariable(BaseModel):
                                                          "gives its category as a condition in that column.")
     # the user's rounding in the digitizer (values snap to this many decimals); not the model's
     decimals: SkipJsonSchema[Optional[int]] = None
+    # ... and a value within this many pixels of a whole number becomes that whole number (0 = off): bars ending
+    # on whole lengths read 2.1 from a click or an axis line a few pixels off, while 3.5 averages stay (2026-11-03)
+    whole_within_px: SkipJsonSchema[float] = 0.0
     # False when the user chose '(none -- not stored)' in the digitizer: no column is made up for the axis
     store: SkipJsonSchema[bool] = True
     tick_labels: List[float] = Field(
@@ -242,6 +245,10 @@ class DigitizedPanel(BaseModel):
 class DigitizedPoint(BaseModel):
     px: float
     py: float
+    # an error bar (Mickey, 2026-11-03): the pixel heights of its upper and lower ends, None when not marked;
+    # written as '<y column>_err_plus' / '_err_minus' (the minus negative), like the conditions' uncertainties
+    err_hi_py: Optional[float] = None
+    err_lo_py: Optional[float] = None
 
 
 class DigitizedSeries(BaseModel):
@@ -273,6 +280,9 @@ class DigitizedFigure(BaseModel):
     supplement: bool = False                        # see FigureCandidate
     page_label: str = ""
     prefix: str = ""
+    # digitized without the editor ("Digitize easy figures automatically", digitizing/auto_figure.py)
+    auto_digitized: bool = False
+    auto_summary: str = ""
 
     @property
     def tag(self) -> str:

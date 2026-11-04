@@ -113,6 +113,9 @@ def main() -> int:
                         help="Don't keep table crops (tables/) or figure images in the run folder")
     parser.add_argument("--all-figure-images", action="store_true",
                         help="Also keep the images of figures that weren't digitized (normally removed)")
+    parser.add_argument("--auto-figures", action="store_true",
+                        help="Digitize easy figures automatically: request suggestions for every figure and keep "
+                             "the bar charts / scatter plots that parse cleanly (flagged for checking)")
     parser.add_argument("--no-suggestions", action="store_true",
                         help="Don't suggest new variables: no open-ended capture of conditions without a column "
                              "(new variables are listed in one flag and new_variables.json, never added)")
@@ -167,6 +170,7 @@ def main() -> int:
                  "suggest_new_variables": not args.no_suggestions, "passes": args.passes,
                  "include_supplements": not args.no_si,
                  "save_images": not args.no_images, "save_all_figure_images": args.all_figure_images,
+                 "auto_digitize_figures": args.auto_figures,
                  "pubchem_cache_path": default_pubchem_cache_path(), "arxiv_cache_dir": default_arxiv_cache_dir()}
     if args.ads_token is not None:
         overrides["ads_token"] = args.ads_token

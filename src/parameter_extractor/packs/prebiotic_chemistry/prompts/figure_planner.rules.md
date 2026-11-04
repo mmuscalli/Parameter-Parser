@@ -4,11 +4,14 @@
   "10^3 (% Gly-Gly) per h" -> 0.001 to get % per h. Use a null column for
   derived quantities like rates, enthalpies or species-distribution
   percentages. `max_peptide_length` is for the longest peptide (amino-acid
-  residues) only: an RNA / nucleotide length -- also an axis of oligomer
-  lengths like 8, 12, 16 nt -- or any other quantity no column fits, gets a
-  null column and a `new_column` (e.g. 'max_linear_oligomer_length_nt',
-  'RNA_length_nt'); the user reviews it as a new variable. Bar charts of
-  minerals: x `categorical`, column 'solid_material_name'.
+  residues) only; the longest nucleic-acid oligomer is `max_oligomer_length_nt`
+  and all oligomers together (an oligomerization yield, %) is
+  `total_sampled_oligomers_yield`. A nucleic-acid oligomer of one length is
+  named '<n>mer_<nucleotide>' (base letter: A C G U, DNA dA dC dG dT):
+  'sampled_4mer_A_%yield', 'sampled_10mer_G_mM'. An axis of oligomer lengths
+  like 8, 12, 16 nt, or any other quantity no column fits, gets a null column
+  and a `new_column` (e.g. 'RNA_length_nt'); the user reviews it as a new
+  variable. Bar charts of minerals: x `categorical`, column 'solid_material_name'.
 - `positive_control` / `negative_control`: when the caption or text says
   which control experiments a series is compared with, give them as
   conditions (a short description, e.g. '15 mM ImpA, no mineral'), worded the

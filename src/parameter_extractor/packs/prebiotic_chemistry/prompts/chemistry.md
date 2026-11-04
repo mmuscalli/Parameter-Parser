@@ -26,7 +26,7 @@ entry per set (and sample) that has species:
 where it is, `c` confidence; and ONLY when they apply (leave them out
 otherwise): `hi` the upper end of a range, `mM` the value in mM, `cn` why there's no mM value, `b` "stock"
 and `stk` for a stock-solution concentration, `how` when the quoted words
-don't name the species, `det` for a product reported without an amount
+don't name the species, `ep` / `em` an uncertainty, `det` for a product reported without an amount
 (see below).
 
 For each species:
@@ -43,6 +43,16 @@ For each species:
   A cyclic peptide (including diketopiperazines) is "cyclo_" plus its
   residues the same way: "cyclo_Gly-Gly" for the glycine DKP,
   "cyclo_Val-Gly".
+- Nucleic-acid oligomers: "<n>mer_<nucleotide>" -- n the chain length, the
+  nucleotide by its base letter, RNA "A" "C" "G" "U", DNA "dA" "dC" "dG"
+  "dT": "4mer_A" for an adenylate tetramer / (pA)4, "43mer_U", "12mer_dT".
+  A mixed oligomer by its letters as the paper gives them (a sequence, or a
+  composition when the order wasn't determined): "3mer_AAU", "3mer_dATG".
+  A table of oligomer lengths (columns 1, 2, 3, ... under "% oligomer")
+  gives one species per length: "1mer_A", "2mer_A", ... All oligomers
+  together (an oligomerization yield, "RNA oligomers") is named "oligomers";
+  the longest oligomer detected is not a species (another step records it).
+  Polymers of unstated length keep their names (poly(A)).
 - Give the concentration as printed (`v` + `u`). Add `mM` only when the
   conversion is unambiguous (mol dm-3 -> mM is x1000; mass/volume needs a
   molecular weight -- only for well-known compounds; otherwise leave `mM`
@@ -137,9 +147,19 @@ For each species:
   e.g. "5-10") -- never one end alone or the midpoint.
 - Reported percent yields (e.g. "% (Gly)2") go in `v` with the unit as
   stated in `u` (no `mM`).
+- Uncertainties: a value given with an error ("29.18 ± 2.40", "65 (±3)%", s.d.
+  or error bars stated in numbers) keeps it -- in a table, copy the cell as
+  printed (the app reads the ±); in `groups`, `ep` the upper and `em` the lower
+  uncertainty (negative) in the value's unit: "29.18 ± 2.40 mM" -> v 29.18,
+  ep 2.40, em -2.40. Leave both out when none is given.
 - A percentage of a STARTING material left over ("Recovered nicotinamide (%)",
   "unreacted 4"): role sampled, `meas` "recovered" (on the table column or the species) -- it
   isn't a yield.
+- A RATE of change of a species' concentration (a table of "DAP (mM/h)" per
+  time interval, "consumption rate of ImpA 0.2 mM h-1"): role sampled, `meas`
+  "rate", `u` as printed, negative for consumption as printed. Rate
+  CONSTANTS (k, k_obs, half-lives) are not species values: another step
+  records them.
 - A RATIO between products ("Ratio ribo : arabino" = II : III): role sampled, `meas` "ratio", `u`
   "ratio", named by what it compares ("cytidine 2':3'-cyclic phosphate : aracytidine 3'-phosphate").
 - Do not extract values that only appear as a point on a scatter plot/figure

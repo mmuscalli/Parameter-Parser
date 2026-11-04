@@ -30,6 +30,15 @@ _UNITS: Dict[str, Tuple[str, float]] = {
     "mL/min": ("flow", 1.0), "µL/min": ("flow", 1e-3), "L/min": ("flow", 1000.0), "mL/h": ("flow", 1 / 60),
     "rpm": ("rate", 1.0),
     "nt": ("residues", 1.0),          # oligomer lengths in nucleotides (longest product detected)
+    # kinetics (Mickey, 2026-11-03): first- and second-order rate constants, rates of change, activation energies
+    "h-1": ("inverse_time", 1.0), "min-1": ("inverse_time", 60.0), "s-1": ("inverse_time", 3600.0),
+    "d-1": ("inverse_time", 1 / 24),
+    "M-1h-1": ("second_order", 1.0), "M-1min-1": ("second_order", 60.0), "M-1s-1": ("second_order", 3600.0),
+    "mM-1h-1": ("second_order", 1000.0), "mM-1s-1": ("second_order", 3.6e6),
+    "mM/h": ("conc_rate", 1.0), "M/h": ("conc_rate", 1000.0), "µM/h": ("conc_rate", 1e-3),
+    "mM/min": ("conc_rate", 60.0), "µM/min": ("conc_rate", 0.06), "M/s": ("conc_rate", 3.6e6),
+    "mM/s": ("conc_rate", 3600.0), "µM/s": ("conc_rate", 3.6), "nM/s": ("conc_rate", 3.6e-3),
+    "kJ/mol": ("molar_energy", 1.0), "kcal/mol": ("molar_energy", 4.184), "J/mol": ("molar_energy", 1e-3),
     "%": ("fraction", 1.0),
     "mol": ("amount", 1000.0), "mmol": ("amount", 1.0), "µmol": ("amount", 1e-3), "nmol": ("amount", 1e-6),
     "°C": ("temperature", 1.0), "K": ("temperature", 1.0), "°F": ("temperature", 1.0),
@@ -37,6 +46,14 @@ _UNITS: Dict[str, Tuple[str, float]] = {
 
 # spellings seen in papers -> canonical unit (matched after normalise_unit_text)
 _ALIASES = {
+    "hr-1": "h-1", "/h": "h-1", "/hr": "h-1", "perh": "h-1", "/min": "min-1", "/s": "s-1", "sec-1": "s-1",
+    "/d": "d-1", "day-1": "d-1",
+    "m-1h-1": "M-1h-1", "m-1s-1": "M-1s-1", "m-1min-1": "M-1min-1", "l/mol/s": "M-1s-1", "lmol-1s-1": "M-1s-1",
+    "dm3mol-1s-1": "M-1s-1", "mm-1s-1": "mM-1s-1", "mm-1h-1": "mM-1h-1",
+    "mmh-1": "mM/h", "mm/hr": "mM/h", "mmol/l/h": "mM/h", "mmoll-1h-1": "mM/h", "mmin-1": "M/min",
+    "ms-1": "M/s", "mol/l/s": "M/s", "moll-1s-1": "M/s", "µmmin-1": "µM/min", "µmh-1": "µM/h", "µms-1": "µM/s",
+    "nms-1": "nM/s", "mmmin-1": "mM/min", "mms-1": "mM/s",
+    "kjmol-1": "kJ/mol", "kj/mol": "kJ/mol", "kcalmol-1": "kcal/mol", "kcal/mol": "kcal/mol", "jmol-1": "J/mol",
     "m": "M", "mol/l": "M", "moll-1": "M", "moldm-3": "M", "mol/dm3": "M", "mol·dm-3": "M", "molar": "M",
     "mm": "mM", "mmol/l": "mM", "mmoll-1": "mM", "mmoldm-3": "mM", "millimolar": "mM",
     "µm": "µM", "umol/l": "µM", "µmol/l": "µM", "µmoldm-3": "µM", "um": "µM",
@@ -65,7 +82,8 @@ _ALIASES = {
 # column unit (observations.unit_for_column) -> canonical unit
 _COLUMN_UNITS = {"mM": "mM", "°C": "°C", "h": "h", "s": "s", "min": "min", "bar": "bar", "mL": "mL",
                  "µL": "µL", "g": "g", "nm": "nm", "rpm": "rpm", "K": "K", "%": "%", "mL/min": "mL/min",
-                 "µm": "µm", "mm": "mm", "cm": "cm", "nt": "nt"}
+                 "µm": "µm", "mm": "mm", "cm": "cm", "nt": "nt",
+                 "h-1": "h-1", "M-1h-1": "M-1h-1", "mM/h": "mM/h", "kJ/mol": "kJ/mol"}
 
 
 def normalise_unit_text(text: str) -> str:

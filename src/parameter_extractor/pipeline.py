@@ -36,7 +36,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import asdict, dataclass, field
 from datetime import datetime
 from pathlib import Path
-from typing import Callable, Dict, List, Optional, Sequence
+from typing import Callable, Dict, List, Optional, Sequence, Tuple
 
 from parameter_extractor.calculators.peptide_totals import fill_total_peptide_yield
 from parameter_extractor.calculators.amounts import VOLUME_COLUMN, apply_detection, derive_from_amounts, split_totals
@@ -253,6 +253,8 @@ class Extraction:
     tables: List[dict] = field(default_factory=list)         # table crops for the Tables tab (table_finder.py)
     ambient_notes: List[str] = field(default_factory=list)   # ambient conditions filled in (calculators/ambient.py)
     abbreviations: Dict[str, str] = field(default_factory=dict)  # species: full name -> the paper's abbreviation
+    skipped_kind: str = ""      # a review / perspective / theory paper / abstract: the extraction steps were skipped
+    auto_figure_notes: List[str] = field(default_factory=list)   # figures not digitized automatically, and why
     terms: List[str] = field(default_factory=list)           # parameters to look for (focus terms)
     always_on: set = field(default_factory=set)              # optional stages that always run
     structure_ready: threading.Event = field(default_factory=threading.Event)
@@ -449,25 +451,35 @@ def extract_steps(ex: "Extraction") -> "Extraction":
             raise _all_requests(running, e) from None
         ex.structure_ready.set()
 
+        # a review, perspective, theory paper or abstract with no rows of its own: nothing for the extraction steps
+        # (Mickey, 2026-11-03: they cost a full run); a search for the user's own terms still runs
+        kind = getattr(ex.structure, "paper_kind", "experimental")
+        skip = kind != "experimental" and not ex.structure.experiment_sets
+        if skip:
+            ex.skipped_kind = kind
+            ctx.total_steps -= pack.uses("methodology") + pack.uses("chemistry") + len(always_on)
+            ctx.note("skipped", f"The paper is a {kind}, with no experiments of its own: extraction steps skipped")
+
         # everything else depends only on the structure: run it all at once
         pack = packs.current()
-        if pack.uses("methodology"):
+        if pack.uses("methodology") and not skip:
             running["methodology"] = pool.submit(run_methodology_extraction, ctx, text, ex.structure)
         passes = 1 if config.handoff_dir else max(1, min(MAX_PASSES, config.passes or 1))
         if passes > 1:
             ctx.note("passes", f"{passes} passes of each extraction step, values kept by vote")
-        if pack.uses("chemistry"):
+        if pack.uses("chemistry") and not skip:
             running["chemistry"] = pool.submit(
                 _voted, ctx, "chemistry", passes, run_chemistry_extraction,
                 (ctx, text, ex.structure, vocab["species_names"]), {"table_images": table_images}, vote_chemistry)
-        if pack.uses("fit_models") and config.optional_stages.get("fit_models", "auto") != "off":
+        if pack.uses("fit_models") and config.optional_stages.get("fit_models", "auto") != "off" and not skip:
             ctx.total_steps += 1
             running["fit_models"] = pool.submit(run_fit_models, ctx, text, ex.structure, table_images)
         if terms:
             columns = VariableRegistry(config.registry_path).known_columns()
             running["term_search"] = pool.submit(run_term_search, ctx, terms, text, ex.structure, columns)
         # optional stages whose trigger matches this paper (decided locally, no API call)
-        specs = triggered_specs(ex.structure, parsed.text, config.optional_stages, config.suggest_new_variables)
+        specs = [] if skip else triggered_specs(ex.structure, parsed.text, config.optional_stages,
+                                                config.suggest_new_variables)
         for spec in specs:
             if spec.name not in always_on:
                 ctx.total_steps += 1
@@ -1011,6 +1023,16 @@ def finish(
         annotated = {}
         for fig in digitized:
             annotated[fig.figure_id] = str(save_digitized(fig, ctx.run_dir / "figures")[1])
+            if getattr(fig, "auto_digitized", False):
+                n_pts = sum(len(x.points) for x in fig.series)
+                n_bars = sum(p.err_hi_py is not None or p.err_lo_py is not None for x in fig.series for p in x.points)
+                paper_flags.append(Flag(
+                    "auto_digitized",
+                    f"{fig.figure_id} was digitized automatically from its suggestions: {n_pts} point(s) in "
+                    f"{len([x for x in fig.series if x.points])} series" + (f", {n_bars} with error bars" if n_bars
+                                                                            else "")
+                    + ". Check the annotated image in the Figures tab against the figure. "
+                    + (fig.auto_summary.replace("\n", " ") if fig.auto_summary else "")))
             if fig.data_source:
                 paper_flags.append(Flag(
                     "cited_data",
@@ -1023,9 +1045,12 @@ def finish(
                     f"{fig.figure_id} was digitized, but it may plot the same data as a table "
                     f"({fig.plan.duplicate_note or 'see the figure plan'}). Check for duplicate rows."))
             n_points = sum(len(s.points) for s in fig.series)
-            figure_summary.append({"figure_id": fig.figure_id, "status": "digitized",
+            figure_summary.append({"figure_id": fig.figure_id,
+                                   "status": "digitized automatically" if getattr(fig, "auto_digitized", False)
+                                   else "digitized",
                                    "series": len([s for s in fig.series if s.points]),
                                    "points": n_points, "annotated_image": annotated[fig.figure_id]})
+    paper_flags += [Flag("figure_problem", f"Not digitized automatically -- {note}") for note in ex.auto_figure_notes]
     done = {f["figure_id"] for f in figure_summary}
     for fig in ex.figures:
         if fig.figure_id not in done:
@@ -1072,7 +1097,11 @@ def finish(
     new_vars = collect_new_variables(ex.methodology, ex.chemistry, registry, index, ex.term_search,
                                      optional=ex.optional_list, structure=ex.structure)
     new_vars += fig_new_vars
-    if pack.uses("results_check") and not _has_results(rows, new_vars):
+    if ex.skipped_kind:
+        paper_flags.append(Flag("no_results", f"The paper was planned as a {ex.skipped_kind}, with no experiments of "
+                                              f"its own, so the extraction steps were skipped (no cost beyond planning "
+                                              f"the rows). If it does report experiments, run it again."))
+    elif pack.uses("results_check") and not _has_results(rows, new_vars):
         paper_flags.append(Flag("no_results", NO_RESULTS_MESSAGE))
     known, pending = split_known(new_vars, registry)
     accepted = []
@@ -1136,6 +1165,22 @@ def finish(
             "derived_value", f"total_sampled_peptides_yield calculated for {len(totals)} row(s) as the sum of the "
             f"peptide % yields reported for each (linear and cyclic); rows where the paper "
             f"states the total keep the stated value. Hover a value to see what was added."))
+    if pack.uses("oligomer_totals"):            # nucleic-acid oligomers: total yield, longest oligomer (calculated)
+        from parameter_extractor.calculators.oligomer_totals import fill_oligomer_totals
+        o_totals, o_lengths, o_differing = fill_oligomer_totals(rows)
+        for full_id, stated, total, listed in o_differing:
+            paper_flags.append(Flag(
+                "conflicting_values", f"Row {full_id}: the paper's total oligomer yield is {stated:g}%, but the oligomer "
+                f"yields extracted for that row add up to {total:g}% ({listed}). The stated total was kept."))
+        if o_totals or o_lengths:
+            paper_flags.append(Flag(
+                "derived_value", "Calculated from the row's oligomers ('<n>mer' columns): "
+                + "; ".join(x for x in (
+                    f"total_sampled_oligomers_yield for {len(o_totals)} row(s) as the sum of the 2-mer and longer "
+                    f"% yields" if o_totals else "",
+                    f"max_oligomer_length_nt for {len(o_lengths)} row(s) as the longest oligomer with a value"
+                    if o_lengths else "") if x)
+                + ". Rows where the paper states them keep the stated values; hover a value to see what was used."))
     archive = None
     if pack.uses("archive_validation") and config.online_checks:
         archive = _archive_check(rows, ex, ctx)
@@ -1177,7 +1222,9 @@ def finish(
     order = ColumnOrder(chosen=chosen, registry=registry)
     observations = rows_to_observations(rows)
     observations_path = ctx.run_dir / f"{ex.paper_id}_observations.csv"
-    write_observations_csv(observations, observations_path, order)
+    from parameter_extractor.compound_names import renames_for
+    write_observations_csv(observations, observations_path, order,
+                           renames=renames_for({o.column for o in observations}, registry))
     csv_path = ctx.run_dir / f"{ex.paper_id}_extracted.csv"
     write_template_csv(observations_to_records(observations), csv_path, column_categories=chosen, registry=registry)
     # every column of the dataset with its category (the dataset CSV keeps one header row)
@@ -1293,6 +1340,30 @@ def _new_variable_flags(groups: List[VariableGroup]) -> List[Flag]:
     return flags
 
 
+def auto_digitize_figures(ex: "Extraction") -> Tuple[List[DigitizedFigure], List[str]]:
+    """Unattended runs with RunConfig.auto_digitize_figures (Mickey, 2026-11-03): suggestions for every figure of
+    the paper itself (not the supplement's), kept when they parse cleanly (digitizing/auto_figure.py). Returns
+    (digitized, skipped figure ids); why the others weren't is in ex.auto_figure_notes."""
+    from parameter_extractor.digitizing.auto_figure import auto_digitize, figure_for
+    digitized, skipped = [], []
+    for fig in ex.figures:
+        if fig.supplement:
+            skipped.append(fig.figure_id)
+            continue
+        try:
+            result = auto_digitize(figure_for(fig), plan_figure(ex, fig))
+        except Exception as e:                       # one figure never stops the paper
+            ex.auto_figure_notes.append(f"{fig.figure_id}: automatic digitizing failed ({e})")
+            skipped.append(fig.figure_id)
+            continue
+        if result.easy:
+            digitized.append(result.figure)
+        else:
+            ex.auto_figure_notes.append(f"{fig.figure_id}: " + "; ".join(result.reasons))
+            skipped.append(fig.figure_id)
+    return digitized, skipped
+
+
 def run_pipeline(
     pdf_path,
     config: RunConfig,
@@ -1300,8 +1371,13 @@ def run_pipeline(
     cancel_event: Optional[threading.Event] = None,
 ) -> RunResult:
     """Fully automatic: extract and finish, with no figures digitized (figures
-    found are listed as "not digitized" in run_summary.json)."""
-    return finish(extract(pdf_path, config, on_progress, cancel_event))
+    found are listed as "not digitized" in run_summary.json) -- unless auto_digitize_figures is on: then the easy
+    ones are digitized from their suggestions."""
+    ex = extract(pdf_path, config, on_progress, cancel_event)
+    if config.auto_digitize_figures and ex.figures:
+        digitized, skipped = auto_digitize_figures(ex)
+        return finish(ex, digitized, skipped)
+    return finish(ex)
 
 
 def run_triage_only(

@@ -114,6 +114,12 @@ class SoluteEntry(BaseModel):
     concentration_high: float = Field(default=0.0, alias="hi",
                                       description="Only for a value printed as a range ('5-10 mM'): its upper end "
                                                   "(v = the lower end, same unit); leave out otherwise.")
+    # uncertainty (Mickey, 2026-11-03): '29.18 ± 2.40' -> ep 2.40, em -2.40 in the value's unit; 0 = none given
+    err_plus: float = Field(default=0.0, alias="ep",
+                            description="Only when the paper gives an uncertainty: the upper one, positive, in the "
+                                        "value's unit ('29.18 ± 2.40' -> 2.40; error bars, s.d.).")
+    err_minus: float = Field(default=0.0, alias="em",
+                             description="Only with an uncertainty: the lower one, negative ('± 2.40' -> -2.40).")
     concentration_basis: ConcentrationBasis = Field(
         default="mixture", alias="b",
         description="Leave out for the concentration in the reaction mixture itself; 'stock' for a solution "
@@ -144,12 +150,13 @@ class SoluteEntry(BaseModel):
         default=False, alias="avg",
         description="True when the value is an AVERAGE over several runs or replicates (mean, avg., 'averaged "
                     "across triplicate experiments'); leave out otherwise.")
-    measure: Literal["yield", "recovered", "ratio"] = Field(
+    measure: Literal["yield", "recovered", "ratio", "rate"] = Field(
         default="yield", alias="meas",
         description="For a sampled value only: 'recovered' when it is the % of a STARTING material left "
                     "unreacted or recovered (e.g. 'Recovered nicotinamide (%)'); 'ratio' when it is a ratio "
-                    "between products (e.g. 'ribo : arabino', name the species 'II : III'); leave out for a "
-                    "product yield or concentration.")
+                    "between products (e.g. 'ribo : arabino', name the species 'II : III'); 'rate' when it is the "
+                    "rate of change of the species' concentration (e.g. 'DAP (mM/h)', negative for consumption; "
+                    "`u` its unit as printed); leave out for a product yield or concentration.")
     detection: Literal["", "detected", "not detected"] = Field(
         default="", alias="det",
         description="Only for a 'sampled' species with no amount (v null): 'detected' when the paper lists "
@@ -168,6 +175,7 @@ class SoluteEntry(BaseModel):
     # set by ingestion/normalize.py from PubChem (pubchem.py); 0 / "" = not looked up or not found
     pubchem_cid: SkipJsonSchema[int] = 0
     pubchem_title: SkipJsonSchema[str] = ""
+    pubchem_synonyms: SkipJsonSchema[List[str]] = Field(default_factory=list)   # pubchem.useful_synonyms
 
     @property
     def variable(self) -> str:
@@ -195,6 +203,15 @@ class SoluteGroup(BaseModel):
 # were dropped before it was allowed
 _CELL = re.compile(r"^\s*([-+]?\d+(?:\.\d+)?|[-+]?\.\d+)\s*(?:[x×*·]\s*10\s*\^?\s*([-+]?\d+))?\s*%?"
                    r"\s*[a-zA-Z*†‡§#]{0,2}\s*(?:(?:±|\+/-|\+-)\s*\d+(?:\.\d+)?\s*%?\s*[a-zA-Z*]{0,2})?\s*$")
+
+
+_CELL_ERROR = re.compile(r"(?:±|\+/-|\+-)\s*(\d+(?:\.\d+)?)")
+
+
+def _cell_error(text: str) -> float:
+    """The '± x' of a table cell ('29.18 ± 2.40' -> 2.40), else 0."""
+    m = _CELL_ERROR.search(text.replace("\u2212", "-"))
+    return float(m.group(1)) if m else 0.0
 
 
 def _cell_range(text: str):
@@ -244,12 +261,13 @@ class TableColumn(BaseModel):
         default=False, alias="avg",
         description="True when the value is an AVERAGE over several runs or replicates (mean, avg., 'averaged "
                     "across triplicate experiments'); leave out otherwise.")
-    measure: Literal["yield", "recovered", "ratio"] = Field(
+    measure: Literal["yield", "recovered", "ratio", "rate"] = Field(
         default="yield", alias="meas",
         description="For a sampled value only: 'recovered' when it is the % of a STARTING material left "
                     "unreacted or recovered (e.g. 'Recovered nicotinamide (%)'); 'ratio' when it is a ratio "
-                    "between products (e.g. 'ribo : arabino', name the species 'II : III'); leave out for a "
-                    "product yield or concentration.")
+                    "between products (e.g. 'ribo : arabino', name the species 'II : III'); 'rate' when it is the "
+                    "rate of change of the species' concentration (e.g. 'DAP (mM/h)', negative for consumption; "
+                    "`u` its unit as printed); leave out for a product yield or concentration.")
 
 
 class TableRow(BaseModel):
@@ -299,6 +317,8 @@ class TableResults(BaseModel):
                     sample_label=row.sample_label or None, concentration_value=number, conversion_note=note,
                     concentration_high=high,
                     concentration_unit_raw=col.unit or None, detection=detection if col.role == "sampled" else "",
+                    err_plus=_cell_error(text) if number is not None and not high else 0.0,
+                    err_minus=-_cell_error(text) if number is not None and not high else 0.0,
                     quote=f"{row.label} {text}".strip(),
                     source=f"{self.source}, row {row.label}, column {col.label}",
                     confidence=self.confidence, identified_by=col.identified_by, measure=col.measure,

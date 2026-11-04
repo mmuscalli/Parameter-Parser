@@ -56,7 +56,7 @@ class SkipAllFigures(QObject):
     seen, opened_while_extracting, statuses = [], None, []
     close_after_ms = 300
 
-    def __init__(self, figures, columns, plan_bridge=None, parent=None):
+    def __init__(self, figures, columns, plan_bridge=None, parent=None, **_):
         super().__init__()
         SkipAllFigures.seen = [f.figure_id for f in figures]
         SkipAllFigures.statuses = []
@@ -594,9 +594,9 @@ def test_stage_toggles():
         w.stage_boxes["fit_models"].setChecked(False)
         assert w.optional_stage_choices()["fit_models"] == "off"
         w.pack_combo.setCurrentIndex(w.pack_combo.findData("prebiotic_chemistry"))
-        assert list(w.stage_boxes) == ["experimental_conditions", "wet_dry"]
+        assert list(w.stage_boxes) == ["experimental_conditions", "kinetics", "wet_dry"]
         from PySide6.QtWidgets import QCheckBox
-        assert len(w.stages_widget.findChildren(QCheckBox)) == 2          # the old area's boxes are gone
+        assert len(w.stages_widget.findChildren(QCheckBox)) == 3          # the old area's boxes are gone
         assert "when the paper calls for it" in w.stage_boxes["wet_dry"].text()
         w.pack_combo.setCurrentIndex(w.pack_combo.findData("exoplanets"))
         assert not w.stage_boxes["fit_models"].isChecked()                  # remembered for this area
@@ -666,7 +666,10 @@ def test_settings_and_run_options():
         assert "batch" in w.options_summary.text() and "arXiv text" in w.options_summary.text()
         assert "no new-variable suggestions" in w.options_summary.text()
         assert w.toggles_btn.text().startswith("Batch, arXiv text")
-        assert len(w.toggles_btn.menu().actions()) == 7 and w.current_config().include_supplements
+        assert len(w.toggles_btn.menu().actions()) == 8 and w.current_config().include_supplements   # + auto figures
+        w.auto_figures_box.setChecked(True)
+        assert w.current_config().auto_digitize_figures and "Auto figures" in w.toggles_btn.text()
+        w.auto_figures_box.setChecked(False)
         assert w.settings_hint.isVisible() and "API key" in w.settings_hint.text()       # no key yet
         w.key_edit.setText("k")
         assert not w.settings_hint.isVisible()
@@ -808,7 +811,7 @@ class SkipReview(QObject):
     """Stands in for FigureReviewDialog in the queue: opens, then skips every figure."""
     finished = Signal(int)
     opened = []
-    def __init__(self, figures, columns, plan_bridge=None, parent=None):
+    def __init__(self, figures, columns, plan_bridge=None, parent=None, **_):
         super().__init__()
         self.figures, self.digitized, self.skipped = figures, [], [f.figure_id for f in figures]
     def setWindowTitle(self, title): SkipReview.opened.append(title)

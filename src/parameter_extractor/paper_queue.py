@@ -189,7 +189,10 @@ class PaperQueue:
             out["csv"] = self.out_dir / "combined_extracted.csv"
             # each paper's accepted columns keep the category they were accepted under
             chosen = {a["column"]: a.get("category", "") for p in finished for a in p.result.accepted_variables}
-            write_csv(rows, out["csv"], column_categories=chosen)
+            from parameter_extractor.registry import VariableRegistry
+            registry = VariableRegistry(self.config.registry_path, self.config.pack) \
+                if self.config.registry_path else None          # compounds' active names, as in each paper's CSV
+            write_csv(rows, out["csv"], column_categories=chosen, registry=registry)
             observations = [p.result.observations_path for p in finished if p.result.observations_path]
             if observations:
                 out["observations"] = self.out_dir / "combined_observations.csv"
@@ -225,7 +228,11 @@ def run_queue(items: Sequence[PaperItem], config: RunConfig, on_change=None, can
     queue.wait()
     for paper in queue.papers:
         if paper.status == "extracted":
-            paper.skipped = [f.figure_id for f in paper.figures]
+            if config.auto_digitize_figures and paper.figures:      # the easy figures, from their suggestions
+                from parameter_extractor.pipeline import auto_digitize_figures
+                paper.digitized, paper.skipped = auto_digitize_figures(paper.extraction)
+            else:
+                paper.skipped = [f.figure_id for f in paper.figures]
             paper.figures_reviewed = True
             queue.finish_paper(paper)
     queue.write_combined()

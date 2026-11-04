@@ -88,26 +88,37 @@ def rounded(value: float, decimals: Optional[int]) -> float:
     return value if decimals is None else round(value, decimals)
 
 
+def _snapped_fraction(t: float, cal: AxisCalibration, decimals: Optional[int], whole_px: float,
+                      length: float) -> float:
+    """The fraction along an axis for its value rounded: to a whole number when that is within `whole_px` pixels,
+    else to `decimals`."""
+    value = _interp(t, cal.p1.value, cal.p2.value, cal.log)
+    if whole_px and not (cal.log and round(value) <= 0):
+        t_whole = _fraction_of(round(value), cal.p1.value, cal.p2.value, cal.log)
+        if abs(t_whole - t) * length <= whole_px:
+            return t_whole
+    return t if decimals is None else _fraction_of(round(value, decimals), cal.p1.value, cal.p2.value, cal.log)
+
+
 def snap(panel: DigitizedPanel, px: float, py: float) -> Tuple[float, float]:
     """The pixel whose axis values are this pixel's, rounded to each axis's `decimals` (Mickey, 2026-10-31:
     a click at x = 1.018 on an integer axis lands on 1). Unchanged where an axis has no rounding or isn't
     calibrated. Each axis is a projection, so the new pixel solves both projections at once; a category
     axis isn't rounded (the point only moves along y)."""
     xd, yd = panel.x.decimals, panel.y.decimals
+    xw, yw = getattr(panel.x, "whole_within_px", 0.0), getattr(panel.y, "whole_within_px", 0.0)
     yc = panel.y_cal
-    if yd is None and xd is None or not yc.complete():
+    if yd is None and xd is None and not xw and not yw or not yc.complete():
         return px, py
     ey = (yc.p2.px - yc.p1.px, yc.p2.py - yc.p1.py)
     t = _fraction_along((yc.p1.px, yc.p1.py), ey, (px, py))
-    t_new = t if yd is None else _fraction_of(round(_interp(t, yc.p1.value, yc.p2.value, yc.log), yd),
-                                               yc.p1.value, yc.p2.value, yc.log)
+    t_new = _snapped_fraction(t, yc, yd, yw, math.hypot(*ey))
     xc = panel.x_cal
     if is_categorical(panel) or not xc.complete():
         return px + (t_new - t) * ey[0], py + (t_new - t) * ey[1]
     ex = (xc.p2.px - xc.p1.px, xc.p2.py - xc.p1.py)
     s = _fraction_along((xc.p1.px, xc.p1.py), ex, (px, py))
-    s_new = s if xd is None else _fraction_of(round(_interp(s, xc.p1.value, xc.p2.value, xc.log), xd),
-                                               xc.p1.value, xc.p2.value, xc.log)
+    s_new = _snapped_fraction(s, xc, xd, xw, math.hypot(*ex))
     # (q - X1).ex = s_new |ex|^2 and (q - Y1).ey = t_new |ey|^2: two linear equations for q
     a1, b1 = ex
     c1 = s_new * (a1 * a1 + b1 * b1) + a1 * xc.p1.px + b1 * xc.p1.py

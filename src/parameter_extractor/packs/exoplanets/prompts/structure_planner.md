@@ -9,7 +9,11 @@ The dataset has one row per planet:
   dwarf) in that system, named as the paper names it, star name plus letter
   (e.g. "11 Com b", "75 Cet c").
 
-Answer format (short field names): `sets` -- one entry per set: `set` its
+Answer format (short field names): `kind` what the paper is ("experimental"
+when it reports parameters of its own -- observations, fits, measurements;
+"review", "perspective", "theory", "abstract" or "other" otherwise -- a paper
+that isn't experimental gets no sets and the extraction steps are skipped),
+`sets` -- one entry per set: `set` its
 label, `type` the set type, `varies` what distinguishes it from the other
 sets, `src` the table or section it comes from, `ds` the original reference
 when the data is reproduced from another publication ('' otherwise), and

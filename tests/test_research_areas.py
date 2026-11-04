@@ -189,7 +189,7 @@ def test_categories_window():
         path = Path(tmp) / "r.json"
         try:
             dlg = CategoriesDialog(path)
-            assert dlg.area == PRE and [r["id"] for r in dlg.rows()][:2] == ["starting_species", "products"]
+            assert dlg.area == PRE and [r["id"] for r in dlg.rows()][:3] == ["starting_species", "kinetics", "products"]
             assert not dlg.table.item(0, C_ID).flags() & dlg.table.item(0, C_ID).flags().ItemIsEditable
             dlg.builtin_confirmed = True
             r = [x["id"] for x in dlg.rows()].index("analysis")
@@ -215,7 +215,7 @@ def test_categories_window():
             vc.use_local({})
             assert vc.by_id("light_source") is None
             vc.use_local(VariableRegistry(path).local_categories)
-            assert [c.id for c in vc.categories(pack)].index("light_source") == 6
+            assert [c.id for c in vc.categories(pack)].index("light_source") == 7
 
             dlg = CategoriesDialog(path)                     # reset an app category; back to the bundled one
             dlg.builtin_confirmed = True
