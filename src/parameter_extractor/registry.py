@@ -109,7 +109,8 @@ _OLIGO_COLUMN = re.compile(r"(?:initial|sampled)_\d{1,3}mer_(?P<letters>d?[ACGTU
 
 def is_oligonucleotide_column(column: str) -> bool:
     """Columns of the nucleic-acid naming convention (names.oligonucleotide_name; Mickey, 2026-11-03):
-    '<role>_<n>mer_<letters>_<phase>_<mM|%yield>' -- 'sampled_4mer_A_aq_%yield', 'sampled_12mer_dT_aq_mM'."""
+    '<role>_<n>mer_<letters>_<phase>_<mM|%yield>' -- 'sampled_4mer_A_aq_%yield', 'sampled_12mer_dT_aq_mM'. Finds a
+    row's oligomers (calculators/oligomer_totals.py); not a reason to accept the column (reviewed, 2026-11-04)."""
     m = _OLIGO_COLUMN.fullmatch(column or "")
     if not m:
         return False
@@ -253,8 +254,8 @@ class VariableRegistry:
             return False
         if column in self._base_set or column in self.added_columns:
             return True
-        if is_oligonucleotide_column(column):        # peptides: reviewed like any compound (Mickey, 2026-11-04)
-            return True
+        # no automatic acceptance by naming rule: a new compound of ANY type -- peptide, oligonucleotide, ... -- is
+        # reviewed (Mickey, 2026-11-04); only the pack's own columns and the user's accepted ones are known
         # the uncertainty of a known value ('<column>_err_plus' / '_err_minus', the prebiotic pack's naming)
         m = re.fullmatch(r"(.+)_err_(?:plus|minus)", column)
         if m and self.is_known_column(m.group(1)):

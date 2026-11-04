@@ -84,6 +84,26 @@ def current_column_name(column: str) -> str:
     return f"{m.group('role')}_{body}_{phase or 'aq'}{markers}_{m.group('measure')}{m.group('tail') or ''}"
 
 
+_COMPOUND = re.compile(r"(?P<role>initial|sampled|stock)_(?P<name>.+)_(?P<phase>aq|gas|s)(?P<markers>(?:_avg|_range)*)"
+                       r"_(?P<measure>rate_mM_hr|mM|%yield|%recovered|ratio)(?P<tail>_err_(?:plus|minus))?")
+
+
+def canonical_compound_column(column: str) -> str:
+    """A compound column named the way the chemistry step would name it: the current format
+    (current_column_name), then the compound's canonical name (names.match_species -- 'diglycine' -> 'Gly-Gly')
+    or its repeats shortened ('Lys-Lys-Lys-Lys' -> '(Lys)4'). For columns a figure suggests or the user types,
+    so a compound read off a plot and the same compound in a table propose ONE column (2026-11-04)."""
+    column = current_column_name(column)
+    m = _COMPOUND.fullmatch(column or "")
+    if not m:
+        return column
+    from parameter_extractor.names import compact_repeats, match_species
+    matched = match_species(m.group("name"))
+    name = column_safe_name(matched[0] if matched else compact_repeats(m.group("name")))
+    return (f"{m.group('role')}_{name}_{m.group('phase')}{m.group('markers')}_{m.group('measure')}"
+            f"{m.group('tail') or ''}")
+
+
 def resolve_template_column(species_name: str, role: str) -> str:
     """A compound's starting / measured concentration column; marked with UNRECOGNIZED_SUFFIX when the pack
     doesn't have it (a new variable for the review)."""

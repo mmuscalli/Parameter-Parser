@@ -2003,3 +2003,10 @@ on EVERY compound (also amino acids, peptides, oligonucleotides, which had none)
   prompts say so. truman2024: (Gly)7, (Gly)9-13 % yields have no vocabulary column -> left for review; Table 1's
   stated totals then don't match the accepted yields before the review -> 4 conflicting_values flags (references
   regenerated; others unchanged).
+- **Follow-up 2 (same day, Mickey): new compounds of ANY type are reviewed** -- oligonucleotide columns no longer
+  known by rule either; is_known_column = the pack's columns + the user's accepted ones (+ err / range / stock of
+  those). Figures: `flatten_to_template.canonical_compound_column` (current format, match_species name, repeats
+  shortened) on axis columns in figure_rows, so a compound read off a plot and the same compound in a table propose
+  ONE column ('sampled_Lys-Lys-Lys-Lys_aq_%yield' -> 'sampled_(Lys)4_aq_%yield'). A figure axis whose compound has no
+  column still gets its rows built (conditions, durations); the values wait in the review (kind figure_axis, row_ids)
+  and land on those rows when accepted (tests/test_compound_columns.test_new_peptide_on_a_figure_axis).

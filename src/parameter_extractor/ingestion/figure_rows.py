@@ -26,7 +26,7 @@ from parameter_extractor.ingestion.flatten_to_template import with_average
 from parameter_extractor.digitizing.calibration import is_categorical, pixel_to_data, pixel_to_y, rounded
 from parameter_extractor.ingestion.flatten_to_template import (
     FIELD_TO_TEMPLATE, UNRECOGNIZED_SUFFIX, resolve_template_column, set_row_value, current_column_name,
-    species_column)
+    species_column, canonical_compound_column)
 from parameter_extractor.schemas.figures import DigitizedFigure, SeriesCondition
 from parameter_extractor.schemas.methodology import Methodology
 from parameter_extractor.schemas.paper_metadata import PaperMetadata
@@ -305,13 +305,13 @@ def build_figure_rows(
                     y_axis = y_axis.model_copy(update={"column": y_axis.new_column
                                                        or axis_column_from_label(y_axis.label, y_axis.average)})
                 # the template's old DKP_<AA> names follow the cyclic naming (cyclo_<AA>-<AA>)
-                x_axis = panel.x.model_copy(update={"column": current_column_name(panel.x.column)}) \
+                x_axis = panel.x.model_copy(update={"column": canonical_compound_column(panel.x.column)}) \
                     if panel.x.column else panel.x
                 if not x_axis.column and x_axis.store and (x_axis.new_column or x_axis.label) and not categorical:
                     x_axis = x_axis.model_copy(update={"column": x_axis.new_column
                                                        or axis_column_from_label(x_axis.label, x_axis.average)})
                 if y_axis.column:
-                    y_axis = y_axis.model_copy(update={"column": current_column_name(y_axis.column)})
+                    y_axis = y_axis.model_copy(update={"column": canonical_compound_column(y_axis.column)})
                 # averaged values go in '<name>_avg_<unit>' columns
                 if getattr(y_axis, "average", False) and y_axis.column:
                     y_axis = y_axis.model_copy(update={"column": with_average(y_axis.column)})

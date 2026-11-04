@@ -29,7 +29,8 @@ def test_oligonucleotide_names():
     assert match_species("(pA)4")[0] == "4mer_A"
     assert is_oligonucleotide_column("sampled_4mer_A_aq_%yield") and not is_oligonucleotide_column("sampled_A_aq_%yield")
     reg = VariableRegistry(None)
-    assert reg.is_known_column("sampled_12mer_dT_aq_mM") and reg.is_known_column("initial_Gly_aq_mM_err_plus")
+    # named by the convention, but a new compound is reviewed (2026-11-04); uncertainties of known columns are known
+    assert not reg.is_known_column("sampled_12mer_dT_aq_mM") and reg.is_known_column("initial_Gly_aq_mM_err_plus")
     assert not reg.is_known_column("initial_Foo_aq_mM_err_plus")
 
 

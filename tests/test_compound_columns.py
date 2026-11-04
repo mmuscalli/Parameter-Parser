@@ -169,6 +169,52 @@ def test_new_peptides_are_reviewed():
     assert [(v.name, v.proposed_column) for v in found] == [("Gly-Ala", "sampled_Gly-Ala_aq_%yield")]
 
 
+def test_new_oligonucleotides_are_reviewed():
+    """Mickey, 2026-11-04: new compounds of ANY type are reviewed -- oligonucleotides too."""
+    packs.activate("prebiotic_chemistry")
+    from parameter_extractor.registry import VariableRegistry, is_oligonucleotide_column
+    reg = VariableRegistry(None)
+    assert is_oligonucleotide_column("sampled_4mer_A_aq_%yield") and not reg.is_known_column("sampled_4mer_A_aq_%yield")
+
+
+def test_new_peptide_on_a_figure_axis():
+    """A figure whose y axis is a compound with no column yet: its rows are built (conditions, durations, ...),
+    the values wait in the review under the same column the chemistry step would propose, and accepting them
+    writes them onto those rows."""
+    packs.activate("prebiotic_chemistry")
+    from parameter_extractor.ingestion.figure_rows import build_figure_rows
+    from parameter_extractor.ingestion.flatten_to_template import proposed_column_for_solute, row_to_template_dict
+    from parameter_extractor.ingestion.new_variables import VariableDecision, apply_decisions, group_new_variables
+    from parameter_extractor.registry import VariableRegistry
+    from parameter_extractor.schemas.chemistry import SoluteEntry
+    from parameter_extractor.schemas.figures import (AxisCalibration, AxisVariable, CalibrationPoint, DigitizedFigure,
+                                                     DigitizedPanel, DigitizedPoint, DigitizedSeries)
+    from parameter_extractor.schemas.methodology import empty_methodology
+    from parameter_extractor.schemas.paper_metadata import PaperMetadata
+    cal = lambda a, b: AxisCalibration(p1=CalibrationPoint(px=a[0], py=a[1], value=0),
+                                       p2=CalibrationPoint(px=b[0], py=b[1], value=10))
+    panel = DigitizedPanel(x_cal=cal((0, 100), (100, 100)), y_cal=cal((0, 100), (0, 0)),
+                           x=AxisVariable(label="time (h)", column="duration_hr"),
+                           # the planner's suggestion, spelled out: canonicalised to the chemistry step's '(Lys)4'
+                           y=AxisVariable(label="% Lys4", column=None, new_column="sampled_Lys-Lys-Lys-Lys_aq_%yield"))
+    fig = DigitizedFigure(figure_id="Fig. 3", number=3, page=4, caption="c", render_scale=1.0, page_image="",
+                          panels=[panel], series=[DigitizedSeries(label="80 C", points=[
+                              DigitizedPoint(px=20, py=60), DigitizedPoint(px=50, py=30)])])
+    meta = PaperMetadata(paper_id="p", paper_title="t", authors=["A"], year_published=2023, journal_published="j")
+    reg = VariableRegistry(None)
+    rows, problems, new_vars = build_figure_rows([fig], meta, empty_methodology("p"), "001", 1, 1, registry=reg)
+    assert not problems and [r.duration_hr for r in rows] == [2.0, 5.0]             # the rows exist already
+    table_entry = SoluteEntry(name="Lys-Lys-Lys-Lys", role="sampled", phase="aq", concentration_value=1.0,
+                              concentration_unit_raw="%", quote="q", source="T1", confidence="high")
+    groups = group_new_variables(new_vars)
+    assert [g.proposed_column for g in groups] == [proposed_column_for_solute(table_entry)] == \
+        ["sampled_(Lys)4_aq_%yield"]
+    assert "sampled_(Lys)4_aq_%yield" not in row_to_template_dict(rows[0])          # held until accepted
+    apply_decisions(rows, groups, [VariableDecision(groups[0].alias_name, groups[0].kind, "new_column",
+                                                    "sampled_(Lys)4_aq_%yield", remember=False)], reg)
+    assert [row_to_template_dict(r)["sampled_(Lys)4_aq_%yield"] for r in rows] == [4.0, 7.0]
+
+
 if __name__ == "__main__":
     for name, fn in list(globals().items()):
         if name.startswith("test_") and callable(fn):
