@@ -14,8 +14,9 @@ import re
 from pathlib import Path
 from typing import Dict, List, Optional
 
-from PySide6.QtCore import Qt
-from PySide6.QtWidgets import (QAbstractItemView, QCheckBox, QComboBox, QDialog, QHBoxLayout, QHeaderView, QLabel,
+from PySide6.QtCore import QSize, Qt
+from PySide6.QtGui import QColor, QPen
+from PySide6.QtWidgets import (QAbstractItemView, QStyledItemDelegate, QCheckBox, QComboBox, QDialog, QHBoxLayout, QHeaderView, QLabel,
                                QMessageBox, QPushButton, QSpinBox, QTableWidget, QTableWidgetItem, QVBoxLayout,
                                QWidget)
 
@@ -30,6 +31,39 @@ ID_RE = re.compile(r"^[a-z][a-z0-9_]{1,40}$")
 WARNING = ("The app's own categories are part of the instructions the model gets (labels, descriptions, formats) "
            "and decide where columns sit. Changing them can make extraction differ from the app's tested "
            "behaviour. Your own categories are offered to the model too when 'Model may assign' is ticked.")
+
+
+ROW_GAP = 7       # px above and below each category's row; a faint line in the middle of the space between rows
+
+
+class RowSeparatorDelegate(QStyledItemDelegate):
+    """Taller rows (descriptions run to several lines) with a subtle line between them (Mickey, 2026-11-04)."""
+
+    def sizeHint(self, option, index):
+        size = super().sizeHint(option, index)
+        return QSize(size.width(), size.height() + 2 * ROW_GAP)
+
+    def paint(self, painter, option, index):
+        option.rect.adjust(0, ROW_GAP, 0, -ROW_GAP)          # the text sits inside the gap
+        super().paint(painter, option, index)
+        option.rect.adjust(0, -ROW_GAP, 0, ROW_GAP)
+        if index.row() < index.model().rowCount() - 1:
+            line = QColor(option.palette.text().color())
+            line.setAlphaF(0.14)
+            painter.save()
+            painter.setPen(QPen(line, 1))
+            y = option.rect.bottom()
+            painter.drawLine(option.rect.left(), y, option.rect.right(), y)
+            painter.restore()
+
+
+def _in_cell(widget: QWidget) -> QWidget:
+    """A cell widget kept at its natural height, centred in the taller row."""
+    holder = QWidget()
+    v = QVBoxLayout(holder)
+    v.setContentsMargins(2, ROW_GAP, 2, ROW_GAP)
+    v.addWidget(widget, alignment=Qt.AlignmentFlag.AlignVCenter)
+    return holder
 
 
 class CategoriesDialog(QDialog):
@@ -69,6 +103,11 @@ class CategoriesDialog(QDialog):
         self.table.horizontalHeader().setSectionResizeMode(C_DESC, QHeaderView.ResizeMode.Stretch)
         self.table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
         self.table.setWordWrap(True)
+        self.table.setShowGrid(False)                    # rows are separated by RowSeparatorDelegate's line
+        self.table.setTextElideMode(Qt.TextElideMode.ElideNone)     # descriptions wrap onto more lines instead
+        # row heights follow the description column's width (it stretches with the window)
+        self.table.horizontalHeader().sectionResized.connect(lambda *_: self.table.resizeRowsToContents())
+        self.table.setItemDelegate(RowSeparatorDelegate(self.table))
         self.table.itemChanged.connect(self._on_item_changed)
         layout.addWidget(self.table, 1)
         self.note = QLabel(wordWrap=True)
@@ -108,6 +147,10 @@ class CategoriesDialog(QDialog):
             out.append(dict(row, builtin=False, changed=False))
         return out
 
+    def showEvent(self, event) -> None:
+        super().showEvent(event)
+        self.table.resizeRowsToContents()          # the description column has its real width only now
+
     def _fill(self) -> None:
         self._filling = True
         try:
@@ -128,7 +171,7 @@ class CategoriesDialog(QDialog):
                     fmt.addItem(label, key)
                 fmt.setCurrentIndex(max(fmt.findData(row.get("value_type") or "any"), 0))
                 fmt.currentIndexChanged.connect(lambda _i, r=r: self._on_widget(r))
-                t.setCellWidget(r, C_FORMAT, fmt)
+                t.setCellWidget(r, C_FORMAT, _in_cell(fmt))
                 for c, field, top in ((C_WORDS, "max_words", 200), (C_ORDER, "table_order", 10000)):
                     spin = QSpinBox(minimum=0, maximum=top)
                     spin.setValue(int(row.get(field) or 0) if row.get(field) is not None else
@@ -136,7 +179,7 @@ class CategoriesDialog(QDialog):
                     if field == "max_words":
                         spin.setSpecialValueText("no limit")
                     spin.valueChanged.connect(lambda _v, r=r: self._on_widget(r))
-                    t.setCellWidget(r, c, spin)
+                    t.setCellWidget(r, c, _in_cell(spin))
                 box = QCheckBox()
                 box.setChecked(bool(row.get("model_assigns")))
                 box.toggled.connect(lambda _on, r=r: self._on_widget(r))
@@ -150,6 +193,8 @@ class CategoriesDialog(QDialog):
                 origin.setFlags(origin.flags() & ~Qt.ItemFlag.ItemIsEditable)
                 t.setItem(r, C_ORIGIN, origin)
             t.resizeColumnsToContents()
+            for c in (C_WORDS, C_ORDER):             # room for 'no limit' beside the arrows
+                t.setColumnWidth(c, max(t.columnWidth(c), 110))
             t.setColumnWidth(C_DESC, max(t.columnWidth(C_DESC), 320))
             t.horizontalHeader().setSectionResizeMode(C_DESC, QHeaderView.ResizeMode.Stretch)
             t.resizeRowsToContents()
@@ -165,8 +210,9 @@ class CategoriesDialog(QDialog):
         model = t.cellWidget(r, C_MODEL).findChild(QCheckBox)
         return {"id": t.item(r, C_ID).text().strip(), "label": t.item(r, C_LABEL).text().strip(),
                 "description": t.item(r, C_DESC).text().strip(),
-                "value_type": t.cellWidget(r, C_FORMAT).currentData(),
-                "max_words": t.cellWidget(r, C_WORDS).value(), "table_order": t.cellWidget(r, C_ORDER).value(),
+                "value_type": t.cellWidget(r, C_FORMAT).findChild(QComboBox).currentData(),
+                "max_words": t.cellWidget(r, C_WORDS).findChild(QSpinBox).value(),
+                "table_order": t.cellWidget(r, C_ORDER).findChild(QSpinBox).value(),
                 "model_assigns": model.isChecked()}
 
     def _on_item_changed(self, item) -> None:
