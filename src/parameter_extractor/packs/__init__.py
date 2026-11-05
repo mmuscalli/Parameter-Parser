@@ -192,10 +192,12 @@ def template_pack() -> Pack:
     return Pack(TEMPLATE_DIR)
 
 
-def create_pack(pack_id: str, label: str, description: str = "", base: Optional[Path] = None) -> Pack:
-    """A new research area: a copy of the template pack in `base` (default the user's packs folder) with its
-    own id, label and description. The copy is a working pack straight away (the template's example columns,
-    stage and rules), to be edited into the new area's own. Raises ValueError for a bad or taken id."""
+def create_pack(pack_id: str, label: str, description: str = "", base: Optional[Path] = None,
+                source: Optional[Pack] = None, units: Optional[Dict[str, str]] = None) -> Pack:
+    """A new research area: a copy of the template pack (or of `source`, another pack -- the way to change one of
+    the app's own) in `base` (default the user's packs folder) with its own id, label, description and, given
+    `units`, words for a set / a row. The copy is a working pack straight away, to be edited into the new area's
+    own (Data Packs menu). Raises ValueError for a bad or taken id."""
     import shutil
     if not PACK_ID.fullmatch(pack_id or ""):
         raise ValueError(f"'{pack_id}' isn't a usable id: lower-case letters, digits and '_', starting with a letter "
@@ -207,9 +209,12 @@ def create_pack(pack_id: str, label: str, description: str = "", base: Optional[
     folder = Path(base or user_packs_dir()) / pack_id
     if folder.exists():
         raise ValueError(f"The folder {folder} already exists.")
-    shutil.copytree(TEMPLATE_DIR, folder, ignore=shutil.ignore_patterns("__pycache__", ".DS_Store"))
+    shutil.copytree((source.folder if source is not None else TEMPLATE_DIR), folder,
+                    ignore=shutil.ignore_patterns("__pycache__", ".DS_Store"))
     manifest = json.loads((folder / "pack.json").read_text())
     manifest.update(id=pack_id, label=label.strip(), description=description.strip(), is_template=False)
+    if units:
+        manifest["units"] = {**manifest.get("units", {}), **{k: v.strip() for k, v in units.items() if v.strip()}}
     (folder / "pack.json").write_text(json.dumps(manifest, indent=2, ensure_ascii=False) + "\n")
     return Pack(folder)
 

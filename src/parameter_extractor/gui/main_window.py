@@ -151,6 +151,17 @@ class MainWindow(QMainWindow):
         variables_menu.addAction(self.registry_action)
         self.categories_action = QAction("Variable categories…", self, triggered=self.open_categories)
         variables_menu.addAction(self.categories_action)
+        # research areas made and edited in the app (Mickey, 2026-11-05; gui/pack_windows.py)
+        packs_menu = self.menuBar().addMenu("Data Packs")
+        self.new_pack_action = QAction("New research area…", self, triggered=lambda: self.new_pack())
+        self.edit_pack_action = QAction("Edit research area…", self, triggered=lambda: self.edit_pack())
+        self.copy_pack_action = QAction("Copy a research area…", self, triggered=lambda: self.copy_pack())
+        self.check_pack_action = QAction("Check research area…", self, triggered=lambda: self.check_pack())
+        self.packs_folder_action = QAction("Open research areas folder", self, triggered=self.open_packs_folder)
+        for action in (self.new_pack_action, self.edit_pack_action, self.copy_pack_action, self.check_pack_action):
+            packs_menu.addAction(action)
+        packs_menu.addSeparator()
+        packs_menu.addAction(self.packs_folder_action)
 
         self._load_preferences()
         self._update_run_enabled()
@@ -826,6 +837,54 @@ class MainWindow(QMainWindow):
         RegistryDialog(self.registry_path, parent=self).exec()
         self._load_category_edits()
 
+    # ---- Data Packs menu ------------------------------------------------------------------
+
+    def new_pack(self, source: Optional[str] = None) -> None:
+        from parameter_extractor.gui.pack_windows import NewPackDialog
+        dlg = NewPackDialog(self, source=source)
+        if dlg.exec() and dlg.created is not None:
+            self.refresh_packs(select=dlg.created.id)
+            self._open_pack_editor(dlg.created.folder)
+
+    def copy_pack(self) -> None:
+        self.new_pack(source=self.pack_combo.currentData())
+
+    def edit_pack(self, tab: int = 0) -> None:
+        from parameter_extractor.gui.pack_windows import choose_pack
+        pack = choose_pack(self, "Edit research area" if not tab else "Check research area")
+        if pack is not None:
+            self._open_pack_editor(pack.folder, tab)
+
+    def check_pack(self) -> None:
+        self.edit_pack(tab=4)
+
+    def _open_pack_editor(self, folder, tab: int = 0) -> None:
+        from parameter_extractor.gui.pack_windows import PackEditor
+        editor = PackEditor(folder, self, self.registry_path)
+        editor.saved.connect(lambda pack_id: self.refresh_packs(select=pack_id))
+        editor.tabs.setCurrentIndex(tab)
+        editor.exec()
+
+    def open_packs_folder(self) -> None:
+        from parameter_extractor import packs
+        folder = packs.user_packs_dir()
+        folder.mkdir(parents=True, exist_ok=True)
+        QDesktopServices.openUrl(QUrl.fromLocalFile(str(folder)))
+
+    def refresh_packs(self, select: Optional[str] = None) -> None:
+        """The Research area list again (a pack was created or saved), keeping the choice unless `select`."""
+        from parameter_extractor import packs
+        keep = select or self.pack_combo.currentData()
+        self.pack_combo.blockSignals(True)
+        self.pack_combo.clear()
+        for pack_id, pack in sorted(packs.available().items(), key=lambda kv: kv[1].label):
+            self.pack_combo.addItem(pack.label, pack_id)
+            self.pack_combo.setItemData(self.pack_combo.count() - 1, pack.manifest.description,
+                                        Qt.ItemDataRole.ToolTipRole)
+        self.pack_combo.setCurrentIndex(max(self.pack_combo.findData(keep), 0))
+        self.pack_combo.blockSignals(False)
+        self._on_pack_changed(self.pack_combo.currentIndex())
+
     def open_categories(self) -> None:
         """Create / edit the categories of new variables, per research area."""
         from parameter_extractor.gui.categories_dialog import CategoriesDialog
@@ -843,6 +902,7 @@ class MainWindow(QMainWindow):
 
     def _set_inputs_enabled(self, enabled: bool) -> None:
         for w in (self.pdf_edit, self.terms_edit, self.registry_action, self.categories_action, self.pack_combo,
+                  self.new_pack_action, self.edit_pack_action, self.copy_pack_action,
                   self.stages_widget, self.profile_combo, self.passes_combo, self.toggles_btn,
                   *self.option_toggles()):   # the pack is active during a run
             w.setEnabled(enabled)

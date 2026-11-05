@@ -2052,3 +2052,34 @@ Step 1 built: a TEMPLATE pack that ships with the app, hidden from every pack li
 Next steps (not built): GUI "New research area…" (create_pack + editors for columns / stages / rules / categories),
 a stage editor (parameters table, trigger, options), validation of a pack (columns named in categories exist, spec
 columns' units match suffixes), and calculations a pack can declare without code (a small declarative layer).
+
+## Data Packs menu: new / edit / copy / check research areas (2026-11-05, Mickey)
+
+Menu "Data Packs" (main window, after Variables; locked during runs): New research area…, Edit research area…,
+Copy a research area…, Check research area…, Open research areas folder. `MainWindow.refresh_packs(select)` rebuilds
+the Research area list after a create / save.
+- `pack_editing.py`: `PackDraft.load(folder)` = manifest (raw dict: `_about_*` and unknown keys kept), columns file,
+  standard file, stage specs by file, rules per RULE_PROMPTS (structure_planner, figure_planner, focused_search,
+  metadata), own whole prompts; `new_stage` (essentials filled: trigger always, per sample, table images, `_err_plus`
+  style), `remove_stage`, `save()` (refuses the app's own packs -- `builtin` = inside packs.BUILTIN_DIR; empty rules
+  delete the file; clears optional._specs_in and the active pack). `check(draft)` -> Problems error/warning/note:
+  invalid manifest / specs, unknown built-in steps or calculations (BUILTIN_STAGES, CALCULATIONS -- the registry of
+  what exists, with descriptions and the step each needs), calculation needing a step not used, missing files,
+  no / duplicate / malformed columns, nothing extracting, stage name / answer-format name (may be empty) clashes,
+  never-running triggers, parameters without column / description / duplicated, choices on numbers, units against the
+  name suffix (pH isn't a unit; a unit not in the name -> one grouped note per stage), columns outside the list (one
+  grouped note per stage), a column filled by several stages, no row rules, template leftovers, categories (ids,
+  unknown targets, missing columns -- provenance / row columns count, bad patterns). Built-in packs: notes only.
+- `packs.create_pack(..., source=pack, units={...})`: from the template or a copy of any pack (how the app's own are
+  changed).
+- `gui/pack_windows.py`: NewPackDialog (name -> id suggestion, description, set / row words, start from template or a
+  copy); PackEditor tabs General (name, description, words, focused row plan, compact text, built-in steps, ordered
+  calculations list, "Edit variable categories…" opening CategoriesDialog on the area), Columns (editable, drag order,
+  tooltip = stages filling it; compound vocabulary when chemistry is on), Stages (list + scrolling form: name, label,
+  description, role, instruction, values per row/set, trigger words, table images, other values + hint, uncertainty
+  naming, rules; parameters table: column, unit, kind, description, allowed words, whole number, ±; add / duplicate /
+  remove stages, add / remove / move parameters; fields the form doesn't show are kept), Rules (per shared prompt,
+  "Show the shared prompt…"), Check (re-run on Save; errors ask before saving). App's own packs open read-only with
+  "Copy to a new research area…". Checked natively (form fields grow; parameter rows refit after layout via
+  `_fit_rows` -- the stretched column gets its width late). tests/test_pack_editing.py.
+Not built yet: removing a research area, the declarative formula layer (Mickey: later), editing the shared columns.
