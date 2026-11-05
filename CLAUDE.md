@@ -2118,3 +2118,6 @@ live result), function help. tests/test_formulas.py; test_template_pack asserts 
   re-sorts; with nothing to show, a one-line note replaces the empty list. Formulas tab: the reference is a grid
   (`_formula_reference`: what to write, monospace at the label size, in one column; one-line descriptions in the
   next; one entry per line -- FUNCTION_HELP restructured), "Try the selected formula" at most 380 px wide.
+- Tests must not see the user's own research areas (<app data>/packs; Mickey makes test packs there):
+  test_research_areas points `packs.user_packs_dir` at an empty temp folder. Gate commits on the runner's summary
+  ("0 failed, 0 skipped"), not on its output existing.

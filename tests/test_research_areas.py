@@ -18,6 +18,11 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 from parameter_extractor import packs, variable_categories as vc
 from parameter_extractor.registry import STANDARD, VariableRegistry
 
+# the user's own research areas (Data Packs > New research area) aren't part of what these tests expect: look for
+# packs in an empty folder instead of <app data>/packs
+_NO_USER_PACKS = Path(tempfile.mkdtemp())
+packs.user_packs_dir = lambda: _NO_USER_PACKS
+
 PRE, EXO = "prebiotic_chemistry", "exoplanets"
 
 
