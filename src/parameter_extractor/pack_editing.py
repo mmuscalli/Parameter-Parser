@@ -54,6 +54,7 @@ RULE_PROMPTS = {
 # the template's examples: still there in a pack made from it -> a note
 TEMPLATE_EXAMPLE_STAGE = "example_measurements"
 TEMPLATE_EXAMPLE_RULES = "EXAMPLE RULES"
+TEMPLATE_EXAMPLE_FORMULA = "temperature_K"
 
 STAGE_NAME = re.compile(r"[a-z][a-z0-9_]{1,60}")
 BAD_COLUMN_CHARS = re.compile(r'[,"\n\t]')
@@ -140,6 +141,7 @@ class PackDraft:
         """Every column the pack can write: its columns, extra columns, stage columns and the shared ones."""
         seen = list(self.columns) + [e["column"] for e in self.standard_file.get("columns", [])]
         seen += [c for c in self.stage_columns() if c not in seen]
+        seen += [f.get("column", "") for f in self.manifest.get("formulas", []) if f.get("column", "") not in seen]
         seen += [e["column"] for e in packs.common_columns() if e["column"] not in seen]
         from parameter_extractor.ingestion.flatten_to_template import OPTIONAL_PROVENANCE_COLUMNS, PROVENANCE_COLUMNS
         row = ["entry_number", "full_id", "set_id", "sample_id", "set_type", "duration_hr", "duration_range_hr"]
@@ -331,6 +333,8 @@ def check(draft: PackDraft) -> List[Problem]:
         if TEMPLATE_EXAMPLE_RULES in text:
             add("note", "Rules", f"the {name} rules still contain the template's example rules.")
 
+    out += _formula_problems(draft)
+
     # categories
     from parameter_extractor import variable_categories as vc
     shared = {c.id for c in vc.shared_categories()} | {"figure", "assumed"}
@@ -353,6 +357,48 @@ def check(draft: PackDraft) -> List[Problem]:
             except re.error as e:
                 add("error", "Categories", f"pattern '{pattern}' (in {cid}) isn't a valid pattern: {e}.")
     return sorted(out, key=lambda p: ("error", "warning", "note").index(p.level))
+
+
+def _formula_problems(draft: PackDraft) -> List[Problem]:
+    """Formulas (formulas.py): they parse, have a column, name columns the pack has, come after the formulas whose
+    columns they use."""
+    from parameter_extractor.formulas import IF_PRESENT, Formula, FormulaError
+    out = []
+    formulas = draft.manifest.get("formulas", [])
+    outputs = [(f.get("column") or "").strip() for f in formulas]
+    known = set(draft.all_columns()) - set(outputs)
+    for i, raw in enumerate(formulas):
+        f = Formula.from_dict(raw)
+        where = f"Formula '{f.column or i + 1}'"
+        if not f.column:
+            out.append(Problem("error", where, "the formula has no column to fill."))
+        elif BAD_COLUMN_CHARS.search(f.column) or " " in f.column:
+            out.append(Problem("error", where, f"'{f.column}': column names can't contain spaces, commas, quotes or tabs."))
+        if f.column and outputs.count(f.column) > 1 and outputs.index(f.column) < i:
+            out.append(Problem("error", where, "another formula fills the same column."))
+        if f.if_present not in IF_PRESENT:
+            out.append(Problem("error", where, f"'if a value exists' must be one of {', '.join(IF_PRESENT)}."))
+        try:
+            inputs = f.inputs()
+        except FormulaError as e:
+            out.append(Problem("error", where, f"{e}."))
+            continue
+        if f.column in inputs:
+            out.append(Problem("error", where, "the formula uses its own column."))
+        earlier = set(outputs[:i])
+        later = [c for c in inputs if c in outputs[i + 1:] and c not in earlier]
+        if later:
+            out.append(Problem("warning", where, f"uses {', '.join(later)}, filled by a LATER formula: move this "
+                                                 "one after it (formulas run in order)."))
+        unknown = [c for c in inputs if c not in known and c not in earlier and c not in later]
+        if unknown:
+            out.append(Problem("warning", where, f"uses column(s) this research area doesn't have: "
+                                                 f"{', '.join(unknown)} (rows will have no value for them)."))
+        if not f.description.strip():
+            out.append(Problem("note", where, "no description: say what the formula calculates."))
+        if f.column == TEMPLATE_EXAMPLE_FORMULA:
+            out.append(Problem("note", where, "this is the template's example formula: replace or remove it."))
+    return out
 
 
 def _unit_problems(p: dict) -> List[tuple]:

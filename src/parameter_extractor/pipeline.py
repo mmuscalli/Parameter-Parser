@@ -1181,6 +1181,9 @@ def finish(
                     f"max_oligomer_length_nt for {len(o_lengths)} row(s) as the longest oligomer with a value"
                     if o_lengths else "") if x)
                 + ". Rows where the paper states them keep the stated values; hover a value to see what was used."))
+    if pack.manifest.formulas:                   # the research area's own calculations (formulas.py), after the review
+        from parameter_extractor.formulas import apply_formulas, formula_flags
+        paper_flags += formula_flags(apply_formulas(rows, pack.manifest.formulas))
     archive = None
     if pack.uses("archive_validation") and config.online_checks:
         archive = _archive_check(rows, ex, ctx)

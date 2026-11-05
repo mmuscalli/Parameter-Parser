@@ -9,6 +9,7 @@ The Data Packs menu's windows (Mickey, 2026-11-05: research areas made and edite
                     Columns  -- the dataset's columns in order (and a compound vocabulary for the chemistry step)
                     Stages   -- each extraction stage: what it asks, when it runs, its parameters (columns)
                     Rules    -- the pack's rules for the shared prompts (planning rows, figures, ...)
+                    Formulas -- calculations without code (formulas.py), with a panel to try one out
                     Check    -- pack_editing.check(): errors, warnings and notes; run again on Save
                   The app's own research areas open read-only, with a button to copy one.
 """
@@ -162,6 +163,7 @@ class PackEditor(QDialog):
         self.tabs.addTab(self._columns_tab(), "Columns")
         self.tabs.addTab(self._stages_tab(), "Stages")
         self.tabs.addTab(self._rules_tab(), "Rules")
+        self.tabs.addTab(self._formulas_tab(), "Formulas")
         self.tabs.addTab(self._check_tab(), "Check")
         self.tabs.currentChanged.connect(lambda _i: self._fit_rows())
         layout.addWidget(self.tabs, 1)
@@ -656,6 +658,144 @@ class PackEditor(QDialog):
         lay.addWidget(QPushButton("Close", clicked=dlg.accept))
         dlg.exec()
 
+    # ---- Formulas -----------------------------------------------------------------------
+
+    def _formulas_tab(self) -> QWidget:
+        from parameter_extractor.formulas import FUNCTION_HELP, IF_PRESENT
+        w = QWidget()
+        v = QVBoxLayout(w)
+        v.addWidget(_hint("Calculations without code: each formula fills its column on every row where its inputs "
+                          "have values, after the review, in this order (a formula can use the columns of the ones "
+                          "above it). The column's unit is what its name says; inputs are in their own columns' "
+                          "units, so convert in the formula (e.g. temperature_K = temperature_C + 273.15)."))
+        self.f_table = QTableWidget(0, 4)
+        self.f_table.setHorizontalHeaderLabels(["Column it fills", "Formula", "Description",
+                                                "If the paper already gives a value"])
+        self.f_table.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
+        self.f_table.horizontalHeader().setSectionResizeMode(2, QHeaderView.ResizeMode.Stretch)
+        self.f_table.setColumnWidth(0, 200)
+        self.f_table.setColumnWidth(3, 250)
+        self.f_table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
+        self._if_present = {"check": "keep the paper's, flag if different", "keep": "keep the paper's",
+                            "replace": "use the formula's"}
+        assert set(self._if_present) == set(IF_PRESENT)
+        for raw in self.draft.manifest.get("formulas", []):
+            self._add_formula(raw)
+        self.f_table.currentCellChanged.connect(lambda *_: self._show_formula_inputs())
+        self.f_table.itemChanged.connect(lambda item: self._show_formula_inputs() if item.column() == 1 else None)
+        v.addWidget(self.f_table, 2)
+        buttons = QHBoxLayout()
+        for text, slot in (("Add formula", lambda: self._add_formula({})), ("Remove", self._remove_formula),
+                           ("Up", lambda: self._move_formula(-1)), ("Down", lambda: self._move_formula(1))):
+            buttons.addWidget(QPushButton(text, clicked=slot))
+        buttons.addStretch(1)
+        v.addLayout(buttons)
+
+        below = QHBoxLayout()
+        trial = QGroupBox("Try the selected formula")
+        tv = QVBoxLayout(trial)
+        tv.addWidget(_hint("Enter values for its inputs (as they'd be in their columns)."))
+        self.f_inputs = QTableWidget(0, 2)
+        self.f_inputs.setHorizontalHeaderLabels(["Input column", "Value"])
+        self.f_inputs.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
+        self.f_inputs.itemChanged.connect(lambda _i: self._try_formula())
+        tv.addWidget(self.f_inputs, 1)
+        self.f_result = QLabel("Result: --")
+        tv.addWidget(self.f_result)
+        below.addWidget(trial, 1)
+        helpbox = QGroupBox("What a formula can use")
+        hv = QVBoxLayout(helpbox)
+        from html import escape                      # 'pH < 7' in the help is text, not markup
+        rows = "".join(f"<tr><td><code>{escape(a)}</code></td><td>&nbsp;{escape(b)}</td></tr>"
+                       for a, b in FUNCTION_HELP)
+        hv.addWidget(QLabel("Column names, numbers, + - * / ** ( ), comparisons and <i>and / or / not</i>.<table>"
+                            f"{rows}</table>A column with no value makes the result empty (except in first() and the "
+                            "pattern totals).", wordWrap=True))
+        below.addWidget(helpbox, 1)
+        v.addLayout(below, 1)
+        return w
+
+    def _add_formula(self, raw: dict) -> None:
+        t = self.f_table
+        t.blockSignals(True)
+        r = t.rowCount()
+        t.insertRow(r)
+        for c, key in ((0, "column"), (1, "expression"), (2, "description")):
+            t.setItem(r, c, QTableWidgetItem(raw.get(key, "")))
+        combo = QComboBox()
+        for key, label in self._if_present.items():
+            combo.addItem(label, key)
+        combo.setCurrentIndex(max(combo.findData(raw.get("if_present", "check")), 0))
+        t.setCellWidget(r, 3, combo)
+        t.blockSignals(False)
+        if not raw:
+            t.setCurrentCell(r, 0)
+
+    def _remove_formula(self) -> None:
+        for r in sorted({i.row() for i in self.f_table.selectedIndexes()}, reverse=True):
+            self.f_table.removeRow(r)
+
+    def _move_formula(self, step: int) -> None:
+        r = self.f_table.currentRow()
+        if r < 0 or not 0 <= r + step < self.f_table.rowCount():
+            return
+        formulas = self._formulas_from_table()
+        formulas[r], formulas[r + step] = formulas[r + step], formulas[r]
+        self.f_table.setRowCount(0)
+        for raw in formulas:
+            self._add_formula(raw)
+        self.f_table.setCurrentCell(r + step, 1)
+
+    def _formulas_from_table(self) -> list:
+        out = []
+        for r in range(self.f_table.rowCount()):
+            text = lambda c: (self.f_table.item(r, c).text().strip() if self.f_table.item(r, c) else "")
+            raw = {"column": text(0), "expression": text(1), "description": text(2),
+                   "if_present": self.f_table.cellWidget(r, 3).currentData()}
+            if any((raw["column"], raw["expression"])):
+                out.append(raw)
+        return out
+
+    def _show_formula_inputs(self) -> None:
+        """The selected formula's input columns, ready for trial values."""
+        from parameter_extractor.formulas import Formula, FormulaError
+        r = self.f_table.currentRow()
+        expression = self.f_table.item(r, 1).text() if r >= 0 and self.f_table.item(r, 1) else ""
+        try:
+            inputs = Formula("x", expression).inputs() if expression.strip() else []
+        except FormulaError:
+            inputs = []
+        old = {self.f_inputs.item(i, 0).text(): (self.f_inputs.item(i, 1).text() if self.f_inputs.item(i, 1) else "")
+               for i in range(self.f_inputs.rowCount())}
+        self.f_inputs.blockSignals(True)
+        self.f_inputs.setRowCount(len(inputs))
+        for i, column in enumerate(inputs):
+            name = QTableWidgetItem(column)
+            name.setFlags(name.flags() & ~Qt.ItemFlag.ItemIsEditable)
+            self.f_inputs.setItem(i, 0, name)
+            self.f_inputs.setItem(i, 1, QTableWidgetItem(old.get(column, "")))
+        self.f_inputs.blockSignals(False)
+        self._try_formula()
+
+    def _try_formula(self) -> None:
+        from parameter_extractor.formulas import MISSING, FormulaError, evaluate
+        r = self.f_table.currentRow()
+        expression = self.f_table.item(r, 1).text() if r >= 0 and self.f_table.item(r, 1) else ""
+        if not expression.strip():
+            self.f_result.setText("Result: --")
+            return
+        values = {self.f_inputs.item(i, 0).text(): (self.f_inputs.item(i, 1).text() if self.f_inputs.item(i, 1) else "")
+                  for i in range(self.f_inputs.rowCount())}
+        try:
+            value = evaluate(expression, values)
+            text = "no value (an input is missing)" if value is MISSING else f"{value:.10g}"
+        except FormulaError as e:
+            text = f"not a usable formula: {e}"
+        except (ZeroDivisionError, ValueError, OverflowError) as e:
+            text = "division by zero" if isinstance(e, ZeroDivisionError) else str(e)
+        column = self.f_table.item(r, 0).text() if self.f_table.item(r, 0) else ""
+        self.f_result.setText(f"Result: {column or 'the column'} = {text}")
+
     # ---- Check --------------------------------------------------------------------------
 
     def _check_tab(self) -> QWidget:
@@ -720,6 +860,9 @@ class PackEditor(QDialog):
             [n for n in m.get("builtin_stages", []) if n not in self.builtin_boxes]      # e.g. old 'methodology'
         m["postprocess"] = [self.calc_list.item(i).data(Qt.ItemDataRole.UserRole) for i in range(self.calc_list.count())
                             if self.calc_list.item(i).checkState() == Qt.CheckState.Checked]
+        m["formulas"] = self._formulas_from_table()
+        if not m["formulas"] and "_about_formulas" not in m:
+            m.pop("formulas", None)
         self.draft.columns = [self.column_list.item(i).text() for i in range(self.column_list.count())]
         self.draft.species = self.species_edit.toPlainText().splitlines()
         self._store_stage()

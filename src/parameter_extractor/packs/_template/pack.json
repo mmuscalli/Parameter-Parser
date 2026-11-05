@@ -22,6 +22,11 @@
   "builtin_stages": [],
   "_about_postprocess": "Calculations run on the extracted rows, in order. Each is code in the app; the ones that exist are listed in README.md. A new pack usually starts with none.",
   "postprocess": [],
+  "_about_formulas": "Calculations without code: each fills its column on every row where its inputs have values, after the review, in this order. 'expression' uses column names (in backticks when they contain - % ( )), numbers, + - * / **, and functions like first(), ifelse(), sum_of(\"pattern\") -- the full list is in README.md and in the editor's Formulas tab. 'if_present': check (keep the paper's value, flag a difference), keep, or replace. This EXAMPLE adds temperature_K: replace or remove it.",
+  "formulas": [
+    {"column": "temperature_K", "expression": "temperature_C + 273.15",
+     "description": "the temperature in kelvin (example)", "if_present": "check"}
+  ],
 
   "_about_units": "What the pack calls a group of rows ('set') and one row ('sample'), used in the prompts and messages. Optionally 'row' for messages ('object model instance').",
   "units": {"set": "experiment set", "sample": "sample"},

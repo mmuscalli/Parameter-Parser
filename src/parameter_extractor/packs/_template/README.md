@@ -23,6 +23,7 @@ keep them or delete them.
 | `prompts/structure_planner.rules.md` | your rules for dividing a paper's results into rows | recommended |
 | `prompts/<name>.rules.md` | extra rules for any other shared prompt (`figure_planner`, `focused_search`, `metadata`, `term_search`) | no |
 | `prompts/<name>.md` | a whole prompt of your own, replacing the app's (advanced) | no |
+| `formulas` in `pack.json` | calculations without code (below) | no |
 
 ## How a paper goes through a pack
 
@@ -114,6 +115,39 @@ two built-in packs:
 A new pack usually starts with none. Unit conversion into the column's unit, uncertainties, ranges ("5-10")
 and the review work in every pack without any calculation listed here.
 
+## Formulas (`formulas` in pack.json)
+
+Calculations that need no code. Each formula fills its column on every row where its inputs have values. Formulas
+run after the review, so accepted values count, and in list order, so a formula can use an earlier formula's
+column.
+
+```json
+"formulas": [
+  {"column": "temperature_K", "expression": "temperature_C + 273.15",
+   "description": "the temperature in kelvin", "if_present": "check"},
+  {"column": "total_yield_pct", "expression": "sum_of(\"^sampled_.*_aq_%yield$\")",
+   "description": "all measured yields together"}
+]
+```
+
+- **Columns** by name; a name with `-`, `%`, `(` or `)` goes in backticks: `` `sampled_Gly-Gly_aq_%yield` ``.
+- **Arithmetic** `+ - * / **`, parentheses, comparisons `< <= > >= == !=`, `and`, `or`, `not`; constants `pi`, `e`.
+- **Functions** `abs`, `min`, `max`, `round(x, digits)`, `sqrt`, `exp`, `ln`, `log10`;
+  `first(a, b, ...)` (the first input that has a value), `ifelse(test, a, b)`;
+  `sum_of("pattern")`, `mean_of`, `max_of`, `min_of`, `count_of` over the row's columns whose name matches the
+  pattern (a regular expression).
+- **Units**: the result is in the unit its column's name says. Inputs are in their own columns' units, so the
+  formula converts.
+- **Missing inputs**: a missing input leaves the result empty. `first()` and the pattern totals skip missing
+  values. Text values such as "detected" count as missing.
+- **`if_present`**, for when the paper already gives the column a value: `check` (the default) keeps the paper's
+  value and flags a calculated value that differs; `keep` keeps it without checking; `replace` uses the formula's
+  value.
+
+Every calculated value is marked "calculated", with the formula and its inputs in the hover text. Each formula
+adds one flag summarising what it filled. The editor's Formulas tab has a panel to try a formula on example
+values.
+
 ## Testing a pack
 
 1. Run one paper whose answers you know (Economy models cost a few cents).
@@ -123,7 +157,8 @@ and the review work in every pack without any calculation listed here.
 
 ## Not yet possible without code
 
-- **New calculations.** A pack can only use the ones listed above.
+- **Calculations beyond formulas.** Anything one row's columns can express is a formula. Calculations across rows,
+  lookups in outside data, or new extraction logic still need a developer.
 - **Built-in stages other than `chemistry` and `fit_models`.** A new step written in code (its own answer
   format) needs a developer; everything a parameter list can express works as a `stages/*.json` file.
 - **Checks against an outside database** (like the exoplanet archive check).

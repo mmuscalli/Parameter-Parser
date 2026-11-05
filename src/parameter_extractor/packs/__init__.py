@@ -20,6 +20,8 @@ A pack is a folder with a pack.json manifest:
                     system", "sample": "planet"}, and optionally a row ("row": "object model
                     instance": one planet as one fit models it), used in messages
   compact_text      collapse long runs of layout spaces in the text sent to the model
+  formulas          calculations without code: [{column, expression, description, if_present}], run on every
+                    row after the review, in order (formulas.py: the expression language)
   is_template       the TEMPLATE pack (packs/_template/, 2026-11-05): a complete, working pack with every
                     file explained, copied by create_pack() to start a new research area. Never listed
                     (available() leaves it out) and never run directly.
@@ -72,6 +74,8 @@ class PackManifest(BaseModel):
     category_columns: Dict[str, dict] = Field(default_factory=dict)
     # the template a new pack is copied from (packs/_template/): hidden from every list of packs
     is_template: bool = False
+    # calculations declared without code: [{column, expression, description, if_present}] (formulas.py)
+    formulas: List[dict] = Field(default_factory=list)
 
 
 class Pack:

@@ -103,6 +103,9 @@ def test_a_pack_created_from_the_template_runs():
             assert [r["temperature_C"] for r in rows] == ["80.0", "80.0"]               # K -> °C, every row
             assert rows[0]["temperature_C_err_plus"] == "1.0" and rows[0]["duration_hr"] == "1.0"
             assert all(r["sample_material"] == "glycine" for r in rows)
+            # the template's example formula (formulas.py): temperature_K from temperature_C, flagged once
+            assert [r["temperature_K"] for r in rows] == ["353.15", "353.15"]
+            assert sum("formula temperature_K" in f.message for f in result.paper_flags) == 1
         finally:
             packs.activate("prebiotic_chemistry")
 

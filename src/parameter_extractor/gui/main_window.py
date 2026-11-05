@@ -858,7 +858,7 @@ class MainWindow(QMainWindow):
             self._open_pack_editor(pack.folder, tab)
 
     def check_pack(self) -> None:
-        self.edit_pack(tab=4)
+        self.edit_pack(tab=5)                  # the Check tab
 
     def _open_pack_editor(self, folder, tab: int = 0) -> None:
         from parameter_extractor.gui.pack_windows import PackEditor

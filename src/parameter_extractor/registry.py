@@ -41,6 +41,8 @@ def standard_columns(pack=None) -> list:
     if pack.uses("fit_models"):                 # exoplanets: how the values were obtained
         from parameter_extractor.calculators.exoplanet_fits import fit_columns
         extra += fit_columns(pack)
+    # the columns the pack's formulas fill (formulas.py): known, written in every CSV like the stages' columns
+    extra += [(f.get("column", ""), "formula") for f in pack.manifest.formulas if f.get("column")]
     for column, _ in extra:
         if column not in template and column not in listed:
             listed.append(column)

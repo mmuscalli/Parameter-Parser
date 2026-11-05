@@ -2089,3 +2089,23 @@ Not built yet: removing a research area, the declarative formula layer (Mickey: 
   packs and the template; resets the active pack if it was that one; clears the spec cache) -> `refresh_packs()`
   (falls back to the default area when the removed one was selected). Remembered variables / categories under its
   id stay in the registry. tests/test_pack_editing.py (both cancels, the full path, button state).
+
+## Formulas: calculations without code (2026-11-05, Mickey)
+
+`formulas.py` + pack.json `formulas: [{column, expression, description, if_present}]` (PackManifest.formulas).
+Expression language parsed with `ast` and evaluated by a WHITELIST (never eval): column names (backticks for names
+with - % ( ) -> col("...")), numbers, pi, e, + - * / ** % //, comparisons, and/or/not; functions abs, min, max,
+round(x, d), sqrt, exp, ln, log10, first(...) (first present), ifelse(test, a, b), sum_of / mean_of / max_of / min_of /
+count_of("regex over column NAMES"). Refused: attributes, calls to anything else, lists, lambdas, if-expressions,
+free text. A missing / text input -> MISSING -> no value (first() and the aggregates skip missing).
+`apply_formulas(rows, formulas)` runs in pipeline.finish after the review and the built-in totals, in list order (a
+later formula uses earlier ones' columns); if_present check (default: the paper's value kept, a difference > 1% or
+0.05 -> conflicting_values) / keep / replace; values _tidy'd, provenance origin "calculated", source "formula
+<col> = <expr> with <inputs>", lowest input confidence. `formula_flags`: per formula one derived_value, one
+conflicting_values (rows listed, 6 shown), one not_calculated (division by zero, math errors). Formula columns are
+registry standard columns (known, in every CSV). pack_editing.check: no column / bad name / same column twice /
+bad if_present / parse errors / own column / uses a LATER formula's column (warning) / unknown columns (warning) /
+no description (note) / the template's example (note). Template pack: example formula temperature_K = temperature_C
++ 273.15 (+ README section). Editor tab "Formulas" (before Check, so Check is tab 5): table (column, formula,
+description, if-present combo), add / remove / up / down, "Try the selected formula" (inputs from the expression,
+live result), function help. tests/test_formulas.py; test_template_pack asserts temperature_K on every row.
