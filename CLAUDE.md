@@ -2083,3 +2083,9 @@ the Research area list after a create / save.
   "Copy to a new research area…". Checked natively (form fields grow; parameter rows refit after layout via
   `_fit_rows` -- the stretched column gets its width late). tests/test_pack_editing.py.
 Not built yet: removing a research area, the declarative formula layer (Mickey: later), editing the shared columns.
+- **Removing a research area (same day, Mickey):** Data Packs > Remove research area… (lists only the user's own
+  areas; locked during runs) -> a warning (Continue… / Cancel) -> `DeleteConfirmDialog`: type exactly "DELETE"
+  (Remove enabled and default only then) -> `packs.delete_pack(id)` (rmtree of the folder; refuses the app's own
+  packs and the template; resets the active pack if it was that one; clears the spec cache) -> `refresh_packs()`
+  (falls back to the default area when the removed one was selected). Remembered variables / categories under its
+  id stay in the registry. tests/test_pack_editing.py (both cancels, the full path, button state).

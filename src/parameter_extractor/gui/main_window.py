@@ -157,10 +157,12 @@ class MainWindow(QMainWindow):
         self.edit_pack_action = QAction("Edit research area…", self, triggered=lambda: self.edit_pack())
         self.copy_pack_action = QAction("Copy a research area…", self, triggered=lambda: self.copy_pack())
         self.check_pack_action = QAction("Check research area…", self, triggered=lambda: self.check_pack())
+        self.remove_pack_action = QAction("Remove research area…", self, triggered=lambda: self.remove_pack())
         self.packs_folder_action = QAction("Open research areas folder", self, triggered=self.open_packs_folder)
         for action in (self.new_pack_action, self.edit_pack_action, self.copy_pack_action, self.check_pack_action):
             packs_menu.addAction(action)
         packs_menu.addSeparator()
+        packs_menu.addAction(self.remove_pack_action)
         packs_menu.addAction(self.packs_folder_action)
 
         self._load_preferences()
@@ -865,6 +867,12 @@ class MainWindow(QMainWindow):
         editor.tabs.setCurrentIndex(tab)
         editor.exec()
 
+    def remove_pack(self) -> None:
+        """Two confirmations (a warning, then typing DELETE); then the Research area list is refreshed."""
+        from parameter_extractor.gui.pack_windows import remove_pack
+        if remove_pack(self):
+            self.refresh_packs()
+
     def open_packs_folder(self) -> None:
         from parameter_extractor import packs
         folder = packs.user_packs_dir()
@@ -881,7 +889,10 @@ class MainWindow(QMainWindow):
             self.pack_combo.addItem(pack.label, pack_id)
             self.pack_combo.setItemData(self.pack_combo.count() - 1, pack.manifest.description,
                                         Qt.ItemDataRole.ToolTipRole)
-        self.pack_combo.setCurrentIndex(max(self.pack_combo.findData(keep), 0))
+        index = self.pack_combo.findData(keep)
+        if index < 0:                          # the chosen area was removed: back to the default one
+            index = self.pack_combo.findData(packs.DEFAULT_PACK)
+        self.pack_combo.setCurrentIndex(max(index, 0))
         self.pack_combo.blockSignals(False)
         self._on_pack_changed(self.pack_combo.currentIndex())
 
@@ -902,7 +913,7 @@ class MainWindow(QMainWindow):
 
     def _set_inputs_enabled(self, enabled: bool) -> None:
         for w in (self.pdf_edit, self.terms_edit, self.registry_action, self.categories_action, self.pack_combo,
-                  self.new_pack_action, self.edit_pack_action, self.copy_pack_action,
+                  self.new_pack_action, self.edit_pack_action, self.copy_pack_action, self.remove_pack_action,
                   self.stages_widget, self.profile_combo, self.passes_combo, self.toggles_btn,
                   *self.option_toggles()):   # the pack is active during a run
             w.setEnabled(enabled)

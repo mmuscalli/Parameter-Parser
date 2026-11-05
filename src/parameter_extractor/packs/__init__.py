@@ -239,6 +239,27 @@ def current() -> Pack:
     return _current if _current is not None else activate(DEFAULT_PACK)
 
 
+def delete_pack(pack_id: str) -> Path:
+    """Remove one of the user's research areas: its folder is deleted (Data Packs > Remove research area, after two
+    confirmations). The app's own packs and the template can't be removed. Remembered variables and categories kept
+    under its id stay in the registry (harmless; they come back if an area with that id is made again). Returns the
+    folder removed."""
+    import shutil
+    pack = available().get(pack_id)
+    if pack is None:
+        raise ValueError(f"There is no research area '{pack_id}'.")
+    folder = Path(pack.folder).resolve()
+    if pack.manifest.is_template or folder == BUILTIN_DIR.resolve() or BUILTIN_DIR.resolve() in folder.parents:
+        raise PermissionError(f"'{pack.label}' is part of the app and can't be removed.")
+    global _current
+    if _current is not None and _current.id == pack_id:
+        _current = None                      # the default becomes active again on the next use
+    shutil.rmtree(folder)
+    from parameter_extractor.stages import optional
+    optional._specs_in.cache_clear()
+    return folder
+
+
 def add_search_dir(path: Path) -> None:
     """Also look for packs in `path` (used by tests)."""
     if Path(path) not in _extra_dirs:

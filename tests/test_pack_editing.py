@@ -132,6 +132,56 @@ def test_windows():
         assert built_in.rules_combo.isEnabled()                                     # its rules can be looked at
 
 
+def test_delete_pack():
+    with tempfile.TemporaryDirectory() as tmp:
+        packs.add_search_dir(Path(tmp))
+        pack = packs.create_pack("doomed_area", "Doomed", base=Path(tmp))
+        packs.activate("doomed_area")
+        assert packs.delete_pack("doomed_area") == pack.folder.resolve()
+        assert not pack.folder.exists() and "doomed_area" not in packs.available()
+        assert packs.current().id == packs.DEFAULT_PACK                     # the active one was it: back to default
+        for protected in ("prebiotic_chemistry", "exoplanets"):
+            try:
+                packs.delete_pack(protected)
+                raise AssertionError(f"removed {protected}")
+            except PermissionError:
+                pass
+        try:
+            packs.delete_pack("_template")                                  # not even listed
+            raise AssertionError("removed the template")
+        except ValueError:
+            pass
+        assert packs.TEMPLATE_DIR.is_dir() and packs.available()["exoplanets"].folder.is_dir()
+
+
+def test_remove_needs_two_confirmations():
+    from PySide6.QtWidgets import QApplication, QDialog, QMessageBox
+    app = QApplication.instance() or QApplication([])
+    from parameter_extractor.gui import pack_windows
+    from parameter_extractor.gui.pack_windows import DeleteConfirmDialog, remove_pack
+    with tempfile.TemporaryDirectory() as tmp:
+        packs.add_search_dir(Path(tmp))
+        pack = packs.create_pack("test_case", "Test case", base=Path(tmp))
+        dlg = DeleteConfirmDialog(pack)
+        assert not dlg.remove_btn.isEnabled()
+        for typed, ok in (("delete", False), ("DELETE ", False), ("DELET", False), ("DELETE", True)):
+            dlg.word_edit.setText(typed)
+            assert dlg.remove_btn.isEnabled() is ok, typed
+
+        def first_answer(role):                    # which button the warning's user presses
+            return lambda box: next(b for b in box.buttons() if box.buttonRole(b) == role)
+        destructive, cancel = QMessageBox.ButtonRole.DestructiveRole, QMessageBox.ButtonRole.RejectRole
+        accepted, rejected = QDialog.DialogCode.Accepted, QDialog.DialogCode.Rejected
+        for first, second, removed in ((cancel, accepted, False), (destructive, rejected, False),
+                                       (destructive, accepted, True)):
+            with patch.object(pack_windows, "choose_pack", lambda *a, **k: pack), \
+                    patch.object(QMessageBox, "exec", lambda self: 0), \
+                    patch.object(QMessageBox, "clickedButton", first_answer(first)), \
+                    patch.object(DeleteConfirmDialog, "exec", lambda self, code=second: code):
+                assert (remove_pack(None) == "test_case") is removed
+            assert pack.folder.exists() is not removed
+
+
 def test_menu():
     from PySide6.QtWidgets import QApplication
     app = QApplication.instance() or QApplication([])
@@ -144,9 +194,10 @@ def test_menu():
     menu = next(a.menu() for a in w.menuBar().actions() if a.text() == "Data Packs")
     assert [a.text() for a in menu.actions() if a.text()] == ["New research area…", "Edit research area…",
                                                              "Copy a research area…", "Check research area…",
-                                                             "Open research areas folder"]
+                                                             "Remove research area…", "Open research areas folder"]
     w._set_inputs_enabled(False)                                                     # locked during a run
     assert not w.new_pack_action.isEnabled() and not w.edit_pack_action.isEnabled()
+    assert not w.remove_pack_action.isEnabled()
     w._set_inputs_enabled(True)
     w.close()
 

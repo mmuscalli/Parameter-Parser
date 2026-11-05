@@ -772,6 +772,60 @@ class PackEditor(QDialog):
             table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
 
 
+DELETE_WORD = "DELETE"
+
+
+class DeleteConfirmDialog(QDialog):
+    """The second confirmation of removing a research area: type DELETE, then Remove (Mickey, 2026-11-05)."""
+
+    def __init__(self, pack: packs.Pack, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("Remove research area")
+        layout = QVBoxLayout(self)
+        layout.addWidget(QLabel(f"To remove <b>{pack.label}</b> and its folder for good, type "
+                                f"<b>{DELETE_WORD}</b> below.", wordWrap=True))
+        self.word_edit = QLineEdit(placeholderText=DELETE_WORD)
+        layout.addWidget(self.word_edit)
+        buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Cancel)
+        self.remove_btn = buttons.addButton("Remove", QDialogButtonBox.ButtonRole.DestructiveRole)
+        self.remove_btn.setEnabled(False)
+        self.remove_btn.clicked.connect(self.accept)
+        buttons.rejected.connect(self.reject)
+        layout.addWidget(buttons)
+        self.word_edit.textChanged.connect(self._on_word)
+        self.setMinimumWidth(440)
+
+    def _on_word(self, text: str) -> None:
+        typed = text == DELETE_WORD
+        self.remove_btn.setEnabled(typed)
+        self.remove_btn.setDefault(typed)          # Return confirms only once DELETE is typed
+
+
+def remove_pack(parent) -> Optional[str]:
+    """Data Packs > Remove research area: choose one of the user's areas, a warning (Remove / Cancel), then type
+    DELETE and confirm. Returns the id removed, or None."""
+    pack = choose_pack(parent, "Remove research area", include_builtin=False)
+    if pack is None:
+        return None
+    warning = QMessageBox(QMessageBox.Icon.Warning, "Remove research area",
+                          f"Remove the research area '{pack.label}'?", parent=parent)
+    warning.setInformativeText(f"Its folder -- columns, stages, rules -- is deleted and can't be restored:\n"
+                               f"{pack.folder}\n\nDatasets already written from it are not affected.")
+    proceed = warning.addButton("Continue…", QMessageBox.ButtonRole.DestructiveRole)
+    warning.addButton(QMessageBox.StandardButton.Cancel)
+    warning.exec()
+    if warning.clickedButton() is not proceed:
+        return None
+    if DeleteConfirmDialog(pack, parent).exec() != QDialog.DialogCode.Accepted:
+        return None
+    try:
+        packs.delete_pack(pack.id)
+    except (ValueError, PermissionError, OSError) as e:
+        QMessageBox.warning(parent, "Not removed", str(e))
+        return None
+    return pack.id
+
+
 def choose_pack(parent, title: str, include_builtin: bool = True) -> Optional[packs.Pack]:
     """Ask which research area (the app's own marked as such)."""
     found = sorted(packs.available().values(), key=lambda p: p.label)
