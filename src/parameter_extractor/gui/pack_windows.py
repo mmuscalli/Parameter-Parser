@@ -30,7 +30,8 @@ from PySide6.QtWidgets import (QAbstractItemView, QCheckBox, QComboBox, QDialog,
 
 from parameter_extractor import packs
 from parameter_extractor.pack_editing import (BUILTIN_STAGES, CALCULATION_STEP, CALCULATIONS, RULE_PROMPTS,
-                                              PackDraft, Problem, check)
+                                              PackDraft, Problem, check, items_to_rules, rules_to_items)
+from parameter_extractor.gui.widgets import RowSeparatorDelegate, in_cell, style_rows
 
 LEVEL_COLORS = {"error": QColor(190, 40, 40), "warning": QColor(176, 110, 0), "note": QColor(110, 110, 110)}
 UNCERTAINTY_STYLES = [("<column>_err_plus / _err_minus", ["_err_plus", "_err_minus"], "_"),
@@ -198,6 +199,8 @@ class PackEditor(QDialog):
         self.tabs.addTab(self._formulas_tab(), "Formulas")
         self.tabs.addTab(self._check_tab(), "Check")
         self.tabs.currentChanged.connect(lambda _i: self._fit_rows())
+        self.tabs.currentChanged.connect(lambda i: self._refresh_formula_columns()
+                                         if self.tabs.tabText(i) == "Formulas" else None)
         layout.addWidget(self.tabs, 1)
         bottom = QHBoxLayout()
         where = _hint(f"Folder: {self.draft.folder}")
@@ -510,13 +513,11 @@ class PackEditor(QDialog):
                        (P_UNIT, "The column's unit (matching the end of its name); values are converted into it.")):
             self.p_table.horizontalHeaderItem(c).setToolTip(tip)
         self.p_table.horizontalHeader().setSectionResizeMode(P_DESC, QHeaderView.ResizeMode.Stretch)
-        self.p_table.setWordWrap(True)
-        self.p_table.setTextElideMode(Qt.TextElideMode.ElideNone)
+        style_rows(self.p_table)                       # spaced rows like the categories window
         for c, width in ((P_COLUMN, 170), (P_UNIT, 55), (P_KIND, 92), (P_CHOICES, 110), (P_INTEGER, 70),
                          (P_UNCERT, 40)):
             self.p_table.setColumnWidth(c, width)
-        # descriptions wrap: row heights follow the description column's width
-        self.p_table.horizontalHeader().sectionResized.connect(lambda *_: self._fit_rows())
+
         fv.addWidget(self.p_table, 1)
         pb = QHBoxLayout()
         for text, slot in (("Add parameter", self._add_parameter), ("Remove", self._remove_parameter),
@@ -626,7 +627,7 @@ class PackEditor(QDialog):
             p = dict(old.get(column, {}))                     # keeps fields the table doesn't show
             p["column"] = column
             p["unit"] = self.p_table.item(r, P_UNIT).text().strip() if self.p_table.item(r, P_UNIT) else ""
-            kind = self.p_table.cellWidget(r, P_KIND).currentData()
+            kind = self.p_table.cellWidget(r, P_KIND).findChild(QComboBox).currentData()
             if kind == "text":
                 p["kind"] = "text"
             else:
@@ -662,7 +663,7 @@ class PackEditor(QDialog):
         kind.addItem("number", "number")
         kind.addItem("text", "text")
         kind.setCurrentIndex(1 if p.get("kind") == "text" else 0)
-        self.p_table.setCellWidget(r, P_KIND, kind)
+        self.p_table.setCellWidget(r, P_KIND, in_cell(kind))
         for c, key in ((P_INTEGER, "integer"), (P_UNCERT, "uncertainties")):
             item = QTableWidgetItem()
             item.setFlags(Qt.ItemFlag.ItemIsEnabled | Qt.ItemFlag.ItemIsUserCheckable)
@@ -740,22 +741,62 @@ class PackEditor(QDialog):
         v.addLayout(top)
         self.rules_note = _hint("")
         v.addWidget(self.rules_note)
-        self.rules_edit = QPlainTextEdit()
-        self.rules_edit.setPlaceholderText("- One rule per line, e.g. '- One row per soil sample and depth.'")
-        v.addWidget(self.rules_edit, 1)
+        # one row per rule (the file's '- ' lines; pack_editing.rules_to_items / items_to_rules convert)
+        self.rules_table = QTableWidget(0, 1)
+        self.rules_table.setHorizontalHeaderLabels(["Rule (double-click to edit)"])
+        self.rules_table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
+        style_rows(self.rules_table)
+        v.addWidget(self.rules_table, 1)
+        buttons = QHBoxLayout()
+        for text, slot in (("Add rule", self._add_rule), ("Remove", self._remove_rule),
+                           ("Up", lambda: self._move_rule(-1)), ("Down", lambda: self._move_rule(1))):
+            buttons.addWidget(QPushButton(text, clicked=slot))
+        buttons.addStretch(1)
+        v.addLayout(buttons)
         self.rules_combo.currentIndexChanged.connect(self._on_rules_prompt)
         self._on_rules_prompt(0)
         return w
 
+    def rules_items(self) -> list:
+        return [self.rules_table.item(r, 0).text() for r in range(self.rules_table.rowCount())
+                if self.rules_table.item(r, 0) and self.rules_table.item(r, 0).text().strip()]
+
+    def set_rules_items(self, items: list) -> None:
+        self.rules_table.setRowCount(0)
+        for text in items:
+            self._add_rule(text, edit=False)
+
+    def _add_rule(self, text: str = "", edit: bool = True) -> None:
+        r = self.rules_table.rowCount()
+        self.rules_table.insertRow(r)
+        self.rules_table.setItem(r, 0, QTableWidgetItem(text if isinstance(text, str) else ""))
+        if edit:
+            self.rules_table.setCurrentCell(r, 0)
+            self.rules_table.editItem(self.rules_table.item(r, 0))
+
+    def _remove_rule(self) -> None:
+        for r in sorted({i.row() for i in self.rules_table.selectedIndexes()}, reverse=True):
+            self.rules_table.removeRow(r)
+
+    def _move_rule(self, step: int) -> None:
+        r = self.rules_table.currentRow()
+        if r < 0 or not 0 <= r + step < self.rules_table.rowCount():
+            return
+        items = [self.rules_table.item(i, 0).text() if self.rules_table.item(i, 0) else ""
+                 for i in range(self.rules_table.rowCount())]
+        items[r], items[r + step] = items[r + step], items[r]
+        self.set_rules_items(items)
+        self.rules_table.setCurrentCell(r + step, 0)
+
     def _store_rules(self) -> None:
         if self._rules_shown is not None and not self.read_only:
-            self.draft.rules[self._rules_shown] = self.rules_edit.toPlainText()
+            self.draft.rules[self._rules_shown] = items_to_rules(self.rules_items())
 
     def _on_rules_prompt(self, _index: int) -> None:
         self._store_rules()
         name = self.rules_combo.currentData()
         self._rules_shown = name
-        self.rules_edit.setPlainText(self.draft.rules.get(name, ""))
+        self.set_rules_items(rules_to_items(self.draft.rules.get(name, "")))
         own = name in self.draft.own_prompts
         self.rules_note.setText(f"This research area has its own whole {name} prompt (prompts/{name}.md): rules "
                                 "here are used only if that prompt has a {{PACK_RULES}} slot." if own else "")
@@ -794,6 +835,8 @@ class PackEditor(QDialog):
         self.f_table.setColumnWidth(0, 200)
         self.f_table.setColumnWidth(3, 250)
         self.f_table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
+        self._formula_editor = None
+        style_rows(self.f_table, FormulaDelegate(self, self.f_table))
         self._if_present = {"check": "keep the paper's, flag if different", "keep": "keep the paper's",
                             "replace": "use the formula's"}
         assert set(self._if_present) == set(IF_PRESENT)
@@ -811,21 +854,82 @@ class PackEditor(QDialog):
 
         below = QHBoxLayout()
         trial = QGroupBox("Try the selected formula")
-        trial.setMaximumWidth(380)                       # a few inputs: it needn't be wide
+        trial.setMaximumWidth(330)                       # a few inputs: it needn't be wide
         tv = QVBoxLayout(trial)
         tv.addWidget(_hint("Values for its inputs, as they'd be in their columns:"))
         self.f_inputs = QTableWidget(0, 2)
         self.f_inputs.setHorizontalHeaderLabels(["Input column", "Value"])
         self.f_inputs.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
         self.f_inputs.setColumnWidth(1, 90)
+        style_rows(self.f_inputs)
         self.f_inputs.itemChanged.connect(lambda _i: self._try_formula())
         tv.addWidget(self.f_inputs, 1)
         self.f_result = QLabel("Result: --", wordWrap=True)
         tv.addWidget(self.f_result)
         below.addWidget(trial)
+        below.addWidget(self._formula_columns())
         below.addWidget(self._formula_reference(FUNCTION_HELP), 1)
         v.addLayout(below, 1)
         return w
+
+    def _formula_columns(self) -> QWidget:
+        """Every column of the research area; a click types the name into the formula being written."""
+        box = QGroupBox("Columns (click to insert)")
+        box.setMaximumWidth(330)                         # names, not prose: the reference beside it gets the room
+        v = QVBoxLayout(box)
+        self.f_column_filter = QLineEdit(placeholderText="filter", clearButtonEnabled=True)
+        self.f_column_filter.textChanged.connect(self._filter_formula_columns)
+        v.addWidget(self.f_column_filter)
+        self.f_columns = QListWidget()
+        self.f_columns.setFocusPolicy(Qt.FocusPolicy.NoFocus)      # the formula cell keeps the focus (and its cursor)
+        self.f_columns.itemClicked.connect(lambda item: self.insert_formula_column(item.text()))
+        self.f_columns.setToolTip("Click a column to put it in the formula at the cursor (names with - % ( ) go in "
+                                  "backticks automatically).")
+        v.addWidget(self.f_columns, 1)
+        self._refresh_formula_columns()
+        return box
+
+    def _refresh_formula_columns(self) -> None:
+        """The columns as the tabs have them now (the Columns / Stages tabs may have changed them)."""
+        if not hasattr(self, "f_columns"):
+            return
+        if not self.read_only and hasattr(self, "column_list"):
+            self.draft.columns = [self.column_list.item(i).text() for i in range(self.column_list.count())]
+            self._store_stage()
+        names = list(dict.fromkeys(self.draft.all_columns()
+                                   + [f["column"] for f in self._formulas_from_table() if f["column"]]))
+        self.f_columns.clear()
+        self.f_columns.addItems(names)
+        self._filter_formula_columns(self.f_column_filter.text())
+
+    def _filter_formula_columns(self, text: str) -> None:
+        text = text.strip().lower()
+        for i in range(self.f_columns.count()):
+            item = self.f_columns.item(i)
+            item.setHidden(bool(text) and text not in item.text().lower())
+
+    def insert_formula_column(self, column: str) -> None:
+        """Into the open Formula cell at its cursor; else at the end of the selected formula."""
+        token = column if column.isidentifier() else f"`{column}`"
+        editor = self._formula_editor
+        if editor is not None:
+            editor.insert(token)
+            editor.setFocus()
+            return
+        r = self.f_table.currentRow()
+        if r < 0:
+            if self.f_table.rowCount() == 0:
+                self._add_formula({})
+            r = max(self.f_table.currentRow(), 0)
+        item = self.f_table.item(r, 1)
+        text = item.text() if item else ""
+        joined = text + ("" if not text or text.endswith((" ", "(")) else " ") + token
+        if item is None:
+            self.f_table.setItem(r, 1, QTableWidgetItem(joined))
+        else:
+            item.setText(joined)
+        self.f_table.setCurrentCell(r, 1)
+        self._show_formula_inputs()
 
     @staticmethod
     def _formula_reference(entries) -> QWidget:
@@ -866,7 +970,7 @@ class PackEditor(QDialog):
         for key, label in self._if_present.items():
             combo.addItem(label, key)
         combo.setCurrentIndex(max(combo.findData(raw.get("if_present", "check")), 0))
-        t.setCellWidget(r, 3, combo)
+        t.setCellWidget(r, 3, in_cell(combo))
         t.blockSignals(False)
         if not raw:
             t.setCurrentCell(r, 0)
@@ -891,7 +995,7 @@ class PackEditor(QDialog):
         for r in range(self.f_table.rowCount()):
             text = lambda c: (self.f_table.item(r, c).text().strip() if self.f_table.item(r, c) else "")
             raw = {"column": text(0), "expression": text(1), "description": text(2),
-                   "if_present": self.f_table.cellWidget(r, 3).currentData()}
+                   "if_present": self.f_table.cellWidget(r, 3).findChild(QComboBox).currentData()}
             if any((raw["column"], raw["expression"])):
                 out.append(raw)
         return out
@@ -954,7 +1058,7 @@ class PackEditor(QDialog):
         self.check_table.setHorizontalHeaderLabels(["Level", "Where", "What"])
         self.check_table.horizontalHeader().setSectionResizeMode(2, QHeaderView.ResizeMode.Stretch)
         self.check_table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
-        self.check_table.setWordWrap(True)
+        style_rows(self.check_table)
         self.check_table.verticalHeader().setVisible(False)
         v.addWidget(self.check_table, 1)
         return w
@@ -1112,6 +1216,22 @@ def remove_pack(parent) -> Optional[str]:
         QMessageBox.warning(parent, "Not removed", str(e))
         return None
     return pack.id
+
+
+class FormulaDelegate(RowSeparatorDelegate):
+    """Spaced rows for the formulas table; remembers the open editor of a Formula cell, so a click on a column name
+    (the columns list, which never takes the focus) types it in at the cursor."""
+
+    def __init__(self, editor_window: "PackEditor", table: QTableWidget):
+        super().__init__(table)
+        self.window = editor_window
+
+    def createEditor(self, parent, option, index):
+        editor = super().createEditor(parent, option, index)
+        if index.column() == 1 and isinstance(editor, QLineEdit):
+            self.window._formula_editor = editor
+            editor.destroyed.connect(lambda *_: setattr(self.window, "_formula_editor", None))
+        return editor
 
 
 def choose_pack(parent, title: str, include_builtin: bool = True) -> Optional[packs.Pack]:

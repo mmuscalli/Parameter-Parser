@@ -2,9 +2,10 @@
 from __future__ import annotations
 import html
 
-from PySide6.QtCore import QEvent, QRect, Qt
-from PySide6.QtGui import QPainter, QPalette
-from PySide6.QtWidgets import (QDialog, QDialogButtonBox, QLabel, QLineEdit, QPlainTextEdit, QStyle,
+from PySide6.QtCore import QEvent, QRect, QSize, Qt, QTimer
+from PySide6.QtGui import QColor, QPainter, QPalette, QPen
+from PySide6.QtWidgets import (QAbstractItemView, QDialog, QDialogButtonBox, QLabel, QLineEdit, QPlainTextEdit, QStyle,
+                               QStyledItemDelegate, QTableWidget,
                                QToolTip, QVBoxLayout, QWidget)
 
 
@@ -127,3 +128,54 @@ class ColumnGroupBand(QWidget):
             text = painter.fontMetrics().elidedText(label, Qt.TextElideMode.ElideRight, max(rect.width() - 8, 0))
             painter.drawText(rect, Qt.AlignmentFlag.AlignCenter, text)     # once, centred over the visible part
         painter.end()
+
+
+# ---- spaced rows: the style of the app's multi-column lists (Mickey, 2026-11-04/05) ------------------------------
+
+ROW_GAP = 7       # px above and below each row's content; a faint line in the middle of the space between rows
+
+
+class RowSeparatorDelegate(QStyledItemDelegate):
+    """Taller rows (long texts wrap onto several lines) with a subtle line between them."""
+
+    def sizeHint(self, option, index):
+        size = super().sizeHint(option, index)
+        return QSize(size.width(), size.height() + 2 * ROW_GAP)
+
+    def paint(self, painter, option, index):
+        option.rect.adjust(0, ROW_GAP, 0, -ROW_GAP)          # the text sits inside the gap
+        super().paint(painter, option, index)
+        option.rect.adjust(0, -ROW_GAP, 0, ROW_GAP)
+        if index.row() < index.model().rowCount() - 1:
+            line = QColor(option.palette.text().color())
+            line.setAlphaF(0.14)
+            painter.save()
+            painter.setPen(QPen(line, 1))
+            y = option.rect.bottom()
+            painter.drawLine(option.rect.left(), y, option.rect.right(), y)
+            painter.restore()
+
+
+def in_cell(widget: QWidget) -> QWidget:
+    """A cell widget (combo box, spin box) kept at its natural height, centred in the taller row; find it again
+    with `table.cellWidget(r, c).findChild(...)`."""
+    holder = QWidget()
+    v = QVBoxLayout(holder)
+    v.setContentsMargins(2, ROW_GAP, 2, ROW_GAP)
+    v.addWidget(widget, alignment=Qt.AlignmentFlag.AlignVCenter)
+    return holder
+
+
+def style_rows(table: QTableWidget, delegate: "RowSeparatorDelegate" = None) -> None:
+    """The spaced-rows style for a multi-column list: no grid, a faint line between rows, long texts wrapped (no
+    '...'), row heights following the column widths (refitted once the layout settles). The default for every
+    scrollable multi-column list of settings."""
+    table.setShowGrid(False)
+    table.setWordWrap(True)
+    table.setTextElideMode(Qt.TextElideMode.ElideNone)
+    table.setItemDelegate(delegate or RowSeparatorDelegate(table))
+    table.setVerticalScrollMode(QAbstractItemView.ScrollMode.ScrollPerPixel)
+    refit = lambda *_: QTimer.singleShot(0, table.resizeRowsToContents)
+    table.horizontalHeader().sectionResized.connect(refit)
+    table.model().rowsInserted.connect(refit)
+    table.model().dataChanged.connect(refit)

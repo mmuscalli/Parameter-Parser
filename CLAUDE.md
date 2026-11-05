@@ -2121,3 +2121,16 @@ live result), function help. tests/test_formulas.py; test_template_pack asserts 
 - Tests must not see the user's own research areas (<app data>/packs; Mickey makes test packs there):
   test_research_areas points `packs.user_packs_dir` at an empty temp folder. Gate commits on the runner's summary
   ("0 failed, 0 skipped"), not on its output existing.
+- **Row style is the default for lists of settings (Mickey, 2026-11-05):** `gui/widgets.style_rows(table, delegate=None)`
+  (+ `RowSeparatorDelegate`, `ROW_GAP`, `in_cell(widget)` -- moved from categories_dialog): no grid, faint line
+  between rows, wrapped text, rows refitted on column resize / inserts / edits. Used by the categories window and the
+  pack editor's parameters, rules, formulas, try-it inputs and check tables. Use it for every new scrollable
+  multi-column list of settings (not the dense data tables like the Rows tab). Cell widgets go in `in_cell(...)` and
+  are read back with `cellWidget(r, c).findChild(...)`.
+- Rules tab: one editable row per rule (`pack_editing.rules_to_items`: '- ' lines start a rule, indented lines
+  continue it, dash-less paragraphs are one rule each; `items_to_rules` writes '- rule' lines; round-trips every
+  built-in rules file), add / remove / up / down.
+- Formulas tab: "Columns (click to insert)" between Try (max 330 px) and the reference: every column of the area
+  (`draft.all_columns()` + formula outputs, refreshed when the tab opens; filter box); the list never takes focus,
+  and `FormulaDelegate` remembers the open Formula cell editor, so a click types the name at its cursor (backticks
+  for names that aren't identifiers); with no editor open it's appended to the selected formula.

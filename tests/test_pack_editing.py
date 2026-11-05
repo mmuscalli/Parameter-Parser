@@ -129,7 +129,15 @@ def test_windows():
         editor.tabs.setCurrentIndex(2)
         editor._add_parameter({"column": "depth_cm", "unit": "cm", "description": "sampling depth"})
         editor.s_keywords.setText("soil, depth")
-        editor.rules_edit.setPlainText("- One row per soil sample.")
+        # rules are rows (the file's '- ' lines): the template's two example rules, then ours instead
+        editor.tabs.setCurrentIndex(3)
+        assert len(editor.rules_items()) == 2 and editor.rules_items()[0].startswith("EXAMPLE RULES")
+        editor.set_rules_items(["One row per soil sample.", "A depth profile is one set."])
+        editor._add_rule("Controls get no rows.", edit=False)
+        editor.rules_table.setCurrentCell(2, 0)
+        editor._move_rule(-1)
+        assert editor.rules_items() == ["One row per soil sample.", "Controls get no rows.",
+                                        "A depth profile is one set."]
         problems = editor.run_check()
         assert any("normalize_species" in p.message for p in problems)              # needs the chemistry step
         with patch("parameter_extractor.gui.pack_windows.QMessageBox.warning", lambda *a, **k: None):
@@ -139,7 +147,8 @@ def test_windows():
         spec = d.stages["example_measurements.json"]
         assert spec["parameters"][-1] == {"column": "depth_cm", "unit": "cm", "description": "sampling depth"}
         assert spec["trigger"] == {"always": True, "keywords": ["soil", "depth"]}
-        assert d.rules["structure_planner"].startswith("- One row per soil sample")
+        assert d.rules["structure_planner"] == ("- One row per soil sample.\n- Controls get no rows.\n"
+                                                "- A depth profile is one set.\n")
         assert spec["parameters"][0].get("uncertainties") is True                   # untouched fields kept
 
         built_in = PackEditor(packs.available()["prebiotic_chemistry"].folder)
@@ -195,6 +204,49 @@ def test_remove_needs_two_confirmations():
                     patch.object(DeleteConfirmDialog, "exec", lambda self, code=second: code):
                 assert (remove_pack(None) == "test_case") is removed
             assert pack.folder.exists() is not removed
+
+
+def test_rules_rows_round_trip():
+    from parameter_extractor.pack_editing import items_to_rules, rules_to_items
+    text = ("- First rule, which goes on\n  over two lines.\n- Second rule.\n\nA paragraph without a dash\n"
+            "continues here.\n")
+    assert rules_to_items(text) == ["First rule, which goes on over two lines.", "Second rule.",
+                                    "A paragraph without a dash continues here."]
+    assert items_to_rules(["  a  b ", "", "c"]) == "- a b\n- c\n" and items_to_rules([]) == ""
+    for path in sorted((packs.BUILTIN_DIR).glob("*/prompts/*.rules.md")):        # the real files survive
+        items = rules_to_items(path.read_text())
+        assert items and rules_to_items(items_to_rules(items)) == items, path
+
+
+def test_formula_columns_list():
+    from PySide6.QtWidgets import QApplication
+    app = QApplication.instance() or QApplication([])
+    from parameter_extractor.gui.pack_windows import PackEditor
+    with tempfile.TemporaryDirectory() as tmp:
+        packs.add_search_dir(Path(tmp))
+        pack = packs.create_pack("cols_area", "Cols", base=Path(tmp))
+        editor = PackEditor(pack.folder)
+        editor.show()
+        editor.tabs.setCurrentIndex(4)
+        app.processEvents()
+        names = [editor.f_columns.item(i).text() for i in range(editor.f_columns.count())]
+        assert {"temperature_C", "product_yield_pct", "temperature_K", "paper_title"} <= set(names)
+        editor.f_column_filter.setText("product")
+        assert [n for i, n in enumerate(names) if not editor.f_columns.item(i).isHidden()] == ["product_yield_pct"]
+        # no editor open: appended to the selected formula
+        editor.f_table.setCurrentCell(0, 1)
+        editor.insert_formula_column("product_yield_pct")
+        assert editor.f_table.item(0, 1).text() == "temperature_C + 273.15 product_yield_pct"
+        # the Formula cell open: typed in at its cursor; odd names get backticks
+        editor.f_table.item(0, 1).setText("2 * ")
+        editor.f_table.editItem(editor.f_table.item(0, 1))
+        app.processEvents()
+        assert editor._formula_editor is not None
+        editor._formula_editor.end(False)
+        editor.insert_formula_column("sampled_Gly-Gly_aq_%yield")
+        assert editor._formula_editor.text() == "2 * `sampled_Gly-Gly_aq_%yield`"
+        assert editor.f_columns.focusPolicy() == editor.f_columns.focusPolicy().NoFocus
+        editor.close()
 
 
 def test_menu():

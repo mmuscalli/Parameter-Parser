@@ -67,6 +67,34 @@ STAGE_NAME = re.compile(r"[a-z][a-z0-9_]{1,60}")
 BAD_COLUMN_CHARS = re.compile(r'[,"\n\t]')
 
 
+def rules_to_items(text: str) -> List[str]:
+    """A rules file as the editor's rows (2026-11-05): each '- ' line starts a rule, the indented lines after it
+    continue it (joined with spaces); text before the first '- ' is a rule of its own per paragraph."""
+    items: List[str] = []
+    current: Optional[str] = None
+    for line in (text or "").splitlines():
+        stripped = line.strip()
+        if stripped.startswith("- ") or stripped == "-":
+            if current is not None:
+                items.append(current)
+            current = stripped[2:].strip()
+        elif not stripped:
+            if current is not None and not line.startswith(" "):
+                items.append(current)
+                current = None
+        else:
+            current = stripped if current is None else f"{current} {stripped}"
+    if current is not None:
+        items.append(current)
+    return [i for i in items if i]
+
+
+def items_to_rules(items: List[str]) -> str:
+    """The rows back into a rules file: one '- ' line per rule ('' when there are none)."""
+    rules = [" ".join(i.split()) for i in items if i and i.strip()]
+    return "".join(f"- {r}\n" for r in rules)
+
+
 @dataclass
 class Problem:
     level: str            # "error" | "warning" | "note"

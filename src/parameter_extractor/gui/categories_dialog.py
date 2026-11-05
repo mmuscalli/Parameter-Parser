@@ -21,6 +21,7 @@ from PySide6.QtWidgets import (QAbstractItemView, QStyledItemDelegate, QCheckBox
                                QWidget)
 
 from parameter_extractor import packs, variable_categories as vc
+from parameter_extractor.gui.widgets import RowSeparatorDelegate, in_cell, style_rows
 from parameter_extractor.registry import STANDARD, VariableRegistry, areas
 
 FORMATS = {"number": "One number with a unit", "text": "Text", "any": "Number or text"}
@@ -31,39 +32,6 @@ ID_RE = re.compile(r"^[a-z][a-z0-9_]{1,40}$")
 WARNING = ("The app's own categories are part of the instructions the model gets (labels, descriptions, formats) "
            "and decide where columns sit. Changing them can make extraction differ from the app's tested "
            "behaviour. Your own categories are offered to the model too when 'Model may assign' is ticked.")
-
-
-ROW_GAP = 7       # px above and below each category's row; a faint line in the middle of the space between rows
-
-
-class RowSeparatorDelegate(QStyledItemDelegate):
-    """Taller rows (descriptions run to several lines) with a subtle line between them (Mickey, 2026-11-04)."""
-
-    def sizeHint(self, option, index):
-        size = super().sizeHint(option, index)
-        return QSize(size.width(), size.height() + 2 * ROW_GAP)
-
-    def paint(self, painter, option, index):
-        option.rect.adjust(0, ROW_GAP, 0, -ROW_GAP)          # the text sits inside the gap
-        super().paint(painter, option, index)
-        option.rect.adjust(0, -ROW_GAP, 0, ROW_GAP)
-        if index.row() < index.model().rowCount() - 1:
-            line = QColor(option.palette.text().color())
-            line.setAlphaF(0.14)
-            painter.save()
-            painter.setPen(QPen(line, 1))
-            y = option.rect.bottom()
-            painter.drawLine(option.rect.left(), y, option.rect.right(), y)
-            painter.restore()
-
-
-def _in_cell(widget: QWidget) -> QWidget:
-    """A cell widget kept at its natural height, centred in the taller row."""
-    holder = QWidget()
-    v = QVBoxLayout(holder)
-    v.setContentsMargins(2, ROW_GAP, 2, ROW_GAP)
-    v.addWidget(widget, alignment=Qt.AlignmentFlag.AlignVCenter)
-    return holder
 
 
 class CategoriesDialog(QDialog):
@@ -102,12 +70,7 @@ class CategoriesDialog(QDialog):
         self.table.setHorizontalHeaderLabels(HEADERS)
         self.table.horizontalHeader().setSectionResizeMode(C_DESC, QHeaderView.ResizeMode.Stretch)
         self.table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
-        self.table.setWordWrap(True)
-        self.table.setShowGrid(False)                    # rows are separated by RowSeparatorDelegate's line
-        self.table.setTextElideMode(Qt.TextElideMode.ElideNone)     # descriptions wrap onto more lines instead
-        # row heights follow the description column's width (it stretches with the window)
-        self.table.horizontalHeader().sectionResized.connect(lambda *_: self.table.resizeRowsToContents())
-        self.table.setItemDelegate(RowSeparatorDelegate(self.table))
+        style_rows(self.table)                           # spaced rows, faint dividers, descriptions wrap
         self.table.itemChanged.connect(self._on_item_changed)
         layout.addWidget(self.table, 1)
         self.note = QLabel(wordWrap=True)
@@ -171,7 +134,7 @@ class CategoriesDialog(QDialog):
                     fmt.addItem(label, key)
                 fmt.setCurrentIndex(max(fmt.findData(row.get("value_type") or "any"), 0))
                 fmt.currentIndexChanged.connect(lambda _i, r=r: self._on_widget(r))
-                t.setCellWidget(r, C_FORMAT, _in_cell(fmt))
+                t.setCellWidget(r, C_FORMAT, in_cell(fmt))
                 for c, field, top in ((C_WORDS, "max_words", 200), (C_ORDER, "table_order", 10000)):
                     spin = QSpinBox(minimum=0, maximum=top)
                     spin.setValue(int(row.get(field) or 0) if row.get(field) is not None else
@@ -179,7 +142,7 @@ class CategoriesDialog(QDialog):
                     if field == "max_words":
                         spin.setSpecialValueText("no limit")
                     spin.valueChanged.connect(lambda _v, r=r: self._on_widget(r))
-                    t.setCellWidget(r, c, _in_cell(spin))
+                    t.setCellWidget(r, c, in_cell(spin))
                 box = QCheckBox()
                 box.setChecked(bool(row.get("model_assigns")))
                 box.toggled.connect(lambda _on, r=r: self._on_widget(r))
