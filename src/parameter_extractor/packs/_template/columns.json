@@ -1,0 +1,15 @@
+{
+  "_about": "The dataset's columns, in the order they're written (every paper's CSV has all of them, empty or not). Name columns with their unit at the end ('temperature_C', 'pressure_bar', 'mass_g', 'yield_pct') -- the app reads the unit from the name and converts values into it. Every pack also gets the shared columns (paper title, DOI, authors, year, journal, arXiv id, where in the paper a row comes from) and the row identifiers (full_id, set_id, sample_id), so they aren't listed here. These are EXAMPLE columns: replace them with your own.",
+  "all_columns": [
+    "set_type",
+    "duration_hr",
+    "temperature_C",
+    "pressure_bar",
+    "pH",
+    "sample_material",
+    "analysis_method",
+    "product_yield_pct"
+  ],
+  "_about_species_names": "Optional: a vocabulary of compound names the model should use exactly (e.g. 'NaCl', 'Gly'). Needed only with the 'chemistry' built-in stage; leave [] otherwise.",
+  "species_names": []
+}

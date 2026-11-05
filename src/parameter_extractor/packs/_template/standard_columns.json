@@ -1,0 +1,4 @@
+{
+  "_about": "Optional extra columns, each with a description: [{\"column\": \"...\", \"description\": \"...\"}]. They come after columns.json's in the dataset. The columns of the extraction stages (stages/*.json) are added automatically -- list a column here only when nothing else creates it (e.g. one a calculation fills).",
+  "columns": []
+}

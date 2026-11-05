@@ -1,0 +1,40 @@
+{
+  "_about": "An extraction stage: one request to the model that reads the paper and fills these columns for every row. A pack can have several (one file each, run in parallel). Every field is explained in README.md ('Stages'). This EXAMPLE reads simple conditions and one result: rename it and replace the parameters with your own.",
+  "name": "example_measurements",
+  "label": "Measurements (example)",
+  "description": "Conditions and results of each experiment (the template's example stage).",
+  "origin": "measurements",
+  "schema_name": "ExampleMeasurementsResult",
+  "system_prompt": "Extract experimental conditions and results from a scientific paper. Report only what the paper states.",
+  "_about_trigger": "When the stage runs: always, or only for papers that need it -- set_types (e.g. ['Time Series']), keywords in the paper text, set_patterns (regexes on set labels).",
+  "trigger": {"always": true},
+  "_about_per": "'sample': a value can belong to one row; 'set': values are per set (or '' = the whole paper).",
+  "per": "sample",
+  "set_word": "experiment set",
+  "error_suffixes": ["_err_plus", "_err_minus"],
+  "suffix_separator": "_",
+  "table_images": true,
+  "intro": "For every experiment set (and sample) in the structure plan below, extract the values the paper reports. A value that holds for every set goes in ONE row with `set` ''; a value that differs between sets goes in each set's row; one that differs between the samples of a set goes in each sample's row.",
+  "_about_parameters": "One entry per column this stage fills: column (from columns.json, or a new one), unit (the column's unit; values are converted into it), description (the model reads it: say exactly what belongs there), kind 'text' for words instead of numbers, choices (a fixed list of allowed words), integer (a count), uncertainties (also <column>_err_plus / _err_minus).",
+  "parameters": [
+    {"column": "temperature_C", "unit": "°C", "uncertainties": true,
+     "description": "the temperature the experiment ran at."},
+    {"column": "pressure_bar", "unit": "bar",
+     "description": "the pressure the experiment ran at (atmospheric = 1 bar only when the paper says ambient or atmospheric pressure)."},
+    {"column": "pH", "unit": "",
+     "description": "the pH of the solution at the start of the experiment."},
+    {"column": "sample_material", "kind": "text",
+     "description": "the material or substance studied, as the paper names it."},
+    {"column": "analysis_method", "kind": "text",
+     "description": "how the result was measured (instrument or technique), at most 8 words."},
+    {"column": "product_yield_pct", "unit": "%", "uncertainties": true,
+     "description": "the yield of the product, in %."}
+  ],
+  "_about_rules": "Extra instructions for the model, one sentence each, about anything the descriptions don't cover.",
+  "rules": [
+    "A value read from the setup (e.g. 'sealed glass ampoule' for a sealed vessel) is b 'derived': quote the setup."
+  ],
+  "_about_open_ended": "true: the model also lists values that have no column (`other`), offered in the review as new variables; open_ended_hint says what to look for and what to leave out.",
+  "open_ended": true,
+  "open_ended_hint": "e.g. other conditions of the experiment (stirring, light, atmosphere) and other measured results. Not the values of the parameters above."
+}

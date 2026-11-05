@@ -20,6 +20,9 @@ A pack is a folder with a pack.json manifest:
                     system", "sample": "planet"}, and optionally a row ("row": "object model
                     instance": one planet as one fit models it), used in messages
   compact_text      collapse long runs of layout spaces in the text sent to the model
+  is_template       the TEMPLATE pack (packs/_template/, 2026-11-05): a complete, working pack with every
+                    file explained, copied by create_pack() to start a new research area. Never listed
+                    (available() leaves it out) and never run directly.
 
 and, next to it:
   prompts/*.md      the pack's prompts (structure_planner, ...); a prompt the pack
@@ -35,6 +38,7 @@ needs the template, vocabulary, prompts or stages asks `current()`.
 """
 from __future__ import annotations
 import json
+import re
 from functools import cached_property
 from pathlib import Path
 from typing import Dict, List, Optional
@@ -66,6 +70,8 @@ class PackManifest(BaseModel):
     # columns (and patterns, table_order) the pack puts in a category -- its own or a shared one -- for the
     # column order of the CSV and the Rows tab (column_order.py)
     category_columns: Dict[str, dict] = Field(default_factory=dict)
+    # the template a new pack is copied from (packs/_template/): hidden from every list of packs
+    is_template: bool = False
 
 
 class Pack:
@@ -159,9 +165,9 @@ def user_packs_dir() -> Path:
 _extra_dirs: List[Path] = []          # more places to look (tests)
 
 
-def available() -> Dict[str, Pack]:
+def available(include_template: bool = False) -> Dict[str, Pack]:
     """Every pack found, by id: the app's own first, then the user's (which can't
-    replace a built-in one)."""
+    replace a built-in one). The template pack only with `include_template`."""
     found: Dict[str, Pack] = {}
     for base in [BUILTIN_DIR, user_packs_dir(), *_extra_dirs]:
         if not base.is_dir():
@@ -171,8 +177,41 @@ def available() -> Dict[str, Pack]:
                 pack = Pack(manifest.parent)
             except (ValueError, OSError):
                 continue                     # a broken user pack shouldn't stop the app
+            if pack.manifest.is_template and not include_template:
+                continue
             found.setdefault(pack.id, pack)
     return found
+
+
+TEMPLATE_DIR = BUILTIN_DIR / "_template"
+PACK_ID = re.compile(r"[a-z][a-z0-9_]{1,40}")
+
+
+def template_pack() -> Pack:
+    """The template every new pack starts from (packs/_template/)."""
+    return Pack(TEMPLATE_DIR)
+
+
+def create_pack(pack_id: str, label: str, description: str = "", base: Optional[Path] = None) -> Pack:
+    """A new research area: a copy of the template pack in `base` (default the user's packs folder) with its
+    own id, label and description. The copy is a working pack straight away (the template's example columns,
+    stage and rules), to be edited into the new area's own. Raises ValueError for a bad or taken id."""
+    import shutil
+    if not PACK_ID.fullmatch(pack_id or ""):
+        raise ValueError(f"'{pack_id}' isn't a usable id: lower-case letters, digits and '_', starting with a letter "
+                         f"(2-41 characters).")
+    if pack_id in available(include_template=True):
+        raise ValueError(f"A research area with the id '{pack_id}' already exists.")
+    if not (label or "").strip():
+        raise ValueError("Give the research area a name.")
+    folder = Path(base or user_packs_dir()) / pack_id
+    if folder.exists():
+        raise ValueError(f"The folder {folder} already exists.")
+    shutil.copytree(TEMPLATE_DIR, folder, ignore=shutil.ignore_patterns("__pycache__", ".DS_Store"))
+    manifest = json.loads((folder / "pack.json").read_text())
+    manifest.update(id=pack_id, label=label.strip(), description=description.strip(), is_template=False)
+    (folder / "pack.json").write_text(json.dumps(manifest, indent=2, ensure_ascii=False) + "\n")
+    return Pack(folder)
 
 
 _current: Optional[Pack] = None
@@ -184,7 +223,7 @@ def activate(pack_id: Optional[str] = None) -> Pack:
     pack_id = pack_id or DEFAULT_PACK
     if _current is not None and _current.id == pack_id:
         return _current
-    packs = available()
+    packs = available(include_template=True)      # (the template only when asked for by id: tests, checks)
     if pack_id not in packs:
         raise ValueError(f"Unknown domain pack '{pack_id}'. Available: {', '.join(sorted(packs))}")
     _current = packs[pack_id]

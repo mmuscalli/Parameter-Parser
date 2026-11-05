@@ -1,0 +1,46 @@
+{
+  "_about": "The manifest of a research area (a 'pack'). This is the TEMPLATE: a complete, working pack that a new research area is copied from (packs.create_pack). Keys starting with '_about' explain the key after them and are ignored by the app -- keep or delete them. See README.md for the whole guide.",
+
+  "_about_id": "The pack's id: lower-case letters, digits and '_', starting with a letter. Set when the pack is created; don't change it later (remembered variables and categories are stored under it).",
+  "id": "_template",
+  "_about_label": "The name shown in the app ('Research area').",
+  "label": "Template (new research area)",
+  "_about_description": "One or two sentences: what kind of papers and what one row of the dataset is.",
+  "description": "The starting point of a new research area: example columns, one example extraction stage and example rules, each explained. Replace them with your own.",
+  "version": 1,
+  "_about_is_template": "true only for this template: it hides the pack from every list in the app. A pack created from it gets false.",
+  "is_template": true,
+
+  "_about_template": "The file listing the dataset's columns in order (and a vocabulary of compound names, if any). See columns.json.",
+  "template": "columns.json",
+  "_about_standard_columns": "Optional: more columns with a description each (standard_columns.json). Columns of the extraction stages (stages/*.json) are added automatically, so most packs leave this empty.",
+  "standard_columns": "standard_columns.json",
+  "_about_species_cids": "Optional: PubChem identities of the vocabulary's compounds (a file like the prebiotic pack's species_cids.json). '' = none.",
+  "species_cids": "",
+
+  "_about_builtin_stages": "Extraction steps written in code that this pack uses. Available: 'chemistry' (dissolved species and their concentrations / yields -- built for solution chemistry), 'fit_models' (how astronomical fits were made). Most new packs use none: their extraction is the stages in stages/*.json.",
+  "builtin_stages": [],
+  "_about_postprocess": "Calculations run on the extracted rows, in order. Each is code in the app; the ones that exist are listed in README.md. A new pack usually starts with none.",
+  "postprocess": [],
+
+  "_about_units": "What the pack calls a group of rows ('set') and one row ('sample'), used in the prompts and messages. Optionally 'row' for messages ('object model instance').",
+  "units": {"set": "experiment set", "sample": "sample"},
+  "_about_compact_text": "true collapses long runs of spaces in the paper text sent to the model (saves ~20% on table-heavy papers).",
+  "compact_text": false,
+  "_about_focused_row_plan": "true: a focused search plans each paper's rows like a full extraction (more accurate rows, a little more cost).",
+  "focused_row_plan": true,
+
+  "_about_variable_categories": "Categories for variables the model suggests beyond the columns (shown in the review and used to place columns). Shared ones -- Metadata, Experimental Methodology, Other -- exist already. Fields: id, label, description (the model reads it), value_type (number / text / any), max_words, table_order (lower = further left), model_assigns (the model may put suggestions in it), patterns (regexes of column names placed in it). Can also be edited in the app (Variables > Variable categories).",
+  "variable_categories": [
+    {"id": "conditions", "table_order": 30, "label": "Conditions", "value_type": "number", "model_assigns": true,
+     "description": "a quantity the experiment ran under that has no column (one number with its unit)"},
+    {"id": "results", "table_order": 70, "label": "Results", "value_type": "number", "model_assigns": true,
+     "description": "a measured result that has no column (one number with its unit)"}
+  ],
+  "_about_category_columns": "Which columns sit in which category (the order of the CSV and the Rows tab): {category id: {columns: [...], patterns: [regex, ...]}}. Columns in no category go under Other.",
+  "category_columns": {
+    "methodology": {"columns": ["set_type", "sample_material", "analysis_method"]},
+    "conditions": {"columns": ["duration_hr", "temperature_C", "pressure_bar", "pH"]},
+    "results": {"columns": ["product_yield_pct"]}
+  }
+}

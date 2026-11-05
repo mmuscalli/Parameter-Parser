@@ -54,6 +54,17 @@ def run_checks(pdf: Optional[Path] = None, api_key: Optional[str] = None) -> Lis
                 f"{pack.label}: {len(pack.template_columns)} columns, {len(pack.species_names)} species")
     checks.append(_run("Bundled prompts & vocabulary", resources))
 
+    def template() -> str:
+        """The template new research areas are made from (packs/_template/): bundled and valid."""
+        from parameter_extractor import packs
+        from parameter_extractor.stages.optional import load_specs
+        pack = packs.template_pack()
+        specs = load_specs(pack)
+        if not pack.manifest.is_template or not specs or not (pack.folder / "README.md").is_file():
+            raise FileNotFoundError("the template pack is incomplete")
+        return f"{len(pack.template_columns)} example columns, {len(specs)} example stage(s), guide included"
+    checks.append(_run("Template for new research areas", template))
+
     def pdf_libs() -> str:
         import pdfplumber, pypdfium2
         return f"pdfplumber {pdfplumber.__version__}, pypdfium2 {pypdfium2.version.PYPDFIUM_INFO}"

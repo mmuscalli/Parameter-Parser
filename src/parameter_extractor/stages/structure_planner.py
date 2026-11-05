@@ -10,7 +10,10 @@ from .prompt_loader import load_prompt
 def run_structure_planner(
     ctx: RunContext, paper_text: str, table_images: Optional[List[Path]] = None,
 ) -> StructurePlan:
-    prompt = load_prompt("structure_planner", PAPER_TEXT=paper_text)
+    from parameter_extractor.packs import current
+    units = current().manifest.units      # what the pack calls a set / a row (the shared prompt's slots)
+    prompt = load_prompt("structure_planner", PAPER_TEXT=paper_text, SET_WORD=units.get("set", "set"),
+                         SAMPLE_WORD=units.get("sample", "sample"))
     plan = call_structured(
         ctx,
         stage="structure_planner",

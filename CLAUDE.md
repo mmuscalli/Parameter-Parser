@@ -2028,3 +2028,27 @@ lists FAILED and SKIPPED files with their output tails (exit 1 on either). The f
 only, registry_path None / tmp registries, and test_gui_offline keeps QSettings under "ParameterExtractorTests".
 Measured on Mickey's 8-core Mac: ~95-110 s vs ~6-7 min one at a time; the floor is the slowest file
 (test_teng2023_replay ~1 min). A new test file must keep that independence (no shared output paths, no user prefs).
+
+## Template pack for new research areas (2026-11-05, Mickey: start of in-app pack creation)
+
+Goal (Mickey): pack creation and editing inside the app, like the variable categories / remembered columns windows.
+Step 1 built: a TEMPLATE pack that ships with the app, hidden from every pack list, as the basis of new packs.
+- `packs/_template/`: pack.json (`"is_template": true`, every key preceded by an `_about_<key>` explanation --
+  ignored by the loaders; tests check each `_about_x` names an existing key), columns.json (8 example columns, units
+  as name suffixes), standard_columns.json (empty), stages/example_measurements.json (a working spec: always,
+  per sample, table images, open-ended, uncertainties on temperature / yield), prompts/structure_planner.rules.md
+  (example rules), README.md (the guide: files, the run flow, columns, every stage + parameter field, row rules,
+  the existing calculators and which pack each suits, testing, what still needs code).
+- `PackManifest.is_template`; `packs.available(include_template=False)` leaves it out (all GUI combos, CLI,
+  registry areas use available()); `activate()` can still load it by id; `packs.template_pack()`;
+  `packs.create_pack(id, label, description, base=user_packs_dir())`: id `[a-z][a-z0-9_]{1,40}`, not taken, non-empty
+  label; copies the folder, rewrites id/label/description, is_template false.
+- Shared row-planning prompt `prompts/structure_planner.md` (generic; slots {{SET_WORD}} / {{SAMPLE_WORD}} from pack
+  `units`, {{PACK_RULES}} from `structure_planner.rules.md`, {{RESEARCH_AREA}}); prebiotic and exoplanets keep their
+  full own prompts (unchanged). stages/structure_planner.py passes the unit words.
+- `--self-check`: "Template for new research areas" (bundled and valid). tests/test_template_pack.py: hidden, valid,
+  id checks, a created pack found + run end to end with stand-in answers (shared prompt + rules used, K -> °C on every
+  row, uncertainties, text values).
+Next steps (not built): GUI "New research area…" (create_pack + editors for columns / stages / rules / categories),
+a stage editor (parameters table, trigger, options), validation of a pack (columns named in categories exist, spec
+columns' units match suffixes), and calculations a pack can declare without code (a small declarative layer).
