@@ -22,14 +22,15 @@ from typing import Optional
 from PySide6.QtCore import Qt, QUrl, Signal
 from PySide6.QtGui import QBrush, QColor, QDesktopServices
 from PySide6.QtWidgets import (QAbstractItemView, QCheckBox, QComboBox, QDialog, QDialogButtonBox, QFormLayout,
+                               QGridLayout,
                                QGroupBox, QHBoxLayout, QHeaderView, QInputDialog, QLabel, QLineEdit, QListWidget,
                                QListWidgetItem, QMessageBox, QPlainTextEdit, QPushButton, QScrollArea, QSplitter,
-                               QTabWidget,
+                               QTabWidget, QToolButton,
                                QTableWidget, QTableWidgetItem, QVBoxLayout, QWidget)
 
 from parameter_extractor import packs
-from parameter_extractor.pack_editing import (BUILTIN_STAGES, CALCULATIONS, RULE_PROMPTS, PackDraft, Problem,
-                                              check)
+from parameter_extractor.pack_editing import (BUILTIN_STAGES, CALCULATION_STEP, CALCULATIONS, RULE_PROMPTS,
+                                              PackDraft, Problem, check)
 
 LEVEL_COLORS = {"error": QColor(190, 40, 40), "warning": QColor(176, 110, 0), "note": QColor(110, 110, 110)}
 UNCERTAINTY_STYLES = [("<column>_err_plus / _err_minus", ["_err_plus", "_err_minus"], "_"),
@@ -56,6 +57,37 @@ def _split(text: str):
     return [w.strip() for w in (text or "").split(",") if w.strip()]
 
 
+class HelpButton(QToolButton):
+    """A small '?' that shows its explanation on hover and on click (Mickey, 2026-11-05: the editor's long
+    explanations moved behind these)."""
+
+    def __init__(self, text: str, parent=None):
+        super().__init__(parent)
+        self.help_text = text
+        self.setText("?")
+        self.setToolTip(text)
+        self.setAutoRaise(True)
+        self.setFixedSize(22, 22)
+        self.setStyleSheet("QToolButton { border: 1px solid palette(mid); border-radius: 11px; font-weight: bold; }")
+        self.clicked.connect(self._show)
+
+    def _show(self) -> None:
+        from PySide6.QtWidgets import QToolTip
+        QToolTip.showText(self.mapToGlobal(self.rect().bottomLeft()), self.help_text, self)
+
+
+def _titled(title: str, help_text: str) -> QWidget:
+    """A section title with a '?' beside it holding the explanation."""
+    w = QWidget()
+    h = QHBoxLayout(w)
+    h.setContentsMargins(0, 0, 0, 0)
+    label = QLabel(f"<b>{title}</b>")
+    h.addWidget(label)
+    h.addWidget(HelpButton(help_text))
+    h.addStretch(1)
+    return w
+
+
 def _hint(text: str) -> QLabel:
     label = QLabel(text, wordWrap=True)
     label.setStyleSheet("color: palette(placeholder-text);")
@@ -74,7 +106,7 @@ class NewPackDialog(QDialog):
         self.created: Optional[packs.Pack] = None
         self._id_edited = False
         layout = QVBoxLayout(self)
-        layout.addWidget(_hint("A research area (a data pack) decides the dataset's columns, how a paper's results "
+        layout.addWidget(_titled("A new research area", "A research area (a data pack) decides the dataset's columns, how a paper's results "
                                "become rows, and what is extracted. It starts as a working copy of the template or "
                                "of an existing area; you then edit it (Data Packs > Edit research area)."))
         form = _form()
@@ -237,26 +269,86 @@ class PackEditor(QDialog):
 
         calcs = QGroupBox("Calculations run on the rows, in this order (drag to reorder; tick to use)")
         cv = QVBoxLayout(calcs)
-        self.calc_list = QListWidget()
+        self.calc_list = QListWidget()                 # those that suit the area's built-in steps, and any ticked
         self.calc_list.setDragDropMode(QAbstractItemView.DragDropMode.InternalMove)
-        chosen = list(m.get("postprocess", []))
-        for name in chosen + [n for n in CALCULATIONS if n not in chosen]:
-            about, needs = CALCULATIONS.get(name, ("(unknown calculation)", ""))
-            item = QListWidgetItem(f"{name} -- {about}" + (f"  [needs the {needs} step]" if needs else ""))
-            item.setData(Qt.ItemDataRole.UserRole, name)
-            item.setFlags(item.flags() | Qt.ItemFlag.ItemIsUserCheckable)
-            item.setCheckState(Qt.CheckState.Checked if name in chosen else Qt.CheckState.Unchecked)
-            self.calc_list.addItem(item)
-        cv.addWidget(self.calc_list)
-        v.addWidget(calcs, 1)
+        cv.addWidget(self.calc_list, 1)
+        self.no_calcs_note = _hint("None of the calculations was written for this research area's built-in steps "
+                                   "(most new areas use none). Formulas (their own tab) cover calculations within a "
+                                   "row; the app's other calculations are below.")
+        cv.addWidget(self.no_calcs_note)
+        self.other_calcs_btn = QToolButton(checkable=True)
+        self.other_calcs_btn.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
+        self.other_calcs_btn.setArrowType(Qt.ArrowType.RightArrow)
+        self.other_calcs_btn.setStyleSheet("QToolButton { border: none; }")
+        self.other_calcs_btn.toggled.connect(self._toggle_other_calcs)
+        cv.addWidget(self.other_calcs_btn)
+        self.other_calc_list = QListWidget()           # the rest, collapsed: ticking one moves it up
+        self.other_calc_list.setVisible(False)
+        self.other_calc_list.itemChanged.connect(self._on_other_calc)
+        cv.addWidget(self.other_calc_list, 1)
+        v.addWidget(calcs)
+        v.addStretch(1)                              # the box only as tall as what it shows
+        self._fill_calculations(list(m.get("postprocess", [])))
+        for box in self.builtin_boxes.values():
+            box.toggled.connect(lambda _on: self._fill_calculations(self._chosen_calculations()))
 
         cats = QHBoxLayout()
-        cats.addWidget(_hint("Variable categories (how suggested variables and columns are grouped) are edited in "
+        cats.addWidget(_titled("Variable categories", "Variable categories (how suggested variables and columns are grouped) are edited in "
                              "their own window; categories defined by the pack are in pack.json."), 1)
         self.categories_btn = QPushButton("Edit variable categories…", clicked=self._open_categories)
         cats.addWidget(self.categories_btn)
         v.addLayout(cats)
         return w
+
+    # the calculations lists ---------------------------------------------------------------
+
+    @staticmethod
+    def _calc_item(name: str, checked: bool) -> QListWidgetItem:
+        about, needs = CALCULATIONS.get(name, ("(unknown calculation)", ""))
+        item = QListWidgetItem(f"{name} -- {about}" + (f"  [needs the {needs} step]" if needs else ""))
+        item.setData(Qt.ItemDataRole.UserRole, name)
+        item.setFlags(item.flags() | Qt.ItemFlag.ItemIsUserCheckable)
+        item.setCheckState(Qt.CheckState.Checked if checked else Qt.CheckState.Unchecked)
+        return item
+
+    def _chosen_calculations(self) -> list:
+        """Ticked calculations, in the main list's order (then any ticked below)."""
+        out = []
+        for lst in (self.calc_list, self.other_calc_list):
+            out += [lst.item(i).data(Qt.ItemDataRole.UserRole) for i in range(lst.count())
+                    if lst.item(i).checkState() == Qt.CheckState.Checked]
+        return out
+
+    def _fill_calculations(self, chosen: list) -> None:
+        """Main list: the ticked ones (in order), then the unticked ones written for the area's built-in steps;
+        'Other calculations': everything else."""
+        steps = {n for n, box in self.builtin_boxes.items() if box.isChecked()}
+        main = chosen + [n for n in CALCULATIONS if n not in chosen and CALCULATION_STEP.get(n) in steps]
+        other = [n for n in CALCULATIONS if n not in main]
+        self.calc_list.clear()
+        self.other_calc_list.blockSignals(True)
+        self.other_calc_list.clear()
+        for name in main:
+            self.calc_list.addItem(self._calc_item(name, name in chosen))
+        for name in other:
+            self.other_calc_list.addItem(self._calc_item(name, False))
+        self.other_calc_list.blockSignals(False)
+        self.calc_list.setVisible(bool(main))
+        self.no_calcs_note.setVisible(not main)
+        self.other_calcs_btn.setText(f"Other calculations ({len(other)}) -- written for other built-in steps")
+        self.other_calcs_btn.setVisible(bool(other))
+        if not other:
+            self.other_calc_list.setVisible(False)
+
+    def _toggle_other_calcs(self, shown: bool) -> None:
+        self.other_calc_list.setVisible(shown)
+        self.other_calcs_btn.setArrowType(Qt.ArrowType.DownArrow if shown else Qt.ArrowType.RightArrow)
+
+    def _on_other_calc(self, item: QListWidgetItem) -> None:
+        """Ticking one of the other calculations moves it into the main list (at the end)."""
+        if item.checkState() == Qt.CheckState.Checked:
+            from PySide6.QtCore import QTimer
+            QTimer.singleShot(0, lambda: self._fill_calculations(self._chosen_calculations()))
 
     def _open_categories(self) -> None:
         from parameter_extractor.gui.categories_dialog import CategoriesDialog
@@ -273,7 +365,7 @@ class PackEditor(QDialog):
     def _columns_tab(self) -> QWidget:
         w = QWidget()
         v = QVBoxLayout(w)
-        v.addWidget(_hint("The dataset's columns, in order. Put the unit at the end of a name (temperature_C, "
+        v.addWidget(_titled("The dataset's columns, in order", "The dataset's columns, in order. Put the unit at the end of a name (temperature_C, "
                           "pressure_bar, mass_g, yield_pct): values are converted into it. The shared columns "
                           "(paper, authors, DOI, ...) and row identifiers are added automatically. Columns a stage "
                           "fills but that aren't listed here are added after these. Double-click to rename; drag to "
@@ -329,7 +421,7 @@ class PackEditor(QDialog):
         w = QWidget()
         outer = QHBoxLayout(w)
         left = QVBoxLayout()
-        left.addWidget(_hint("Each stage is one request to the model, run for every paper (or only papers that "
+        left.addWidget(_titled("Stages", "Each stage is one request to the model, run for every paper (or only papers that "
                              "need it). Several small stages run in parallel."))
         self.stage_list = QListWidget()
         self.stage_list.currentRowChanged.connect(self._on_stage_row)
@@ -374,22 +466,38 @@ class PackEditor(QDialog):
         self.s_rules = QPlainTextEdit()
         self.s_rules.setPlaceholderText("Extra instructions, one per line.")
         self.s_rules.setFixedHeight(60)
+        # Basics: what the stage is and when it runs; Advanced (collapsed): how it asks (Mickey, 2026-11-05)
+        fv.addWidget(QLabel("<b>Basics</b>"))
         form.addRow("Name:", self.s_name)
         form.addRow("Label:", self.s_label)
         form.addRow("Description:", self.s_desc)
-        form.addRow("The model's role:", self.s_system)
         form.addRow("Instruction:", self.s_intro)
         form.addRow("Values belong to:", self.s_per)
         form.addRow("Runs for:", trigger)
-        form.addRow("Tables:", self.s_images)
-        form.addRow("Other values:", self.s_open)
-        form.addRow("", self.s_open_hint)
-        form.addRow("Uncertainty columns:", self.s_uncert)
-        form.addRow("Rules:", self.s_rules)
         fv.addLayout(form)
+        self.advanced_btn = QToolButton(text="Advanced", checkable=True)
+        self.advanced_btn.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
+        self.advanced_btn.setArrowType(Qt.ArrowType.RightArrow)
+        self.advanced_btn.setStyleSheet("QToolButton { border: none; font-weight: bold; }")
+        fv.addWidget(self.advanced_btn)
+        self.advanced_box = QWidget()
+        advanced = _form()
+        advanced.setContentsMargins(0, 0, 0, 0)
+        self.advanced_box.setLayout(advanced)
+        advanced.addRow("The model's role:", self.s_system)
+        advanced.addRow("Tables:", self.s_images)
+        advanced.addRow("Other values:", self.s_open)
+        advanced.addRow("", self.s_open_hint)
+        advanced.addRow("Uncertainty columns:", self.s_uncert)
+        advanced.addRow("Rules:", self.s_rules)
+        self.advanced_box.setVisible(False)
+        self.advanced_btn.toggled.connect(self._toggle_advanced)
+        fv.addWidget(self.advanced_box)
+        fv.addStretch(1)
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
         scroll.setWidget(settings_w)
+        self.stage_scroll = scroll
         params_w = QWidget()
         fv = QVBoxLayout(params_w)
         fv.setContentsMargins(0, 0, 0, 0)
@@ -433,6 +541,13 @@ class PackEditor(QDialog):
         outer.addWidget(split)
         self._fill_stage_list()
         return w
+
+    def _toggle_advanced(self, shown: bool) -> None:
+        self.advanced_box.setVisible(shown)
+        self.advanced_btn.setArrowType(Qt.ArrowType.DownArrow if shown else Qt.ArrowType.RightArrow)
+        if shown:                                    # bring the opened section into view
+            from PySide6.QtCore import QTimer
+            QTimer.singleShot(0, lambda: self.stage_scroll.ensureWidgetVisible(self.advanced_box))
 
     def _fill_stage_list(self, select: Optional[str] = None) -> None:
         self.stage_list.blockSignals(True)
@@ -479,6 +594,9 @@ class PackEditor(QDialog):
         suffixes = spec.get("error_suffixes", ["err1", "err2", "lim"])
         self.s_uncert.setCurrentIndex(0 if suffixes == UNCERTAINTY_STYLES[0][1] else 1)
         self.s_rules.setPlainText("\n".join(spec.get("rules", [])))
+        for edit in (self.s_name, self.s_label, self.s_desc, self.s_system, self.s_open_hint, self.s_keywords,
+                     self.s_set_types, self.s_patterns):
+            edit.setCursorPosition(0)                # long texts show their start
         self.p_table.setRowCount(0)
         for p in spec.get("parameters", []):
             self._add_parameter(p)
@@ -610,7 +728,7 @@ class PackEditor(QDialog):
     def _rules_tab(self) -> QWidget:
         w = QWidget()
         v = QVBoxLayout(w)
-        v.addWidget(_hint("Rules for this research area, added to the app's shared prompts. The most important "
+        v.addWidget(_titled("Rules for the shared prompts", "Rules for this research area, added to the app's shared prompts. The most important "
                           "are the row-planning rules: what ONE row is, what makes rows one set, and which results "
                           "must not become rows. A few lines are enough."))
         top = QHBoxLayout()
@@ -664,7 +782,7 @@ class PackEditor(QDialog):
         from parameter_extractor.formulas import FUNCTION_HELP, IF_PRESENT
         w = QWidget()
         v = QVBoxLayout(w)
-        v.addWidget(_hint("Calculations without code: each formula fills its column on every row where its inputs "
+        v.addWidget(_titled("Formulas, run in this order", "Calculations without code: each formula fills its column on every row where its inputs "
                           "have values, after the review, in this order (a formula can use the columns of the ones "
                           "above it). The column's unit is what its name says; inputs are in their own columns' "
                           "units, so convert in the formula (e.g. temperature_K = temperature_C + 273.15)."))
@@ -693,27 +811,49 @@ class PackEditor(QDialog):
 
         below = QHBoxLayout()
         trial = QGroupBox("Try the selected formula")
+        trial.setMaximumWidth(380)                       # a few inputs: it needn't be wide
         tv = QVBoxLayout(trial)
-        tv.addWidget(_hint("Enter values for its inputs (as they'd be in their columns)."))
+        tv.addWidget(_hint("Values for its inputs, as they'd be in their columns:"))
         self.f_inputs = QTableWidget(0, 2)
         self.f_inputs.setHorizontalHeaderLabels(["Input column", "Value"])
         self.f_inputs.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
+        self.f_inputs.setColumnWidth(1, 90)
         self.f_inputs.itemChanged.connect(lambda _i: self._try_formula())
         tv.addWidget(self.f_inputs, 1)
-        self.f_result = QLabel("Result: --")
+        self.f_result = QLabel("Result: --", wordWrap=True)
         tv.addWidget(self.f_result)
-        below.addWidget(trial, 1)
-        helpbox = QGroupBox("What a formula can use")
-        hv = QVBoxLayout(helpbox)
-        from html import escape                      # 'pH < 7' in the help is text, not markup
-        rows = "".join(f"<tr><td><code>{escape(a)}</code></td><td>&nbsp;{escape(b)}</td></tr>"
-                       for a, b in FUNCTION_HELP)
-        hv.addWidget(QLabel("Column names, numbers, + - * / ** ( ), comparisons and <i>and / or / not</i>.<table>"
-                            f"{rows}</table>A column with no value makes the result empty (except in first() and the "
-                            "pattern totals).", wordWrap=True))
-        below.addWidget(helpbox, 1)
+        below.addWidget(trial)
+        below.addWidget(self._formula_reference(FUNCTION_HELP), 1)
         v.addLayout(below, 1)
         return w
+
+    @staticmethod
+    def _formula_reference(entries) -> QWidget:
+        """What a formula can use: what to write in one aligned column, what it does in the next."""
+        from PySide6.QtGui import QFontDatabase
+        box = QGroupBox("What a formula can use")
+        outer = QVBoxLayout(box)
+        grid_w = QWidget()
+        grid = QGridLayout(grid_w)
+        grid.setHorizontalSpacing(18)
+        grid.setVerticalSpacing(3)
+        mono = QFontDatabase.systemFont(QFontDatabase.SystemFont.FixedFont)
+        mono.setPointSizeF(QLabel().font().pointSizeF())        # the same size as the descriptions
+        for r, (code, what) in enumerate(entries):
+            left = QLabel(code)
+            left.setFont(mono)
+            left.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
+            grid.addWidget(left, r, 0, Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop)
+            grid.addWidget(QLabel(what), r, 1, Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop)
+        grid.setColumnStretch(1, 1)
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QScrollArea.Shape.NoFrame)
+        scroll.setWidget(grid_w)
+        outer.addWidget(scroll, 1)
+        outer.addWidget(_hint("A column with no value leaves the result empty (first() and the pattern totals skip "
+                              "it)."))
+        return box
 
     def _add_formula(self, raw: dict) -> None:
         t = self.f_table
@@ -803,7 +943,11 @@ class PackEditor(QDialog):
         v = QVBoxLayout(w)
         top = QHBoxLayout()
         self.check_summary = QLabel()
-        top.addWidget(self.check_summary, 1)
+        top.addWidget(self.check_summary)
+        top.addWidget(HelpButton("Errors: the research area won't work as meant. Warnings: probably not what you "
+                                 "want. Notes: worth knowing. The check runs again when you save; errors ask before "
+                                 "saving."))
+        top.addStretch(1)
         top.addWidget(QPushButton("Check again", clicked=self.run_check))
         v.addLayout(top)
         self.check_table = QTableWidget(0, 3)
@@ -813,8 +957,6 @@ class PackEditor(QDialog):
         self.check_table.setWordWrap(True)
         self.check_table.verticalHeader().setVisible(False)
         v.addWidget(self.check_table, 1)
-        v.addWidget(_hint("Errors: the research area won't work as meant. Warnings: probably not what you want. "
-                          "Notes: worth knowing."))
         return w
 
     def run_check(self) -> list:
@@ -858,8 +1000,7 @@ class PackEditor(QDialog):
         m["compact_text"] = self.compact_box.isChecked()
         m["builtin_stages"] = [n for n, box in self.builtin_boxes.items() if box.isChecked()] + \
             [n for n in m.get("builtin_stages", []) if n not in self.builtin_boxes]      # e.g. old 'methodology'
-        m["postprocess"] = [self.calc_list.item(i).data(Qt.ItemDataRole.UserRole) for i in range(self.calc_list.count())
-                            if self.calc_list.item(i).checkState() == Qt.CheckState.Checked]
+        m["postprocess"] = self._chosen_calculations()
         m["formulas"] = self._formulas_from_table()
         if not m["formulas"] and "_about_formulas" not in m:
             m.pop("formulas", None)
@@ -897,6 +1038,10 @@ class PackEditor(QDialog):
             editor = PackEditor(dlg.created.folder, self.parent(), self.registry_path)
             editor.saved.connect(self.saved.emit)
             editor.exec()
+
+    def help_buttons(self) -> list:
+        """The '?' buttons holding the editor's explanations."""
+        return self.findChildren(HelpButton)
 
     def _lock(self, widget: QWidget) -> None:
         """Read-only (the app's own research areas): everything can be looked at, nothing changed."""

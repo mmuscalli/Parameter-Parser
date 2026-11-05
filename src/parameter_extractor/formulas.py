@@ -56,15 +56,25 @@ _FUNCTIONS = {"abs", "min", "max", "round", "sqrt", "exp", "ln", "log10", "first
               "sum_of", "mean_of", "max_of", "min_of", "count_of", "col"}
 _AGGREGATES = {"sum_of", "mean_of", "max_of", "min_of", "count_of"}
 _CONSTANTS = {"pi": math.pi, "e": math.e}
-FUNCTION_HELP = [
-    ("abs(x), min(a, b, ...), max(a, b, ...)", "absolute value, smallest, largest"),
+FUNCTION_HELP = [            # (what to write, what it does): the editor's reference, one entry per line
+    ("a + b   a - b   a * b   a / b", "arithmetic"),
+    ("a ** b", "a to the power b"),
+    ("( ... )", "grouping"),
+    ("<  <=  >  >=  ==  !=", "comparisons (1 = true, 0 = false)"),
+    ("and   or   not", "combine tests"),
+    ("pi   e", "constants"),
+    ("abs(x)", "absolute value"),
+    ("min(a, b, ...)   max(a, b, ...)", "smallest, largest"),
     ("round(x, digits)", "rounded to that many decimals"),
-    ("sqrt(x), exp(x), ln(x), log10(x)", "square root, e^x, natural and base-10 logarithm"),
-    ("first(a, b, ...)", "the first value that's there (the others are fallbacks)"),
-    ("ifelse(test, a, b)", "a when the test is true, else b -- e.g. ifelse(pH < 7, 1, 0)"),
-    ('sum_of("pattern"), mean_of, max_of, min_of, count_of',
-     "over the row's columns whose name matches the pattern, e.g. sum_of(\"^sampled_.*_%yield$\")"),
-    ("`column-name`", "a column whose name has characters like - % ( ) goes in backticks"),
+    ("sqrt(x)   exp(x)", "square root, e to the power x"),
+    ("ln(x)   log10(x)", "natural, base-10 logarithm"),
+    ("first(a, b, ...)", "the first value that's there"),
+    ("ifelse(test, a, b)", "a if the test is true, else b"),
+    ('sum_of("pattern")', "sum of the columns whose names match"),
+    ('mean_of("pattern")', "their average"),
+    ('max_of("pattern")   min_of(...)', "their largest, smallest"),
+    ('count_of("pattern")', "how many of them have a value"),
+    ("`name-with-%`", "a column name with - % ( ) goes in backticks"),
 ]
 
 

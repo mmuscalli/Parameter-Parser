@@ -44,6 +44,13 @@ CALCULATIONS = {
     "reference_names": ("Reference names like 'Teng et al. 2023' (exoplanets).", ""),
     "archive_validation": ("Compares values with the NASA Exoplanet Archive (exoplanets).", ""),
 }
+# the built-in step each calculation was written alongside: the editor lists those of the area's steps first and
+# the rest under "Other calculations" (2026-11-05)
+CALCULATION_STEP = {**{n: "chemistry" for n in ("normalize_species", "mixing", "molar_ratios", "amounts",
+                                                "peptide_totals", "oligomer_totals", "water_type", "ambient_conditions",
+                                                "atmospheric_start", "results_check")},
+                    **{n: "fit_models" for n in ("row_labels", "exoplanet_masses", "reference_names",
+                                                 "archive_validation")}}
 # shared prompts a pack can add rules to (prompts/<name>.rules.md): what they do
 RULE_PROMPTS = {
     "structure_planner": "Planning rows: which results become rows and how they group into sets.",

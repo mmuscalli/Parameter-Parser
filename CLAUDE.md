@@ -2109,3 +2109,12 @@ no description (note) / the template's example (note). Template pack: example fo
 + 273.15 (+ README section). Editor tab "Formulas" (before Check, so Check is tab 5): table (column, formula,
 description, if-present combo), add / remove / up / down, "Try the selected formula" (inputs from the expression,
 live result), function help. tests/test_formulas.py; test_template_pack asserts temperature_K on every row.
+- **Editor tidy-up (same day, Mickey):** long explanations behind "?" buttons (`HelpButton`: tooltip on hover, shown
+  on click; `_titled(title, help)` section headers; `PackEditor.help_buttons()`). Stage form: "Basics" (name, label,
+  description, instruction, values per row/set, runs for) + collapsible "Advanced" (closed; model's role, tables,
+  other values + hint, uncertainty naming, rules; opening it scrolls it into view). Calculations: the main list
+  shows the ticked ones and those written for the area's ticked built-in steps (`pack_editing.CALCULATION_STEP`);
+  the rest sit under a collapsed "Other calculations (n)" list -- ticking one moves it up; toggling a built-in step
+  re-sorts; with nothing to show, a one-line note replaces the empty list. Formulas tab: the reference is a grid
+  (`_formula_reference`: what to write, monospace at the label size, in one column; one-line descriptions in the
+  next; one entry per line -- FUNCTION_HELP restructured), "Try the selected formula" at most 380 px wide.

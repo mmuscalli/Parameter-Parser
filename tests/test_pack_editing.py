@@ -20,6 +20,11 @@ from parameter_extractor import packs
 from parameter_extractor.pack_editing import PackDraft, check
 
 
+def editor_calcs():
+    from parameter_extractor.pack_editing import CALCULATIONS
+    return CALCULATIONS
+
+
 def _levels(problems, level):
     return [p for p in problems if p.level == level]
 
@@ -110,7 +115,17 @@ def test_windows():
         editor = PackEditor(new.created.folder)
         editor.label_edit.setText("Soil carbon cycling")
         editor.column_list.addItem("depth_cm")
-        editor.calc_list.item(0).setCheckState(Qt.CheckState.Checked)            # normalize_species
+        # calculations: none suits the template's (no) built-in steps -> all under "Other calculations"; ticking one
+        # moves it up (2026-11-05)
+        assert editor.calc_list.count() == 0 and editor.other_calc_list.count() == len(editor_calcs())
+        editor.other_calc_list.item(0).setCheckState(Qt.CheckState.Checked)      # normalize_species
+        app.processEvents()
+        assert [editor.calc_list.item(i).data(Qt.ItemDataRole.UserRole) for i in range(editor.calc_list.count())] \
+            == ["normalize_species"]
+        editor.builtin_boxes["chemistry"].setChecked(True)                        # its calculations come up
+        assert editor.calc_list.count() == 10 and editor.other_calc_list.count() == 4
+        editor.builtin_boxes["chemistry"].setChecked(False)
+        assert not editor.advanced_box.isVisibleTo(editor) and editor.help_buttons()
         editor.tabs.setCurrentIndex(2)
         editor._add_parameter({"column": "depth_cm", "unit": "cm", "description": "sampling depth"})
         editor.s_keywords.setText("soil, depth")
