@@ -415,6 +415,46 @@ def _finished_steps(ctx: RunContext) -> list:
     return seen
 
 
+# a streamed answer cut off by the server or the network (2026-11-06, Mickey's Riggi run: httpx RemoteProtocolError
+# "peer closed connection without sending complete message body" in the structure step). The SDK retries a request
+# only until the stream starts; a drop mid-stream came out as a raw transport error, i.e. "a bug in the app".
+STREAM_RETRY_WAITS = (3, 10)                  # seconds before the 2nd and 3rd try
+
+
+def _dropped_connection(e: BaseException) -> bool:
+    """An SDK connection error, or a transport error of the HTTP stack (httpx / httpcore / h11, any fork name)."""
+    import anthropic
+    if isinstance(e, anthropic.APIConnectionError):
+        return True
+    for cls in type(e).__mro__:
+        root = cls.__module__.split(".")[0]
+        if root.startswith(("httpx", "httpcore", "h11")) and cls.__name__ in (
+                "TransportError", "NetworkError", "ProtocolError", "RemoteProtocolError", "ReadError",
+                "ReadTimeout", "TimeoutException", "ConnectError", "WriteError", "CloseError"):
+            return True
+    return False
+
+
+def _send_resuming(ctx: RunContext, stage: str, model: str, **kwargs):
+    """`_send`, asked again (up to twice, after a short wait) when the connection drops; then NetworkError."""
+    for attempt in range(len(STREAM_RETRY_WAITS) + 1):
+        try:
+            return _send(ctx, model=model, **kwargs)
+        except Exception as e:
+            if not _dropped_connection(e):
+                raise
+            if attempt == len(STREAM_RETRY_WAITS):
+                raise errors.NetworkError(stage) from None
+            if hasattr(ctx, "note"):
+                ctx.note(stage, "The connection to the Anthropic API broke off; asking again …")
+            cancel = getattr(ctx, "cancel_event", None)
+            if cancel is not None and cancel.wait(STREAM_RETRY_WAITS[attempt]):
+                raise errors.RunCancelledError() from None
+            if cancel is None:
+                import time
+                time.sleep(STREAM_RETRY_WAITS[attempt])
+
+
 def _send_mapping_errors(ctx: RunContext, stage: str, model: str, **kwargs):
     import anthropic
     _streamed.stage = stage
@@ -426,7 +466,7 @@ def _send_mapping_errors(ctx: RunContext, stage: str, model: str, **kwargs):
         return handoff.answer(ctx, stage, kwargs["system_prompt"], kwargs["content"], kwargs["response_model"])
     credits = lambda detail: errors.OutOfCreditsError(stage, detail, _finished_steps(ctx), getattr(ctx, "run_dir", None))
     try:
-        return _send(ctx, model=model, **kwargs)
+        return _send_resuming(ctx, stage, model, **kwargs)
     except _BatchRequestError as e:
         if _out_of_credits(0, e.kind, e.message):
             raise credits(e.message) from None

@@ -60,8 +60,12 @@ class RateLimitedError(PipelineError):
 
 
 class NetworkError(PipelineError):
-    def __init__(self):
-        super().__init__("Couldn't reach the Anthropic API. Check the internet connection.")
+    def __init__(self, stage: str = ""):
+        if stage:
+            super().__init__(f"The connection to the Anthropic API broke off during the '{stage}' step, three times in "
+                             "a row. Check the internet connection; running the paper again usually works.")
+        else:
+            super().__init__("Couldn't reach the Anthropic API. Check the internet connection.")
 
 
 class OutOfCreditsError(PipelineError):

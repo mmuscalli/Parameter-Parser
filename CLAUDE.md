@@ -2145,3 +2145,14 @@ Description / Requirements (`pack_editing.CALCULATION_NEEDS`) / Written for); or
 (`_move_calc`), `_calc_names(table, ticked_only)`; ticking an "other" one moves it up as before; read-only areas
 can't tick (`_calcs_locked`). `RowSeparatorDelegate(parent, gap=...)`: the rules table uses RULES_ROW_GAP = 13
 (default ROW_GAP 7).
+
+## Dropped connections mid-answer (2026-11-06, Mickey's Riggi2023 run)
+
+Economy, 3 passes: the structure step's stream was cut off ("peer closed connection without sending complete message
+body", httpx2 RemoteProtocolError -- the anthropic SDK now uses the `httpx2` fork). The SDK retries only until the
+stream starts, so it came out raw and the GUI called it "a bug in the app". `api_client._send_resuming` (inside
+_send_mapping_errors, so every step and figure suggestion): `_dropped_connection` (anthropic.APIConnectionError, or
+an httpx*/httpcore*/h11 transport error by class name) -> ctx.note + wait STREAM_RETRY_WAITS (3, 10 s; cancel-aware
+-> RunCancelledError) and ask again; a third drop -> `errors.NetworkError(stage)` ("broke off during the '<stage>'
+step, three times in a row ... running the paper again usually works"). The dropped attempt's tokens aren't
+recorded (unknown). tests/test_dropped_connection.py.
