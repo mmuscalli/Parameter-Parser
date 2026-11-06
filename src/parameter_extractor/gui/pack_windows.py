@@ -29,10 +29,11 @@ from PySide6.QtWidgets import (QAbstractItemView, QCheckBox, QComboBox, QDialog,
                                QTableWidget, QTableWidgetItem, QVBoxLayout, QWidget)
 
 from parameter_extractor import packs
-from parameter_extractor.pack_editing import (BUILTIN_STAGES, CALCULATION_STEP, CALCULATIONS, RULE_PROMPTS,
+from parameter_extractor.pack_editing import (BUILTIN_STAGES, CALCULATION_NEEDS, CALCULATION_STEP, CALCULATIONS, RULE_PROMPTS,
                                               PackDraft, Problem, check, items_to_rules, rules_to_items)
 from parameter_extractor.gui.widgets import RowSeparatorDelegate, in_cell, style_rows
 
+RULES_ROW_GAP = 13      # rules are long texts: more room between them and the lines (Mickey, 2026-11-06)
 LEVEL_COLORS = {"error": QColor(190, 40, 40), "warning": QColor(176, 110, 0), "note": QColor(110, 110, 110)}
 UNCERTAINTY_STYLES = [("<column>_err_plus / _err_minus", ["_err_plus", "_err_minus"], "_"),
                       ("<column>err1 / err2 / lim (Exoplanet Archive)", ["err1", "err2", "lim"], "")]
@@ -87,6 +88,22 @@ def _titled(title: str, help_text: str) -> QWidget:
     h.addWidget(HelpButton(help_text))
     h.addStretch(1)
     return w
+
+
+def _disclosure(title: str, box: QWidget = None, bold: bool = True):
+    """A collapsible section, closed at first: an arrow button and the widget it shows or hides."""
+    box = box or QWidget()
+    btn = QToolButton(text=title, checkable=True)
+    btn.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
+    btn.setArrowType(Qt.ArrowType.RightArrow)
+    btn.setStyleSheet("QToolButton { border: none; %s}" % ("font-weight: bold; " if bold else ""))
+    box.setVisible(False)
+
+    def toggle(shown: bool) -> None:
+        box.setVisible(shown)
+        btn.setArrowType(Qt.ArrowType.DownArrow if shown else Qt.ArrowType.RightArrow)
+    btn.toggled.connect(toggle)
+    return btn, box
 
 
 def _hint(text: str) -> QLabel:
@@ -254,12 +271,24 @@ class PackEditor(QDialog):
         form.addRow("Name:", self.label_edit)
         form.addRow("ID:", QLabel(m.get("id", "")))
         form.addRow("Description:", self.desc_edit)
-        form.addRow("A group of rows is called:", self.set_edit)
-        form.addRow("One row is called:", self.sample_edit)
-        form.addRow("In messages, a row is:", self.row_edit)
         v.addLayout(form)
-        v.addWidget(self.focused_box)
-        v.addWidget(self.compact_box)
+
+        rows_box = QGroupBox("Row options")          # what the area's rows and their groups are called (2026-11-06)
+        rf = _form()
+        rf.addRow("A group of rows is called:", self.set_edit)
+        rf.addRow("One row is called:", self.sample_edit)
+        rf.addRow("In messages, a row is:", self.row_edit)
+        rows_box.setLayout(rf)
+        v.addWidget(rows_box)
+
+        self.optimization_btn, self.optimization_box = _disclosure("Optimization and Focused Search")
+        ov = QVBoxLayout(self.optimization_box)
+        ov.setContentsMargins(18, 0, 0, 0)
+        ov.addWidget(self.focused_box)
+        ov.addWidget(self.compact_box)
+        v.addWidget(self.optimization_btn)
+        v.addWidget(self.optimization_box)
+        v.addSpacing(14)                               # room before the steps (Mickey: the area felt crowded)
 
         steps = QGroupBox("Built-in extraction steps (written in code; most new research areas use none)")
         sv = QVBoxLayout(steps)
@@ -270,25 +299,30 @@ class PackEditor(QDialog):
             sv.addWidget(box)
         v.addWidget(steps)
 
-        calcs = QGroupBox("Calculations run on the rows, in this order (drag to reorder; tick to use)")
+        calcs = QGroupBox("Calculations run on the rows, in this order (tick to use; Move up / down to reorder)")
         cv = QVBoxLayout(calcs)
-        self.calc_list = QListWidget()                 # those that suit the area's built-in steps, and any ticked
-        self.calc_list.setDragDropMode(QAbstractItemView.DragDropMode.InternalMove)
-        cv.addWidget(self.calc_list, 1)
+        self.calc_table = self._calc_table()           # those that suit the area's built-in steps, and any ticked
+        row = QHBoxLayout()
+        row.addWidget(self.calc_table, 1)
+        moves = QVBoxLayout()
+        self.calc_up_btn = QPushButton("Move up", clicked=lambda: self._move_calc(-1))
+        self.calc_down_btn = QPushButton("Move down", clicked=lambda: self._move_calc(1))
+        moves.addWidget(self.calc_up_btn)
+        moves.addWidget(self.calc_down_btn)
+        moves.addStretch(1)
+        row.addLayout(moves)
+        self.calc_row = QWidget()
+        self.calc_row.setLayout(row)
+        row.setContentsMargins(0, 0, 0, 0)
+        cv.addWidget(self.calc_row, 1)
         self.no_calcs_note = _hint("None of the calculations was written for this research area's built-in steps "
                                    "(most new areas use none). Formulas (their own tab) cover calculations within a "
                                    "row; the app's other calculations are below.")
         cv.addWidget(self.no_calcs_note)
-        self.other_calcs_btn = QToolButton(checkable=True)
-        self.other_calcs_btn.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
-        self.other_calcs_btn.setArrowType(Qt.ArrowType.RightArrow)
-        self.other_calcs_btn.setStyleSheet("QToolButton { border: none; }")
-        self.other_calcs_btn.toggled.connect(self._toggle_other_calcs)
+        self.other_calcs_btn, self.other_calc_table = _disclosure("", self._calc_table(), bold=False)
+        self.other_calc_table.itemChanged.connect(self._on_other_calc)
         cv.addWidget(self.other_calcs_btn)
-        self.other_calc_list = QListWidget()           # the rest, collapsed: ticking one moves it up
-        self.other_calc_list.setVisible(False)
-        self.other_calc_list.itemChanged.connect(self._on_other_calc)
-        cv.addWidget(self.other_calc_list, 1)
+        cv.addWidget(self.other_calc_table, 1)
         v.addWidget(calcs)
         v.addStretch(1)                              # the box only as tall as what it shows
         self._fill_calculations(list(m.get("postprocess", [])))
@@ -303,53 +337,97 @@ class PackEditor(QDialog):
         v.addLayout(cats)
         return w
 
-    # the calculations lists ---------------------------------------------------------------
+    # the calculations tables (spaced rows like the categories window, 2026-11-06) -------------------------------
+
+    CALC_HEADERS = ("Calculator", "Description", "Requirements", "Written for")
+
+    def _calc_table(self) -> QTableWidget:
+        t = QTableWidget(0, len(self.CALC_HEADERS))
+        t.setHorizontalHeaderLabels(list(self.CALC_HEADERS))
+        t.verticalHeader().setVisible(False)
+        t.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
+        t.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
+        t.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
+        head = t.horizontalHeader()
+        head.setSectionResizeMode(0, QHeaderView.ResizeMode.ResizeToContents)
+        head.setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
+        head.setSectionResizeMode(2, QHeaderView.ResizeMode.Stretch)
+        head.setSectionResizeMode(3, QHeaderView.ResizeMode.ResizeToContents)
+        t.setMinimumHeight(200)
+        style_rows(t)
+        return t
+
+    def _add_calc_row(self, table: QTableWidget, name: str, checked: bool) -> None:
+        about, _ = CALCULATIONS.get(name, ("(unknown calculation)", ""))
+        step = CALCULATION_STEP.get(name, "")
+        r = table.rowCount()
+        table.insertRow(r)
+        item = QTableWidgetItem(name)
+        item.setData(Qt.ItemDataRole.UserRole, name)
+        flags = item.flags() & ~Qt.ItemFlag.ItemIsEditable
+        if not getattr(self, "_calcs_locked", False):
+            flags |= Qt.ItemFlag.ItemIsUserCheckable
+        else:
+            flags &= ~Qt.ItemFlag.ItemIsUserCheckable
+        item.setFlags(flags)
+        item.setCheckState(Qt.CheckState.Checked if checked else Qt.CheckState.Unchecked)
+        table.setItem(r, 0, item)
+        for c, text in ((1, about), (2, CALCULATION_NEEDS.get(name, "")),
+                        (3, f"the {step} step" if step else "any research area")):
+            cell = QTableWidgetItem(text)
+            cell.setToolTip(text)
+            table.setItem(r, c, cell)
 
     @staticmethod
-    def _calc_item(name: str, checked: bool) -> QListWidgetItem:
-        about, needs = CALCULATIONS.get(name, ("(unknown calculation)", ""))
-        item = QListWidgetItem(f"{name} -- {about}" + (f"  [needs the {needs} step]" if needs else ""))
-        item.setData(Qt.ItemDataRole.UserRole, name)
-        item.setFlags(item.flags() | Qt.ItemFlag.ItemIsUserCheckable)
-        item.setCheckState(Qt.CheckState.Checked if checked else Qt.CheckState.Unchecked)
-        return item
+    def _calc_names(table: QTableWidget, ticked_only: bool = False) -> list:
+        return [table.item(r, 0).data(Qt.ItemDataRole.UserRole) for r in range(table.rowCount())
+                if not ticked_only or table.item(r, 0).checkState() == Qt.CheckState.Checked]
 
     def _chosen_calculations(self) -> list:
-        """Ticked calculations, in the main list's order (then any ticked below)."""
-        out = []
-        for lst in (self.calc_list, self.other_calc_list):
-            out += [lst.item(i).data(Qt.ItemDataRole.UserRole) for i in range(lst.count())
-                    if lst.item(i).checkState() == Qt.CheckState.Checked]
-        return out
+        """Ticked calculations, in the main table's order (then any ticked below)."""
+        return (self._calc_names(self.calc_table, True) + self._calc_names(self.other_calc_table, True))
 
     def _fill_calculations(self, chosen: list) -> None:
-        """Main list: the ticked ones (in order), then the unticked ones written for the area's built-in steps;
+        """Main table: the ticked ones (in order), then the unticked ones written for the area's built-in steps;
         'Other calculations': everything else."""
         steps = {n for n, box in self.builtin_boxes.items() if box.isChecked()}
         main = chosen + [n for n in CALCULATIONS if n not in chosen and CALCULATION_STEP.get(n) in steps]
         other = [n for n in CALCULATIONS if n not in main]
-        self.calc_list.clear()
-        self.other_calc_list.blockSignals(True)
-        self.other_calc_list.clear()
-        for name in main:
-            self.calc_list.addItem(self._calc_item(name, name in chosen))
-        for name in other:
-            self.other_calc_list.addItem(self._calc_item(name, False))
-        self.other_calc_list.blockSignals(False)
-        self.calc_list.setVisible(bool(main))
+        for table, names, ticked in ((self.calc_table, main, set(chosen)), (self.other_calc_table, other, set())):
+            table.blockSignals(True)
+            table.setRowCount(0)
+            for name in names:
+                self._add_calc_row(table, name, name in ticked)
+            table.blockSignals(False)
+            table.resizeRowsToContents()
+        self.calc_row.setVisible(bool(main))
         self.no_calcs_note.setVisible(not main)
         self.other_calcs_btn.setText(f"Other calculations ({len(other)}) -- written for other built-in steps")
         self.other_calcs_btn.setVisible(bool(other))
         if not other:
-            self.other_calc_list.setVisible(False)
+            self.other_calc_table.setVisible(False)
+        else:
+            self.other_calc_table.setVisible(self.other_calcs_btn.isChecked())
 
-    def _toggle_other_calcs(self, shown: bool) -> None:
-        self.other_calc_list.setVisible(shown)
-        self.other_calcs_btn.setArrowType(Qt.ArrowType.DownArrow if shown else Qt.ArrowType.RightArrow)
+    def _move_calc(self, step: int) -> None:
+        t = self.calc_table
+        r = t.currentRow()
+        if r < 0 or not 0 <= r + step < t.rowCount():
+            return
+        names = self._calc_names(t)
+        ticked = set(self._calc_names(t, True))
+        names[r], names[r + step] = names[r + step], names[r]
+        t.blockSignals(True)
+        t.setRowCount(0)
+        for name in names:
+            self._add_calc_row(t, name, name in ticked)
+        t.blockSignals(False)
+        t.resizeRowsToContents()
+        t.setCurrentCell(r + step, 0)
 
-    def _on_other_calc(self, item: QListWidgetItem) -> None:
-        """Ticking one of the other calculations moves it into the main list (at the end)."""
-        if item.checkState() == Qt.CheckState.Checked:
+    def _on_other_calc(self, item: QTableWidgetItem) -> None:
+        """Ticking one of the other calculations moves it into the main table (at the end of the ticked ones)."""
+        if item.column() == 0 and item.checkState() == Qt.CheckState.Checked:
             from PySide6.QtCore import QTimer
             QTimer.singleShot(0, lambda: self._fill_calculations(self._chosen_calculations()))
 
@@ -745,7 +823,7 @@ class PackEditor(QDialog):
         self.rules_table = QTableWidget(0, 1)
         self.rules_table.setHorizontalHeaderLabels(["Rule (double-click to edit)"])
         self.rules_table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
-        style_rows(self.rules_table)
+        style_rows(self.rules_table, RowSeparatorDelegate(self.rules_table, gap=RULES_ROW_GAP))
         v.addWidget(self.rules_table, 1)
         buttons = QHBoxLayout()
         for text, slot in (("Add rule", self._add_rule), ("Remove", self._remove_rule),
@@ -1162,6 +1240,9 @@ class PackEditor(QDialog):
             lst.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
         for table in widget.findChildren(QTableWidget):
             table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
+        self._calcs_locked = True                  # the calculation ticks too
+        if hasattr(self, "calc_table"):
+            self._fill_calculations(self._chosen_calculations())
 
 
 DELETE_WORD = "DELETE"

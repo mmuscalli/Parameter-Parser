@@ -136,16 +136,22 @@ ROW_GAP = 7       # px above and below each row's content; a faint line in the m
 
 
 class RowSeparatorDelegate(QStyledItemDelegate):
-    """Taller rows (long texts wrap onto several lines) with a subtle line between them."""
+    """Taller rows (long texts wrap onto several lines) with a subtle line between them; `gap` = px above and
+    below the text (larger for lists of long texts, e.g. the pack editor's rules)."""
+
+    def __init__(self, parent=None, gap: int = ROW_GAP):
+        super().__init__(parent)
+        self.gap = gap
 
     def sizeHint(self, option, index):
         size = super().sizeHint(option, index)
-        return QSize(size.width(), size.height() + 2 * ROW_GAP)
+        return QSize(size.width(), size.height() + 2 * self.gap)
 
     def paint(self, painter, option, index):
-        option.rect.adjust(0, ROW_GAP, 0, -ROW_GAP)          # the text sits inside the gap
+        g = self.gap
+        option.rect.adjust(0, g, 0, -g)          # the text sits inside the gap
         super().paint(painter, option, index)
-        option.rect.adjust(0, -ROW_GAP, 0, ROW_GAP)
+        option.rect.adjust(0, -g, 0, g)
         if index.row() < index.model().rowCount() - 1:
             line = QColor(option.palette.text().color())
             line.setAlphaF(0.14)

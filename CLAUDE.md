@@ -2134,3 +2134,14 @@ live result), function help. tests/test_formulas.py; test_template_pack asserts 
   (`draft.all_columns()` + formula outputs, refreshed when the tab opens; filter box); the list never takes focus,
   and `FormulaDelegate` remembers the open Formula cell editor, so a click types the name at its cursor (backticks
   for names that aren't identifiers); with no editor open it's appended to the selected formula.
+
+## Pack editor General / Rules layout (2026-11-06, Mickey)
+
+General tab: Name / ID / Description, then a "Row options" group box (set / sample / row words), then a collapsible
+"Optimization and Focused Search" section (`_disclosure` helper: arrow button + box, closed by default;
+`optimization_btn` / `optimization_box` hold focused_box + compact_box), 14 px spacing, built-in steps. Calculations
+are now `style_rows` tables (`calc_table`, `other_calc_table`; columns Calculator (checkable, UserRole = name) /
+Description / Requirements (`pack_editing.CALCULATION_NEEDS`) / Written for); order via Move up / Move down
+(`_move_calc`), `_calc_names(table, ticked_only)`; ticking an "other" one moves it up as before; read-only areas
+can't tick (`_calcs_locked`). `RowSeparatorDelegate(parent, gap=...)`: the rules table uses RULES_ROW_GAP = 13
+(default ROW_GAP 7).

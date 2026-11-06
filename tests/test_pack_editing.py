@@ -117,14 +117,27 @@ def test_windows():
         editor.column_list.addItem("depth_cm")
         # calculations: none suits the template's (no) built-in steps -> all under "Other calculations"; ticking one
         # moves it up (2026-11-05)
-        assert editor.calc_list.count() == 0 and editor.other_calc_list.count() == len(editor_calcs())
-        editor.other_calc_list.item(0).setCheckState(Qt.CheckState.Checked)      # normalize_species
+        # (tables since 2026-11-06: Calculator, Description, Requirements, Written for)
+        assert editor.calc_table.rowCount() == 0 and editor.other_calc_table.rowCount() == len(editor_calcs())
+        assert all(editor.other_calc_table.item(r, 2).text() for r in range(editor.other_calc_table.rowCount()))
+        editor.other_calc_table.item(0, 0).setCheckState(Qt.CheckState.Checked)  # normalize_species
         app.processEvents()
-        assert [editor.calc_list.item(i).data(Qt.ItemDataRole.UserRole) for i in range(editor.calc_list.count())] \
-            == ["normalize_species"]
+        assert editor._calc_names(editor.calc_table) == ["normalize_species"]
         editor.builtin_boxes["chemistry"].setChecked(True)                        # its calculations come up
-        assert editor.calc_list.count() == 10 and editor.other_calc_list.count() == 4
+        assert editor.calc_table.rowCount() == 10 and editor.other_calc_table.rowCount() == 4
+        editor.calc_table.item(3, 0).setCheckState(Qt.CheckState.Checked)        # molar_ratios? -> move it up
+        ticked = editor._chosen_calculations()
+        assert len(ticked) == 2
+        editor.calc_table.setCurrentCell(3, 0)
+        editor._move_calc(-1)
+        assert editor._calc_names(editor.calc_table)[2] == ticked[1] and editor._chosen_calculations() == ticked
+        editor.calc_table.item(2, 0).setCheckState(Qt.CheckState.Unchecked)
         editor.builtin_boxes["chemistry"].setChecked(False)
+        assert editor._chosen_calculations() == ["normalize_species"]
+        # optimization options collapsed, row options grouped (2026-11-06)
+        assert not editor.optimization_box.isVisibleTo(editor)
+        editor.optimization_btn.setChecked(True)
+        assert editor.optimization_box.isVisibleTo(editor) and editor.focused_box.isVisibleTo(editor)
         assert not editor.advanced_box.isVisibleTo(editor) and editor.help_buttons()
         editor.tabs.setCurrentIndex(2)
         editor._add_parameter({"column": "depth_cm", "unit": "cm", "description": "sampling depth"})

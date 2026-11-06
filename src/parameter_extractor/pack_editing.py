@@ -51,6 +51,23 @@ CALCULATION_STEP = {**{n: "chemistry" for n in ("normalize_species", "mixing", "
                                                 "atmospheric_start", "results_check")},
                     **{n: "fit_models" for n in ("row_labels", "exoplanet_masses", "reference_names",
                                                  "archive_validation")}}
+# what each calculation needs to do anything: shown in the editor's Requirements column (2026-11-06)
+CALCULATION_NEEDS = {
+    "normalize_species": "The chemistry step's compounds; online lookups on for PubChem.",
+    "mixing": "Stock concentrations and the volumes of the solutions combined (chemistry step).",
+    "molar_ratios": "Molar ratios stated by the chemistry step; one side's concentration known.",
+    "amounts": "Amounts (mol, mmol ...) from the chemistry step; a solvent_volume_mL column.",
+    "peptide_totals": "Peptide %yield columns (chemistry step).",
+    "oligomer_totals": "Oligonucleotide %yield / length columns (chemistry step).",
+    "water_type": "A solvent_name column.",
+    "ambient_conditions": "initial_temperature_C / sampled_temperature_C / initial_pressure_bar columns in a stage.",
+    "atmospheric_start": "experiment_type, vessel_sealed and initial_pressure_bar columns.",
+    "results_check": "Result columns starting 'sampled_' or 'total_sampled_'.",
+    "row_labels": "Row labels 'planet [solution]'; pl_name / pl_fitlabel columns.",
+    "exoplanet_masses": "pl_bmassj / pl_masse / pl_msinij-style mass columns.",
+    "reference_names": "pl_refname / st_refname / disc_refname columns; the paper's authors and year.",
+    "archive_validation": "pl_name rows and online lookups on (NASA Exoplanet Archive).",
+}
 # shared prompts a pack can add rules to (prompts/<name>.rules.md): what they do
 RULE_PROMPTS = {
     "structure_planner": "Planning rows: which results become rows and how they group into sets.",
