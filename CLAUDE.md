@@ -2156,3 +2156,42 @@ an httpx*/httpcore*/h11 transport error by class name) -> ctx.note + wait STREAM
 -> RunCancelledError) and ask again; a third drop -> `errors.NetworkError(stage)` ("broke off during the '<stage>'
 step, three times in a row ... running the paper again usually works"). The dropped attempt's tokens aren't
 recorded (unknown). tests/test_dropped_connection.py.
+
+## Analysis methods step (2026-11-07, Mickey: instrument settings were left to suggestions)
+
+Riggi2023's Table 2 (MALDI-TOF MS settings) got no suggestions; analysis details came out under a different name in
+each paper. Now a built-in step `analysis` (prebiotic pack `builtin_stages`; toggleable like fit_models; runs once,
+not voted; skipped for non-experimental papers):
+- Column format (Mickey's proposal, made slot-consistent with compound columns): `analysis_<technique>_<setting>
+  [_range][_<unit>]` -- hyphens inside a slot, underscores between ('analysis_MALDI-TOF-MS_laser-intensity_range_%',
+  'analysis_RP-HPLC_flow-rate_mL_min', 'analysis_RP-HPLC_column'). `analysis_vocab.py`: column / parse_column /
+  token, UNIT_TOKENS (existing suffixes: C, um, uL, mL_min, ...; new kV, ns, MHz, eV, per_cm, mW, mA, %), the unit
+  for observations (`unit_for_column` handles analysis_ first), `is_vocab_column`.
+- Vocabulary `packs/prebiotic_chemistry/analysis_vocab.json` (data, editable): 20 families of settings (general +
+  LC, GC, planar, CE, gel, MS, MALDI, UV-Vis, fluorescence, IR, Raman, NMR, X-ray, atomic, elemental, electrodes,
+  radiolabel, sequencing, microscopy) with unit / integer / description / aliases, and ~55 techniques with
+  families + aliases. Grounded in Rouessac & Rouessac, Chemical Analysis 3rd ed. (Paper Files/"Chemical analysis _
+  modern instrumentation methods.pdf", ch. 1-22) + settings seen in our runs (kim2017 HPLC, Riggi MALDI, Sam Papers).
+  A vocabulary technique + one of its families' (or general) settings with that unit = KNOWN column (the pack's
+  own, like template columns; registry.is_known_column); other techniques/settings -> review (category analysis,
+  column already in the format; alias '<technique> <setting>' remembered as usual).
+- `schemas/analysis.py` (compact: methods [{tech nm set sample settings [{par v hi u txt q src c n}] q src c}]),
+  `stages/analysis.py` (table images; budget 6000 + 400/set), shared prompt `prompts/analysis.md` with
+  {{ANALYSIS_VOCABULARY}} = compact listing (names + units only, ~1.2K tokens; the app maps other wordings by
+  alias -- the descriptive listing was 4.5K and cost $0.045-0.06/paper Standard, compact ~$0.035).
+  `calculators/analysis_columns.apply_analysis` (pipeline.finish, before the review): converts to the setting's unit
+  (GC 'm' = metres, not molar; Å; no printed unit -> taken as the setting's, noted), ranges 'low:high', set ''
+  = every row incl. figure rows, several values of one setting for the same rows kept '; '-joined, a non-whole
+  count kept as printed; flags kind `analysis` (GUI group "Analysis methods"): one summary per technique, problems.
+- Conditions spec: new StageSpec field `hint_by_stage` {stage: {runs, off}} appended to open_ended_hint by `for_run`
+  (triggered_specs gets the set of running steps): analysis details go to `other` only when the analysis step is off.
+- units.py: voltage, short times (ms/µs/ns), frequency, energy, wavenumber, power, current, scan rate, Å, µL/min.
+- Replays: `test_pipeline_offline.ADDED_LATER` = code steps recorded runs lack (replayed as empty); eder1994's step
+  count 7 -> 8.
+- Live (Standard): Riggi2023 -- all 8 Table 2 settings (voltages kV, 140 ns, laser 75:85 %, reflectron, negative)
+  + matrix, ratio, target plate, spot volume, calibration standard, ZipTip prep, smoothing; kim2017 -- full RP-HPLC
+  method (column, 3 x 150 mm, 5 µm, TEAA/ACN gradient, 0.5 mL/min, 260 nm, 20 µL, retention times, standards) +
+  1H NMR 300 MHz D2O, ESI-TOF HRMS, UV-Vis; faisal2005 -- amino acid analyzer (40 °C, 0.05 mL/min, 254 nm as
+  printed), organic acid analyzer, IC, TOC. Fixes from the runs: preparative purification isn't analysis;
+  replicate-measurements != replicate experiments; `shot-sets` added (Riggi: 5 sets x 1000 shots).
+  tests/test_analysis_step.py. Not built: an editor tab for analysis_vocab.json (edit the JSON for now).

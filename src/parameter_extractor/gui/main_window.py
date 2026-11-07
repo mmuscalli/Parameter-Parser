@@ -1111,11 +1111,13 @@ class MainWindow(QMainWindow):
         source_flags = [f for f in result.paper_flags if f.kind == "paper_source"]
         vote_flags = [f for f in result.paper_flags if f.kind == "pass_disagreement"]
         auto_fig_flags = [f for f in result.paper_flags if f.kind == "auto_digitized"]
+        analysis_flags = [f for f in result.paper_flags if f.kind == "analysis"]
         other_paper_flags = [f for f in result.paper_flags
                              if f.kind not in ("new_variable", "cited_data", "derived_value", "duplicate_removed",
                                                "archive_check", "archive_match", "fit_model",
                                                "multimodal", "other_estimates", "identity_not_quoted",
-                                               "paper_source", "pass_disagreement", "auto_digitized")]
+                                               "paper_source", "pass_disagreement", "auto_digitized",
+                                               "analysis")]
         if source_flags:
             add_group("Where the text came from", source_flags)
         if cited_flags:
@@ -1130,6 +1132,8 @@ class MainWindow(QMainWindow):
             add_group("Species identified without being named in the quote", identity_flags)
         if fit_flags:
             add_group("How the values were obtained (fitting models)", fit_flags)
+        if analysis_flags:
+            add_group("Analysis methods (techniques and instrument settings)", analysis_flags)
         if repeat_flags:
             add_group("Left out as repeats of the solution chemistry", repeat_flags)
         if vote_flags:

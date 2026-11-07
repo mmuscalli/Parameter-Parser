@@ -26,6 +26,8 @@ BUILTIN_STAGES = {
     "chemistry": "Dissolved species and their concentrations / yields, with a compound vocabulary (solution "
                  "chemistry). Needs species names in the columns file.",
     "fit_models": "How astronomical fits were made: data, software, priors, joint fits (exoplanets).",
+    "analysis": "Analytical techniques and their instrument settings -> analysis_<technique>_<setting>_<unit> "
+                "columns. Needs analysis_vocab.json (techniques and settings) in the pack's folder.",
 }
 # calculations a pack can run on its rows (packs.PackManifest.postprocess): description, step it needs ('' = none)
 CALCULATIONS = {
@@ -309,6 +311,30 @@ def check(draft: PackDraft) -> List[Problem]:
     for c in columns:
         if BAD_COLUMN_CHARS.search(c) or c != c.strip() or " " in c:
             add("error", "Columns", f"'{c}': column names can't contain spaces, commas, quotes or tabs.")
+    if "analysis" in m.get("builtin_stages", []):
+        vocab_file = draft.folder / "analysis_vocab.json"
+        if not vocab_file.is_file():
+            add("warning", "General", "the analysis step has no analysis_vocab.json in the folder: every technique "
+                                      "and setting it finds will go to the review.")
+        else:
+            try:
+                raw = json.loads(vocab_file.read_text())
+                fams = set(raw.get("families", {}))
+                for t in raw.get("techniques", []):
+                    for f in t.get("families", []):
+                        if f not in fams:
+                            add("error", "analysis_vocab.json", f"technique '{t.get('name')}' names an unknown "
+                                                                f"family '{f}'.")
+                    if "_" in t.get("name", ""):
+                        add("error", "analysis_vocab.json", f"technique '{t.get('name')}': names use hyphens, not "
+                                                            f"underscores (they are column slots).")
+                for fid, fam in raw.get("families", {}).items():
+                    for st in fam.get("settings", []):
+                        if "_" in st.get("name", "") or " " in st.get("name", ""):
+                            add("error", "analysis_vocab.json", f"setting '{st.get('name')}' ({fid}): names use "
+                                                                f"hyphens, not underscores or spaces.")
+            except Exception as e:
+                add("error", "analysis_vocab.json", f"not valid JSON: {e}")
     if "chemistry" in m.get("builtin_stages", []) and not draft.species:
         add("warning", "Columns", "the chemistry step uses a compound vocabulary, but none is listed.")
 

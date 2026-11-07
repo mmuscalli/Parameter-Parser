@@ -6,7 +6,7 @@
   "template": "template_vocab.json",
   "standard_columns": "standard_columns.json",
   "species_cids": "species_cids.json",
-  "builtin_stages": ["chemistry"],
+  "builtin_stages": ["chemistry", "analysis"],
   "postprocess": ["normalize_species", "mixing", "molar_ratios", "amounts", "peptide_totals", "oligomer_totals", "water_type", "ambient_conditions", "atmospheric_start", "results_check"],
   "units": {"set": "experiment set", "sample": "sample"},
   "focused_row_plan": true,
@@ -32,7 +32,7 @@
     "metadata": {"columns": ["paper_title", "author_list", "year_published", "journal_published", "paper_DOI", "paper_arxiv_id", "data_location", "original_data_reference", "reagent_suppliers"]},
     "methodology": {"columns": ["set_type", "experiment_type", "solution_type", "vessel_material", "vessel_sealed", "solvent_name", "positive_control", "negative_control", "replicates", "stirring_agitation"]},
     "conditions": {"columns": ["duration_hr", "initial_temperature_C", "sampled_temperature_C", "initial_pressure_bar", "sampled_pressure_bar", "initial_pH", "sampled_pH", "headspace_gas_name", "solvent_volume_mL", "loading_volume_mL", "flow_rate_mL_min", "flow_cycle_duration_sec", "solid_material_name", "solid_material_type", "solid_material_mass_g", "solid_material_preheat_C", "solid_material_preheat_hr", "initial_SO2_gas_mL", "cycle_number", "cycle_duration_hr", "wet_phase_temperature_C", "wet_phase_duration_hr", "wet_phase_relative_humidity_pct", "dry_phase_temperature_C", "dry_phase_duration_hr"]},
-    "analysis": {"columns": ["analysis_method"]},
+    "analysis": {"columns": ["analysis_method"], "patterns": ["^analysis_"]},
     "solution_prep": {"columns": ["pH_buffer"], "patterns": ["^(added|stock)_"]},
     "starting_species": {"columns": ["unique_AA", "name_AA", "form_AA", "is_balanced_by"], "patterns": ["^initial_"]},
     "products": {"columns": ["total_sampled_peptides_yield", "total_sampled_peptides_mM", "max_peptide_length", "total_sampled_oligomers_yield", "max_oligomer_length_nt", "is_max_peptide_yield", "is_last_sample"], "patterns": ["^(total_)?sampled_", "^max_.*length"]}

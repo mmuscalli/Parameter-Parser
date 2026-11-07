@@ -42,6 +42,10 @@ def _spec_stages() -> dict:
     return {spec.schema_name: name for name, spec in load_specs().items()}
 
 
+# code steps added after most runs were recorded: such a run found nothing for them (the analysis step, 2026-11-07)
+ADDED_LATER = {"analysis"}
+
+
 def make_replay(replay_dir: Path):
     """An api_client._send stand-in that returns the saved responses from a reference run."""
     def send(ctx, *, model, system_prompt, content, response_model, stop_reason="end_turn"):
@@ -53,7 +57,8 @@ def make_replay(replay_dir: Path):
             audit = json.loads((replay_dir / "methodology.audit.json").read_text())
             output = json.dumps(conditions_from_methodology(
                 json.loads((replay_dir / "methodology.output.json").read_text())))
-        elif not (replay_dir / f"{stage}.audit.json").is_file() and stage in _spec_stages().values():
+        elif not (replay_dir / f"{stage}.audit.json").is_file() and (stage in _spec_stages().values()
+                                                                     or stage in ADDED_LATER):
             # an optional stage added after the run was recorded (kinetics, 2026-11-03): it found nothing then
             audit = {"raw_response": {}, "input_tokens": 0, "output_tokens": 0}
             output = response_model().model_dump_json()
@@ -101,12 +106,14 @@ def test_replay_reproduces_committed_csv():
         # (+ the kinetics step since 2026-11-03: eder1994 reports rate constants; recorded before it existed, so
         # replayed as finding nothing)
         # (the count grows to 7 once the structure plan shows the keyword-triggered step will run)
-        assert [e.step for e in steps] == [1, 2, 3, 4, 5, 6, 7] and [e.total_steps for e in steps] == [6, 6] + [7] * 5
+        # (+ the analysis step since 2026-11-07, also replayed as finding nothing: 8)
+        assert [e.step for e in steps] == [1, 2, 3, 4, 5, 6, 7, 8] and [e.total_steps for e in steps] == [6, 6] + [8] * 6
         assert [e.stage for e in steps][:2] == ["parse", "structure_planner"] and steps[-1].stage == "assemble"
-        assert sorted(e.stage for e in steps[2:6]) == ["chemistry", "experimental_conditions", "kinetics", "metadata"]
+        assert sorted(e.stage for e in steps[2:7]) == ["analysis", "chemistry", "experimental_conditions", "kinetics",
+                                                       "metadata"]
         assert any(e.stage == "parallel" and "experimental conditions" in e.message for e in events)
         assert [u.stage for u in result.usage] == ["structure_planner", "metadata", "experimental_conditions",
-                                               "kinetics", "chemistry"]
+                                               "kinetics", "analysis", "chemistry"]
 
         audits = [json.loads((REPLAY_DIR / f"{s}.audit.json").read_text())
                   for s in STAGE_FOR_MODEL.values() if (REPLAY_DIR / f"{s}.audit.json").exists()]

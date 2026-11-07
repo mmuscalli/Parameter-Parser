@@ -348,6 +348,8 @@ def _in_column_unit(v: NewVariable, column: str):
         return v.value_text, ""              # a column with no unit keeps the unit with the value
     if raw in (None, "", DETECTED) or not column_unit or column_unit == "pH":
         return raw, ""                       # 'detected' is meant as text
+    if isinstance(raw, (int, float)) and v.unit == column_unit:
+        return raw, ""                       # already in the column's unit (the analysis step converts its own)
     rng = _printed_range(v.value_text) if v.value is None else None
     formatted = re.fullmatch(r"([-\d.eE+]+):([-\d.eE+]+)", str(raw)) if v.value is None else None
     if formatted and not rng:            # already 'low:high' (the chemistry step's ranges: % / ratio as printed)

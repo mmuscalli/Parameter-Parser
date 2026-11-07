@@ -42,6 +42,17 @@ _UNITS: Dict[str, Tuple[str, float]] = {
     "%": ("fraction", 1.0),
     "mol": ("amount", 1000.0), "mmol": ("amount", 1.0), "µmol": ("amount", 1e-3), "nmol": ("amount", 1e-6),
     "°C": ("temperature", 1.0), "K": ("temperature", 1.0), "°F": ("temperature", 1.0),
+    # instrument settings (the analysis step, 2026-11-07): voltages, short times, frequencies, energies,
+    # wavenumbers, powers, currents, scan rates, Å
+    "kV": ("voltage", 1000.0), "V": ("voltage", 1.0), "mV": ("voltage", 1e-3),
+    "ms": ("time", 1 / 3.6e6), "µs": ("time", 1 / 3.6e9), "ns": ("time", 1 / 3.6e12),
+    "Hz": ("frequency", 1.0), "kHz": ("frequency", 1e3), "MHz": ("frequency", 1e6), "GHz": ("frequency", 1e9),
+    "eV": ("energy", 1.0), "keV": ("energy", 1e3),
+    "cm-1": ("wavenumber", 1.0),
+    "W": ("power", 1.0), "mW": ("power", 1e-3), "kW": ("power", 1e3),
+    "A": ("current", 1.0), "mA": ("current", 1e-3), "µA": ("current", 1e-6),
+    "mV/s": ("scan_rate", 1.0), "V/s": ("scan_rate", 1000.0),
+    "Å": ("length", 0.1), "µL/min": ("flow", 1e-3),
 }
 
 # spellings seen in papers -> canonical unit (matched after normalise_unit_text)
@@ -77,13 +88,25 @@ _ALIASES = {
     "%": "%", "percent": "%", "%rh": "%", "rh%": "%",
     "°c": "°C", "c": "°C", "degc": "°C", "oc": "°C", "celsius": "°C", "k": "K", "kelvin": "K",
     "°f": "°F", "f": "°F",
+    "kv": "kV", "v": "V", "mv": "mV", "volt": "V", "volts": "V", "kilovolt": "kV", "kilovolts": "kV",
+    "msec": "ms", "µsec": "µs", "us": "µs", "ns": "ns", "nsec": "ns", "nanoseconds": "ns",
+    "hz": "Hz", "khz": "kHz", "mhz": "MHz", "ghz": "GHz",
+    "ev": "eV", "kev": "keV", "electronvolts": "eV",
+    "cm-1": "cm-1", "/cm": "cm-1", "wavenumbers": "cm-1",
+    "w": "W", "mw": "mW", "kw": "kW", "watt": "W", "watts": "W",
+    "a": "A", "ma": "mA", "µa": "µA", "ua": "µA",
+    "mv/s": "mV/s", "mvs-1": "mV/s", "v/s": "V/s", "vs-1": "V/s",
+    "å": "Å", "angstrom": "Å", "angstroms": "Å", "a°": "Å",
 }
 
 # column unit (observations.unit_for_column) -> canonical unit
 _COLUMN_UNITS = {"mM": "mM", "°C": "°C", "h": "h", "s": "s", "min": "min", "bar": "bar", "mL": "mL",
                  "µL": "µL", "g": "g", "nm": "nm", "rpm": "rpm", "K": "K", "%": "%", "mL/min": "mL/min",
                  "µm": "µm", "mm": "mm", "cm": "cm", "nt": "nt",
-                 "h-1": "h-1", "M-1h-1": "M-1h-1", "mM/h": "mM/h", "kJ/mol": "kJ/mol"}
+                 "h-1": "h-1", "M-1h-1": "M-1h-1", "mM/h": "mM/h", "kJ/mol": "kJ/mol",
+                 # instrument settings (analysis_<technique>_<setting>_<unit> columns)
+                 "kV": "kV", "V": "V", "ns": "ns", "Hz": "Hz", "MHz": "MHz", "eV": "eV", "cm-1": "cm-1",
+                 "mW": "mW", "W": "W", "mA": "mA", "mV/s": "mV/s", "µL/min": "µL/min"}
 
 
 def normalise_unit_text(text: str) -> str:

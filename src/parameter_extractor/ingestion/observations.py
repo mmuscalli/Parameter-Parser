@@ -63,6 +63,11 @@ _UNITLESS = re.compile(r"(^|_)pH($|_(err|range|alt|avg|mode|lim|prior)|_?\d)")
 
 
 def unit_for_column(column: str) -> str:
+    if column.startswith("analysis_"):            # instrument settings: the unit is the column's last slot
+        from parameter_extractor.analysis_vocab import unit_for_column as analysis_unit
+        unit = analysis_unit(column)
+        if unit is not None:
+            return unit
     if re.search(r"(method|desc)$", column):
         return ""                                  # text about another column's value (initial_pH_alt1_method)
     column = re.sub(r"_err_(?:plus|minus)$", "", column)    # an uncertainty is in its value's unit

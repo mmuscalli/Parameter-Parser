@@ -24,6 +24,7 @@ keep them or delete them.
 | `prompts/<name>.rules.md` | extra rules for any other shared prompt (`figure_planner`, `focused_search`, `metadata`, `term_search`) | no |
 | `prompts/<name>.md` | a whole prompt of your own, replacing the app's (advanced) | no |
 | `formulas` in `pack.json` | calculations without code (below) | no |
+| `analysis_vocab.json` | analytical techniques and their instrument settings, for the built-in `analysis` step (below) | only with that step |
 
 ## How a paper goes through a pack
 
@@ -98,6 +99,25 @@ Rows decide everything later, so say clearly:
 A few lines are enough. The shared prompt already covers the general rules (tables, text results with
 conditions, figures are digitized separately, quoted data from other papers).
 
+## Analysis methods (built-in step `analysis`, `analysis_vocab.json`)
+
+Add `"analysis"` to `builtin_stages` to record how the results were measured: every analytical technique a paper
+used and its instrument settings, in columns named `analysis_<technique>_<setting>[_<unit>]` --
+`analysis_RP-HPLC_flow-rate_mL_min`, `analysis_MALDI-TOF-MS_laser-intensity_%`, `analysis_RP-HPLC_column` (text).
+Technique and setting names use hyphens; underscores only separate the parts. `analysis_vocab.json` lists:
+
+- `families`: groups of settings shared by similar instruments (liquid chromatography, mass spectrometry, NMR, ...),
+  each setting with its `unit` (the column's unit; values are converted to it; '' = text), `integer` for counts,
+  a `description` and `aliases` (other wordings papers use -- the app matches them, so the model's prompt only
+  needs the names). The `general` family applies to every technique (instrument, what it measured,
+  calibration, detection limit, sample preparation ...).
+- `techniques`: each with its `families` and `aliases` ('reversed-phase HPLC', 'C18 HPLC' -> `RP-HPLC`).
+
+A setting of a listed technique is a known column; anything else is offered in the review (category Analysis)
+with its column already named. Copy the prebiotic chemistry pack's file as a start -- it covers the techniques
+of a standard instrumental-analysis textbook (chromatography, electrophoresis, MS, UV-Vis, fluorescence, IR,
+Raman, NMR, X-ray, atomic spectroscopy, elemental analysers, electrodes, radiolabels, sequencing, microscopy).
+
 ## Calculations (`postprocess`)
 
 Calculations are code in the app. A pack chooses which ones run. The ones that exist today were written for the
@@ -159,6 +179,6 @@ values.
 
 - **Calculations beyond formulas.** Anything one row's columns can express is a formula. Calculations across rows,
   lookups in outside data, or new extraction logic still need a developer.
-- **Built-in stages other than `chemistry` and `fit_models`.** A new step written in code (its own answer
+- **Built-in stages other than `chemistry`, `fit_models` and `analysis`.** A new step written in code (its own answer
   format) needs a developer; everything a parameter list can express works as a `stages/*.json` file.
 - **Checks against an outside database** (like the exoplanet archive check).

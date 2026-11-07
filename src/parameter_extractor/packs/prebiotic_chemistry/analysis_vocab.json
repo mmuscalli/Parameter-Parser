@@ -1,0 +1,344 @@
+{
+  "_about": "Analytical techniques and the instrument settings recorded for each (the 'analysis' step, stages/analysis.py; 2026-11-07). A value goes in the column analysis_<technique>_<setting>[_<unit>] -- e.g. analysis_MALDI-TOF-MS_laser-intensity_%, analysis_RP-HPLC_flow-rate_mL_min, analysis_RP-HPLC_column (text). Technique and setting names use hyphens inside, underscores only between the parts, like the compound columns (<role>_<name>_<phase>_<measure>). A technique listed here with one of its families' settings (or a 'general' one) is a known column; anything else is offered in the review under Analysis. Families and settings follow Rouessac & Rouessac, Chemical Analysis: Modern Instrumentation Methods and Techniques, 3rd ed. (Wiley 2022), chapters 1-22, plus the settings prebiotic-chemistry papers report (Riggi2023's MALDI Table 2, kim2017's HPLC, the Sam Papers set). Units: the unit the column holds (values are converted from the unit printed); '' = text. 'integer': a whole number.",
+  "families": {
+    "general": {
+      "label": "Any technique",
+      "settings": [
+        {"name": "instrument", "unit": "", "description": "make and model of the instrument (e.g. 'Bruker Autoflex Speed', 'Agilent 1260 Infinity II')", "aliases": ["instrument model", "spectrometer", "chromatograph", "system", "manufacturer"]},
+        {"name": "measured", "unit": "", "description": "what this technique was used for in the paper: which products or quantities it identified or measured (e.g. 'maximum oligomer length', 'Gly-Gly and DKP yields')", "aliases": ["purpose", "analytes", "used for", "quantified"]},
+        {"name": "quantification", "unit": "", "description": "how amounts were obtained from the signal: external standards, internal standard, standard addition, peak areas against reference compounds, relative intensities", "aliases": ["quantitation", "quantification method", "yield determination", "calculation of yields"]},
+        {"name": "calibration", "unit": "", "description": "calibration standard(s) or calibration procedure (e.g. 'external, Oligonucleotide Calibration Standard LMW, 1000-4000 Da')", "aliases": ["calibration standard", "calibrant", "external calibration", "mass calibration", "calibration curve"]},
+        {"name": "standards", "unit": "", "description": "reference compounds the analytes were identified or quantified against (authentic samples, commercial standards)", "aliases": ["reference compounds", "authentic standards", "reference standards", "standard compounds"]},
+        {"name": "internal-standard", "unit": "", "description": "internal standard added to the samples, with its amount if given", "aliases": ["internal standard", "IS"]},
+        {"name": "detection-limit", "unit": "", "description": "limit of detection as printed with its unit (concentration, amount or %)", "aliases": ["LOD", "limit of detection", "detection limit"]},
+        {"name": "quantification-limit", "unit": "", "description": "limit of quantification as printed with its unit", "aliases": ["LOQ", "limit of quantification", "limit of quantitation"]},
+        {"name": "sample-preparation", "unit": "", "description": "what was done to a sample before this analysis: dilution, filtration, desalting, extraction (SPE, ZipTip), derivatization, redissolution", "aliases": ["sample preparation", "sample prep", "pretreatment", "workup for analysis", "dilution"]},
+        {"name": "derivatization", "unit": "", "description": "derivatizing reagent and conditions (pre- or post-column: ninhydrin, OPA, FMOC, Marfey's reagent, silylation)", "aliases": ["derivatisation", "derivatizing agent", "post-column derivatization", "pre-column derivatization"]},
+        {"name": "data-processing", "unit": "", "description": "how spectra or chromatograms were processed: baseline correction, smoothing (Savitzky-Golay), peak integration, deconvolution", "aliases": ["data processing", "processing", "smoothing", "baseline correction", "baseline subtraction", "peak integration"]},
+        {"name": "software", "unit": "", "description": "software used to acquire or process the data", "aliases": ["acquisition software", "processing software", "data software"]},
+        {"name": "replicate-measurements", "unit": "", "integer": true, "description": "number of times each sample was measured (injections, spectra) -- not replicate experiments", "aliases": ["replicate injections", "technical replicates", "repeat measurements", "injections per sample"]},
+        {"name": "temperature", "unit": "°C", "description": "temperature of the measurement (cell, probe, column oven) when the family has no more specific setting", "aliases": ["measurement temperature", "analysis temperature"]}
+      ]
+    },
+    "liquid_chromatography": {
+      "label": "Liquid chromatography (HPLC, UHPLC, ion chromatography, SEC)",
+      "settings": [
+        {"name": "column", "unit": "", "description": "column name, maker and type as printed (e.g. 'SunFire C18, Waters')", "aliases": ["HPLC column", "analytical column", "column type"]},
+        {"name": "stationary-phase", "unit": "", "description": "stationary phase chemistry (C18, C8, anion exchange, HILIC, polymeric)", "aliases": ["stationary phase", "packing", "phase"]},
+        {"name": "column-length", "unit": "mm", "description": "column length", "aliases": ["length", "column dimensions (length)"]},
+        {"name": "column-diameter", "unit": "mm", "description": "column internal diameter (i.d.)", "aliases": ["internal diameter", "i.d.", "inner diameter", "column i.d."]},
+        {"name": "particle-size", "unit": "µm", "description": "particle size of the packing", "aliases": ["particle diameter", "dp"]},
+        {"name": "pore-size", "unit": "nm", "description": "pore size of the packing (Å are converted to nm)", "aliases": ["pore diameter"]},
+        {"name": "guard-column", "unit": "", "description": "guard / pre-column", "aliases": ["guard column", "pre-column", "precolumn"]},
+        {"name": "mobile-phase", "unit": "", "description": "eluents as printed, A and B for gradients, with additives and pH (e.g. 'A: 25 mM TEAA pH 7; B: acetonitrile')", "aliases": ["mobile phase", "eluent", "eluents", "solvent system", "buffer A/B"]},
+        {"name": "ion-pair-reagent", "unit": "", "description": "ion-pairing reagent (TEAA, TBAHS, sodium hexanesulfonate, HFIP/TEA)", "aliases": ["ion pairing reagent", "ion-pairing agent"]},
+        {"name": "elution", "unit": "", "description": "isocratic or the gradient programme as printed (e.g. '0-15% B in 20 min')", "aliases": ["gradient", "gradient program", "elution program", "isocratic"]},
+        {"name": "flow-rate", "unit": "mL/min", "description": "mobile phase flow rate", "aliases": ["flow", "flow rate"]},
+        {"name": "column-temperature", "unit": "°C", "description": "column oven temperature", "aliases": ["oven temperature", "column oven"]},
+        {"name": "injection-volume", "unit": "µL", "description": "volume injected", "aliases": ["injection", "sample volume injected", "loop volume"]},
+        {"name": "detector", "unit": "", "description": "detector type (UV, diode array, fluorescence, refractive index, conductivity, MS, ELSD)", "aliases": ["detection", "detector type"]},
+        {"name": "detection-wavelength", "unit": "nm", "description": "UV-Vis detection wavelength", "aliases": ["wavelength", "UV detection", "monitoring wavelength", "absorbance wavelength"]},
+        {"name": "excitation-wavelength", "unit": "nm", "description": "fluorescence detector excitation wavelength", "aliases": ["λex", "ex"]},
+        {"name": "emission-wavelength", "unit": "nm", "description": "fluorescence detector emission wavelength", "aliases": ["λem", "em"]},
+        {"name": "suppressor", "unit": "", "description": "ion chromatography suppressor", "aliases": ["suppression"]},
+        {"name": "run-time", "unit": "min", "description": "length of one chromatographic run", "aliases": ["analysis time", "run duration", "total run time"]},
+        {"name": "retention-times", "unit": "", "description": "retention times the paper gives for its products, as printed (e.g. 'GlyGly 4.2 min, DKP 6.1 min')", "aliases": ["retention time", "elution times", "tR"]}
+      ]
+    },
+    "gas_chromatography": {
+      "label": "Gas chromatography",
+      "settings": [
+        {"name": "column", "unit": "", "description": "column name, maker and stationary phase (e.g. 'HP-5MS')", "aliases": ["GC column", "capillary column"]},
+        {"name": "stationary-phase", "unit": "", "description": "stationary phase", "aliases": ["stationary phase", "phase"]},
+        {"name": "column-length", "unit": "m", "description": "column length (metres)", "aliases": ["length"]},
+        {"name": "column-diameter", "unit": "mm", "description": "column internal diameter", "aliases": ["internal diameter", "i.d."]},
+        {"name": "film-thickness", "unit": "µm", "description": "stationary phase film thickness", "aliases": ["df", "film"]},
+        {"name": "carrier-gas", "unit": "", "description": "carrier gas", "aliases": ["carrier", "carrier gas"]},
+        {"name": "carrier-gas-flow", "unit": "mL/min", "description": "carrier gas flow rate", "aliases": ["flow rate", "column flow", "flow"]},
+        {"name": "injection-mode", "unit": "", "description": "split / splitless / on-column, with the split ratio as printed", "aliases": ["split ratio", "split", "splitless", "injection"]},
+        {"name": "injector-temperature", "unit": "°C", "description": "injector (inlet) temperature", "aliases": ["inlet temperature", "injection port temperature"]},
+        {"name": "injection-volume", "unit": "µL", "description": "volume injected", "aliases": ["injection volume"]},
+        {"name": "oven-program", "unit": "", "description": "oven temperature programme as printed", "aliases": ["temperature program", "oven temperature", "temperature programming"]},
+        {"name": "detector", "unit": "", "description": "detector (FID, TCD, ECD, NPD, MS)", "aliases": ["detection"]},
+        {"name": "detector-temperature", "unit": "°C", "description": "detector temperature", "aliases": ["FID temperature"]},
+        {"name": "make-up-gas", "unit": "", "description": "make-up gas", "aliases": ["makeup gas"]},
+        {"name": "headspace", "unit": "", "description": "headspace sampling conditions (equilibration temperature and time)", "aliases": ["headspace sampling", "static headspace", "SPME"]}
+      ]
+    },
+    "planar_separation": {
+      "label": "Thin-layer / paper chromatography and paper electrophoresis",
+      "settings": [
+        {"name": "plate", "unit": "", "description": "plate or paper and its layer (silica gel 60 F254, cellulose, Whatman 3MM, PEI-cellulose)", "aliases": ["stationary phase", "paper", "TLC plate", "support"]},
+        {"name": "mobile-phase", "unit": "", "description": "developing solvent or electrophoresis buffer as printed (e.g. '1-butanol-water 84:16')", "aliases": ["solvent system", "eluent", "developing solvent", "buffer"]},
+        {"name": "voltage", "unit": "V", "description": "applied voltage (paper electrophoresis)", "aliases": ["applied voltage"]},
+        {"name": "run-time", "unit": "min", "description": "development or electrophoresis time", "aliases": ["development time", "time"]},
+        {"name": "visualization", "unit": "", "description": "how spots were seen (UV 254 nm, ninhydrin, iodine, autoradiography)", "aliases": ["detection", "visualisation", "staining", "spray reagent"]}
+      ]
+    },
+    "capillary_electrophoresis": {
+      "label": "Capillary electrophoresis",
+      "settings": [
+        {"name": "capillary", "unit": "", "description": "capillary type and coating (fused silica, coated)", "aliases": ["capillary type"]},
+        {"name": "capillary-length", "unit": "cm", "description": "total capillary length", "aliases": ["total length"]},
+        {"name": "effective-length", "unit": "cm", "description": "length to the detector", "aliases": ["length to detector"]},
+        {"name": "capillary-diameter", "unit": "µm", "description": "capillary internal diameter", "aliases": ["internal diameter", "i.d."]},
+        {"name": "electrolyte", "unit": "", "description": "background electrolyte (buffer, concentration, additives)", "aliases": ["background electrolyte", "running buffer", "BGE", "buffer"]},
+        {"name": "electrolyte-pH", "unit": "", "description": "pH of the background electrolyte (a number)", "aliases": ["buffer pH", "BGE pH"]},
+        {"name": "voltage", "unit": "kV", "description": "separation voltage", "aliases": ["applied voltage", "separation voltage"]},
+        {"name": "injection", "unit": "", "description": "injection mode and its pressure/time or voltage/time as printed (hydrodynamic 50 mbar 5 s)", "aliases": ["injection mode", "hydrodynamic injection", "electrokinetic injection"]},
+        {"name": "detector", "unit": "", "description": "detector (UV, diode array, LIF, MS)", "aliases": ["detection"]},
+        {"name": "detection-wavelength", "unit": "nm", "description": "detection wavelength", "aliases": ["wavelength"]}
+      ]
+    },
+    "gel_electrophoresis": {
+      "label": "Gel electrophoresis (PAGE, agarose)",
+      "settings": [
+        {"name": "gel", "unit": "", "description": "gel as printed (e.g. '20% polyacrylamide, 7 M urea')", "aliases": ["gel composition", "polyacrylamide gel", "agarose gel"]},
+        {"name": "gel-percentage", "unit": "%", "description": "acrylamide or agarose percentage", "aliases": ["acrylamide", "gel concentration", "percentage"]},
+        {"name": "denaturant", "unit": "", "description": "denaturing agent (urea concentration, formamide); 'none' for native gels", "aliases": ["denaturing", "urea"]},
+        {"name": "buffer", "unit": "", "description": "running buffer (TBE, TAE)", "aliases": ["running buffer", "electrophoresis buffer"]},
+        {"name": "voltage", "unit": "V", "description": "applied voltage", "aliases": ["applied voltage"]},
+        {"name": "run-time", "unit": "min", "description": "running time", "aliases": ["electrophoresis time", "running time"]},
+        {"name": "staining", "unit": "", "description": "stain or label (SYBR Gold, ethidium bromide, 32P, fluorescent primer)", "aliases": ["stain", "dye", "label", "visualization"]},
+        {"name": "imaging", "unit": "", "description": "how the gel was imaged (phosphorimager, fluorescence scanner, UV shadowing)", "aliases": ["imager", "scanner", "detection"]},
+        {"name": "ladder", "unit": "", "description": "size marker or ladder", "aliases": ["marker", "size marker", "DNA ladder", "RNA ladder"]}
+      ]
+    },
+    "mass_spectrometry": {
+      "label": "Mass spectrometry",
+      "settings": [
+        {"name": "ionization", "unit": "", "description": "ionization source (ESI, nano-ESI, MALDI, EI, CI, APCI, ICP)", "aliases": ["ion source", "ionisation", "ionization source", "source"]},
+        {"name": "ion-polarity", "unit": "", "description": "positive or negative ion mode", "aliases": ["polarity", "ionization mode", "ion mode", "mode", "positive mode", "negative mode"]},
+        {"name": "analyzer", "unit": "", "description": "mass analyzer (TOF, quadrupole, triple quadrupole, ion trap, Orbitrap, FT-ICR, Q-TOF)", "aliases": ["mass analyzer", "analyser", "mass analyser"]},
+        {"name": "detection-mode", "unit": "", "description": "TOF flight mode (reflectron / linear) or scan mode (full scan, SIM, MRM)", "aliases": ["mode", "reflectron", "linear mode", "scan mode", "acquisition mode"]},
+        {"name": "mass-range", "unit": "", "description": "m/z range acquired, as printed (e.g. 'm/z 500-4000')", "aliases": ["m/z range", "scan range", "mass window"]},
+        {"name": "resolution", "unit": "", "description": "resolving power (a number, e.g. 70000)", "aliases": ["resolving power", "mass resolution"]},
+        {"name": "mass-accuracy", "unit": "", "description": "mass accuracy as printed (e.g. '< 5 ppm')", "aliases": ["accuracy"]},
+        {"name": "spray-voltage", "unit": "kV", "description": "ESI spray / capillary voltage", "aliases": ["capillary voltage", "needle voltage", "ion spray voltage", "spray voltage"]},
+        {"name": "cone-voltage", "unit": "V", "description": "cone / fragmentor / declustering voltage", "aliases": ["fragmentor voltage", "declustering potential", "sampling cone"]},
+        {"name": "source-temperature", "unit": "°C", "description": "ion source temperature", "aliases": ["source temperature", "ion source temperature"]},
+        {"name": "capillary-temperature", "unit": "°C", "description": "heated capillary / ion transfer tube temperature", "aliases": ["ion transfer tube temperature", "inlet capillary temperature"]},
+        {"name": "desolvation-temperature", "unit": "°C", "description": "desolvation / drying gas temperature", "aliases": ["drying gas temperature", "gas temperature"]},
+        {"name": "gas-flows", "unit": "", "description": "nebulizer, sheath, drying or desolvation gas flows as printed", "aliases": ["nebulizer gas", "sheath gas", "drying gas", "desolvation gas", "auxiliary gas"]},
+        {"name": "fragmentation", "unit": "", "description": "MS/MS fragmentation method (CID, HCD, ETD) and target ions", "aliases": ["MS/MS", "tandem MS", "CID", "HCD"]},
+        {"name": "collision-energy", "unit": "eV", "description": "collision energy (normalized % values: as text in fragmentation)", "aliases": ["collision energy", "CE"]},
+        {"name": "electron-energy", "unit": "eV", "description": "electron ionization energy (usually 70 eV)", "aliases": ["ionization energy", "electron energy"]},
+        {"name": "inlet", "unit": "", "description": "how samples entered the MS: direct infusion, LC, GC, flow injection", "aliases": ["sample introduction", "infusion", "direct infusion"]},
+        {"name": "infusion-rate", "unit": "µL/min", "description": "direct infusion flow rate", "aliases": ["infusion flow rate", "syringe pump rate"]}
+      ]
+    },
+    "maldi": {
+      "label": "MALDI settings",
+      "settings": [
+        {"name": "matrix", "unit": "", "description": "matrix and its solvent/additives as printed (e.g. 'THAP in 50% ACN with ammonium citrate')", "aliases": ["MALDI matrix", "matrix solution"]},
+        {"name": "matrix-ratio", "unit": "", "description": "sample : matrix mixing ratio as printed (e.g. '1:1 v/v')", "aliases": ["sample to matrix ratio", "mixing ratio"]},
+        {"name": "target-plate", "unit": "", "description": "target plate (stainless steel, AnchorChip, ground steel)", "aliases": ["target", "MALDI plate", "plate", "MALDI target"]},
+        {"name": "spot-volume", "unit": "µL", "description": "volume spotted on the target", "aliases": ["spotted volume", "deposited volume"]},
+        {"name": "laser", "unit": "", "description": "laser type (N2 337 nm, Nd:YAG smartbeam)", "aliases": ["laser type", "laser source"]},
+        {"name": "laser-wavelength", "unit": "nm", "description": "laser wavelength", "aliases": ["wavelength"]},
+        {"name": "laser-intensity", "unit": "%", "description": "relative laser intensity / power setting in %", "aliases": ["relative laser intensity", "laser power", "laser fluence", "laser energy"]},
+        {"name": "laser-shots", "unit": "", "integer": true, "description": "laser shots summed per spectrum, or per set of shots when the paper counts sets (then the sets go in shot-sets)", "aliases": ["shots", "number of shots", "shots per spectrum", "shots per set"]},
+        {"name": "shot-sets", "unit": "", "integer": true, "description": "sets of laser shots (positions) summed per sample", "aliases": ["sets of shots per sample", "shot sets", "sets of shots", "positions per spot", "shots per sample"]},
+        {"name": "laser-frequency", "unit": "Hz", "description": "laser repetition rate", "aliases": ["repetition rate", "laser repetition rate"]},
+        {"name": "ion-source-1-voltage", "unit": "kV", "description": "ion source 1 (accelerating) voltage", "aliases": ["ion source 1", "IS1", "accelerating voltage", "acceleration voltage"]},
+        {"name": "ion-source-2-voltage", "unit": "kV", "description": "ion source 2 voltage", "aliases": ["ion source 2", "IS2"]},
+        {"name": "lens-voltage", "unit": "kV", "description": "lens voltage", "aliases": ["lens"]},
+        {"name": "reflector-voltage", "unit": "kV", "description": "reflector voltage(s)", "aliases": ["reflector", "reflectron voltage"]},
+        {"name": "pulsed-ion-extraction", "unit": "ns", "description": "pulsed ion extraction / delayed extraction time", "aliases": ["PIE", "delayed extraction", "extraction delay", "pulsed ion extraction"]},
+        {"name": "detector-gain", "unit": "", "description": "detector gain as printed", "aliases": ["gain"]}
+      ]
+    },
+    "uv_vis": {
+      "label": "UV-Vis absorption",
+      "settings": [
+        {"name": "wavelength", "unit": "nm", "description": "wavelength measured at", "aliases": ["detection wavelength", "λ", "lambda", "absorbance at"]},
+        {"name": "wavelength-range", "unit": "", "description": "wavelength range scanned, as printed (e.g. '200-400 nm')", "aliases": ["scan range", "spectral range"]},
+        {"name": "path-length", "unit": "cm", "description": "cell path length", "aliases": ["path length", "cuvette path length", "optical path"]},
+        {"name": "cell", "unit": "", "description": "cell or cuvette (quartz, microplate, NanoDrop)", "aliases": ["cuvette", "cell type", "microplate"]},
+        {"name": "bandwidth", "unit": "nm", "description": "spectral bandwidth or slit width", "aliases": ["slit width", "spectral bandwidth", "slit"]},
+        {"name": "reference", "unit": "", "description": "blank or reference solution", "aliases": ["blank", "baseline"]},
+        {"name": "extinction-coefficient", "unit": "", "description": "molar absorption coefficient used for quantification, as printed with its unit", "aliases": ["molar absorptivity", "ε", "epsilon", "extinction coefficient"]}
+      ]
+    },
+    "fluorescence": {
+      "label": "Fluorescence and luminescence",
+      "settings": [
+        {"name": "excitation-wavelength", "unit": "nm", "description": "excitation wavelength", "aliases": ["λex", "excitation"]},
+        {"name": "emission-wavelength", "unit": "nm", "description": "emission wavelength (or the range as text in emission-range)", "aliases": ["λem", "emission"]},
+        {"name": "emission-range", "unit": "", "description": "emission range scanned, as printed", "aliases": ["scan range"]},
+        {"name": "slit-width", "unit": "nm", "description": "excitation / emission slit width", "aliases": ["bandwidth", "slits"]},
+        {"name": "dye", "unit": "", "description": "fluorescent dye or label (SYBR Gold, thioflavin T, fluorescamine)", "aliases": ["fluorophore", "probe", "stain", "label"]},
+        {"name": "path-length", "unit": "cm", "description": "cell path length", "aliases": ["cuvette"]}
+      ]
+    },
+    "infrared": {
+      "label": "Infrared (FTIR, ATR)",
+      "settings": [
+        {"name": "sampling", "unit": "", "description": "sampling technique (ATR with its crystal, KBr pellet, transmission, DRIFTS)", "aliases": ["sampling technique", "ATR", "KBr pellet", "accessory"]},
+        {"name": "spectral-range", "unit": "", "description": "wavenumber range as printed (e.g. '4000-400 cm-1')", "aliases": ["range", "wavenumber range", "scan range"]},
+        {"name": "resolution", "unit": "cm-1", "description": "spectral resolution", "aliases": ["spectral resolution"]},
+        {"name": "scans", "unit": "", "integer": true, "description": "scans averaged per spectrum", "aliases": ["number of scans", "scans per spectrum", "accumulations"]},
+        {"name": "detector", "unit": "", "description": "detector (DTGS, MCT)", "aliases": ["detection"]}
+      ]
+    },
+    "raman": {
+      "label": "Raman",
+      "settings": [
+        {"name": "laser-wavelength", "unit": "nm", "description": "excitation laser wavelength", "aliases": ["excitation wavelength", "laser", "excitation"]},
+        {"name": "laser-power", "unit": "mW", "description": "laser power at the sample", "aliases": ["power"]},
+        {"name": "acquisition-time", "unit": "s", "description": "integration time per spectrum", "aliases": ["integration time", "exposure time"]},
+        {"name": "accumulations", "unit": "", "integer": true, "description": "spectra accumulated", "aliases": ["scans", "number of accumulations"]},
+        {"name": "objective", "unit": "", "description": "microscope objective", "aliases": ["magnification"]},
+        {"name": "spectral-range", "unit": "", "description": "Raman shift range as printed", "aliases": ["range"]},
+        {"name": "grating", "unit": "", "description": "grating as printed (lines/mm)", "aliases": ["grating"]}
+      ]
+    },
+    "nmr": {
+      "label": "NMR",
+      "settings": [
+        {"name": "frequency", "unit": "MHz", "description": "spectrometer frequency (for 1H unless the technique names another nucleus: then that nucleus's frequency as printed)", "aliases": ["field", "field strength", "spectrometer frequency", "MHz"]},
+        {"name": "solvent", "unit": "", "description": "NMR solvent / lock (D2O, 10% D2O, DMSO-d6)", "aliases": ["deuterated solvent", "lock solvent", "lock"]},
+        {"name": "reference", "unit": "", "description": "chemical-shift reference (TMS, DSS, TSP, 85% H3PO4 external)", "aliases": ["chemical shift reference", "external standard", "referenced to"]},
+        {"name": "scans", "unit": "", "integer": true, "description": "number of scans (transients)", "aliases": ["number of scans", "transients", "ns"]},
+        {"name": "relaxation-delay", "unit": "s", "description": "relaxation (recycle) delay d1", "aliases": ["recycle delay", "d1", "repetition delay"]},
+        {"name": "acquisition-time", "unit": "s", "description": "acquisition time", "aliases": ["aq"]},
+        {"name": "pulse-sequence", "unit": "", "description": "pulse programme or angle (zg30, 90° pulse, NOESY presat, inverse-gated)", "aliases": ["pulse program", "pulse angle", "pulse width", "pulse"]},
+        {"name": "decoupling", "unit": "", "description": "decoupling (1H-decoupled, inverse gated)", "aliases": ["proton decoupled", "decoupled"]},
+        {"name": "water-suppression", "unit": "", "description": "solvent / water suppression (presaturation, WATERGATE, excitation sculpting)", "aliases": ["presaturation", "solvent suppression"]},
+        {"name": "probe", "unit": "", "description": "probe (cryoprobe, BBO, 5 mm)", "aliases": ["probehead"]},
+        {"name": "temperature", "unit": "°C", "description": "sample temperature (K converted to °C)", "aliases": ["probe temperature", "acquisition temperature"]},
+        {"name": "experiments", "unit": "", "description": "experiments run beyond 1D (COSY, HSQC, HMBC, DOSY, 1H-31P HMBC)", "aliases": ["2D experiments", "2D NMR", "spectra recorded"]}
+      ]
+    },
+    "xray": {
+      "label": "X-ray diffraction and fluorescence",
+      "settings": [
+        {"name": "radiation", "unit": "", "description": "X-ray source / radiation (Cu Kα, Mo Kα, synchrotron with energy)", "aliases": ["source", "X-ray source", "anode", "Cu Kα"]},
+        {"name": "voltage", "unit": "kV", "description": "tube voltage", "aliases": ["tube voltage", "generator voltage"]},
+        {"name": "current", "unit": "mA", "description": "tube current", "aliases": ["tube current"]},
+        {"name": "scan-range", "unit": "", "description": "2θ (or energy) range as printed (e.g. '5-80° 2θ')", "aliases": ["2θ range", "2theta range", "range", "angular range"]},
+        {"name": "step-size", "unit": "", "description": "step size and time per step as printed", "aliases": ["step", "step width", "scan speed"]},
+        {"name": "detector", "unit": "", "description": "detector", "aliases": ["detection"]},
+        {"name": "sample-mounting", "unit": "", "description": "how the sample was presented (powder on zero-background holder, pressed pellet, fused bead)", "aliases": ["sample holder", "mounting", "pellet"]},
+        {"name": "phase-identification", "unit": "", "description": "database or method used to identify phases (ICDD PDF, Rietveld)", "aliases": ["database", "PDF card", "Rietveld"]}
+      ]
+    },
+    "atomic_spectroscopy": {
+      "label": "Atomic absorption / emission and ICP",
+      "settings": [
+        {"name": "wavelength", "unit": "nm", "description": "analytical line(s); several -> as text in the note", "aliases": ["emission line", "analytical line", "line"]},
+        {"name": "atomizer", "unit": "", "description": "atomization or excitation source (flame with its gases, graphite furnace, ICP)", "aliases": ["flame", "graphite furnace", "atomization"]},
+        {"name": "plasma-power", "unit": "W", "description": "RF (plasma) power", "aliases": ["RF power", "forward power"]},
+        {"name": "nebulizer", "unit": "", "description": "nebulizer and spray chamber", "aliases": ["nebuliser", "spray chamber"]},
+        {"name": "gas-flows", "unit": "", "description": "plasma / auxiliary / nebulizer gas flows as printed", "aliases": ["plasma gas", "auxiliary gas", "nebulizer gas flow"]},
+        {"name": "lamp", "unit": "", "description": "light source (hollow cathode lamp, EDL)", "aliases": ["hollow cathode lamp", "source"]},
+        {"name": "background-correction", "unit": "", "description": "background correction (deuterium, Zeeman)", "aliases": ["Zeeman", "deuterium background correction"]},
+        {"name": "digestion", "unit": "", "description": "sample digestion before analysis (acids, microwave)", "aliases": ["acid digestion", "microwave digestion"]}
+      ]
+    },
+    "elemental_analysis": {
+      "label": "Elemental and sum-parameter analysers (TOC, TN, CHNS)",
+      "settings": [
+        {"name": "oxidation", "unit": "", "description": "oxidation or combustion method (high-temperature catalytic combustion, UV-persulfate)", "aliases": ["combustion", "oxidation method"]},
+        {"name": "combustion-temperature", "unit": "°C", "description": "furnace temperature", "aliases": ["furnace temperature"]},
+        {"name": "detector", "unit": "", "description": "detector (NDIR, chemiluminescence, TCD)", "aliases": ["detection"]},
+        {"name": "carrier-gas", "unit": "", "description": "carrier gas", "aliases": ["carrier"]}
+      ]
+    },
+    "electrochemistry": {
+      "label": "Electrodes and electrochemical methods (pH, ISE, voltammetry)",
+      "settings": [
+        {"name": "electrode", "unit": "", "description": "working / indicator electrode (glass pH electrode, ion-selective electrode, glassy carbon)", "aliases": ["working electrode", "indicator electrode", "probe"]},
+        {"name": "reference-electrode", "unit": "", "description": "reference electrode (Ag/AgCl, SCE)", "aliases": ["reference", "Ag/AgCl"]},
+        {"name": "calibration-buffers", "unit": "", "description": "calibration buffers or solutions", "aliases": ["calibration", "buffers"]},
+        {"name": "scan-rate", "unit": "mV/s", "description": "potential scan rate", "aliases": ["sweep rate"]},
+        {"name": "potential-range", "unit": "", "description": "potential window as printed", "aliases": ["potential window"]}
+      ]
+    },
+    "radiolabel": {
+      "label": "Radiolabelling and counting",
+      "settings": [
+        {"name": "isotope", "unit": "", "description": "label (32P, 33P, 14C, 3H) and where it sits ([γ-32P]-ATP)", "aliases": ["radiolabel", "label", "tracer"]},
+        {"name": "detection", "unit": "", "description": "how the label was detected (phosphorimager, liquid scintillation counting, autoradiography)", "aliases": ["counting", "phosphorimager", "scintillation counting", "autoradiography"]},
+        {"name": "exposure-time", "unit": "h", "description": "exposure time of the screen / film", "aliases": ["exposure"]}
+      ]
+    },
+    "sequencing": {
+      "label": "Sequencing",
+      "settings": [
+        {"name": "platform", "unit": "", "description": "platform and flow cell (PromethION, MinION R9.4.1, Illumina MiSeq)", "aliases": ["sequencer", "flow cell", "instrument platform"]},
+        {"name": "library-preparation", "unit": "", "description": "library preparation (adapter ligation, kit)", "aliases": ["library prep", "adapters", "ligation"]},
+        {"name": "basecaller", "unit": "", "description": "basecaller or analysis pipeline", "aliases": ["base calling", "basecalling", "pipeline"]}
+      ]
+    },
+    "microscopy": {
+      "label": "Microscopy",
+      "settings": [
+        {"name": "magnification", "unit": "", "description": "magnification or objective as printed", "aliases": ["objective"]},
+        {"name": "accelerating-voltage", "unit": "kV", "description": "electron beam accelerating voltage (SEM/TEM)", "aliases": ["acceleration voltage", "beam voltage", "HV"]},
+        {"name": "coating", "unit": "", "description": "sample coating (gold, carbon)", "aliases": ["sputter coating"]},
+        {"name": "staining", "unit": "", "description": "stain or label", "aliases": ["stain", "dye"]}
+      ]
+    }
+  },
+  "techniques": [
+    {"name": "HPLC", "families": ["liquid_chromatography"], "description": "high-performance liquid chromatography when the paper doesn't say which mode", "aliases": ["high-performance liquid chromatography", "high performance liquid chromatography", "high-pressure liquid chromatography", "LC", "liquid chromatography", "HPLC-UV", "HPLC-DAD", "HPLC with UV detection", "HPLC with diode-array detection"]},
+    {"name": "RP-HPLC", "families": ["liquid_chromatography"], "description": "reversed-phase HPLC (C18, C8, ion-pair reversed phase)", "aliases": ["reversed-phase HPLC", "reverse-phase HPLC", "reversed phase HPLC", "reverse phase HPLC", "RP-LC", "IP-RP-HPLC", "ion-pair reversed-phase HPLC", "C18 HPLC", "reversed-phase chromatography"]},
+    {"name": "AEX-HPLC", "families": ["liquid_chromatography"], "description": "anion-exchange HPLC", "aliases": ["anion-exchange HPLC", "anion exchange HPLC", "SAX-HPLC", "strong anion exchange", "anion-exchange chromatography", "anion exchange chromatography"]},
+    {"name": "CEX-HPLC", "families": ["liquid_chromatography"], "description": "cation-exchange HPLC", "aliases": ["cation-exchange HPLC", "cation exchange HPLC", "SCX-HPLC", "cation-exchange chromatography"]},
+    {"name": "IEX-HPLC", "families": ["liquid_chromatography"], "description": "ion-exchange HPLC when the paper doesn't say anion or cation", "aliases": ["ion-exchange HPLC", "ion exchange HPLC", "ion-exchange chromatography", "ion exchange chromatography", "IEC"]},
+    {"name": "HILIC", "families": ["liquid_chromatography"], "description": "hydrophilic interaction chromatography", "aliases": ["hydrophilic interaction liquid chromatography", "HILIC-HPLC"]},
+    {"name": "UHPLC", "families": ["liquid_chromatography"], "description": "ultra-high-performance liquid chromatography", "aliases": ["UPLC", "ultra-high performance liquid chromatography", "ultra performance liquid chromatography"]},
+    {"name": "SEC", "families": ["liquid_chromatography"], "description": "size-exclusion / gel permeation chromatography", "aliases": ["size-exclusion chromatography", "size exclusion chromatography", "GPC", "gel permeation chromatography", "gel filtration", "gel chromatography"]},
+    {"name": "IC", "families": ["liquid_chromatography"], "description": "ion chromatography (inorganic ions, organic acids; conductivity detection)", "aliases": ["ion chromatography", "ion chromatograph", "ion-exclusion chromatography"]},
+    {"name": "amino-acid-analyzer", "families": ["liquid_chromatography"], "description": "dedicated amino acid analyser (ion exchange with post-column ninhydrin or OPA)", "aliases": ["amino acid analyzer", "amino acid analyser", "amino acid analysis", "AAA"]},
+    {"name": "LC-MS", "families": ["liquid_chromatography", "mass_spectrometry"], "description": "liquid chromatography coupled to mass spectrometry", "aliases": ["HPLC-MS", "LC/MS", "HPLC/MS", "UPLC-MS", "UHPLC-MS", "HPLC-ESI-MS", "LC-ESI-MS", "LC-TOF-MS", "HPLC-ESI-TOF"]},
+    {"name": "LC-MS-MS", "families": ["liquid_chromatography", "mass_spectrometry"], "description": "liquid chromatography with tandem mass spectrometry", "aliases": ["LC-MS/MS", "LC/MS/MS", "HPLC-MS/MS", "UPLC-MS/MS"]},
+    {"name": "GC", "families": ["gas_chromatography"], "description": "gas chromatography (FID, TCD)", "aliases": ["gas chromatography", "GC-FID", "GC-TCD", "gas chromatograph"]},
+    {"name": "GC-MS", "families": ["gas_chromatography", "mass_spectrometry"], "description": "gas chromatography - mass spectrometry", "aliases": ["GC/MS", "gas chromatography-mass spectrometry", "gas chromatography mass spectrometry"]},
+    {"name": "TLC", "families": ["planar_separation"], "description": "thin-layer chromatography (incl. HPTLC)", "aliases": ["thin-layer chromatography", "thin layer chromatography", "HPTLC"]},
+    {"name": "paper-chromatography", "families": ["planar_separation"], "description": "paper chromatography", "aliases": ["paper chromatography", "descending paper chromatography"]},
+    {"name": "paper-electrophoresis", "families": ["planar_separation"], "description": "paper electrophoresis", "aliases": ["paper electrophoresis", "high-voltage paper electrophoresis"]},
+    {"name": "CE", "families": ["capillary_electrophoresis"], "description": "capillary electrophoresis (CZE, MEKC, CGE)", "aliases": ["capillary electrophoresis", "CZE", "capillary zone electrophoresis", "MEKC", "HPCE", "CGE"]},
+    {"name": "CE-MS", "families": ["capillary_electrophoresis", "mass_spectrometry"], "description": "capillary electrophoresis - mass spectrometry", "aliases": ["CE/MS"]},
+    {"name": "PAGE", "families": ["gel_electrophoresis"], "description": "polyacrylamide gel electrophoresis (denaturing or native)", "aliases": ["polyacrylamide gel electrophoresis", "denaturing PAGE", "urea PAGE", "urea-PAGE", "native PAGE", "SDS-PAGE", "gel electrophoresis"]},
+    {"name": "agarose-gel", "families": ["gel_electrophoresis"], "description": "agarose gel electrophoresis", "aliases": ["agarose gel electrophoresis", "agarose electrophoresis"]},
+    {"name": "MALDI-TOF-MS", "families": ["mass_spectrometry", "maldi"], "description": "matrix-assisted laser desorption/ionization time-of-flight MS", "aliases": ["MALDI-TOF MS", "MALDI-TOF", "MALDI TOF MS", "MALDI-MS", "MALDI", "matrix-assisted laser desorption/ionization time-of-flight mass spectrometry", "matrix-assisted laser desorption ionization"]},
+    {"name": "ESI-MS", "families": ["mass_spectrometry"], "description": "electrospray ionization MS (direct infusion)", "aliases": ["ESI MS", "electrospray ionization mass spectrometry", "electrospray mass spectrometry", "ESI-TOF", "ESI-TOF-MS", "ESI-QTOF", "ESI-Q-TOF"]},
+    {"name": "nESI-MS", "families": ["mass_spectrometry"], "description": "nano-electrospray ionization MS", "aliases": ["nano-ESI-MS", "nanoESI", "nanospray", "nano-electrospray"]},
+    {"name": "HRMS", "families": ["mass_spectrometry"], "description": "high-resolution mass spectrometry when the source isn't named", "aliases": ["high-resolution mass spectrometry", "high resolution mass spectrometry", "HR-MS", "high resolution mass analysis", "accurate mass"]},
+    {"name": "MS", "families": ["mass_spectrometry"], "description": "mass spectrometry when neither source nor coupling is named", "aliases": ["mass spectrometry", "mass spectrometer", "TOF-MS", "Q-TOF", "Orbitrap MS", "FT-ICR-MS"]},
+    {"name": "EI-MS", "families": ["mass_spectrometry"], "description": "electron-ionization MS (direct probe)", "aliases": ["EI MS", "electron ionization mass spectrometry", "electron impact"]},
+    {"name": "ICP-MS", "families": ["mass_spectrometry", "atomic_spectroscopy"], "description": "inductively coupled plasma mass spectrometry", "aliases": ["ICPMS", "inductively coupled plasma mass spectrometry"]},
+    {"name": "IRMS", "families": ["mass_spectrometry"], "description": "isotope-ratio mass spectrometry", "aliases": ["isotope ratio mass spectrometry", "EA-IRMS", "GC-C-IRMS"]},
+    {"name": "UV-Vis", "families": ["uv_vis"], "description": "UV-visible absorption spectroscopy / photometry", "aliases": ["UV-vis", "UV/Vis", "UV-visible spectroscopy", "UV spectroscopy", "UV spectrophotometry", "spectrophotometry", "absorbance", "UV absorbance", "spectrophotometer", "colorimetry", "colorimetric assay", "NanoDrop"]},
+    {"name": "fluorescence", "families": ["fluorescence"], "description": "fluorescence spectroscopy / fluorimetry, plate-reader fluorescence", "aliases": ["fluorimetry", "fluorometry", "fluorescence spectroscopy", "spectrofluorimetry", "fluorescence assay", "fluorescence measurement"]},
+    {"name": "CD", "families": ["uv_vis"], "description": "circular dichroism", "aliases": ["circular dichroism", "CD spectroscopy"]},
+    {"name": "FTIR", "families": ["infrared"], "description": "infrared spectroscopy (FTIR, ATR-FTIR)", "aliases": ["FT-IR", "IR", "infrared spectroscopy", "ATR-FTIR", "ATR-IR", "infrared", "DRIFTS"]},
+    {"name": "Raman", "families": ["raman"], "description": "Raman spectroscopy", "aliases": ["Raman spectroscopy", "micro-Raman", "SERS"]},
+    {"name": "NMR-1H", "families": ["nmr"], "description": "proton NMR", "aliases": ["1H NMR", "1H-NMR", "proton NMR", "¹H NMR", "H NMR"]},
+    {"name": "NMR-13C", "families": ["nmr"], "description": "carbon-13 NMR", "aliases": ["13C NMR", "13C-NMR", "¹³C NMR", "carbon NMR"]},
+    {"name": "NMR-31P", "families": ["nmr"], "description": "phosphorus-31 NMR", "aliases": ["31P NMR", "31P-NMR", "³¹P NMR", "phosphorus NMR", "1H-decoupled 31P NMR"]},
+    {"name": "NMR-15N", "families": ["nmr"], "description": "nitrogen-15 NMR", "aliases": ["15N NMR", "15N-NMR"]},
+    {"name": "NMR", "families": ["nmr"], "description": "NMR when the nucleus isn't named, or 2D NMR", "aliases": ["nuclear magnetic resonance", "NMR spectroscopy", "2D NMR", "HSQC", "HMBC", "COSY", "DOSY"]},
+    {"name": "XRD", "families": ["xray"], "description": "X-ray diffraction (powder)", "aliases": ["X-ray diffraction", "powder X-ray diffraction", "PXRD", "XRPD", "powder diffraction"]},
+    {"name": "XRF", "families": ["xray"], "description": "X-ray fluorescence", "aliases": ["X-ray fluorescence", "EDXRF", "WDXRF"]},
+    {"name": "XPS", "families": ["xray"], "description": "X-ray photoelectron spectroscopy", "aliases": ["X-ray photoelectron spectroscopy", "ESCA"]},
+    {"name": "AAS", "families": ["atomic_spectroscopy"], "description": "atomic absorption spectroscopy (flame or graphite furnace)", "aliases": ["atomic absorption", "atomic absorption spectroscopy", "atomic absorption spectrometry", "GFAAS", "FAAS"]},
+    {"name": "ICP-OES", "families": ["atomic_spectroscopy"], "description": "inductively coupled plasma optical emission spectroscopy", "aliases": ["ICP-AES", "ICP OES", "inductively coupled plasma optical emission", "inductively coupled plasma atomic emission", "flame photometry"]},
+    {"name": "TOC-analyzer", "families": ["elemental_analysis"], "description": "total organic carbon (and total nitrogen) analyser", "aliases": ["TOC analyzer", "TOC analyser", "TOC", "total organic carbon", "TN analyzer", "total nitrogen analyzer", "TOC-TN"]},
+    {"name": "elemental-analysis", "families": ["elemental_analysis"], "description": "CHNS(O) combustion elemental analysis", "aliases": ["elemental analysis", "CHN analysis", "CHNS analysis", "combustion analysis", "elemental analyzer"]},
+    {"name": "pH-meter", "families": ["electrochemistry"], "description": "pH measurement with an electrode (or indicator strips: say so in electrode)", "aliases": ["pH meter", "pH electrode", "pH measurement", "pH strips", "pH-indicator strips", "pH paper"]},
+    {"name": "ISE", "families": ["electrochemistry"], "description": "ion-selective electrode", "aliases": ["ion-selective electrode", "ion selective electrode", "potentiometry"]},
+    {"name": "voltammetry", "families": ["electrochemistry"], "description": "voltammetry / polarography / amperometry", "aliases": ["cyclic voltammetry", "CV", "polarography", "amperometry", "stripping voltammetry"]},
+    {"name": "radiolabel", "families": ["radiolabel"], "description": "radioactive labelling with counting or imaging", "aliases": ["radiolabeling", "radiolabelling", "32P labelling", "32P-labeling", "scintillation counting", "autoradiography", "phosphorimaging"]},
+    {"name": "nanopore-sequencing", "families": ["sequencing"], "description": "nanopore sequencing", "aliases": ["nanopore sequencing", "Oxford Nanopore", "MinION", "PromethION"]},
+    {"name": "sequencing", "families": ["sequencing"], "description": "other sequencing (Illumina, Sanger)", "aliases": ["Illumina sequencing", "Sanger sequencing", "deep sequencing", "next-generation sequencing", "NGS"]},
+    {"name": "SEM", "families": ["microscopy"], "description": "scanning electron microscopy (with EDS)", "aliases": ["scanning electron microscopy", "SEM-EDS", "SEM-EDX", "ESEM"]},
+    {"name": "TEM", "families": ["microscopy"], "description": "transmission electron microscopy", "aliases": ["transmission electron microscopy", "cryo-TEM"]},
+    {"name": "AFM", "families": ["microscopy"], "description": "atomic force microscopy", "aliases": ["atomic force microscopy"]},
+    {"name": "optical-microscopy", "families": ["microscopy"], "description": "light / fluorescence / confocal microscopy", "aliases": ["optical microscopy", "light microscopy", "fluorescence microscopy", "confocal microscopy", "microscopy"]},
+    {"name": "DLS", "families": [], "description": "dynamic light scattering", "aliases": ["dynamic light scattering"]},
+    {"name": "titration", "families": ["electrochemistry"], "description": "titration (acid-base, Karl Fischer, complexometric)", "aliases": ["Karl Fischer", "Karl Fischer titration", "acid-base titration", "potentiometric titration"]}
+  ]
+}

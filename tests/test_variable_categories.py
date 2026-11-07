@@ -88,7 +88,8 @@ def test_open_ended_items_carry_a_category_unless_suggestions_are_off():
     assert result.model_validate({"other": [{"nm": "x", "v": "1 h", "q": "", "src": "", "c": "high"}]}).other[0].category == ""
     off = for_run(spec, suggest=False)
     assert "other" not in off.models()[1].model_fields and not any("`other`" in r for r in off._field_rules())
-    assert for_run(spec, suggest=True) is spec
+    on = for_run(spec, suggest=True)
+    assert on.open_ended and on.models()[1].model_fields.keys() == spec.models()[1].model_fields.keys()
 
 
 def test_values_follow_their_category_format():

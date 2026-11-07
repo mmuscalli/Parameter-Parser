@@ -596,9 +596,9 @@ def test_stage_toggles():
         w.stage_boxes["fit_models"].setChecked(False)
         assert w.optional_stage_choices()["fit_models"] == "off"
         w.pack_combo.setCurrentIndex(w.pack_combo.findData("prebiotic_chemistry"))
-        assert list(w.stage_boxes) == ["experimental_conditions", "kinetics", "wet_dry"]
+        assert list(w.stage_boxes) == ["experimental_conditions", "kinetics", "wet_dry", "analysis"]
         from PySide6.QtWidgets import QCheckBox
-        assert len(w.stages_widget.findChildren(QCheckBox)) == 3          # the old area's boxes are gone
+        assert len(w.stages_widget.findChildren(QCheckBox)) == 4          # the old area's boxes are gone
         assert "when the paper calls for it" in w.stage_boxes["wet_dry"].text()
         w.pack_combo.setCurrentIndex(w.pack_combo.findData("exoplanets"))
         assert not w.stage_boxes["fit_models"].isChecked()                  # remembered for this area

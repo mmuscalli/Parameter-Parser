@@ -92,6 +92,8 @@ from parameter_extractor.stages.optional import (
     StageSpec, for_run, load_specs, run_optional_stage, triggered_specs)
 from parameter_extractor.stages.fit_models import LABEL as FIT_MODELS_LABEL, run_fit_models
 from parameter_extractor.schemas.fit_models import FitModels
+from parameter_extractor.schemas.analysis import AnalysisResult
+from parameter_extractor.stages.analysis import LABEL as ANALYSIS_LABEL, run_analysis
 from parameter_extractor.calculators import exoplanet_fits
 from parameter_extractor.calculators.water import normalize_water
 from parameter_extractor.voting import MAX_PASSES, disagreement_flags, vote_chemistry, vote_stage
@@ -245,6 +247,7 @@ class Extraction:
     chemistry: Optional[ChemistryExtraction] = None
     term_search: Optional[TermSearch] = None
     fit_models: Optional[FitModels] = None          # exoplanet pack: how the values were obtained
+    analysis: Optional[AnalysisResult] = None       # analytical techniques and instrument settings (2026-11-07)
     # optional stages (the domain pack's stages/*.json) that ran: name -> (spec, result)
     optional: Dict[str, tuple] = field(default_factory=dict)
     equations: List[EquationCandidate] = field(default_factory=list)
@@ -474,12 +477,15 @@ def extract_steps(ex: "Extraction") -> "Extraction":
         if pack.uses("fit_models") and config.optional_stages.get("fit_models", "auto") != "off" and not skip:
             ctx.total_steps += 1
             running["fit_models"] = pool.submit(run_fit_models, ctx, text, ex.structure, table_images)
+        if pack.uses("analysis") and config.optional_stages.get("analysis", "auto") != "off" and not skip:
+            ctx.total_steps += 1
+            running["analysis"] = pool.submit(run_analysis, ctx, text, ex.structure, table_images)
         if terms:
             columns = VariableRegistry(config.registry_path).known_columns()
             running["term_search"] = pool.submit(run_term_search, ctx, terms, text, ex.structure, columns)
         # optional stages whose trigger matches this paper (decided locally, no API call)
         specs = [] if skip else triggered_specs(ex.structure, parsed.text, config.optional_stages,
-                                                config.suggest_new_variables)
+                                                config.suggest_new_variables, set(running))
         for spec in specs:
             if spec.name not in always_on:
                 ctx.total_steps += 1
@@ -493,6 +499,7 @@ def extract_steps(ex: "Extraction") -> "Extraction":
         ex.chemistry = results.get("chemistry") or ChemistryExtraction(paper_id=ex.paper_id, solutes=[])
         ex.term_search = results.get("term_search")
         ex.fit_models = results.get("fit_models")
+        ex.analysis = results.get("analysis")
         ex.optional = {spec.name: (spec, results[spec.name]) for spec in specs}
         if pack.uses("ambient_conditions"):     # 'ambient temperature' -> 25 °C, 'ambient pressure' -> 1 bar
             from parameter_extractor.calculators.ambient import apply_ambient
@@ -601,6 +608,8 @@ def _paper_tools(pack, config: RunConfig, terms, has_figures: bool = False) -> d
         tools["term_search"] = TermSearch
     if pack.uses("fit_models") and config.optional_stages.get("fit_models", "auto") != "off":
         tools["fit_models"] = FitModels
+    if pack.uses("analysis") and config.optional_stages.get("analysis", "auto") != "off":
+        tools["analysis"] = AnalysisResult
     for name, spec in load_specs().items():
         if config.optional_stages.get(name, "auto") != "off":
             tools[name] = for_run(spec, config.suggest_new_variables).models()[1]
@@ -615,7 +624,7 @@ def _paper_tools(pack, config: RunConfig, terms, has_figures: bool = False) -> d
 # optional stages (specs) go before chemistry
 def stage_order() -> List[str]:
     return (["structure_planner", "metadata", "methodology", "term_search"] + list(load_specs())
-            + ["fit_models", "chemistry", "equations", "figure_planner"])
+            + ["fit_models", "analysis", "chemistry", "equations", "figure_planner"])
 
 
 def stage_label(name: str) -> str:
@@ -625,7 +634,7 @@ def stage_label(name: str) -> str:
 
 _STAGE_LABELS = {"metadata": "Bibliographic metadata", "methodology": "Experimental methodology",
                  "chemistry": "Solution chemistry", "term_search": "Parameter search",
-                 "equations": "Equations to LaTeX", "fit_models": FIT_MODELS_LABEL}
+                 "equations": "Equations to LaTeX", "fit_models": FIT_MODELS_LABEL, "analysis": ANALYSIS_LABEL}
 
 
 def _collect(ctx: RunContext, running: dict) -> dict:
@@ -1097,6 +1106,12 @@ def finish(
     new_vars = collect_new_variables(ex.methodology, ex.chemistry, registry, index, ex.term_search,
                                      optional=ex.optional_list, structure=ex.structure)
     new_vars += fig_new_vars
+    if pack.uses("analysis") and ex.analysis is not None:     # instrument settings -> analysis_* columns
+        from parameter_extractor.calculators.analysis_columns import apply_analysis
+        analysis_vars, analysis_flags = apply_analysis(rows, ex.analysis, registry,
+                                                       lambda s, smp: _rows_for(s, smp, index))
+        new_vars += analysis_vars
+        paper_flags += [Flag(kind, message) for kind, message in analysis_flags]
     if ex.skipped_kind:
         paper_flags.append(Flag("no_results", f"The paper was planned as a {ex.skipped_kind}, with no experiments of "
                                               f"its own, so the extraction steps were skipped (no cost beyond planning "

@@ -113,6 +113,9 @@ class StageSpec(BaseModel):
     # a text column for the time system of the epochs, filled from the printed unit of any
     # Julian-date parameter ('BJD_TDB - 2450000' -> 'BJD_TDB'): exoplanets' pl_tsystemref
     time_system_column: str = ""        # what kinds of other parameters to look for (prompt)
+    # the hint's wording depends on another step running (2026-11-07): {stage: {"runs": text, "off": text}},
+    # appended to open_ended_hint -- e.g. analysis details go to `other` only when the analysis step is off
+    hint_by_stage: Dict[str, Dict[str, str]] = Field(default_factory=dict)
 
     def _field_rules(self) -> List[str]:
         rules = []
@@ -740,22 +743,32 @@ def optional_results(optional=None, wet_dry=None) -> List[Tuple[StageSpec, objec
 
 
 def triggered_specs(structure: StructurePlan, paper_text: str,
-                    choices: Optional[Dict[str, str]] = None, suggest: bool = True) -> List[StageSpec]:
+                    choices: Optional[Dict[str, str]] = None, suggest: bool = True,
+                    running: Optional[set] = None) -> List[StageSpec]:
     """The stages to run: triggered ones, unless the user turned them off ('off'), plus
-    any forced on ('on'). `suggest` False: without their open-ended part (see for_run)."""
+    any forced on ('on'). `suggest` False: without their open-ended part (see for_run). `running`: the
+    other steps this run makes (for hint_by_stage)."""
     choices = choices or {}
     out = []
     for name, spec in load_specs().items():
         choice = choices.get(name, "auto")
         if choice == "on" or (choice == "auto" and spec.triggered(structure, paper_text)):
-            out.append(for_run(spec, suggest))
+            out.append(for_run(spec, suggest, running))
     return out
 
 
-def for_run(spec: StageSpec, suggest: bool = True) -> StageSpec:
+def for_run(spec: StageSpec, suggest: bool = True, running: Optional[set] = None) -> StageSpec:
     """The spec as a run uses it: with new-variable suggestions off (RunConfig.suggest_new_variables),
-    an open-ended stage doesn't ask for `other` conditions."""
-    return spec if suggest or not spec.open_ended else spec.model_copy(update={"open_ended": False})
+    an open-ended stage doesn't ask for `other` conditions; hint_by_stage's wording for the steps that run."""
+    update = {}
+    if not suggest and spec.open_ended:
+        update["open_ended"] = False
+    if spec.hint_by_stage:
+        extra = [texts.get("runs" if stage in (running or set()) else "off", "")
+                 for stage, texts in spec.hint_by_stage.items()]
+        update["open_ended_hint"] = "; ".join(x for x in [spec.open_ended_hint.rstrip(" .;")] + extra if x)
+        update["hint_by_stage"] = {}
+    return spec.model_copy(update=update) if update else spec
 
 
 @dataclass
@@ -770,8 +783,9 @@ class StageToggle:
 
 
 def _code_stage_toggles() -> Dict[str, Tuple[str, str]]:
-    from parameter_extractor.stages import fit_models
-    return {"fit_models": (fit_models.LABEL, fit_models.DESCRIPTION)}
+    from parameter_extractor.stages import analysis, fit_models
+    return {"fit_models": (fit_models.LABEL, fit_models.DESCRIPTION),
+            "analysis": (analysis.LABEL, analysis.DESCRIPTION)}
 
 
 def toggleable_stages(pack=None) -> List[StageToggle]:

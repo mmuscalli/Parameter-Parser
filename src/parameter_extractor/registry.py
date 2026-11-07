@@ -256,6 +256,12 @@ class VariableRegistry:
             return False
         if column in self._base_set or column in self.added_columns:
             return True
+        # an instrument setting the pack's analysis vocabulary defines ('analysis_RP-HPLC_flow-rate_mL_min';
+        # analysis_vocab.py, 2026-11-07) -- the pack's own column, like its template columns
+        if column.startswith("analysis_"):
+            from parameter_extractor.analysis_vocab import is_vocab_column
+            if is_vocab_column(column, self.pack):
+                return True
         # no automatic acceptance by naming rule: a new compound of ANY type -- peptide, oligonucleotide, ... -- is
         # reviewed (Mickey, 2026-11-04); only the pack's own columns and the user's accepted ones are known
         # the uncertainty of a known value ('<column>_err_plus' / '_err_minus', the prebiotic pack's naming)
