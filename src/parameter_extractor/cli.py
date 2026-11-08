@@ -120,6 +120,12 @@ def main() -> int:
     parser.add_argument("--suggest-additions", metavar="ID", default=None,
                         help="Survey sample papers (--papers / --pdf / --paper) and suggest what one of your research "
                              "areas lacks (parameters, stages, categories, rules, compounds); prints them")
+    parser.add_argument("--survey-passes", type=int, default=2, choices=[1, 2, 3],
+                        help="--draft-pack / --suggest-additions: survey each paper this many times (cheap) and merge "
+                             "(default 2)")
+    parser.add_argument("--no-tidy", action="store_true",
+                        help="--draft-pack / --suggest-additions / --find-compounds: keep the model's column names "
+                             "instead of the app's conventions (initial_pH, initial_temperature_C, ...)")
     parser.add_argument("--apply-suggestions", action="store_true",
                         help="With --suggest-additions: write every suggestion into the research area")
     parser.add_argument("--area-description", default="", help="A sentence on the field (--draft-pack)")
@@ -389,7 +395,8 @@ def _draft_pack(args, parser) -> int:
     config = RunConfig.from_settings(**overrides)
     try:
         result = pack_drafting.draft_pack(items, args.draft_pack, args.area_name, args.area_description, config,
-                                          on_progress=lambda d, n, m: print(f"[{d}/{n}] {m}"))
+                                          on_progress=lambda d, n, m: print(f"[{d}/{n}] {m}"),
+                                          passes=args.survey_passes, tidy=not args.no_tidy)
     except (PipelineError, ValueError) as e:
         print(f"Error: {e}", file=sys.stderr)
         return 1
@@ -416,7 +423,7 @@ def _find_compounds(pack_id: str, args) -> int:
     from parameter_extractor.registry import default_pubchem_cache_path
     pack = _user_pack(pack_id)
     plan, done, problems = compound_setup.set_up_compounds(
-        pack.folder, None if args.no_pubchem else PubChem(default_pubchem_cache_path()))
+        pack.folder, None if args.no_pubchem else PubChem(default_pubchem_cache_path()), tidy=not args.no_tidy)
     for c in plan.compounds:
         print(f"  {c.name:30} CID {c.cid or '-':<10} {', '.join(c.columns())}   ({'; '.join(c.sources)})")
     for line in done:
@@ -446,7 +453,8 @@ def _suggest_additions(args, parser) -> int:
     overrides.update(_provider_overrides(args, parser))
     try:
         result = pack_drafting.suggest_additions(pack.folder, items, RunConfig.from_settings(**overrides),
-                                                 on_progress=lambda d, n, m: print(f"[{d}/{n}] {m}"))
+                                                 on_progress=lambda d, n, m: print(f"[{d}/{n}] {m}"),
+                                                 passes=args.survey_passes, tidy=not args.no_tidy)
     except PipelineError as e:
         print(f"Error: {e}", file=sys.stderr)
         return 1

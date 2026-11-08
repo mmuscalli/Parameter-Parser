@@ -2424,3 +2424,36 @@ build -> one "Always Allow" per app (public and Dev have different bundle ids). 
 Tests and dev scripts: PARAMETER_EXTRACTOR_NO_KEYCHAIN=1 makes key_store a no-op (scripts/run_tests.py sets it for every
 test; the GUI tests set it too) -- reading the keychain from the venv Python had also prompted. Use it in any ad-hoc
 script that builds a MainWindow.
+
+## Draft robustness, compound identity, naming conventions (2026-11-08, Mickey's 'Sam Papers' redraft)
+
+His observations: the suggestions pass found more than twice the compounds of the draft; 'mg' (elemental magnesium) where
+the paper used MgCl2; inconsistent names ('pH' instead of initial_pH); the drafting dialog's new checkbox overlapped the
+paper buttons. Found too: ImpA -> 'isopropyl methylphosphonate' and RCP -> 'CP-640186' (PubChem's first hit for codes),
+'borate' -> 'BORaTe' (formula casing), 'primer' -> a drug (column words sent to PubChem).
+- **Survey**: `PaperSurvey.compounds` [{name as written, full_name, role starting/product/reagent/other, example}]
+  (prompt: every salt by formula, buffers, activating agents, every product; not enzymes, dyes, kits, classes);
+  **passes** (`survey_paper(passes=)`, audits pack_survey.passN; `merge_surveys` = union, first wins; dialogs default
+  2 -- QSettings draft/survey_passes; CLI --survey-passes, default 2); the synthesis digest and the report list them.
+- **compound_setup**: survey compounds are a source (trusted: kept without a CID when nothing identifies them; full
+  name looked up first); `is_compound_name` drops classes / enzymes / panel letters, 'X/Y' split; a column token is
+  spelled from its description's formula words or the survey names ('mg' + 'Mg2+ (as MgCl2)' -> MgCl2, salts before
+  ions) and goes to PubChem only as a formula (`formula_case` now: a digit, or 2 elements in <= 4 letters / 3 in <= 5;
+  re-casing only for lower-case tokens); codes (`is_abbreviation`) count only when PubChem lists the code among the
+  compound's synonyms or a full name identifies them; a name the prebiotic vocabulary rules match takes that pack's
+  hand-checked CID (`_reference_cids`). Pairs: a text column must only NAME substances (NAMING_WORDS) -- not
+  'product_phase_state'; partners also by a shared substance word or, for products, result words in the same stage;
+  replacements de-duplicated; survey products get the product pairs' measures. Chemistry is switched on only when
+  compounds / replacements are applied.
+- **conventions.py** `canonical(column, unit, kind)`: pH -> initial_pH / sampled_pH (measured/final words), reaction
+  temperature -> initial/sampled_temperature_C, pressure -> initial/sampled_pressure_bar, a sample's reaction time ->
+  dropped (duration_hr), wet-dry cycles -> cycle_number (integer), cycle length -> cycle_duration_hr, analysis
+  technique -> analysis_method, solvent -> solvent_name, volume -> solvent_volume_mL, mineral/clay/surface ->
+  solid_material_name (+ _mass_g), headspace / vessel / buffer / replicates / flow rate / longest oligomer;
+  `strip_unit_words` ('primer_concentration_um' + mM -> primer_concentration_mM). Applied (on by default, QSettings
+  draft/tidy_names, CLI --no-tidy) in write_pack (`tidy_parameter`, DraftResult.tidied, report section), in
+  suggest_additions (before the already-a-column check) and as `CompoundPlan.renames` in the editor's renamed
+  'Find compounds / tidy names…' review (third table).
+- Live redraft of Sam Papers (11 PDFs, 2 passes): 133 compounds from the surveys, 108 with CIDs, codes without a listed
+  synonym left without one; renames pH / reaction_pH / final_pH / reaction temperature / wet-dry cycles; reaction time
+  dropped. tests/test_compound_setup.py (test_reported_misses_and_conventions, test_survey_passes_are_merged).

@@ -28,6 +28,7 @@ KIM = PAPERS / "Kim2019" / "kim2019.pdf"
 
 def _survey(n):
     return PaperSurvey(field="peptide formation", row_unit="one time point", set_unit="one condition", notes="",
+                       compounds=[],
                        variables=[SurveyVariable(name="temperature", column="reaction_temperature", unit="°C",
                                                  kind="number", role="condition", description="heating temperature",
                                                  level="set", uncertainty=False, where="table", example=f"{80 + n} °C"),
@@ -116,15 +117,17 @@ def test_draft_writes_a_working_pack():
         assert stages == ["conditions.json", "results.json"]                     # the template's example is gone
         cond = json.loads((folder / "stages" / "conditions.json").read_text())
         assert cond["trigger"] == {"always": True} and cond["rules"] == ["Read tables."]
-        assert cond["parameters"][0] == {"column": "reaction_temperature_C", "description": "temperature",
+        assert cond["parameters"][0] == {"column": "initial_temperature_C", "description": "temperature",
                                          "unit": "°C", "uncertainties": True}
         assert cond["parameters"][2]["choices"] == ["sealed", "open"] and cond["parameters"][2]["kind"] == "text"
         res = json.loads((folder / "stages" / "results.json").read_text())
         assert res["trigger"] == {"keywords": ["yield"]} and res["open_ended_hint"] == "other results"
         assert [p["column"] for p in res["parameters"]] == ["product_yield_pct", "rate_per_hr"]   # repeat dropped
-        assert r.dropped == ["reaction_temperature_C (stage results)"]
+        assert r.dropped == ["initial_temperature_C (stage results)"]
+        assert any(t.startswith("reaction_temperature_C -> initial_temperature_C") for t in r.tidied)
+        assert any(t.startswith("pH -> initial_pH") for t in r.tidied)
         columns = json.loads((folder / "columns.json").read_text())["all_columns"]
-        assert columns == ["set_type", "duration_hr", "reaction_temperature_C", "pH", "reactor", "product_yield_pct",
+        assert columns == ["set_type", "duration_hr", "initial_temperature_C", "initial_pH", "reactor", "product_yield_pct",
                            "rate_per_hr"]
         assert (folder / "prompts" / "structure_planner.rules.md").read_text() == \
             "- One row is one time point.\n- Controls are not rows.\n"

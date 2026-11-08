@@ -38,7 +38,7 @@ class FakePubChem:
         return SimpleNamespace(cid=hit[0], title=hit[1]) if hit else None
 
     def synonyms(self, cid):
-        return [f"syn-{cid}"]
+        return [f"syn-{cid}"] + (["UMP"] if cid == 6030 else [])        # a code PubChem does list
 
     def save(self):
         pass
@@ -106,8 +106,8 @@ def test_find_and_apply_compounds():
         assert "chemistry" in d.manifest["builtin_stages"]
         assert d.manifest["postprocess"][:3] == ["normalize_species", "mixing", "molar_ratios"]
         assert {"MgCl2", "UMP", "Tris"} <= set(d.species)
-        assert d.cids_file["species"]["MgCl2"] == {"cid": 5360315, "title": "Magnesium Chloride",
-                                                   "synonyms": ["syn-5360315"]}
+        ref = compound_setup._reference_cids()["MgCl2"]            # the prebiotic pack's checked identity wins
+        assert d.cids_file["species"]["MgCl2"]["cid"] == ref["cid"]
         params = [p["column"] for s in d.stages.values() for p in s["parameters"]]
         assert "mgcl2_concentration_mM" not in params and "nacl_concentration_mM" in params
         assert "initial_MgCl2_aq_mM" in d.columns and "mgcl2_concentration_mM" not in d.columns
@@ -128,7 +128,7 @@ def test_suggest_and_apply_additions():
             return
         from parameter_extractor.pack_drafting import (PackAdditions, PaperSurvey, ProposedCategory, SuggestedCompound,
                                                        SuggestedParameter, SuggestedRule, SuggestedStage)
-        survey = PaperSurvey(field="x", row_unit="r", set_unit="s", notes="", variables=[])
+        survey = PaperSurvey(field="x", row_unit="r", set_unit="s", notes="", variables=[], compounds=[])
         survey.variables = [pack_drafting.SurveyVariable(name="t", column="t", unit="°C", kind="number",
                                                          role="condition", description="d", level="set",
                                                          uncertainty=False, where="table", example="80 °C")]
@@ -207,6 +207,74 @@ def test_review_windows_and_editor_buttons():
         assert ed.compounds_btn.isEnabled() and ed.suggest_btn.isEnabled()
         builtin = PackEditor(packs.available()["prebiotic_chemistry"].folder)
         assert not builtin.compounds_btn.isEnabled() and not builtin.suggest_btn.isEnabled()
+
+
+def test_reported_misses_and_conventions():
+    """Mickey's Sam Papers draft (2026-11-08): 'mg' from a column became elemental magnesium (the paper used MgCl2),
+    ImpA / RCP matched unrelated compounds on PubChem, 'borate' became 'BORaTe'; names like 'pH' and
+    'reaction_temperature_C' instead of the app's conventions."""
+    from parameter_extractor.conventions import canonical
+    assert formula_case("borate") is None and formula_case("mg") is None
+    assert compound_setup.is_abbreviation("ImpA") and compound_setup.is_abbreviation("RCP")
+    assert not compound_setup.is_abbreviation("MgCl2") and not compound_setup.is_abbreviation("NaCl")
+    assert canonical("pH", "", "number").column == "initial_pH"
+    assert canonical("measured_pH", "", "number").column == "sampled_pH"
+    assert canonical("reaction_temperature_C", "°C").column == "initial_temperature_C"
+    assert canonical("reaction_time_hr", "h").column == ""                         # duration_hr: the row column
+    assert canonical("wet_dry_cycles", "", "number").column == "cycle_number"
+    assert canonical("warm_side_temperature_C", "°C") is None and canonical("initial_pH", "") is None
+    with tempfile.TemporaryDirectory() as tmp, patch.object(packs, "user_packs_dir", lambda: Path(tmp)):
+        pack = packs.create_pack("sam_check", "Sam check", base=Path(tmp))
+        d = PackDraft.load(pack.folder)
+        for f in list(d.stages):
+            d.remove_stage(f)
+        f1 = d.new_stage("conditions", "Conditions")
+        d.stages[f1]["parameters"] = [
+            {"column": "mg_concentration_mM", "unit": "mM", "description": "Concentration of Mg2+ (as MgCl2)."},
+            {"column": "pH", "description": "Initial pH."},
+            {"column": "reaction_temperature_C", "unit": "°C", "description": "Temperature."}]
+        d.columns = ["set_type", "duration_hr", "mg_concentration_mM", "pH", "reaction_temperature_C"]
+        d.save()
+        (pack.folder / compound_setup.SURVEYS_FILE).write_text(json.dumps([{"paper": "p", "survey": {
+            "variables": [], "compounds": [
+                {"name": "ImpA", "full_name": "adenosine 5'-phosphorimidazolide", "role": "starting", "example": ""},
+                {"name": "RCP", "full_name": "", "role": "product", "example": ""},
+                {"name": "KCl", "full_name": "", "role": "reagent", "example": "100 mM"}]}}]))
+        fake = FakePubChem()
+        KNOWN["adenosine 5'-phosphorimidazolide"] = (3035161, "Adenosine 5'-phosphorimidazolide")
+        KNOWN["impa"] = (15778, "Isopropyl methylphosphonate")      # PubChem's (wrong) answer for the abbreviation
+        KNOWN["rcp"] = (449097, "CP-640186")
+        KNOWN["kcl"] = (4873, "Potassium Chloride")
+        plan = compound_setup.find_compounds(PackDraft.load(pack.folder), fake)
+        by = {c.name: c for c in plan.compounds}
+        assert "MgCl2" in by and "mg" not in by and "Mg" not in by, by          # spelled out by the description
+        assert by["ImpA"].cid == 3035161                                         # via its full name, not 'ImpA'
+        assert by["RCP"].cid == 0             # PubChem's hit doesn't list 'RCP' among its names: not taken
+        assert not compound_setup.is_compound_name("Taq polymerase") and not compound_setup.is_compound_name(
+            "RNA oligomers") and compound_setup.is_compound_name("MgCl2")
+        assert "sampled_RCP_aq_mM" in by["RCP"].columns() and by["KCl"].columns() == ["initial_KCl_aq_mM"]
+        assert {(r.column, r.new) for r in plan.renames} == {("pH", "initial_pH"),
+                                                             ("reaction_temperature_C", "initial_temperature_C")}
+        _, done, problems = compound_setup.set_up_compounds(pack.folder, fake, plan=plan)
+        d = PackDraft.load(pack.folder)
+        cols = [p["column"] for s in d.stages.values() for p in s["parameters"]]
+        assert cols == ["initial_pH", "initial_temperature_C"] and "initial_MgCl2_aq_mM" in d.columns
+        assert "pH" not in d.columns and "initial_pH" in d.columns
+        assert not [p for p in problems if p.level == "error"], problems
+
+
+def test_survey_passes_are_merged():
+    from parameter_extractor.pack_drafting import PaperSurvey, SurveyCompound, SurveyVariable, merge_surveys
+    v = lambda c: SurveyVariable(name=c, column=c, unit="", kind="number", role="result", description="",
+                                 level="row", uncertainty=False, where="table", example="1")
+    c = lambda n: SurveyCompound(name=n, full_name="", role="starting", example="")
+    a = PaperSurvey(field="f", row_unit="r", set_unit="s", notes="", variables=[v("yield"), v("ph")],
+                    compounds=[c("MgCl2")])
+    b = PaperSurvey(field="g", row_unit="r2", set_unit="s2", notes="", variables=[v("Yield"), v("rate")],
+                    compounds=[c("mgcl2"), c("NaCl")])
+    m = merge_surveys([a, b])
+    assert [x.column for x in m.variables] == ["yield", "ph", "rate"] and [x.name for x in m.compounds] == ["MgCl2", "NaCl"]
+    assert m.field == "f"
 
 
 if __name__ == "__main__":

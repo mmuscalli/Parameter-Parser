@@ -16,8 +16,10 @@ from pathlib import Path
 from typing import Callable, Optional
 
 from PySide6.QtCore import QObject, Qt, Signal
-from PySide6.QtWidgets import (QAbstractItemView, QApplication, QDialog, QDialogButtonBox, QHBoxLayout, QHeaderView,
-                               QLabel, QProgressBar, QPushButton, QTableWidget, QTableWidgetItem, QVBoxLayout, QWidget)
+from PySide6.QtCore import QSettings
+from PySide6.QtWidgets import (QAbstractItemView, QApplication, QCheckBox, QComboBox, QDialog, QDialogButtonBox,
+                               QHBoxLayout, QHeaderView, QLabel, QProgressBar, QPushButton, QTableWidget,
+                               QTableWidgetItem, QVBoxLayout, QWidget)
 
 from parameter_extractor.gui.widgets import style_rows
 
@@ -63,7 +65,7 @@ class CompoundSetupDialog(QDialog):
         from parameter_extractor import compound_setup
         from parameter_extractor.pack_editing import PackDraft
         self.folder, self.applied, self.problems = Path(folder), [], []
-        self.setWindowTitle("Find compounds")
+        self.setWindowTitle("Find compounds and tidy column names")
         self.resize(1080, 720)
         v = QVBoxLayout(self)
         v.addWidget(_hint("Compounds named in this research area's columns, in its sample papers' examples and in its "
@@ -109,13 +111,25 @@ class CompoundSetupDialog(QDialog):
             self.replace_table.setItem(r, 1, _plain(rep.reason))
         self.replace_table.setColumnWidth(0, 280)
         v.addWidget(self.replace_table, 1)
+        v.addWidget(QLabel(f"<b>Column names changed to the app's conventions ({len(self.plan.renames)})</b>"))
+        self.rename_table = _table(["Column", "Becomes", "Why"])
+        for rn in self.plan.renames:
+            r = self.rename_table.rowCount()
+            self.rename_table.insertRow(r)
+            self.rename_table.setItem(r, 0, _checked_item(rn.column, rn.include))
+            self.rename_table.setItem(r, 1, _plain(rn.new or "(removed: duration_hr)"))
+            self.rename_table.setItem(r, 2, _plain(rn.reason))
+        self.rename_table.setColumnWidth(0, 260)
+        self.rename_table.setColumnWidth(1, 220)
+        v.addWidget(self.rename_table, 1)
         if self.plan.not_identified:
             v.addWidget(_hint("Not identified as compounds (left alone): " + ", ".join(self.plan.not_identified)))
         buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Cancel)
         self.apply_btn = buttons.addButton("Apply", QDialogButtonBox.ButtonRole.AcceptRole)
         self.apply_btn.setEnabled(not self.plan.empty)
         if self.plan.empty:
-            v.addWidget(_hint("No compounds found in this research area's columns."))
+            v.addWidget(_hint("No compounds found in this research area's columns, and its column names already follow "
+                              "the app's conventions."))
         buttons.accepted.connect(self.apply)
         buttons.rejected.connect(self.reject)
         v.addWidget(buttons)
@@ -126,6 +140,8 @@ class CompoundSetupDialog(QDialog):
             c.include = self.compound_table.item(r, 0).checkState() == Qt.CheckState.Checked
         for r, rep in enumerate(self.plan.replacements):
             rep.include = self.replace_table.item(r, 0).checkState() == Qt.CheckState.Checked
+        for r, rn in enumerate(self.plan.renames):
+            rn.include = self.rename_table.item(r, 0).checkState() == Qt.CheckState.Checked
         _, self.applied, self.problems = compound_setup.set_up_compounds(self.folder, self.pubchem, plan=self.plan)
         self.accept()
 
@@ -163,6 +179,19 @@ class AdditionsDialog(QDialog):
         row = QHBoxLayout()
         self.run_btn = QPushButton("Get suggestions", clicked=self.run)
         row.addWidget(self.run_btn)
+        self.passes_combo = QComboBox()
+        for n, text in ((1, "1 survey pass"), (2, "2 survey passes, merged"), (3, "3 survey passes, merged")):
+            self.passes_combo.addItem(text, n)
+        self.passes_combo.setToolTip("How many times each paper is surveyed (Claude Haiku, about a cent or two a pass "
+                                     "per paper); the variables and compounds of all passes are merged.")
+        self.passes_combo.setCurrentIndex(max(0, self.passes_combo.findData(
+            QSettings().value("draft/survey_passes", 2, type=int))))
+        row.addWidget(self.passes_combo)
+        self.tidy_box = QCheckBox("App's naming conventions")
+        self.tidy_box.setToolTip("Suggested names for quantities the app already has a convention for are changed to it "
+                                 "(pH -> initial_pH, reaction temperature -> initial_temperature_C, ...), local.")
+        self.tidy_box.setChecked(QSettings().value("draft/tidy_names", True, type=bool))
+        row.addWidget(self.tidy_box)
         self.progress = QProgressBar(visible=False, textVisible=False)
         row.addWidget(self.progress, 1)
         v.addLayout(row)
@@ -201,11 +230,15 @@ class AdditionsDialog(QDialog):
         self.progress.setVisible(True)
         self.progress.setRange(0, 0)
 
+        passes, tidy = self.passes_combo.currentData(), self.tidy_box.isChecked()
+        QSettings().setValue("draft/survey_passes", passes)
+        QSettings().setValue("draft/tidy_names", tidy)
+
         def work():
             try:
                 result = pack_drafting.suggest_additions(self.folder, items, config,
                                                          on_progress=self._signals.progress.emit,
-                                                         cancel_event=self._cancel)
+                                                         cancel_event=self._cancel, passes=passes, tidy=tidy)
             except BaseException as e:
                 result = e
             self._signals.done.emit(result)

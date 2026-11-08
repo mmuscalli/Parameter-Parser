@@ -58,11 +58,25 @@ class SurveyVariable(BaseModel):
     example: str = Field(description="One value as printed, with its unit.")
 
 
+class SurveyCompound(BaseModel):
+    name: str = Field(description="As the paper writes it: formula or abbreviation ('MgCl2', 'ImpA', 'Gly-Gly').")
+    full_name: str = Field(description="The full chemical name when the paper gives or implies one ('adenosine "
+                                       "5'-phosphorimidazolide'); '' when the name is already the full name.")
+    role: Literal["starting", "product", "reagent", "other"] = Field(
+        description="starting: a reactant or other substance in the starting solution; product: formed or measured "
+                    "at the end; reagent: buffer, salt, activating agent, catalyst in solution; other.")
+    example: str = Field(description="One amount or concentration as printed ('10 mM'), or ''.")
+
+
 class PaperSurvey(BaseModel):
     field: str = Field(description="What the paper studies, at most 15 words.")
     row_unit: str = Field(description="What one row of results is, e.g. 'one time point of one reaction'.")
     set_unit: str = Field(description="What groups rows, e.g. 'one reaction condition'.")
     variables: List[SurveyVariable]
+    compounds: List[SurveyCompound] = Field(description=(
+        "EVERY chemical compound the experiments use or form -- reactants, salts (each salt separately, by its "
+        "formula as written: MgCl2, NaCl, KCl), buffers, activating agents, products (each product separately) -- "
+        "from the tables, the methods and the text; not instruments, minerals or materials. [] for no chemistry."))
     notes: str = Field(description="Anything unusual about how the results are reported, at most 20 words; or ''.")
 
 
@@ -127,6 +141,7 @@ class DraftResult:
     cost_usd: float = 0.0
     dropped: List[str] = field(default_factory=list)      # duplicate columns left out
     compound_lines: List[str] = field(default_factory=list)   # compound_setup, when asked for with the draft
+    tidied: List[str] = field(default_factory=list)           # names changed to the conventions (conventions.py)
 
 
 # ---- column names --------------------------------------------------------------------------------------------------
@@ -148,7 +163,8 @@ def column_for(base: str, unit: str, kind: str = "number") -> tuple:
     from parameter_extractor.ingestion.observations import unit_for_column
     from parameter_extractor.units import canonical_unit
     from parameter_extractor.variable_categories import unit_suffix
-    base = re.sub(r"(^|_)ph(?=_|$)", r"\1pH", _slug(base))       # the app reads 'pH' columns as pH values
+    from parameter_extractor.conventions import strip_unit_words
+    base = re.sub(r"(^|_)ph(?=_|$)", r"\1pH", strip_unit_words(_slug(base)))   # 'pH' columns are read as pH values
     unit = (unit or "").strip()
     if kind == "text" or not unit or unit.lower() in ("none", "unitless", "dimensionless", "-"):
         return base, ""
@@ -187,8 +203,28 @@ def _config(config: RunConfig) -> RunConfig:
     return replace(config, models=models, model_profile="standard", batch_mode=False, passes=1)
 
 
+def merge_surveys(surveys: List[PaperSurvey]) -> PaperSurvey:
+    """Several passes over one paper -> one survey: every variable and compound any pass found (first wins)."""
+    first = surveys[0]
+    variables, seen = [], set()
+    compounds, names = [], set()
+    for s in surveys:
+        for v in s.variables:
+            key = _slug(v.column)
+            if key not in seen:
+                seen.add(key)
+                variables.append(v)
+        for c in s.compounds:
+            key = c.name.strip().lower()
+            if key and key not in names:
+                names.add(key)
+                compounds.append(c)
+    return PaperSurvey(field=first.field, row_unit=first.row_unit, set_unit=first.set_unit, variables=variables,
+                       compounds=compounds, notes=first.notes)
+
+
 def survey_paper(item, config: RunConfig, work_dir: Path, area: str, description: str,
-                 cancel_event: Optional[threading.Event] = None) -> SurveyedPaper:
+                 cancel_event: Optional[threading.Event] = None, passes: int = 1) -> SurveyedPaper:
     from parameter_extractor.api_client import call_structured
     from parameter_extractor.focused_search import _paper_text
     from parameter_extractor.paper_source import resolve_paper, run_name
@@ -203,10 +239,15 @@ def survey_paper(item, config: RunConfig, work_dir: Path, area: str, description
         text, images = _paper_text(source, run_dir, True, config.rasterize_table_pages, config.table_raster_dpi,
                                    config.include_supplements)
         prompt = _prompt("pack_survey", AREA=area, AREA_DESCRIPTION=description)
-        out.survey = call_structured(
-            ctx, stage="pack_survey", system_prompt="Survey which variables a research paper reports. Report only "
-            "what the paper states.", user_content=f"{prompt}\n\nPAPER TEXT:\n\n{text[:MAX_PAPER_CHARS]}",
-            response_model=PaperSurvey, image_paths=images or None, max_tokens=SURVEY_BUDGET)
+        answers = []
+        for n in range(1, max(1, passes) + 1):          # extra passes catch what one cheap pass misses; merged
+            ctx.check_cancelled()
+            answers.append(call_structured(
+                ctx, stage="pack_survey", system_prompt="Survey which variables a research paper reports. Report "
+                "only what the paper states.", user_content=f"{prompt}\n\nPAPER TEXT:\n\n{text[:MAX_PAPER_CHARS]}",
+                response_model=PaperSurvey, image_paths=images or None, max_tokens=SURVEY_BUDGET,
+                audit_name="pack_survey" if n == 1 else f"pack_survey.pass{n}"))
+        out.survey = merge_surveys(answers)
     except RunCancelledError:
         raise
     except PipelineError as e:
@@ -224,6 +265,9 @@ def _survey_digest(papers: List[SurveyedPaper]) -> str:
         s = p.survey
         lines.append(f"PAPER {i} ({p.name}): field: {s.field}; one row: {s.row_unit}; rows grouped by: {s.set_unit}"
                      + (f"; notes: {s.notes}" if s.notes else ""))
+        if s.compounds:
+            lines.append("  compounds: " + "; ".join(c.name + (f" ({c.full_name})" if c.full_name else "") + f" [{c.role}]"
+                                                   for c in s.compounds))
         for v in s.variables:
             lines.append("  " + json.dumps({"column": v.column, "name": v.name, "unit": v.unit, "kind": v.kind,
                                             "role": v.role, "level": v.level, "unc": v.uncertainty,
@@ -246,8 +290,18 @@ def synthesize(papers: List[SurveyedPaper], config: RunConfig, work_dir: Path, a
 
 # ---- writing the pack ------------------------------------------------------------------------------------------------
 
+def tidy_parameter(column: str, unit: str, kind: str, description: str = ""):
+    """(column, unit, kind, integer, note) after the naming conventions (conventions.py); column '' = drop it."""
+    from parameter_extractor.conventions import canonical
+    conv = canonical(column, unit, kind, description)
+    if conv is None:
+        return column, unit, kind, False, ""
+    return conv.column, conv.unit if conv.column else "", conv.kind or kind, conv.integer, \
+        f"{column} -> {conv.column or '(dropped)'}: {conv.reason}"
+
+
 def write_pack(proposal: PackProposal, pack_id: str, label: str, description: str = "",
-               base: Optional[Path] = None) -> tuple:
+               base: Optional[Path] = None, tidy: bool = True) -> tuple:
     """A new pack from the proposal (packs.create_pack from the template, examples replaced); (pack, dropped
     duplicate columns, {column: proposed parameter})."""
     from parameter_extractor.pack_editing import PackDraft, items_to_rules
@@ -270,7 +324,7 @@ def write_pack(proposal: PackProposal, pack_id: str, label: str, description: st
     category_columns: Dict[str, Dict[str, List[str]]] = {"methodology": {"columns": ["set_type"]}}
     first = categories[0]["id"] if categories else "methodology"
     category_columns.setdefault(first, {"columns": []})["columns"].append("duration_hr")
-    columns, seen, dropped, by_column = ["set_type", "duration_hr"], set(), [], {}
+    columns, seen, dropped, by_column, tidied = ["set_type", "duration_hr"], set(), [], {}, []
     for st in proposal.stages:
         name = _slug(st.name)
         try:
@@ -287,6 +341,14 @@ def write_pack(proposal: PackProposal, pack_id: str, label: str, description: st
         params = []
         for p in st.parameters:
             column, unit = column_for(p.column, p.unit, p.kind)
+            kind, integer = p.kind, p.kind == "integer"
+            if tidy:
+                column, unit, kind, tidied_integer, note = tidy_parameter(column, unit, p.kind, p.description)
+                integer = integer or tidied_integer
+                if note:
+                    tidied.append(note)
+                if not column:
+                    continue
             if column in seen or column in ("set_type", "duration_hr"):
                 dropped.append(f"{column} (stage {name})")
                 continue
@@ -294,13 +356,13 @@ def write_pack(proposal: PackProposal, pack_id: str, label: str, description: st
             entry = {"column": column, "description": p.description}
             if unit:
                 entry["unit"] = unit
-            if p.kind == "text":
+            if kind == "text":
                 entry["kind"] = "text"
-            if p.kind == "integer":
+            if integer:
                 entry["integer"] = True
-            if p.choices and p.kind == "text":
+            if p.choices and kind == "text":
                 entry["choices"] = [c for c in p.choices if c.strip()]
-            if p.uncertainties and p.kind != "text":
+            if p.uncertainties and kind != "text":
                 entry["uncertainties"] = True
             params.append(entry)
             columns.append(column)
@@ -315,6 +377,7 @@ def write_pack(proposal: PackProposal, pack_id: str, label: str, description: st
     draft.species = []
     draft.rules["structure_planner"] = items_to_rules([r for r in proposal.row_rules if r.strip()])
     draft.save()
+    by_column["__tidied__"] = tidied                 # read by draft_pack for the report
     return packs.Pack(pack.folder), dropped, by_column
 
 
@@ -342,11 +405,25 @@ def write_report(result: DraftResult, by_column: Dict[str, ProposedParameter], a
                                          if st.keywords else ""))
         for p in st.parameters:
             column, unit = column_for(p.column, p.unit, p.kind)
+            if result.tidied:
+                column, unit, _, _, _ = tidy_parameter(column, unit, p.kind, p.description)
+                if not column:
+                    continue
             seen = examples.get(_slug(p.column), [])
             ex = "; ".join(f"{e} ({name})" for name, e in seen[:3])
             lines.append(f"- `{column}`" + (f" [{unit}]" if unit else "") + f" -- {p.description} "
                          f"(in {p.papers} paper(s)" + (f"; e.g. {ex}" if ex else "") + ")")
         lines.append("")
+    if result.tidied:
+        lines += ["## Names changed to the app's conventions", ""] + [f"- {t}" for t in result.tidied] + [""]
+    compounds = {}
+    for p in result.papers:
+        for c in (p.survey.compounds if p.survey else []):
+            compounds.setdefault(c.name, (c.full_name, []))[1].append(p.name)
+    if compounds:
+        lines += ["## Compounds the papers name (Data Packs > Edit > Find compounds… sets them up)", ""] + [
+            f"- {n}" + (f" ({full})" if full else "") + f" -- {', '.join(names)}"
+            for n, (full, names) in sorted(compounds.items(), key=lambda kv: kv[0].lower())] + [""]
     if result.dropped:
         lines += ["## Left out (a column already used by an earlier stage)", ""] + [f"- {d}" for d in result.dropped] \
             + [""]
@@ -462,7 +539,8 @@ def _already(draft, column: str) -> bool:
 
 def suggest_additions(folder: Path, items: Sequence, config: RunConfig,
                       on_progress: Optional[Callable[[int, int, str], None]] = None,
-                      cancel_event: Optional[threading.Event] = None, workers: int = 4) -> AdditionsResult:
+                      cancel_event: Optional[threading.Event] = None, workers: int = 4, passes: int = 1,
+                      tidy: bool = True) -> AdditionsResult:
     """Survey new sample papers and ask what an existing research area lacks; nothing is changed (see
     apply_additions)."""
     from parameter_extractor.api_client import call_structured
@@ -486,7 +564,7 @@ def suggest_additions(folder: Path, items: Sequence, config: RunConfig,
     report(0, total, f"Surveying {len(items)} paper(s) for their variables")
     papers: List[SurveyedPaper] = []
     with ThreadPoolExecutor(max_workers=max(1, min(workers, len(items))), thread_name_prefix="survey") as pool:
-        futures = [pool.submit(survey_paper, item, config, work_dir, area, description, cancel_event)
+        futures = [pool.submit(survey_paper, item, config, work_dir, area, description, cancel_event, passes)
                    for item in items]
         for f in as_completed(futures):
             p = f.result()
@@ -532,6 +610,14 @@ def suggest_additions(folder: Path, items: Sequence, config: RunConfig,
     seen = set()
     for p in answer.parameters:
         column, unit = column_for(p.column, p.unit, p.kind)
+        if tidy:
+            new, unit, kind, integer, note = tidy_parameter(column, unit, p.kind, p.description)
+            if not new:
+                left_out.append(f"{column} ({note.split(': ', 1)[-1]})")
+                continue
+            if new != column:
+                p = p.model_copy(update={"column": new, "kind": "integer" if integer else kind, "unit": unit})
+                column = new
         if _already(draft, column) or column in seen:
             left_out.append(f"{column} (already a column)")
             continue
@@ -546,13 +632,26 @@ def suggest_additions(folder: Path, items: Sequence, config: RunConfig,
         out.append(Suggestion("rule", r.rule, "planning the rows" if target == "rows" else f"stage `{target}`",
                               reason=r.reason, payload=(target, r.rule)))
     known = {s.lower() for s in draft.species}
+    model_names = {c.name.lower() for c in answer.compounds}
+    if chemistry:                     # every compound the surveys name, not only those the model picked out
+        role = {"product": "sampled"}
+        for p in good:
+            for sc in p.survey.compounds:
+                if sc.name.lower() not in model_names and sc.role != "other":
+                    model_names.add(sc.name.lower())
+                    answer.compounds.append(SuggestedCompound(
+                        name=sc.name, role=role.get(sc.role, "initial"), papers=1,
+                        reason=f"named in {p.name}" + (f" ({sc.full_name})" if sc.full_name else "")))
+    full_names = {sc.name.lower(): sc.full_name for p in good for sc in p.survey.compounds if sc.full_name}
     for c in answer.compounds if chemistry else []:
         matched = match_species(c.name, vocab=tuple(draft.species) or ("",))
         if c.name.lower() in known or (matched and matched[0].lower() in known):
             left_out.append(f"{c.name} (already a compound)")
             continue
-        out.append(Suggestion("compound", c.name, f"{'starting compound' if c.role == 'initial' else 'product'}",
-                              reason=c.reason, papers=c.papers, payload=c))
+        full = full_names.get(c.name.lower(), "")
+        out.append(Suggestion("compound", c.name, f"{'starting compound' if c.role == 'initial' else 'product'}"
+                              + (f" -- {full}" if full else ""), reason=c.reason, papers=c.papers,
+                              payload=(c, full)))
     result = AdditionsResult(suggestions=out, papers=papers, work_dir=work_dir, cost_usd=cost, left_out=left_out,
                              notes=answer.notes)
     (work_dir / "suggestions.json").write_text(json.dumps(answer.model_dump(), indent=2, ensure_ascii=False))
@@ -637,8 +736,8 @@ def apply_additions(folder: Path, suggestions: Sequence[Suggestion], pubchem=Non
         species = list(draft.species)
         entries = draft.cids_file.setdefault("species", {})
         for s in compounds:
-            c = s.payload
-            hit = resolver.resolve(c.name)
+            c, full = s.payload if isinstance(s.payload, tuple) else (s.payload, "")
+            hit = resolver.resolve(c.name, full_name=full)
             name, cid, title, synonyms = hit if hit else (c.name, 0, "", [])
             if name not in species:
                 species.append(name)
@@ -664,7 +763,7 @@ def apply_additions(folder: Path, suggestions: Sequence[Suggestion], pubchem=Non
 def draft_pack(items: Sequence, pack_id: str, label: str, description: str, config: RunConfig,
                on_progress: Optional[Callable[[int, int, str], None]] = None,
                cancel_event: Optional[threading.Event] = None, workers: int = 4,
-               base: Optional[Path] = None) -> DraftResult:
+               base: Optional[Path] = None, passes: int = 1, tidy: bool = True) -> DraftResult:
     """Survey the papers, merge, write the pack. Raises PipelineError when no paper could be surveyed."""
     from parameter_extractor.errors import ApiKeyMissingError
     from parameter_extractor.pack_editing import check, PackDraft
@@ -683,7 +782,7 @@ def draft_pack(items: Sequence, pack_id: str, label: str, description: str, conf
     report(0, total, f"Surveying {len(items)} paper(s) for their variables")
     papers: List[SurveyedPaper] = []
     with ThreadPoolExecutor(max_workers=max(1, min(workers, len(items))), thread_name_prefix="survey") as pool:
-        futures = {pool.submit(survey_paper, item, config, work_dir, area, description, cancel_event): item
+        futures = {pool.submit(survey_paper, item, config, work_dir, area, description, cancel_event, passes): item
                    for item in items}
         for f in as_completed(futures):
             p = f.result()
@@ -701,10 +800,11 @@ def draft_pack(items: Sequence, pack_id: str, label: str, description: str, conf
     report(len(items), total, "Designing the research area from the surveys")
     proposal, merge_cost = synthesize(good, config, work_dir, area, description, cancel_event)
     report(len(items) + 1, total, "Writing the research area")
-    pack, dropped, by_column = write_pack(proposal, pack_id, label, description, base=base)
+    pack, dropped, by_column = write_pack(proposal, pack_id, label, description, base=base, tidy=tidy)
+    tidied = by_column.pop("__tidied__", [])
     result = DraftResult(pack=pack, proposal=proposal, papers=papers, problems=check(PackDraft.load(pack.folder)),
                          work_dir=work_dir, cost_usd=round(sum(p.cost_usd for p in papers) + merge_cost, 4),
-                         dropped=dropped)
+                         dropped=dropped, tidied=tidied)
     text = write_report(result, by_column, area)
     (pack.folder / "drafted_from.md").write_text(text)
     (work_dir / "drafted_from.md").write_text(text)

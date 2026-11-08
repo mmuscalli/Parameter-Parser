@@ -185,7 +185,21 @@ class NewPackDialog(QDialog):
         self.papers.setMinimumHeight(170)
         self.papers.message.connect(lambda m: self.error.setText(m))
         dv.addWidget(self.papers)
-        self.compounds_box = QCheckBox("Then find compounds in the drafted columns and set up the chemistry step "
+        options = QGroupBox("Options")
+        of = QFormLayout(options)
+        of.setFieldGrowthPolicy(QFormLayout.FieldGrowthPolicy.AllNonFixedFieldsGrow)
+        self.passes_combo = QComboBox()
+        for n, text in ((1, "1 pass (cheapest)"), (2, "2 passes, merged (recommended)"), (3, "3 passes, merged")):
+            self.passes_combo.addItem(text, n)
+        self.passes_combo.setToolTip("How many times each paper is surveyed (Claude Haiku, about a cent or two a pass "
+                                     "per paper). Every pass misses something different; the variables and compounds "
+                                     "of all passes are merged.")
+        self.tidy_box = QCheckBox("Name columns by the app's conventions (initial_pH, initial_temperature_C, ...)")
+        self.tidy_box.setToolTip("Local, no cost: drafted names for quantities the app already has a convention for "
+                                 "are changed to it (pH -> initial_pH / sampled_pH, reaction temperature -> "
+                                 "initial_temperature_C, wet-dry cycles -> cycle_number, a sample's reaction time -> "
+                                 "the row column duration_hr, ...). Listed in drafted_from.md.")
+        self.compounds_box = QCheckBox("Find compounds in the drafted columns and set up the chemistry step "
                                        "(local + PubChem, no extra model cost)")
         self.compounds_box.setToolTip("For chemistry papers: substances named in the drafted columns and the papers' "
                                       "examples become compounds of the chemistry step (one column per compound, "
@@ -193,7 +207,16 @@ class NewPackDialog(QDialog):
         from PySide6.QtCore import QSettings
         self.compounds_box.setChecked(QSettings().value("draft/find_compounds", False, type=bool))
         self.compounds_box.toggled.connect(lambda on: QSettings().setValue("draft/find_compounds", on))
-        dv.addWidget(self.compounds_box)
+        self.tidy_box.setChecked(QSettings().value("draft/tidy_names", True, type=bool))
+        self.tidy_box.toggled.connect(lambda on: QSettings().setValue("draft/tidy_names", on))
+        self.passes_combo.setCurrentIndex(max(0, self.passes_combo.findData(
+            QSettings().value("draft/survey_passes", 2, type=int))))
+        self.passes_combo.currentIndexChanged.connect(
+            lambda _i: QSettings().setValue("draft/survey_passes", self.passes_combo.currentData()))
+        of.addRow("Survey passes:", self.passes_combo)
+        of.addRow(self.tidy_box)
+        of.addRow(self.compounds_box)
+        dv.addWidget(options)
         self.draft_progress = QProgressBar(visible=False, textVisible=False)
         self.draft_status = QLabel(wordWrap=True)
         dv.addWidget(self.draft_progress)
@@ -220,8 +243,11 @@ class NewPackDialog(QDialog):
         drafting = self.source_combo.currentData() == DRAFT
         self.draft_box.setVisible(drafting)
         self.create_btn.setText("Draft from these papers" if drafting else "Create")
-        if drafting:
-            self.resize(max(self.width(), 720), max(self.height(), 640))
+        if drafting:                                # room for the papers and options (no overlap on macOS)
+            self.setMinimumSize(self.layout().minimumSize())
+            self.resize(max(self.width(), 760), max(self.height(), 820, self.layout().sizeHint().height()))
+        else:
+            self.setMinimumSize(0, 0)
         source = packs.available().get(self.source_combo.currentData() or "")
         if source is not None:                      # a copy keeps the words of what it's copied from
             self.set_edit.setText(source.manifest.units.get("set", "set"))
@@ -268,12 +294,13 @@ class NewPackDialog(QDialog):
         self._signals.done.connect(self._draft_done)
         self._set_drafting(True)
         description = self.desc_edit.toPlainText()
-        compounds = self.compounds_box.isChecked()
+        compounds, tidy, passes = self.compounds_box.isChecked(), self.tidy_box.isChecked(), self.passes_combo.currentData()
 
         def work():
             try:
                 result = pack_drafting.draft_pack(items, pack_id, label, description, config,
-                                                  on_progress=self._signals.progress.emit, cancel_event=self._cancel)
+                                                  on_progress=self._signals.progress.emit, cancel_event=self._cancel,
+                                                  passes=passes, tidy=tidy)
                 if compounds:
                     from parameter_extractor import compound_setup
                     from parameter_extractor.pubchem import PubChem
@@ -281,8 +308,8 @@ class NewPackDialog(QDialog):
                     self._signals.progress.emit(1, 1, "Finding compounds in the drafted columns (PubChem)")
                     pubchem = PubChem(config.pubchem_cache_path or default_pubchem_cache_path()) \
                         if config.use_pubchem else None
-                    _, result.compound_lines, result.problems = compound_setup.set_up_compounds(result.pack.folder,
-                                                                                                pubchem)
+                    _, result.compound_lines, result.problems = compound_setup.set_up_compounds(
+                        result.pack.folder, pubchem, tidy=tidy)
             except BaseException as e:           # shown in the dialog
                 result = e
             self._signals.done.emit(result)
@@ -291,7 +318,7 @@ class NewPackDialog(QDialog):
 
     def _set_drafting(self, on: bool) -> None:
         for w in (self.label_edit, self.id_edit, self.desc_edit, self.set_edit, self.sample_edit, self.source_combo,
-                  self.create_btn, self.compounds_box):
+                  self.create_btn, self.compounds_box, self.tidy_box, self.passes_combo):
             w.setEnabled(not on)
         self.papers.set_locked(on)
         self.draft_progress.setVisible(on)
@@ -372,7 +399,7 @@ class PackEditor(QDialog):
                                   "columns, synonyms, compound names, changes to this pack's columns). Kept apart "
                                   "from the pack, so it applies on top of it.")
             bottom.addWidget(remembered)
-        self.compounds_btn = QPushButton("Find compounds…", clicked=self._find_compounds)
+        self.compounds_btn = QPushButton("Find compounds / tidy names…", clicked=self._find_compounds)
         self.compounds_btn.setToolTip("Find the compounds named in this research area's columns and examples, identify "
                                       "them on PubChem (free, no model) and switch the chemistry step on for them -- "
                                       "you review everything before it's changed. Saves your edits first.")

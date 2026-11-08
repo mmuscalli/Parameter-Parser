@@ -28,5 +28,13 @@ For each variable:
 - `where`: table, text or figure (where its values are mostly found).
 - `example`: one value as printed, with its unit.
 
+Then list the COMPOUNDS (`compounds`): every chemical compound the experiments use or form, wherever the paper names
+it (tables, methods, figure captions, text) -- reactants, every salt separately by its formula as written (MgCl2,
+NaCl, KCl -- not "Mg" or "chloride salts"), buffers, activating agents, catalysts in solution, and every product
+separately. Use the paper's own short name or abbreviation as `name` and give the spelled-out chemical name in
+`full_name` whenever the paper defines or implies one (ImpA -> adenosine 5'-phosphorimidazolide). Not instruments,
+minerals, clays or other solid materials; not enzymes, dyes, kits or reagent mixtures ("Taq polymerase", "SYBR Green",
+"PCR buffer"); not classes of molecules ("RNA oligomers", "amino acids") -- name the specific compounds instead.
+
 Also say in a few words what one ROW of results is in this paper (`row_unit`, e.g. 'one time point of one reaction',
 'one planet', 'one mineral sample') and what groups rows (`set_unit`, e.g. 'one reaction condition').
