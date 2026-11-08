@@ -111,6 +111,27 @@ class RunConfig:
     ads_token: str = ""
     # arXiv lookups and full texts kept between runs (ingestion/arxiv_source.LookupCache); None = none
     arxiv_cache_dir: Optional[Path] = None
+    # Who answers the model calls (2026-11-08): "anthropic" (the API, the default) or "local" -- a model on the user's
+    # own server (local_models.py: Ollama or an OpenAI-compatible server). `local` = local_models.LocalSettings as a
+    # dict (server, models, profiles); `model_profile` then names one of ITS profiles. Local runs need no API key and
+    # switch off what only the API has (prompt caching, batches, shared cached instructions; __post_init__).
+    provider: str = "anthropic"
+    local: Dict = field(default_factory=dict)
+
+    def __post_init__(self) -> None:
+        if self.provider == "local":
+            self.prompt_caching = False
+            self.batch_mode = False
+            self.shared_instructions = False
+            self.figure_suggestions_on_paper = False
+
+    @property
+    def is_local(self) -> bool:
+        return self.provider == "local"
+
+    @property
+    def needs_api_key(self) -> bool:
+        return not self.is_local and not self.handoff_dir
 
     @classmethod
     def from_settings(cls, **overrides) -> "RunConfig":
@@ -122,6 +143,9 @@ class RunConfig:
         return cls(**values)
 
     def model_for(self, stage: str) -> str:
+        if self.is_local:
+            from parameter_extractor.local_models import model_for
+            return model_for(self.local, self.model_profile, stage)
         profile = settings.MODEL_PROFILES.get(self.model_profile, {})
         if stage in profile:
             return profile[stage]
@@ -133,6 +157,8 @@ class RunConfig:
         """For run_summary.json -- everything except the key."""
         d = asdict(self)
         d.pop("api_key")
+        if isinstance(d.get("local"), dict):
+            d["local"] = {k: v for k, v in d["local"].items() if k != "api_key"}
         d["ads_token"] = "(set)" if self.ads_token else ""
         d["output_dir"] = str(self.output_dir)
         d["registry_path"] = str(self.registry_path) if self.registry_path else None

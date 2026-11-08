@@ -1,7 +1,8 @@
 """
 Settings (Mickey, 2026-10-24: options consolidated so the main window stays uncluttered): the
-things set once -- the Anthropic API key, the optional NASA ADS token, where results are saved,
-online lookups. Opened from the menu (Settings…, Cmd+,) or the main window's Settings button.
+things set once -- who answers the model calls (the Anthropic API, or a local model server:
+gui/local_models_panel.py, 2026-11-08), the Anthropic API key, the optional NASA ADS token, where
+results are saved, online lookups. Opened from the menu (Settings…, Cmd+,) or the main window's Settings button.
 
 The widgets live as long as the main window (which reads them at run time and keeps its old
 attribute names: key_edit, out_edit, pubchem_box ...); closing the dialog only hides it.
@@ -9,8 +10,8 @@ attribute names: key_edit, out_edit, pubchem_box ...); closing the dialog only h
 from __future__ import annotations
 
 from PySide6.QtCore import Signal
-from PySide6.QtWidgets import (QCheckBox, QDialog, QDialogButtonBox, QFileDialog, QFormLayout, QGroupBox,
-                               QHBoxLayout, QLabel, QLineEdit, QPushButton, QVBoxLayout, QWidget)
+from PySide6.QtWidgets import (QCheckBox, QComboBox, QDialog, QDialogButtonBox, QFileDialog, QFormLayout, QGroupBox,
+                               QHBoxLayout, QLabel, QLineEdit, QPushButton, QScrollArea, QVBoxLayout, QWidget)
 
 ADS_HELP = ("Optional. Only needed to look papers up by journal ADS bibcode (e.g. 2023PASJ...75.1030T); "
             "arXiv IDs and DOIs work without it. Free: ui.adsabs.harvard.edu → Account → Settings → API Token.")
@@ -40,8 +41,34 @@ class SettingsDialog(QDialog):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setWindowTitle("Settings")
-        self.setMinimumWidth(620)
-        layout = QVBoxLayout(self)
+        self.setMinimumWidth(680)
+        outer = QVBoxLayout(self)
+        scroll = QScrollArea(widgetResizable=True)
+        scroll.setFrameShape(QScrollArea.Shape.NoFrame)
+        body = QWidget()
+        scroll.setWidget(body)
+        outer.addWidget(scroll)
+        layout = QVBoxLayout(body)
+
+        from parameter_extractor.gui.local_models_panel import LocalModelsPanel
+        provider = QGroupBox("Model provider")
+        pv = QVBoxLayout(provider)
+        prow = QHBoxLayout()
+        prow.addWidget(QLabel("Models run on:"))
+        self.provider_combo = QComboBox()
+        self.provider_combo.addItem("Anthropic API (recommended)", "anthropic")
+        self.provider_combo.addItem("A local model server (Ollama, LM Studio, ...)", "local")
+        self.provider_combo.setToolTip("Anthropic API: Claude models, validated for this app (needs an API key). "
+                                       "Local: a model on your own computer or server -- free and private, but not "
+                                       "validated, and usually much slower.")
+        prow.addWidget(self.provider_combo, 1)
+        pv.addLayout(prow)
+        self.local_panel = LocalModelsPanel()
+        pv.addWidget(self.local_panel)
+        self.provider_combo.currentIndexChanged.connect(
+            lambda _i: self.local_panel.setVisible(self.provider() == "local"))
+        self.local_panel.setVisible(False)
+        layout.addWidget(provider)
 
         keys = QGroupBox("Accounts")
         form = QFormLayout(keys)
@@ -89,10 +116,14 @@ class SettingsDialog(QDialog):
             form.addRow("Handoff folder:", _row(self.handoff_edit, handoff_btn))
             layout.addWidget(dev)
 
+        layout.addStretch(1)
         buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Close)
         buttons.rejected.connect(self.hide)
         buttons.accepted.connect(self.hide)
-        layout.addWidget(buttons)
+        outer.addWidget(buttons)
+
+    def provider(self) -> str:
+        return self.provider_combo.currentData() or "anthropic"
 
     def _choose_output_dir(self) -> None:
         path = QFileDialog.getExistingDirectory(self, "Save results to", self.out_edit.text())
@@ -118,7 +149,8 @@ class SettingsDialog(QDialog):
     def lock(self, locked: bool) -> None:
         """Read-only while a run uses these settings."""
         for w in (self.key_edit, self.remember_key_box, self.ads_edit, self.remember_ads_box, self.out_edit,
-                  self.pubchem_box, self.handoff_box, self.handoff_edit):
+                  self.pubchem_box, self.handoff_box, self.handoff_edit, self.provider_combo):
             if w is None:
                 continue
             w.setEnabled(not locked)
+        self.local_panel.set_locked(locked)

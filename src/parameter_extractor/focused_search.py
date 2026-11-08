@@ -497,7 +497,7 @@ def run_focused_search(items: Sequence[PaperItem], columns: Sequence[str], confi
     +10-45% passage tokens, ~$0.003 a paper on Economy; without it teng2023's planet table -- rows
     without the search words -- was missed)."""
     from parameter_extractor.errors import ApiKeyMissingError
-    if not config.api_key:
+    if config.needs_api_key and not config.api_key:
         raise ApiKeyMissingError()
     packs.activate(config.pack)
     known = {p.column: p for p in available_parameters(optional_stages=config.optional_stages)}
@@ -525,9 +525,11 @@ def run_focused_search(items: Sequence[PaperItem], columns: Sequence[str], confi
     # 2. one client for all papers; in batch mode their requests share batches, and many papers can
     #    wait in the queue at once (the arXiv downloads stay one at a time: arxiv_source's rate limit)
     from parameter_extractor.api_client import BatchCollector
-    import anthropic
-    client = anthropic.Anthropic(api_key=config.api_key, max_retries=5)
-    collector = BatchCollector(client) if config.batch_mode else None
+    client = collector = None
+    if not config.is_local:                       # a local server needs no client (local_models.py)
+        import anthropic
+        client = anthropic.Anthropic(api_key=config.api_key, max_retries=5)
+        collector = BatchCollector(client) if config.batch_mode else None
     workers = max_workers if max_workers else (BATCH_WORKERS if config.batch_mode else DIRECT_WORKERS)
     names: Dict[str, int] = {}
     jobs = []

@@ -97,10 +97,19 @@ def main() -> int:
     parser.add_argument("--equations-latex", action="store_true",
                         help="Convert the paper's labelled equations to LaTeX (one small extra API call); "
                              "they're found and cropped either way")
-    parser.add_argument("--models", choices=["standard", "balanced", "economy"], default="standard",
-                        help="standard: Claude Sonnet 5.5 for every step (most accurate); balanced: Sonnet plans "
-                             "the rows, Claude Haiku 5.5 extracts (about half price); economy: Haiku for every "
-                             "step (cheapest; best with --passes 3)")
+    parser.add_argument("--models", default=None,
+                        help="standard: Claude Sonnet 5.5 for every step (most accurate; the default); balanced: "
+                             "Sonnet plans the rows, Claude Haiku 5.5 extracts (about half price); economy: Haiku for "
+                             "every step (cheapest; best with --passes 3). With --provider local: one of your local "
+                             "model profiles (default: the first)")
+    parser.add_argument("--provider", choices=["anthropic", "local"], default="anthropic",
+                        help="anthropic: the Anthropic API (default); local: a model on your own server -- Ollama or "
+                             "an OpenAI-compatible server, set up in the app's Settings > Model provider (or "
+                             "--local-settings). No API key or cost; results aren't validated like the API's")
+    parser.add_argument("--local-settings", type=Path, default=None,
+                        help="local model settings file (default: the app's local_models.json)")
+    parser.add_argument("--list-local-models", action="store_true",
+                        help="List the local server's models and your local profiles, then exit")
     parser.add_argument("--passes", type=int, default=1, choices=[1, 2, 3],
                         help="Run the extraction steps 2 or 3 times and keep each value by vote (cheap runs: "
                              "use with --models economy); disagreements are flagged")
@@ -154,6 +163,8 @@ def main() -> int:
                 group = p.group
             print(f"    {p.column:26} {p.description[:90]}" + (f" [{p.unit}]" if p.unit else ""))
         return 0
+    if args.list_local_models:
+        return _list_local_models(args)
     if args.focus:
         return _focused(args, parser)
     if not args.pdf and not args.paper and not args.queue:
@@ -165,7 +176,7 @@ def main() -> int:
                  "equations_to_latex": args.equations_latex, "pack": args.pack,
                  "online_checks": not args.no_pubchem,
                  "optional_stages": {name: "off" for name in args.skip_stage},
-                 "model_profile": args.models, "prompt_caching": not args.no_cache,
+                 "prompt_caching": not args.no_cache,
                  "batch_mode": args.batch, "prefer_arxiv": args.arxiv,
                  "suggest_new_variables": not args.no_suggestions, "passes": args.passes,
                  "include_supplements": not args.no_si,
@@ -181,6 +192,7 @@ def main() -> int:
             parser.error("--handoff is a developer-only option (set PARAMETER_EXTRACTOR_DEV=1 when running "
                          "from source)")
         overrides.update(handoff_dir=Path(args.handoff), batch_mode=False)
+    overrides.update(_provider_overrides(args, parser))
     config = RunConfig.from_settings(**overrides)
 
     if args.queue:
@@ -259,7 +271,7 @@ def _focused(args, parser) -> int:
     if not items:
         parser.error("a focused search needs papers: --papers LIST, --paper ID or --pdf")
     from parameter_extractor.registry import default_arxiv_cache_dir
-    overrides = {"pack": args.pack, "model_profile": args.models, "batch_mode": args.batch,
+    overrides = {"pack": args.pack, "batch_mode": args.batch,
                  "include_supplements": not args.no_si,
                  "prefer_arxiv": args.arxiv, "optional_stages": {name: "off" for name in args.skip_stage},
                  "arxiv_cache_dir": default_arxiv_cache_dir()}
@@ -272,6 +284,7 @@ def _focused(args, parser) -> int:
             parser.error("--handoff is a developer-only option (set PARAMETER_EXTRACTOR_DEV=1 when running "
                          "from source)")
         overrides.update(handoff_dir=Path(args.handoff), batch_mode=False)
+    overrides.update(_provider_overrides(args, parser))
     config = RunConfig.from_settings(**overrides)
     try:
         run = run_focused_search(items, args.focus, config, search_words=args.search_word,
@@ -295,3 +308,43 @@ def _focused(args, parser) -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
+
+
+def _provider_overrides(args, parser) -> dict:
+    """--provider / --models -> RunConfig fields (local: the saved local model settings and one of their profiles)."""
+    if args.provider != "local":
+        profile = args.models or "standard"
+        if profile not in ("standard", "balanced", "economy"):
+            parser.error(f"--models {profile}: choose standard, balanced or economy (local profiles need "
+                         f"--provider local)")
+        return {"model_profile": profile}
+    import os
+    from parameter_extractor import local_models
+    local = local_models.load(args.local_settings)
+    local.api_key = os.environ.get("LOCAL_SERVER_API_KEY", "")
+    if not local.profiles:
+        parser.error("no local model profiles yet: set them up in the app (Settings > Model provider), or write "
+                     f"{args.local_settings or local_models.default_path()}")
+    profile = args.models or next(iter(local.profiles))
+    if profile not in local.profiles:
+        parser.error(f"--models {profile}: not a local profile ({', '.join(local.profiles)})")
+    return {"provider": "local", "local": local.to_dict(), "model_profile": profile}
+
+
+def _list_local_models(args) -> int:
+    from parameter_extractor import local_models
+    from parameter_extractor.errors import PipelineError
+    local = local_models.load(args.local_settings)
+    print(f"{local_models.KINDS.get(local.kind, local.kind)} at {local.url}")
+    try:
+        for m in local_models.list_models(local):
+            saved = local.models.get(m["name"])
+            vision = {True: "reads images", False: "text only", None: "images: unknown"}[m["vision"]]
+            print(f"    {m['name']:30} {vision:16} max context {m['max_context'] or '?'}"
+                  + (f"  (set: {saved.context}, {'images' if saved.vision else 'no images'})" if saved else ""))
+    except PipelineError as e:
+        print(f"    {e}")
+    for name, roles in local.profiles.items():
+        print(f"profile {name}: " + "; ".join(f"{dict(local_models.PROFILE_ROLES)[r]}: {m}"
+                                              for r, m in roles.items() if m))
+    return 0

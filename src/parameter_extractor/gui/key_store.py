@@ -11,6 +11,7 @@ from __future__ import annotations
 SERVICE = "parameter-extractor"
 ACCOUNT = "anthropic-api-key"
 ADS_ACCOUNT = "ads-api-token"          # optional NASA ADS token (ADS bibcode lookups)
+LOCAL_ACCOUNT = "local-model-server"   # optional key of an OpenAI-compatible local server (local_models.py)
 
 
 def load_key(account: str = ACCOUNT) -> str:

@@ -216,6 +216,8 @@ class MainWindow(QMainWindow):
         self.out_edit, self.pubchem_box = d.out_edit, d.pubchem_box
         for edit in (self.key_edit, self.out_edit):
             edit.textChanged.connect(self._update_run_enabled)
+        d.provider_combo.currentIndexChanged.connect(lambda _i: self._refresh_profiles())
+        d.local_panel.changed.connect(self._refresh_profiles)
         if d.handoff_box is not None:          # developer builds only
             d.handoff_box.toggled.connect(self._update_run_enabled)
             d.handoff_edit.textChanged.connect(self._update_run_enabled)
@@ -311,13 +313,7 @@ class MainWindow(QMainWindow):
         form = QFormLayout()
         form.setFieldGrowthPolicy(QFormLayout.FieldGrowthPolicy.AllNonFixedFieldsGrow)
         self.profile_combo = QComboBox()
-        for key, label, tip in MODEL_PROFILE_CHOICES:
-            self.profile_combo.addItem(label.split(" -- ")[0], key)       # the details are in the tooltip
-            self.profile_combo.setItemData(self.profile_combo.count() - 1, tip, Qt.ItemDataRole.ToolTipRole)
-        self.profile_combo.setToolTip("Which Claude models read the paper:<br><br>"
-                                      + "<br><br>".join(tip for _, _, tip in MODEL_PROFILE_CHOICES)
-                                      + "<br><br>Figure-digitizing suggestions and LaTeX conversion (when you ask "
-                                        "for them) always use Sonnet 5.5.")
+        self.profile_combo.currentIndexChanged.connect(lambda _i: self._update_run_enabled())
         form.addRow("Models:", self.profile_combo)
         self.passes_combo = QComboBox()
         for n, label in ((1, "1 pass"), (2, "2 passes, vote"), (3, "3 passes, vote")):
@@ -335,6 +331,7 @@ class MainWindow(QMainWindow):
                                   "Each step then waits in Anthropic's batch queue: usually a few minutes, at "
                                   "most 24 hours, so a paper can take much longer. Results are the same. Best for "
                                   "papers you don't need right away.")
+        self._batch_tip = self.batch_box.toolTip()
         v.addWidget(self.batch_box)
 
         v.addWidget(self._section("Paper text"))
@@ -472,6 +469,42 @@ class MainWindow(QMainWindow):
                                     + (f" -- only {narrowed}" if narrowed else ""))
             self.run_btn.setText(f"Extract data from {n} papers" if n > 1 else "Extract data")
 
+    def _refresh_profiles(self) -> None:
+        """The Models list: the Claude profiles, or the local profiles set up in Settings > Model provider."""
+        local = self.settings_dialog.provider() == "local"
+        if getattr(self, "_profiles_local", None) is not None:      # remember the choice of the list being left
+            self._settings.setValue("local_model_profile" if self._profiles_local else "model_profile",
+                                    self.profile_combo.currentData())
+        self._profiles_local = local
+        self.profile_combo.blockSignals(True)
+        self.profile_combo.clear()
+        if local:
+            from parameter_extractor import local_models
+            profiles = self.settings_dialog.local_panel.settings().profiles
+            for name, roles in profiles.items():
+                self.profile_combo.addItem(f"{name} (local)", name)
+                tip = "<br>".join(f"{label}: {roles.get(role) or '-'}" for role, label in local_models.PROFILE_ROLES)
+                self.profile_combo.setItemData(self.profile_combo.count() - 1, f"<b>{name}</b><br>{tip}",
+                                               Qt.ItemDataRole.ToolTipRole)
+            self.profile_combo.setToolTip("Your local model profiles (Settings > Model provider). Local models "
+                                          "aren't validated for this app: check the values against the paper.")
+            wanted = self._settings.value("local_model_profile", "")
+        else:
+            for key, label, tip in MODEL_PROFILE_CHOICES:
+                self.profile_combo.addItem(label.split(" -- ")[0], key)       # the details are in the tooltip
+                self.profile_combo.setItemData(self.profile_combo.count() - 1, tip, Qt.ItemDataRole.ToolTipRole)
+            self.profile_combo.setToolTip("Which Claude models read the paper:<br><br>"
+                                          + "<br><br>".join(tip for _, _, tip in MODEL_PROFILE_CHOICES)
+                                          + "<br><br>Figure-digitizing suggestions and LaTeX conversion (when you "
+                                            "ask for them) always use Sonnet 5.5.")
+            wanted = self._settings.value("model_profile", "standard")
+        self.profile_combo.setCurrentIndex(max(0, self.profile_combo.findData(wanted)))
+        self.profile_combo.blockSignals(False)
+        # batch mode is the Anthropic API's; a local run never uses it
+        self.batch_box.setEnabled(not local)
+        self.batch_box.setToolTip(self._batch_tip if not local else "Not available with a local model server.")
+        self._update_run_enabled()
+
     def open_settings(self) -> None:
         self.settings_dialog.show()
         self.settings_dialog.raise_()
@@ -587,8 +620,15 @@ class MainWindow(QMainWindow):
         self.pack_combo.setCurrentIndex(index if index >= 0 else self.pack_combo.findData("prebiotic_chemistry"))
         self.params.load(self.pack_combo.currentData(), self.registry_path)           # no change signal if index 0 was kept
         self.equations_box.setChecked(self._settings.value("equations_to_latex", False, type=bool))
-        index = self.profile_combo.findData(self._settings.value("model_profile", "standard"))
-        self.profile_combo.setCurrentIndex(max(index, 0))
+        from parameter_extractor import local_models
+        local = local_models.load()
+        local.api_key = key_store.load_key(key_store.LOCAL_ACCOUNT) or ""
+        self._local_saved = local.to_dict()            # written back only when changed
+        d = self.settings_dialog
+        d.local_panel.load(local)
+        d.provider_combo.setCurrentIndex(max(0, d.provider_combo.findData(
+            self._settings.value("provider", "anthropic"))))
+        self._refresh_profiles()
         self.batch_box.setChecked(self._settings.value("batch_mode", False, type=bool))
         self.arxiv_box.setChecked(self._settings.value("prefer_arxiv", False, type=bool))
         self.suggest_box.setChecked(self._settings.value("suggest_new_variables", True, type=bool))
@@ -656,7 +696,23 @@ class MainWindow(QMainWindow):
         self._settings.setValue("use_pubchem", self.pubchem_box.isChecked())
         self._settings.setValue("pack", self.pack_combo.currentData())
         self._settings.setValue("equations_to_latex", self.equations_box.isChecked())
-        self._settings.setValue("model_profile", self.profile_combo.currentData())
+        local_run = self.settings_dialog.provider() == "local"
+        self._settings.setValue("local_model_profile" if local_run else "model_profile", self.profile_combo.currentData())
+        self._settings.setValue("provider", self.settings_dialog.provider())
+        from parameter_extractor import local_models
+        local = self.settings_dialog.local_panel.settings()
+        before = getattr(self, "_local_saved", {}) or {}
+        if local.to_dict(with_key=False) != {k: v for k, v in before.items() if k != "api_key"}:
+            try:
+                local_models.save(local)
+            except OSError:
+                self.status.setText("Note: couldn't save the local model settings.")
+        if local.api_key != before.get("api_key", ""):
+            if local.api_key:
+                key_store.save_key(local.api_key, key_store.LOCAL_ACCOUNT)
+            else:
+                key_store.delete_key(key_store.LOCAL_ACCOUNT)
+        self._local_saved = local.to_dict()
         self._settings.setValue("batch_mode", self.batch_box.isChecked())
         self._settings.setValue("prefer_arxiv", self.arxiv_box.isChecked())
         self._settings.setValue("suggest_new_variables", self.suggest_box.isChecked())
@@ -727,14 +783,19 @@ class MainWindow(QMainWindow):
 
     def _update_run_enabled(self, *_args) -> None:
         handoff = self.settings_dialog.handoff_dir() is not None      # developer mode: no key needed
+        local = self.settings_dialog.provider() == "local"            # a local model server: no key either
         items = self.run_items()
-        ready = bool(items and (handoff or self.key_edit.text().strip()) and self.out_edit.text().strip())
+        ready = bool(items and (handoff or local or self.key_edit.text().strip()) and self.out_edit.text().strip())
+        if local and not self.profile_combo.currentData():
+            ready = False
         if self.params.focused and not self.params.checked_columns():
             ready = False
         self.run_btn.setEnabled(ready and not self._busy)
         missing = [what for what, edit in (("your Anthropic API key", self.key_edit),
                                            ("a folder for the results", self.out_edit))
-                   if not edit.text().strip() and not (handoff and edit is self.key_edit)]
+                   if not edit.text().strip() and not ((handoff or local) and edit is self.key_edit)]
+        if local and not self.profile_combo.currentData():
+            missing.append("a local model profile")
         self.settings_hint.setText(f"Add {' and '.join(missing)} in <a href='settings'>Settings…</a>"
                                    if missing else "")
         self.settings_hint.setVisible(bool(missing))
@@ -759,6 +820,8 @@ class MainWindow(QMainWindow):
                          online_checks=self.pubchem_box.isChecked(),
                          optional_stages=self.optional_stage_choices(), scopes=self.params.scopes(),
                          model_profile=self.profile_combo.currentData() or "standard",
+                         provider=self.settings_dialog.provider(),
+                         local=self.settings_dialog.local_panel.settings().to_dict(),
                          batch_mode=self.batch_box.isChecked(),
                          prefer_arxiv=self.arxiv_box.isChecked(), ads_token=self.ads_edit.text().strip(),
                          suggest_new_variables=self.suggest_box.isChecked(),

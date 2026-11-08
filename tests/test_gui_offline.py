@@ -43,6 +43,9 @@ from parameter_extractor.schemas.figures import (AxisVariable, FigurePlan, Plann
 from parameter_extractor.schemas.methodology import Methodology
 from parameter_extractor.schemas.paper_metadata import PaperMetadata
 from test_pipeline_offline import PDF, REPLAY_DIR, _replay_send
+from parameter_extractor import local_models
+_LOCAL_TMP = Path(tempfile.mkdtemp(prefix="pe-local-models-"))
+local_models.default_path = lambda: _LOCAL_TMP / "local_models.json"     # never the user's own settings file
 
 
 from PySide6.QtCore import QObject, Qt, QTimer, Signal
@@ -80,7 +83,7 @@ QCoreApplication.setApplicationName("ParameterExtractorTests")
 
 class FakeKeyStore:
     """The API key (default account) plus other secrets by account (the ADS token)."""
-    ACCOUNT, ADS_ACCOUNT = "anthropic-api-key", "ads-api-token"
+    ACCOUNT, ADS_ACCOUNT, LOCAL_ACCOUNT = "anthropic-api-key", "ads-api-token", "local-model-server"
     def __init__(self, stored="", ads=""):
         self.stored, self.saved, self.deleted = stored, [], 0
         self.other = {self.ADS_ACCOUNT: ads} if ads else {}

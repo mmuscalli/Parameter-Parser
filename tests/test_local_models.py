@@ -1,0 +1,260 @@
+"""
+Locally hosted models (local_models.py, 2026-11-08): a fake Ollama / OpenAI-compatible server answers with eder1994's
+recorded answers; the run must reproduce the reference CSV byte for byte, with no API key, prompt caching or batches,
+and with the requests in the server's format (schema constraint, context length, images only for vision models).
+Also: profiles -> models, settings file, refusing a paper that won't fit, an unreachable server, one request at a time.
+No network beyond 127.0.0.1, no API.
+"""
+import json
+import sys
+import tempfile
+import threading
+import time
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from pathlib import Path
+from unittest.mock import patch
+
+from PySide6.QtWidgets import QCheckBox
+
+ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT / "src"))
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+
+from parameter_extractor import errors, local_models, packs
+from parameter_extractor.config.run_config import RunConfig
+
+REF = ROOT / "runs" / "reference" / "eder1994"
+PDF = ROOT.parent / "Paper Files" / "Paper Lists" / "Initial Easy Papers" / "Eder1994" / "eder1994.pdf"
+
+
+class FakeServer:
+    """Answers each step with the reference run's recorded output (by the X-Parameter-Extractor-Step header)."""
+
+    def __init__(self, kind: str, delay: float = 0.0):
+        self.kind, self.delay, self.requests, self.active, self.most_at_once = kind, delay, [], 0, 0
+        server = self
+        lock = threading.Lock()
+
+        class Handler(BaseHTTPRequestHandler):
+            def log_message(self, *a):
+                pass
+
+            def do_GET(self):
+                body = ({"models": [{"name": "fake:12b"}]} if self.path == "/api/tags"
+                        else {"data": [{"id": "fake-model"}]})
+                self._send(json.dumps(body).encode())
+
+            def do_POST(self):
+                req = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
+                if self.path == "/api/show":
+                    self._send(json.dumps({"capabilities": ["completion", "vision"],
+                                           "model_info": {"gemma3.context_length": 131072}}).encode())
+                    return
+                stage = self.headers.get("X-Parameter-Extractor-Step", "")
+                with lock:
+                    server.requests.append((self.path, stage, req))
+                    server.active += 1
+                    server.most_at_once = max(server.most_at_once, server.active)
+                time.sleep(server.delay)
+                out = REF / f"{stage}.output.json"
+                answer = out.read_text() if out.is_file() else "{}"     # steps the reference run didn't have
+                if server.kind == "ollama":
+                    lines = [{"message": {"content": answer[:10]}, "done": False},
+                             {"message": {"content": answer[10:]}, "done": True, "done_reason": "stop",
+                              "prompt_eval_count": 1234, "eval_count": 56}]
+                    payload = b"".join(json.dumps(x).encode() + b"\n" for x in lines)
+                else:
+                    events = [{"choices": [{"delta": {"content": answer}, "finish_reason": "stop"}]},
+                              {"choices": [], "usage": {"prompt_tokens": 1234, "completion_tokens": 56}}]
+                    payload = b"".join(b"data: " + json.dumps(x).encode() + b"\n\n" for x in events) \
+                        + b"data: [DONE]\n\n"
+                with lock:
+                    server.active -= 1
+                self._send(payload)
+
+            def _send(self, data: bytes):
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Content-Length", str(len(data)))
+                self.end_headers()
+                self.wfile.write(data)
+
+        self.httpd = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+        threading.Thread(target=self.httpd.serve_forever, daemon=True).start()
+        self.url = f"http://127.0.0.1:{self.httpd.server_address[1]}"
+
+    def close(self):
+        self.httpd.shutdown()
+
+
+def _local(server: FakeServer, model: str, vision: bool, parallel: int = 1) -> dict:
+    return local_models.LocalSettings(
+        kind=server.kind, url=server.url, parallel=parallel, timeout_sec=30,
+        models={model: local_models.LocalModel(context=131072, vision=vision)},
+        profiles={"Local standard": {"structure_planner": model, "*": model, "figure_planner": model}}).to_dict()
+
+
+def _run(server, model, vision, out, parallel=1):
+    from parameter_extractor.pipeline import run_pipeline
+    cfg = RunConfig.from_settings(api_key="", output_dir=out, provider="local", model_profile="Local standard",
+                                  local=_local(server, model, vision, parallel), use_pubchem=False,
+                                  registry_path=None)
+    try:
+        return run_pipeline(PDF, cfg)
+    finally:
+        packs.activate("prebiotic_chemistry")
+
+
+def test_ollama_run_reproduces_the_reference():
+    if not PDF.is_file():
+        print(f"SKIP: needs {PDF}")
+        return
+    server = FakeServer("ollama")
+    try:
+        with tempfile.TemporaryDirectory() as tmp:
+            result = _run(server, "fake:12b", vision=True, out=Path(tmp))
+            assert result.csv_path.read_text() == (REF / "expected_extracted.csv").read_text()
+            assert any(f.kind == "local_model" and "fake:12b" in f.message for f in result.paper_flags)
+            summary = json.loads((result.run_dir / "run_summary.json").read_text())
+            assert summary["provider"] == "local" and summary["estimated_cost_usd"] == 0
+            assert not summary["config"]["prompt_caching"] and not summary["config"]["batch_mode"]
+            paths = {p for p, _, _ in server.requests}
+            assert paths == {"/api/chat"}
+            stages = [s for _, s, _ in server.requests]
+            assert {"structure_planner", "chemistry", "experimental_conditions"} <= set(stages)
+            chem = next(r for _, s, r in server.requests if s == "chemistry")
+            assert chem["options"]["num_ctx"] == 131072 and chem["format"]["type"] == "object"
+            assert chem["messages"][1].get("images"), "a vision model gets the table images"
+            assert "JSON Schema" in chem["messages"][0]["content"]
+            assert server.most_at_once == 1                     # one request at a time by default
+    finally:
+        server.close()
+
+
+def test_openai_compatible_run_without_vision():
+    if not PDF.is_file():
+        print(f"SKIP: needs {PDF}")
+        return
+    server = FakeServer("openai")
+    try:
+        with tempfile.TemporaryDirectory() as tmp:
+            result = _run(server, "fake-model", vision=False, out=Path(tmp))
+            assert result.csv_path.read_text() == (REF / "expected_extracted.csv").read_text()
+            chem = next(r for _, s, r in server.requests if s == "chemistry")
+            assert chem["response_format"]["type"] == "json_schema"
+            assert all(part["type"] == "text" for part in chem["messages"][1]["content"])   # images left out
+            assert {p for p, _, _ in server.requests} == {"/v1/chat/completions"}
+    finally:
+        server.close()
+
+
+def test_parallel_requests_and_listing():
+    server = FakeServer("ollama", delay=0.3)
+    try:
+        local = local_models.LocalSettings.from_dict(_local(server, "fake:12b", True, parallel=2))
+        listed = local_models.list_models(local)
+        assert listed == [{"name": "fake:12b", "vision": True, "max_context": 131072}]
+        ctx = type("Ctx", (), {"config": RunConfig.from_settings(api_key="", output_dir=Path("."), provider="local",
+                                                                 local=local.to_dict()),
+                               "cancel_event": None, "note": lambda *a: None})()
+        from parameter_extractor.schemas.paper_metadata import PaperMetadata
+        from parameter_extractor.api_client import _streamed
+        _streamed.max_tokens = 4000
+        threads = [threading.Thread(target=local_models.send, args=(ctx, "metadata", "fake:12b"),
+                                    kwargs=dict(system_prompt="s", content="c", response_model=PaperMetadata))
+                   for _ in range(4)]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
+        assert server.most_at_once == 2
+    finally:
+        server.close()
+
+
+def test_profiles_settings_and_refusals():
+    local = {"profiles": {"Fast": {"*": "small", "structure_planner": "big"}}}
+    cfg = RunConfig.from_settings(api_key="", output_dir=Path("."), provider="local", model_profile="Fast", local=local)
+    assert cfg.model_for("structure_planner") == "big" and cfg.model_for("chemistry") == "small"
+    assert cfg.model_for("figure_planner") == "small" and not cfg.needs_api_key
+    assert RunConfig.from_settings(api_key="", output_dir=Path(".")).needs_api_key
+    with tempfile.TemporaryDirectory() as tmp:
+        path = Path(tmp) / "local_models.json"
+        s = local_models.LocalSettings(models={"m": local_models.LocalModel(context=8192, vision=True)},
+                                       profiles={"P": {"*": "m"}}, api_key="secret")
+        local_models.save(s, path)
+        assert "secret" not in path.read_text()
+        back = local_models.load(path)
+        assert back.models["m"].context == 8192 and back.profiles == {"P": {"*": "m"}}
+    pub = RunConfig.from_settings(api_key="", output_dir=Path("."), provider="local",
+                                  local={"api_key": "secret", "profiles": {}}).to_public_dict()
+    assert "secret" not in json.dumps(pub)
+    # a paper too long for the model's context is refused with a clear message, before anything is sent
+    ctx = type("Ctx", (), {"config": RunConfig.from_settings(
+        api_key="", output_dir=Path("."), provider="local",
+        local={"url": "http://127.0.0.1:9", "models": {"m": {"context": 4096}}}), "cancel_event": None})()
+    from parameter_extractor.schemas.paper_metadata import PaperMetadata
+    try:
+        local_models.send(ctx, "metadata", "m", system_prompt="s", content="x" * 40000, response_model=PaperMetadata)
+        raise AssertionError("expected a refusal")
+    except errors.PipelineError as e:
+        assert "context" in str(e)
+    ctx.config.local["models"]["m"]["context"] = 65536                 # fits now -- but nothing listens on :9
+    try:
+        local_models.send(ctx, "metadata", "m", system_prompt="s", content="x", response_model=PaperMetadata)
+        raise AssertionError("expected unreachable")
+    except errors.PipelineError as e:
+        assert "Couldn't reach" in str(e)
+
+
+def test_settings_window_sets_up_a_local_run():
+    """Settings > Model provider: Test connection lists the server's models, a profile is added, the main window's
+    Models list shows it, a run needs no API key, batch mode is off; the settings file is written on close."""
+    import os
+    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+    from PySide6.QtCore import QSettings
+    from PySide6.QtWidgets import QApplication
+    app = QApplication.instance() or QApplication([])
+    app.setOrganizationName("ParameterExtractorTests")
+    QSettings().clear()
+    from parameter_extractor.gui import main_window
+    from test_gui_offline import FakeKeyStore
+    server = FakeServer("ollama")
+    keys = FakeKeyStore()
+    try:
+        with tempfile.TemporaryDirectory() as tmp, patch.object(main_window, "key_store", keys), \
+                patch.object(local_models, "default_path", lambda: Path(tmp) / "local_models.json"):
+            w = main_window.MainWindow()
+            w.out_edit.setText(tmp)
+            w.registry_path = Path(tmp) / "registry.json"
+            d = w.settings_dialog
+            d.provider_combo.setCurrentIndex(d.provider_combo.findData("local"))
+            assert not w.batch_box.isEnabled()
+            panel = d.local_panel
+            panel.url_edit.setText(server.url)
+            assert panel.refresh_models() and panel.model_names() == ["fake:12b"]
+            assert panel.models_table.cellWidget(0, 2).findChild(QCheckBox).isChecked()      # vision from /api/show
+            assert w.profile_combo.count() == 0 and "local model profile" in w.settings_hint.text()
+            panel.add_profile()
+            assert w.profile_combo.currentData() == "Local 1"
+            w.papers.add_items([PDF])
+            assert w.run_btn.isEnabled()                         # no Anthropic key needed
+            cfg = w.current_config()
+            assert cfg.provider == "local" and cfg.model_for("chemistry") == "fake:12b" and not cfg.batch_mode
+            w._save_preferences()
+            saved = json.loads((Path(tmp) / "local_models.json").read_text())
+            assert saved["profiles"]["Local 1"]["*"] == "fake:12b" and saved["url"] == server.url
+            d.provider_combo.setCurrentIndex(d.provider_combo.findData("anthropic"))
+            assert w.profile_combo.currentData() == "standard" and w.batch_box.isEnabled()
+            assert not w.run_btn.isEnabled()                     # the API needs its key again
+            w.close()
+    finally:
+        server.close()
+        QSettings().clear()
+
+
+if __name__ == "__main__":
+    for name, fn in list(globals().items()):
+        if name.startswith("test_"):
+            fn()
+            print("ok", name)

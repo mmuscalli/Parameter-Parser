@@ -2301,3 +2301,39 @@ description, items=[ScopeItem(key, label, tip, detail)]); `scopes.groups(pack, r
   error bars, when-suggestions-arrive; Find similar points + similarity; status; points table). No horizontal scroll
   in the tools pane; it opens at >= 480 px / 40%. Round choices shortened ("whole ±3 px, else 1 decimal"). Attribute
   names unchanged. Checked natively. tests/test_digitizer_copy_settings.py.
+
+## Local model servers (2026-11-08, Mickey: a framework for locally hosted models, all search types)
+
+`local_models.py` + RunConfig `provider` ("anthropic" default | "local") and `local` (LocalSettings as a dict). Two
+server kinds: "ollama" (native POST /api/chat -- the only way to set `num_ctx`; Ollama's small default would silently
+cut a paper off) and "openai" (POST /v1/chat/completions: LM Studio, llama.cpp, vLLM; optional bearer key). Plain
+urllib, streamed (NDJSON / SSE) on a helper thread so Cancel works while the server reads a long prompt; socket timeout
+= `timeout_sec` (wait for the next piece). Hook: api_client._send_mapping_errors -> `local_models.send` (after the
+handoff check), returning an Anthropic-message-shaped SimpleNamespace, so call_structured (retry on broken answers,
+audits, usage) is unchanged; cost 0.0 in _record.
+- Request: the step's schema = transform_schema + model_facing_schema, sent as the constraint (`format` /
+  `response_format` json_schema strict) AND in the system prompt (a grammar doesn't carry the field descriptions);
+  temperature 0; output budget = min(step budget, context - estimated prompt); a prompt estimated (chars/3.5 + 600 per
+  image) within 1024 tokens of the model's context is REFUSED with a message (raise the context length). Images only
+  for models marked `vision` (else dropped + a ctx note). Header X-Parameter-Extractor-Step (server logs; the tests'
+  fake server).
+- RunConfig.__post_init__ for local: prompt_caching, batch_mode, shared_instructions, figure_suggestions_on_paper off
+  (the non-cached path sends each step's prompt with the paper + its images). `needs_api_key` (not local, not handoff)
+  replaces the key checks in pipeline._start and focused_search (no Anthropic client made for local). `model_for`:
+  profile roles structure_planner / "*" / figure_planner (equations use figure_planner). `to_public_dict` drops the
+  local key. One semaphore per server URL (`parallel`, default 1) -> parallel steps, passes, queues and focused searches
+  just wait their turn. Every local run: paper flag `local_model` (unvalidated); run_summary `provider`.
+- Settings: <app data>/local_models.json (`default_path`, `load`/`save`; key never written -- keychain account
+  `key_store.LOCAL_ACCOUNT`). GUI: Settings > Model provider (`gui/local_models_panel.LocalModelsPanel`: server type,
+  address, Test connection -> models with context length + reads-images (vision from Ollama /api/show capabilities),
+  time limit, requests at once, model profiles table: Profile | Plans the rows | Extraction steps | Figure
+  suggestions); the dialog scrolls. Main window: Models list = local profiles when the provider is local
+  (`_refresh_profiles`; QSettings provider / local_model_profile), batch box disabled, no API key needed (hint asks for
+  a local profile instead); local settings / key written only when changed. CLI: --provider local, --models <local
+  profile> (default the first), --local-settings PATH, --list-local-models, env LOCAL_SERVER_API_KEY.
+- Tests: tests/test_local_models.py (fake Ollama + OpenAI servers replaying runs/reference/eder1994 -> the reference CSV
+  byte for byte; request formats; vision off; 2-at-once gate; listing; context refusal; unreachable server; the
+  Settings window end to end). test_gui_offline points local_models.default_path at a temp file. --self-check: "Local
+  model support".
+- Installed for the live test (Mickey's OK): Homebrew `ollama` 0.40.15 (started with `ollama serve`; not a login
+  service) + `gemma3:12b` (8.2 GB, vision, 128K max context). M2 / 24 GB: ~10 tokens/s generation.

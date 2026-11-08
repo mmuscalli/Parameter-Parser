@@ -175,10 +175,10 @@ def _record(ctx: RunContext, stage: str, model: str, response, elapsed: float) -
     write, read = getattr(u, "cache_creation_input_tokens", 0) or 0, getattr(u, "cache_read_input_tokens", 0) or 0
     write_1h = getattr(getattr(u, "cache_creation", None), "ephemeral_1h_input_tokens", 0) or 0
     batch = bool(ctx.config.batch_mode)
+    cost = 0.0 if getattr(ctx.config, "is_local", False) else request_cost(
+        model, u.input_tokens, u.output_tokens, write - write_1h, read, cache_write_1h_tokens=write_1h, batch=batch)
     usage = StageUsage(stage=stage, model=model, input_tokens=u.input_tokens, output_tokens=u.output_tokens,
-                       elapsed_sec=round(elapsed, 2),
-                       cost_usd=request_cost(model, u.input_tokens, u.output_tokens, write - write_1h, read,
-                                             cache_write_1h_tokens=write_1h, batch=batch),
+                       elapsed_sec=round(elapsed, 2), cost_usd=cost,
                        cache_write_tokens=write, cache_read_tokens=read, batch=batch)
     ctx.record_usage(usage)
     return usage
@@ -498,6 +498,9 @@ def _send_mapping_errors(ctx: RunContext, stage: str, model: str, **kwargs):
         return handoff.answer(ctx, stage, kwargs["system_prompt"], kwargs["content"], kwargs["response_model"])
     credits = lambda detail: errors.OutOfCreditsError(stage, detail, _finished_steps(ctx), getattr(ctx, "run_dir", None))
     try:
+        if getattr(ctx.config, "is_local", False):     # a model on the user's own server (local_models.py)
+            from parameter_extractor import local_models
+            return local_models.send(ctx, stage, model, **kwargs)
         return _send_resuming(ctx, stage, model, **kwargs)
     except _BatchRequestError as e:
         if _out_of_credits(0, e.kind, e.message):

@@ -190,7 +190,7 @@ def _start(pdf_path, config: RunConfig, total_steps: int,
         if not dev_features.enabled():
             raise PipelineError("Answering steps in Claude Code (handoff) is a developer-only option and isn't "
                                 "available in this version of the app.")
-    elif not config.api_key:  # fail fast, before creating a run folder or parsing anything
+    elif config.needs_api_key and not config.api_key:  # fail fast, before creating a run folder or parsing anything
         raise ApiKeyMissingError()
     pdf_path = Path(pdf_path)
     # a PDF's stem; a paper named by identifier keeps its dots ('arXiv_2308.05343')
@@ -222,6 +222,7 @@ def _write_summary(ctx: RunContext, pdf_path: Path, started: datetime, **extra) 
         "output_tokens": sum(u.output_tokens for u in ctx.usage),
         "estimated_cost_usd": total_cost(ctx.usage),
         "prices_checked": PRICES_CHECKED,
+        "provider": ctx.config.provider,
         **extra,
     }
     (ctx.run_dir / "run_summary.json").write_text(json.dumps(summary, indent=2))
@@ -1095,6 +1096,9 @@ def finish(
                       drop_below=config.confidence_drop_below)
     paper_flags = check_extraction(ex.methodology, ex.chemistry, optional=ex.optional_list, **thresholds)
     paper_flags += _cited_data_flags(ex.structure)
+    if config.is_local:                   # results from a model the app hasn't been validated with
+        from parameter_extractor.local_models import FLAG_TEXT, models_used
+        paper_flags.append(Flag("local_model", FLAG_TEXT.format(models=", ".join(models_used(config)) or "?")))
     paper_flags += stage_flags
     paper_flags += [Flag("assumed_default", m) for m in ex.ambient_notes]
     paper_flags += _identity_flags(ex.chemistry, ex.parsed.pages_for_lookup)

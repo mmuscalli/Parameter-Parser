@@ -65,6 +65,19 @@ def run_checks(pdf: Optional[Path] = None, api_key: Optional[str] = None) -> Lis
         return f"{len(pack.template_columns)} example columns, {len(specs)} example stage(s), guide included"
     checks.append(_run("Template for new research areas", template))
 
+    def local_model_support() -> str:
+        """Local model servers (local_models.py): settings round trip and the request format, no network."""
+        import json
+        from parameter_extractor import local_models
+        from parameter_extractor.schemas.structure_plan import StructurePlan
+        s = local_models.LocalSettings.from_dict({"models": {"m": {"context": 65536, "vision": True}},
+                                                  "profiles": {"P": {"*": "m"}}})
+        assert s.model("m").context == 65536 and local_models.model_for(s.to_dict(), "P", "chemistry") == "m"
+        schema = local_models.answer_schema(StructurePlan)
+        json.dumps(schema)
+        return f"Ollama and OpenAI-compatible servers; schema of {len(json.dumps(schema)) // 1000}K characters"
+    checks.append(_run("Local model support", local_model_support))
+
     def pdf_libs() -> str:
         import pdfplumber, pypdfium2
         return f"pdfplumber {pdfplumber.__version__}, pypdfium2 {pypdfium2.version.PYPDFIUM_INFO}"
