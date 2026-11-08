@@ -41,6 +41,11 @@ def test_copy_rounding_and_columns_to_every_panel():
     w.suggestion_label.setText("Suggestions applied")
     assert w.suggestion_label.isVisibleTo(w)
     assert ROUND_CHOICES[1][0] == "whole numbers"
+    # a point with only an upper error bar (a bar's whisker) -- selecting its series broke the points table
+    fig.series[0].points[0] = fig.series[0].points[0].model_copy(update={"err_hi_py": 20.0})
+    w.series_list.setCurrentRow(-1)
+    w.series_list.setCurrentRow(0)
+    assert w.points_table.item(0, 1).text() == "6.6 (+1.4)"
 
 
 if __name__ == "__main__":

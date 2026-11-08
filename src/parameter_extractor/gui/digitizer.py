@@ -1469,7 +1469,8 @@ class DigitizerWidget(QWidget):
                                                              else f"{xy[0]:.4g}" if xy else "—"))
             text = f"{xy[1]:.4g}" if xy else "—"
             if xy and (p.err_hi_py is not None or p.err_lo_py is not None):     # the error bar, as read
-                ends = [read_values(panel, p.px, e) for e in (p.err_hi_py, p.err_lo_py)]
+                ends = [read_values(panel, p.px, e) if e is not None else None      # a bar: often the top only
+                        for e in (p.err_hi_py, p.err_lo_py)]
                 plus = f"+{ends[0][1] - xy[1]:.3g}" if ends[0] else ""
                 minus = f"−{xy[1] - ends[1][1]:.3g}" if ends[1] else ""
                 text += f" ({'/'.join(x for x in (plus, minus) if x)})"
