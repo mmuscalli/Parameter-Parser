@@ -183,13 +183,18 @@ def is_vocab_column(name: str, pack=None) -> bool:
     return setting is not None and setting.unit == unit
 
 
-def prompt_listing(vocab: Vocabulary) -> str:
+def prompt_listing(vocab: Vocabulary, families: Optional[List[str]] = None) -> str:
     """The vocabulary as the model reads it, compact (names and units; the app matches other wordings through
-    each setting's aliases, so descriptions stay in the file): settings per family, then the techniques."""
+    each setting's aliases, so descriptions stay in the file): settings per family, then the techniques.
+    `families`: only those (and 'general'), for a run narrowed to some instrument families (scopes.py)."""
+    keep = None if not families else set(families) | {"general"}
     lines = ["VOCABULARY. Settings by instrument family ([unit] for numbers; [n] whole number; others text):"]
     for fid, (label, settings) in vocab.families.items():
+        if keep is not None and fid not in keep:
+            continue
         names = ", ".join(s.name + (f" [{s.unit}]" if s.unit else " [n]" if s.integer else "") for s in settings)
         lines.append(f"- {fid}: {names}")
     lines.append("Techniques (families; general applies to all):")
-    lines.append("; ".join(f"{t.name} ({', '.join(t.families) or '-'})" for t in vocab.techniques))
+    lines.append("; ".join(f"{t.name} ({', '.join(t.families) or '-'})" for t in vocab.techniques
+                           if keep is None or set(t.families) & keep - {"general"}))
     return "\n".join(lines)

@@ -466,8 +466,10 @@ class MainWindow(QMainWindow):
             self.run_btn.setText(f"Search {n} paper{'s' if n != 1 else ''}" if n else "Search")
         else:
             off = self.params.stages_off()
+            narrowed = self.params.scope_summary()
             self.mode_label.setText("Full extraction" + (f" of {n} papers (one after another)" if n > 1 else "")
-                                    + (f" -- without {', '.join(off)}" if off else ""))
+                                    + (f" -- without {', '.join(off)}" if off else "")
+                                    + (f" -- only {narrowed}" if narrowed else ""))
             self.run_btn.setText(f"Extract data from {n} papers" if n > 1 else "Extract data")
 
     def open_settings(self) -> None:
@@ -583,7 +585,7 @@ class MainWindow(QMainWindow):
         saved_pack = self._settings.value("pack", "prebiotic_chemistry")
         index = self.pack_combo.findData(saved_pack)
         self.pack_combo.setCurrentIndex(index if index >= 0 else self.pack_combo.findData("prebiotic_chemistry"))
-        self.params.load(self.pack_combo.currentData())           # no change signal if index 0 was kept
+        self.params.load(self.pack_combo.currentData(), self.registry_path)           # no change signal if index 0 was kept
         self.equations_box.setChecked(self._settings.value("equations_to_latex", False, type=bool))
         index = self.profile_combo.findData(self._settings.value("model_profile", "standard"))
         self.profile_combo.setCurrentIndex(max(index, 0))
@@ -623,7 +625,7 @@ class MainWindow(QMainWindow):
         pack_id = self.pack_combo.currentData()
         if pack_id:
             packs.activate(pack_id)
-            self.params.load(pack_id)
+            self.params.load(pack_id, self.registry_path)
             self._load_plan_box()
 
     def _load_plan_box(self) -> None:
@@ -755,7 +757,7 @@ class MainWindow(QMainWindow):
                          equations_to_latex=self.equations_box.isChecked(),
                          pack=self.pack_combo.currentData() or "prebiotic_chemistry",
                          online_checks=self.pubchem_box.isChecked(),
-                         optional_stages=self.optional_stage_choices(),
+                         optional_stages=self.optional_stage_choices(), scopes=self.params.scopes(),
                          model_profile=self.profile_combo.currentData() or "standard",
                          batch_mode=self.batch_box.isChecked(),
                          prefer_arxiv=self.arxiv_box.isChecked(), ads_token=self.ads_edit.text().strip(),
@@ -1273,6 +1275,7 @@ class MainWindow(QMainWindow):
         fit_flags = [f for f in result.paper_flags if f.kind in ("fit_model", "multimodal", "other_estimates")]
         identity_flags = [f for f in result.paper_flags if f.kind == "identity_not_quoted"]
         source_flags = [f for f in result.paper_flags if f.kind == "paper_source"]
+        scope_flags = [f for f in result.paper_flags if f.kind == "scope"]
         vote_flags = [f for f in result.paper_flags if f.kind == "pass_disagreement"]
         auto_fig_flags = [f for f in result.paper_flags if f.kind == "auto_digitized"]
         analysis_flags = [f for f in result.paper_flags if f.kind == "analysis"]
@@ -1281,7 +1284,9 @@ class MainWindow(QMainWindow):
                                                "archive_check", "archive_match", "fit_model",
                                                "multimodal", "other_estimates", "identity_not_quoted",
                                                "paper_source", "pass_disagreement", "auto_digitized",
-                                               "analysis")]
+                                               "analysis", "scope")]
+        if scope_flags:
+            add_group("Scope of this run (compounds / instrument families)", scope_flags)
         if source_flags:
             add_group("Where the text came from", source_flags)
         if cited_flags:

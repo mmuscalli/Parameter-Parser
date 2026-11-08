@@ -198,7 +198,7 @@ Return a ChemistryExtraction object.
 STRUCTURE PLAN:
 
 {{STRUCTURE_PLAN_JSON}}
-
+{{COMPOUND_SCOPE}}
 ---
 CONTROLLED VOCABULARY (existing tracked species names):
 

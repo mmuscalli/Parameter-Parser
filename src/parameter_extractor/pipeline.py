@@ -308,7 +308,7 @@ def read_paper(
     pdf_path, ctx = _start(Path(run_name(item)), config, 0, on_progress, cancel_event)
     pack = packs.current()
     # parse, structure, metadata and assembly, plus the pack's built-in stages and the term search
-    ctx.total_steps = 4 + pack.uses("methodology") + pack.uses("chemistry") + bool(terms)
+    ctx.total_steps = 4 + pack.uses("methodology") + _chemistry_on(pack, config) + bool(terms)
     # stages that always run are counted now (the progress bar doesn't jump); triggered ones once known
     always_on = {name for name, spec in load_specs().items()
                  if spec.trigger.always and config.optional_stages.get(name, "auto") != "off"}
@@ -501,7 +501,7 @@ def extract_steps(ex: "Extraction") -> "Extraction":
         skip = kind != "experimental" and not ex.structure.experiment_sets
         if skip:
             ex.skipped_kind = kind
-            ctx.total_steps -= pack.uses("methodology") + pack.uses("chemistry") + len(always_on)
+            ctx.total_steps -= pack.uses("methodology") + _chemistry_on(pack, config) + len(always_on)
             ctx.note("skipped", f"The paper is a {kind}, with no experiments of its own: extraction steps skipped")
 
         # everything else depends only on the structure: run it all at once
@@ -511,7 +511,7 @@ def extract_steps(ex: "Extraction") -> "Extraction":
         passes = 1 if config.handoff_dir else max(1, min(MAX_PASSES, config.passes or 1))
         if passes > 1:
             ctx.note("passes", f"{passes} passes of each extraction step, values kept by vote")
-        if pack.uses("chemistry") and not skip:
+        if _chemistry_on(pack, config) and not skip:
             running["chemistry"] = pool.submit(
                 _voted, ctx, "chemistry", passes, run_chemistry_extraction,
                 (ctx, text, ex.structure, vocab["species_names"]), {"table_images": table_images, **({"grids": ex.grids} if ex.grids else {})},
@@ -638,6 +638,12 @@ def _paper_wide_methodology(ex: "Extraction"):
     return view
 
 
+def _chemistry_on(pack, config: RunConfig) -> bool:
+    """The chemistry step runs: the pack has it and it isn't switched off (every compound unticked in the
+    Parameters panel, 2026-11-08)."""
+    return pack.uses("chemistry") and config.optional_stages.get("chemistry", "auto") != "off"
+
+
 def _step_instructions(pack, config: RunConfig, tools: dict, vocab: dict) -> dict:
     """Every paper-reading step's static instructions (its prompt, with the structure plan's place marked), sent
     in the cached system prompt BEFORE the paper (2026-11-07): identical for every paper of a pack and settings, so
@@ -656,9 +662,10 @@ def _step_instructions(pack, config: RunConfig, tools: dict, vocab: dict) -> dic
         if stage == "structure_planner":
             out[stage] = planner_stage.prompt_text(PAPER_ABOVE)
         elif stage == "chemistry":
-            out[stage] = chemistry_extractor.prompt_text(PAPER_ABOVE, PLAN_MARK, vocab["species_names"])
+            out[stage] = chemistry_extractor.prompt_text(PAPER_ABOVE, PLAN_MARK, vocab["species_names"],
+                                                         config.scopes.get("chemistry"))
         elif stage == "analysis":
-            out[stage] = analysis_stage.prompt_text(PAPER_ABOVE, PLAN_MARK)
+            out[stage] = analysis_stage.prompt_text(PAPER_ABOVE, PLAN_MARK, config.scopes.get("analysis"))
         elif stage == "fit_models":
             out[stage] = fit_stage.prompt_text(PAPER_ABOVE, PLAN_MARK)
         elif stage in specs:
@@ -675,7 +682,7 @@ def _paper_tools(pack, config: RunConfig, terms, has_figures: bool = False) -> d
     tools = {"structure_planner": StructurePlan}
     if pack.uses("methodology"):
         tools["methodology"] = Methodology
-    if pack.uses("chemistry"):
+    if _chemistry_on(pack, config):
         tools["chemistry"] = ChemistryExtraction
     if terms:
         tools["term_search"] = TermSearch
@@ -1061,6 +1068,12 @@ def finish(
                      if pack.uses("normalize_species") else [])
     if pubchem:
         pubchem.save()
+    from parameter_extractor.scopes import filter_compounds
+    left_out = filter_compounds(ex.chemistry, ex.ctx.config.scopes.get("chemistry"))
+    scope_flags = [Flag("scope", f"This run extracted only the {len(ex.ctx.config.scopes['chemistry'])} compounds "
+                                 f"chosen in the Parameters panel; {len(left_out)} other species returned were left "
+                                 f"out: {', '.join(left_out[:15])}" + (" ..." if len(left_out) > 15 else ""))] \
+        if left_out else []
     set_labels = [s.set_label for s in ex.structure.experiment_sets]
     # stock -> mixture concentrations, then molar ratios -> missing concentrations; marked derived
     mixing = []
@@ -1180,8 +1193,15 @@ def finish(
                                      optional=ex.optional_list, structure=ex.structure)
     new_vars += fig_new_vars
     paper_flags += [Flag("value_not_read", m) for m in ex.grid_problems]      # mapped table cells not read
+    paper_flags += scope_flags
     if pack.uses("analysis") and ex.analysis is not None:     # instrument settings -> analysis_* columns
+        from parameter_extractor.analysis_vocab import vocabulary as analysis_vocabulary
         from parameter_extractor.calculators.analysis_columns import apply_analysis
+        from parameter_extractor.scopes import filter_analysis
+        outside = filter_analysis(ex.analysis, config.scopes.get("analysis"), analysis_vocabulary())
+        if outside:
+            paper_flags.append(Flag("scope", f"This run recorded only the instrument families chosen in the "
+                                             f"Parameters panel; left out: {', '.join(outside)}."))
         analysis_vars, analysis_flags = apply_analysis(rows, ex.analysis, registry,
                                                        lambda s, smp: _rows_for(s, smp, index))
         new_vars += analysis_vars

@@ -35,6 +35,7 @@ standard or isolate a product) unless the same run also measured the experiments
 - Compound numbers ('nicotinamide 6') and citation numbers ('ammonia.14') are never values.
 {{PACK_RULES}}
 {{ANALYSIS_VOCABULARY}}
+{{ANALYSIS_SCOPE}}
 
 Return an AnalysisResult; `methods` [] when the paper describes no analysis.
 

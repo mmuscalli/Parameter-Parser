@@ -16,17 +16,20 @@ def chemistry_budget(structure: StructurePlan) -> int:
     return 10000 + 900 * rows
 
 
-def prompt_text(paper_text: str, plan_json: str, controlled_vocab: list) -> str:
-    """The step's prompt (also the static instructions cached for every paper of a run: api_client)."""
+def prompt_text(paper_text: str, plan_json: str, controlled_vocab: list, scope: Optional[list] = None) -> str:
+    """The step's prompt (also the static instructions cached for every paper of a run: api_client). `scope`: only
+    these compounds (scopes.py; the vocabulary shown is then just them)."""
+    from parameter_extractor.scopes import compound_rule
     return load_prompt("chemistry", PAPER_TEXT=paper_text, STRUCTURE_PLAN_JSON=plan_json,
-                       CONTROLLED_VOCAB_JSON=json.dumps(controlled_vocab))
+                       CONTROLLED_VOCAB_JSON=json.dumps(scope or controlled_vocab), COMPOUND_SCOPE=compound_rule(scope))
 
 
 def run_chemistry_extraction(
     ctx: RunContext, paper_text: str, structure_plan: StructurePlan,
     controlled_vocab: list[str], table_images: Optional[List[Path]] = None, grids: Optional[list] = None,
 ) -> ChemistryExtraction:
-    prompt = prompt_text(paper_text, structure_plan.model_dump_json(indent=2), controlled_vocab)
+    prompt = prompt_text(paper_text, structure_plan.model_dump_json(indent=2), controlled_vocab,
+                         ctx.config.scopes.get("chemistry"))
     result = call_structured(
         ctx,
         stage="chemistry",

@@ -8,6 +8,10 @@ What the ticks mean:
   research area remembers them, QSettings stages/<pack>/<stage>);
 - single parameters unticked inside a stage -- a FOCUSED SEARCH for the ticked parameters only (focused_search.py:
   one small call per paper, only the passages that matter).
+
+Steps whose columns are built from a vocabulary (scopes.py: the chemistry step's compounds, the analysis step's
+instrument families) are groups of their vocabulary's items: unticking some NARROWS that step in a full extraction
+(RunConfig.scopes) -- it isn't a focused search; unticking all switches the step off.
 """
 from __future__ import annotations
 from typing import Dict, List, Optional
@@ -27,6 +31,7 @@ class ParameterPanel(QWidget):
         self._settings = QSettings()
         self.pack_id: Optional[str] = None
         self.groups: Dict[str, QTreeWidgetItem] = {}
+        self.scope_groups: Dict[str, QTreeWidgetItem] = {}
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
         top = QHBoxLayout()
@@ -48,9 +53,10 @@ class ParameterPanel(QWidget):
         self._filling = False
 
     # ---- filling ---------------------------------------------------------------------------------
-    def load(self, pack_id: str) -> None:
-        """The area's stages and their parameters; stages ticked as the area last had them."""
-        from parameter_extractor import packs
+    def load(self, pack_id: str, registry_path=None) -> None:
+        """The area's stages and their parameters, and its constructed-parameter groups (compounds, instrument
+        families); stages ticked as the area last had them."""
+        from parameter_extractor import packs, scopes
         from parameter_extractor.focused_search import available_parameters
         from parameter_extractor.stages.optional import toggleable_stages
         self.pack_id = pack_id
@@ -58,8 +64,22 @@ class ParameterPanel(QWidget):
         self._filling = True
         self.tree.clear()
         self.groups: Dict[str, QTreeWidgetItem] = {}
+        self.scope_groups: Dict[str, QTreeWidgetItem] = {}
         params = available_parameters(pack, {}) if pack else []
+        registry = None
+        if pack is not None:
+            try:
+                from parameter_extractor.registry import VariableRegistry
+                registry = VariableRegistry(registry_path, pack=pack) if registry_path else None
+            except Exception:                    # a damaged registry file: the bundled compounds only
+                registry = None
+        built = {g.step: g for g in (scopes.groups(pack, registry) if pack else [])}
+        if "chemistry" in built:                 # the core step first
+            self._add_scope_group(built.pop("chemistry"), pack_id)
         for t in (toggleable_stages(pack) if pack else []):
+            if t.name in built:                  # a vocabulary-built step: its items, not parameters
+                self._add_scope_group(built.pop(t.name), pack_id, t.label, t.conditional)
+                continue
             label = t.label + (" (when the paper calls for it)" if t.conditional else "")
             group = QTreeWidgetItem([label, t.description])
             group.setData(0, STAGE_ROLE, t.name)
@@ -81,15 +101,56 @@ class ParameterPanel(QWidget):
                 item.setToolTip(1, p.description)
                 group.addChild(item)
             self.groups[t.name] = group
-        always = [s for s in ("structure_planner", "chemistry") if s == "structure_planner" or (pack and pack.uses(s))]
-        names = {"structure_planner": "planning the rows", "chemistry": "solution chemistry (compounds)"}
-        self.always_label.setText("Always part of a full extraction: " + ", ".join(names[s] for s in always)
-                                  + ". Untick single parameters to search only for those (a focused search).")
+        self.always_label.setText("Always part of a full extraction: planning the rows. Untick single parameters to "
+                                  "search only for those (a focused search); untick compounds or instrument "
+                                  "families to narrow those steps.")
         self.tree.resizeColumnToContents(0)
         self.tree.setColumnWidth(0, min(self.tree.columnWidth(0), 300))
         self._filling = False
         self._filter(self.filter_edit.text())
         self.changed.emit()
+
+    def _add_scope_group(self, group_def, pack_id: str, label: str = "", conditional: bool = False) -> None:
+        """A vocabulary-built step: one child per vocabulary item (scopes.ScopeGroup)."""
+        title = (label or group_def.label) + (" (when the paper calls for it)" if conditional else "")
+        group = QTreeWidgetItem([title, group_def.description])
+        group.setData(0, STAGE_ROLE, group_def.step)
+        group.setToolTip(0, group_def.description)
+        group.setToolTip(1, group_def.description)
+        group.setFlags((group.flags() | Qt.ItemFlag.ItemIsUserCheckable | Qt.ItemFlag.ItemIsAutoTristate)
+                       & ~Qt.ItemFlag.ItemIsSelectable)
+        on = self._settings.value(f"stages/{pack_id}/{group_def.step}", True, type=bool)
+        group.setCheckState(0, Qt.CheckState.Checked if on else Qt.CheckState.Unchecked)
+        self.tree.addTopLevelItem(group)
+        for it in group_def.items:
+            item = QTreeWidgetItem([it.label, it.detail])
+            item.setFlags(item.flags() | Qt.ItemFlag.ItemIsUserCheckable)
+            item.setCheckState(0, Qt.CheckState.Checked if on else Qt.CheckState.Unchecked)
+            item.setData(0, STAGE_ROLE, it.key)
+            item.setToolTip(0, it.tip)
+            item.setToolTip(1, it.tip)
+            group.addChild(item)
+        self.groups[group_def.step] = group
+        self.scope_groups[group_def.step] = group
+
+    def scopes(self) -> dict:
+        """RunConfig.scopes: the ticked items of each vocabulary-built step that's only partly ticked."""
+        out = {}
+        for step, g in self.scope_groups.items():
+            if g.checkState(0) == Qt.CheckState.PartiallyChecked:
+                out[step] = [g.child(j).data(0, STAGE_ROLE) for j in range(g.childCount())
+                             if g.child(j).checkState(0) == Qt.CheckState.Checked]
+        return out
+
+    def scope_summary(self) -> str:
+        """'compounds: 5 of 129; analysis: NMR, Mass spectrometry' for the mode line ('' when nothing is narrowed)."""
+        parts = []
+        for step, keys in self.scopes().items():
+            g = self.scope_groups[step]
+            labels = [g.child(j).text(0) for j in range(g.childCount()) if g.child(j).data(0, STAGE_ROLE) in keys]
+            name = "compounds" if step == "chemistry" else g.text(0).split(" (")[0].lower()
+            parts.append(f"{name}: " + (", ".join(labels) if len(labels) <= 3 else f"{len(labels)} of {g.childCount()}"))
+        return "; ".join(parts)
 
     # ---- state -----------------------------------------------------------------------------------
     def _item_changed(self, item: QTreeWidgetItem, column: int) -> None:
@@ -123,11 +184,14 @@ class ParameterPanel(QWidget):
     @property
     def focused(self) -> bool:
         """Single parameters unticked inside a stage: a focused search, not a full extraction."""
-        return any(g.checkState(0) == Qt.CheckState.PartiallyChecked for g in self.groups.values())
+        return any(g.checkState(0) == Qt.CheckState.PartiallyChecked for name, g in self.groups.items()
+                   if name not in self.scope_groups)
 
     def checked_columns(self) -> List[str]:
         out = []
-        for g in self.groups.values():
+        for name, g in self.groups.items():
+            if name in self.scope_groups:         # compounds / families aren't searchable parameters
+                continue
             for j in range(g.childCount()):
                 if g.child(j).checkState(0) == Qt.CheckState.Checked:
                     out.append(g.child(j).data(0, STAGE_ROLE))

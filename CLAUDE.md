@@ -2266,3 +2266,22 @@ queue. `_start_run` dispatches: one paper -> the usual run + figure review; `gui
 menu (Settings… with PreferencesRole, results folder, open folder, Online lookups mirroring `pubchem_box`); File has
 Add PDFs / Add list. "Parameters to look for" left the window (`focus_terms()` returns []; CLI --look-for stays).
 `main_split` position now saved as main_split_v2 (the old one-paper layout's would squeeze the panes).
+
+## Constructed parameters in the Parameters panel (2026-11-08, Mickey)
+
+Steps whose columns are BUILT from a vocabulary get a group of that vocabulary's items in the main window's Parameters
+panel, in one standard shape meant for future (incl. user-defined) vocabularies: `scopes.py` ScopeGroup(step, label,
+description, items=[ScopeItem(key, label, tip, detail)]); `scopes.groups(pack, registry)`.
+- "Chemical compounds" (step chemistry, listed first): the pack's species_names + compounds remembered in reviews,
+  shown by ACTIVE name (compound_names), key = default name. "Analysis methods": the analysis vocabulary's instrument
+  families (not "general"), hover/detail = their techniques.
+- Some unticked -> `RunConfig.scopes {step: [keys]}` (missing = everything): NOT a focused search (`focused`,
+  `checked_columns` ignore scope groups). Prompt slots `{{COMPOUND_SCOPE}}` (chemistry.md; the controlled vocabulary
+  sent is the scope) and `{{ANALYSIS_SCOPE}}` (analysis.md; `prompt_listing(vocab, families)` lists only those
+  families + general); the app also drops anything outside the scope (`filter_compounds` after normalize, by
+  canonical name -- a peptide is its own compound, 'Gly' doesn't include 'Gly-Gly'; `filter_analysis`, unknown
+  techniques dropped) with `scope` flags (GUI group "Scope of this run"). Added solutions / ratios involving the
+  chosen compounds are still asked for (stock -> mixture calculations).
+- All unticked -> optional_stages[step] 'off'; `pipeline._chemistry_on` now gates chemistry (step count, tools,
+  submit) like the spec stages. Mode line: "Full extraction -- only compounds: 5 of 129; analysis methods: NMR".
+- CLI: no flags yet (RunConfig.scopes works from code). tests/test_scopes.py (eder1994 replay with scope Gly).

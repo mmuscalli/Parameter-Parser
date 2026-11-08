@@ -46,6 +46,9 @@ class RunConfig:
     # Optional stages (the domain pack's stages/*.json) by name: "auto" (run when its trigger matches the
     # paper -- the default), "on" (always) or "off" (never)
     optional_stages: Dict[str, str] = field(default_factory=dict)
+    # narrowed constructed-parameter steps (scopes.py, 2026-11-08): {"chemistry": [compound default names],
+    # "analysis": [instrument family ids]}; a step missing = everything
+    scopes: Dict[str, List[str]] = field(default_factory=dict)
     pubchem_cache_path: Optional[Path] = None
     # Send the paper (text + table images) first, marked for caching, with the same tool list in
     # every paper-reading step (api_client): the structure planner writes the cache, the later steps
