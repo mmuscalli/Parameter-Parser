@@ -3,9 +3,9 @@
 #   dist/Parameter Extractor.app
 #   dist/ParameterExtractor-<version>-macOS-<arch>.dmg
 #
-# Run from anywhere, with the project's Python environment that has
-# `pip install -e ".[gui]"` and pyinstaller installed:
-#   PYTHON=../.venv/bin/python packaging/build_macos.sh
+# Run from anywhere: it uses the project's environment (../.venv, with
+# `pip install -e ".[gui,build]"`) by default; PYTHON=/path/to/python overrides.
+#   packaging/build_macos.sh
 #
 # The app is NOT signed for distribution or notarized: on other Macs, Gatekeeper will block
 # it until it is (needs an Apple Developer ID). See packaging/README.md. Locally it's signed
@@ -22,7 +22,22 @@ if [[ "${1:-}" == "--dev" ]]; then
 else
   unset PE_DEV_BUILD
 fi
-PY="${PYTHON:-python3}"
+# the project's environment (../.venv, where pyinstaller and the app's packages are installed) unless PYTHON says
+# otherwise; then an activated environment; then python3
+if [[ -n "${PYTHON:-}" ]]; then
+  PY="$PYTHON"
+elif [[ -x "../.venv/bin/python" ]]; then
+  PY="../.venv/bin/python"
+elif [[ -n "${VIRTUAL_ENV:-}" ]]; then
+  PY="$VIRTUAL_ENV/bin/python"
+else
+  PY="python3"
+fi
+if ! "$PY" -c "import PyInstaller" 2>/dev/null; then
+  echo "PyInstaller isn't installed for $PY. Install the build tools into the project's environment:" >&2
+  echo "  ../.venv/bin/pip install -e \".[gui,build]\"" >&2
+  exit 1
+fi
 VERSION="$("$PY" -c 'import sys; sys.path.insert(0, "src"); import parameter_extractor as p; print(p.__version__)')"
 ARCH="$(uname -m)"
 
