@@ -15,9 +15,10 @@ The Data Packs menu's windows (Mickey, 2026-11-05: research areas made and edite
 """
 from __future__ import annotations
 import copy
+import json
 import re
 from pathlib import Path
-from typing import Optional
+from typing import List, Optional, Tuple
 
 from PySide6.QtCore import Qt, QUrl, Signal
 from PySide6.QtGui import QBrush, QColor, QDesktopServices
@@ -211,11 +212,15 @@ class PackEditor(QDialog):
         self.tabs = QTabWidget()
         self.tabs.addTab(self._general_tab(), "General")
         self.tabs.addTab(self._columns_tab(), "Columns")
+        self.tabs.addTab(self._compounds_tab(), "Compounds")
+        self.tabs.addTab(self._analysis_tab(), "Analysis methods")
         self.tabs.addTab(self._stages_tab(), "Stages")
         self.tabs.addTab(self._rules_tab(), "Rules")
         self.tabs.addTab(self._formulas_tab(), "Formulas")
         self.tabs.addTab(self._check_tab(), "Check")
         self.tabs.currentChanged.connect(lambda _i: self._fit_rows())
+        for name, tab in (("chemistry", "Compounds"), ("analysis", "Analysis methods")):
+            self._follow_step(name, tab)
         self.tabs.currentChanged.connect(lambda i: self._refresh_formula_columns()
                                          if self.tabs.tabText(i) == "Formulas" else None)
         layout.addWidget(self.tabs, 1)
@@ -225,6 +230,12 @@ class PackEditor(QDialog):
         bottom.addWidget(where, 1)
         bottom.addWidget(QPushButton("Open folder", clicked=lambda: QDesktopServices.openUrl(
             QUrl.fromLocalFile(str(self.draft.folder)))))
+        if self.registry_path:
+            remembered = QPushButton("Remembered from your reviews…", clicked=self._open_remembered)
+            remembered.setToolTip("What you've taught the app for this research area while reviewing papers (accepted "
+                                  "columns, synonyms, compound names, changes to this pack's columns). Kept apart "
+                                  "from the pack, so it applies on top of it.")
+            bottom.addWidget(remembered)
         bottom.addWidget(QPushButton("Close", clicked=self.reject))
         self.save_btn = QPushButton("Save", clicked=self.save, default=True)
         self.save_btn.setEnabled(not self.read_only)
@@ -431,6 +442,10 @@ class PackEditor(QDialog):
             from PySide6.QtCore import QTimer
             QTimer.singleShot(0, lambda: self._fill_calculations(self._chosen_calculations()))
 
+    def _open_remembered(self) -> None:
+        from parameter_extractor.gui.registry_dialog import RegistryDialog
+        RegistryDialog(self.registry_path, parent=self, area=self.draft.manifest.get("id")).exec()
+
     def _open_categories(self) -> None:
         from parameter_extractor.gui.categories_dialog import CategoriesDialog
         if self.draft.manifest.get("id") not in packs.available():
@@ -463,15 +478,421 @@ class PackEditor(QDialog):
         side.addStretch(1)
         row.addLayout(side)
         v.addLayout(row, 1)
-        self.species_box = QGroupBox("Compound vocabulary (for the chemistry step): one name per line")
-        sv = QVBoxLayout(self.species_box)
-        self.species_edit = QPlainTextEdit("\n".join(self.draft.species))
-        sv.addWidget(self.species_edit)
-        self.species_box.setVisible("chemistry" in self.draft.manifest.get("builtin_stages", []))
-        self.builtin_boxes["chemistry"].toggled.connect(self.species_box.setVisible)
-        v.addWidget(self.species_box)
         self._update_column_tips()
         return w
+
+    # ---- tabs that follow a built-in step ------------------------------------------------------
+
+    def tab(self, name: str) -> QWidget:
+        """A tab by its title (tests and code use names: the tabs' positions change)."""
+        return self.tabs.widget(self.tab_index(name))
+
+    def tab_index(self, name: str) -> int:
+        return next(i for i in range(self.tabs.count()) if self.tabs.tabText(i) == name)
+
+    def _follow_step(self, step: str, tab: str) -> None:
+        """A tab only a built-in step uses is enabled when the step is ticked (General tab)."""
+        box = self.builtin_boxes.get(step)
+        i = self.tab_index(tab)
+        update = lambda on: (self.tabs.setTabEnabled(i, on),
+                             self.tabs.setTabToolTip(i, "" if on else f"Used by the built-in '{step}' step: tick it "
+                                                                      f"on the General tab."))
+        update(bool(box and box.isChecked()))
+        if box:
+            box.toggled.connect(update)
+
+    # ---- Compounds (the chemistry step's compound vocabulary) ------------------------------------
+
+    C_NAME, C_CID, C_TITLE, C_SYN = range(4)
+
+    def _compounds_tab(self) -> QWidget:
+        w = QWidget()
+        v = QVBoxLayout(w)
+        v.addWidget(_titled("Compound vocabulary", "The compounds this research area knows: the chemistry step "
+                            "asks the model to use these names, and their columns (<role>_<name>_<phase>_<measure>) "
+                            "are known without a review. A PubChem CID identifies the compound, so the paper's other "
+                            "names for it (from PubChem) are matched to it. New compounds found in papers are "
+                            "reviewed; the ones you accept are remembered for you (Remembered from reviews), not "
+                            "added here."))
+        filt = QLineEdit(placeholderText="Filter compounds", clearButtonEnabled=True)
+        v.addWidget(filt)
+        self.compound_table = QTableWidget(0, 4)
+        self.compound_table.setHorizontalHeaderLabels(["Name (as used in columns)", "PubChem CID", "PubChem title",
+                                                       "PubChem synonyms"])
+        self.compound_table.verticalHeader().setVisible(False)
+        head = self.compound_table.horizontalHeader()
+        head.setSectionResizeMode(self.C_NAME, QHeaderView.ResizeMode.ResizeToContents)
+        head.setSectionResizeMode(self.C_CID, QHeaderView.ResizeMode.ResizeToContents)
+        head.setSectionResizeMode(self.C_TITLE, QHeaderView.ResizeMode.Interactive)
+        head.setSectionResizeMode(self.C_SYN, QHeaderView.ResizeMode.Stretch)
+        self.compound_table.setColumnWidth(self.C_TITLE, 260)
+        style_rows(self.compound_table)
+        for c in self.draft.compounds:
+            self._add_compound_row(c)
+        filt.textChanged.connect(lambda t: [self.compound_table.setRowHidden(
+            r, bool(t) and t.lower() not in self.compound_table.item(r, self.C_NAME).text().lower())
+            for r in range(self.compound_table.rowCount())])
+        v.addWidget(self.compound_table, 1)
+        row = QHBoxLayout()
+        row.addWidget(QPushButton("Add compound…", clicked=self._add_compound))
+        row.addWidget(QPushButton("Remove", clicked=lambda: [self.compound_table.removeRow(r) for r in sorted(
+            {i.row() for i in self.compound_table.selectedIndexes()}, reverse=True)]))
+        self.lookup_btn = QPushButton("Look up missing CIDs on PubChem", clicked=self._lookup_cids)
+        self.lookup_btn.setToolTip("Asks PubChem for each compound without a CID (needs the internet). Check the "
+                                   "titles it finds: a first hit can be the wrong compound.")
+        row.addWidget(self.lookup_btn)
+        row.addStretch(1)
+        self.compound_count = _hint("")
+        row.addWidget(self.compound_count)
+        v.addLayout(row)
+        self._count_compounds()
+        return w
+
+    def _add_compound_row(self, c: dict) -> None:
+        t = self.compound_table
+        r = t.rowCount()
+        t.insertRow(r)
+        t.setItem(r, self.C_NAME, QTableWidgetItem(c.get("name", "")))
+        t.setItem(r, self.C_CID, QTableWidgetItem(str(c.get("cid") or "")))
+        for col, text in ((self.C_TITLE, c.get("title", "")), (self.C_SYN, ", ".join(c.get("synonyms", [])[:12]))):
+            item = QTableWidgetItem(text)
+            item.setFlags(item.flags() & ~Qt.ItemFlag.ItemIsEditable)
+            item.setToolTip(", ".join(c.get("synonyms", [])) if col == self.C_SYN else text)
+            t.setItem(r, col, item)
+
+    def _add_compound(self) -> None:
+        name, ok = QInputDialog.getText(self, "Add a compound", "Name as it should appear in column names "
+                                                              "(e.g. Gly-Gly, NaCl, ImpA):")
+        if ok and name.strip():
+            self._add_compound_row({"name": name.strip()})
+            self.compound_table.scrollToBottom()
+            self._count_compounds()
+
+    def _compounds_from_table(self) -> List[dict]:
+        t, out = self.compound_table, []
+        for r in range(t.rowCount()):
+            name = t.item(r, self.C_NAME).text().strip() if t.item(r, self.C_NAME) else ""
+            cid = (t.item(r, self.C_CID).text() if t.item(r, self.C_CID) else "").strip()
+            if name:
+                out.append({"name": name, "cid": int(cid) if cid.isdigit() else 0})
+        return out
+
+    def _count_compounds(self) -> None:
+        rows = self._compounds_from_table()
+        self.compound_count.setText(f"{len(rows)} compounds, {sum(1 for r in rows if r['cid'])} with a PubChem CID")
+
+    def _lookup_cids(self) -> None:
+        from parameter_extractor.pubchem import PubChem
+        from parameter_extractor.registry import default_pubchem_cache_path
+        client, found, failed = PubChem(default_pubchem_cache_path()), 0, 0
+        t = self.compound_table
+        for r in range(t.rowCount()):
+            if t.item(r, self.C_CID).text().strip():
+                continue
+            try:
+                hit = client.lookup(t.item(r, self.C_NAME).text())
+            except Exception:
+                hit, failed = None, failed + 1
+            if hit:
+                t.item(r, self.C_CID).setText(str(hit.cid))
+                t.item(r, self.C_TITLE).setText(hit.title)
+                found += 1
+        try:
+            client.save()
+        except Exception:
+            pass
+        self._count_compounds()
+        QMessageBox.information(self, "PubChem", f"Found {found} CID(s)." + (
+            f" {failed} lookup(s) failed (no internet?)." if failed else "") + " Check the titles before saving.")
+
+    # ---- Analysis methods (the analysis step's vocabulary) ---------------------------------------
+
+    def _analysis_tab(self) -> QWidget:
+        from PySide6.QtWidgets import QStackedWidget
+        w = QWidget()
+        v = QVBoxLayout(w)
+        v.addWidget(_titled("Analytical techniques and their instrument settings", "What the analysis step records: "
+                            "each technique a paper used and its settings, in columns analysis_<technique>_<setting>"
+                            "[_<unit>] (e.g. analysis_RP-HPLC_flow-rate_mL_min). Settings are grouped in instrument "
+                            "families; a technique has the settings of its families plus the 'general' ones. "
+                            "Everything listed here is written to the dataset directly; other techniques and "
+                            "settings a paper reports are offered in the review. Aliases are other wordings papers "
+                            "use -- the app matches them, so the model's prompt only lists the names."))
+        self.analysis_stack = QStackedWidget()
+        empty = QWidget()
+        ev = QVBoxLayout(empty)
+        ev.addWidget(_hint("This research area has no analysis vocabulary yet."))
+        start = QHBoxLayout()
+        start.addWidget(QPushButton("Start from the prebiotic chemistry vocabulary",
+                                    clicked=lambda: self._start_vocab(True)))
+        start.addWidget(QPushButton("Start empty", clicked=lambda: self._start_vocab(False)))
+        start.addStretch(1)
+        ev.addLayout(start)
+        ev.addStretch(1)
+        self.analysis_stack.addWidget(empty)
+        self.analysis_stack.addWidget(self._analysis_editor())
+        v.addWidget(self.analysis_stack, 1)
+        self._fill_vocab()
+        return w
+
+    def _analysis_editor(self) -> QWidget:
+        w = QWidget()
+        v = QVBoxLayout(w)
+        v.setContentsMargins(0, 0, 0, 0)
+        split = QSplitter(Qt.Orientation.Vertical)
+        top = QSplitter(Qt.Orientation.Horizontal)
+        left = QWidget()
+        lv = QVBoxLayout(left)
+        lv.setContentsMargins(0, 0, 0, 0)
+        lv.addWidget(QLabel("<b>Instrument families</b>"))
+        self.family_list = QListWidget()
+        self.family_list.currentRowChanged.connect(self._show_family)
+        lv.addWidget(self.family_list, 1)
+        fam_btns = QHBoxLayout()
+        fam_btns.addWidget(QPushButton("Add family…", clicked=self._add_family))
+        fam_btns.addWidget(QPushButton("Remove", clicked=self._remove_family))
+        lv.addLayout(fam_btns)
+        top.addWidget(left)
+        right = QWidget()
+        rv = QVBoxLayout(right)
+        rv.setContentsMargins(0, 0, 0, 0)
+        self.family_title = QLabel("<b>Settings</b>")
+        rv.addWidget(self.family_title)
+        self.setting_table = QTableWidget(0, 4)
+        self.setting_table.setHorizontalHeaderLabels(["Setting (column part)", "Unit", "Description", "Aliases"])
+        self.setting_table.verticalHeader().setVisible(False)
+        head = self.setting_table.horizontalHeader()
+        head.setSectionResizeMode(0, QHeaderView.ResizeMode.Interactive)
+        head.setSectionResizeMode(1, QHeaderView.ResizeMode.ResizeToContents)
+        head.setSectionResizeMode(2, QHeaderView.ResizeMode.Stretch)
+        head.setSectionResizeMode(3, QHeaderView.ResizeMode.Stretch)
+        self.setting_table.setColumnWidth(0, 200)
+        style_rows(self.setting_table)
+        rv.addWidget(self.setting_table, 1)
+        set_btns = QHBoxLayout()
+        set_btns.addWidget(QPushButton("Add setting", clicked=lambda: self._add_setting_row({}, edit=True)))
+        set_btns.addWidget(QPushButton("Remove", clicked=lambda: self._remove_rows(self.setting_table)))
+        set_btns.addWidget(QPushButton("Up", clicked=lambda: self._move_setting(-1)))
+        set_btns.addWidget(QPushButton("Down", clicked=lambda: self._move_setting(1)))
+        set_btns.addStretch(1)
+        rv.addLayout(set_btns)
+        top.addWidget(right)
+        top.setStretchFactor(0, 1)
+        top.setStretchFactor(1, 3)
+        top.setSizes([380, 1000])
+        split.addWidget(top)
+        bottom = QWidget()
+        bv = QVBoxLayout(bottom)
+        bv.setContentsMargins(0, 0, 0, 0)
+        head_row = QHBoxLayout()
+        head_row.addWidget(_titled("Techniques", "One row per technique: its name (the column part, e.g. RP-HPLC), "
+                                   "its instrument families (comma-separated ids from the list above), what it is, "
+                                   "and other names papers use for it (comma-separated)."), 1)
+        self.tech_filter = QLineEdit(placeholderText="Filter techniques", clearButtonEnabled=True)
+        self.tech_filter.textChanged.connect(self._filter_techniques)
+        head_row.addWidget(self.tech_filter)
+        bv.addLayout(head_row)
+        self.tech_table = QTableWidget(0, 4)
+        self.tech_table.setHorizontalHeaderLabels(["Technique (column part)", "Families", "Description", "Aliases"])
+        self.tech_table.verticalHeader().setVisible(False)
+        th = self.tech_table.horizontalHeader()
+        th.setSectionResizeMode(0, QHeaderView.ResizeMode.Interactive)
+        th.setSectionResizeMode(1, QHeaderView.ResizeMode.Interactive)
+        th.setSectionResizeMode(2, QHeaderView.ResizeMode.Stretch)
+        th.setSectionResizeMode(3, QHeaderView.ResizeMode.Stretch)
+        self.tech_table.setColumnWidth(0, 170)
+        self.tech_table.setColumnWidth(1, 230)
+        style_rows(self.tech_table)
+        bv.addWidget(self.tech_table, 1)
+        tech_btns = QHBoxLayout()
+        tech_btns.addWidget(QPushButton("Add technique", clicked=lambda: self._add_technique_row({}, edit=True)))
+        tech_btns.addWidget(QPushButton("Remove", clicked=lambda: self._remove_rows(self.tech_table)))
+        tech_btns.addStretch(1)
+        self.vocab_count = _hint("")
+        tech_btns.addWidget(self.vocab_count)
+        bv.addLayout(tech_btns)
+        split.addWidget(bottom)
+        split.setStretchFactor(0, 3)
+        split.setStretchFactor(1, 2)
+        v.addWidget(split, 1)
+        self._family_shown = None
+        return w
+
+    # unit choices: text, whole number, then the units the app converts to
+    @staticmethod
+    def _unit_choices() -> List[Tuple[str, str]]:
+        from parameter_extractor.analysis_vocab import UNIT_TOKENS
+        return [("text", ""), ("whole number", "#")] + [(u, u) for u in UNIT_TOKENS]
+
+    def _start_vocab(self, from_prebiotic: bool) -> None:
+        if from_prebiotic:
+            src = packs.BUILTIN_DIR / "prebiotic_chemistry" / "analysis_vocab.json"
+            self.draft.analysis_vocab = json.loads(src.read_text())
+        else:
+            self.draft.analysis_vocab = {"families": {"general": {"label": "Any technique", "settings": [
+                {"name": "instrument", "unit": "", "description": "make and model of the instrument", "aliases": []},
+                {"name": "measured", "unit": "", "description": "what the technique was used for", "aliases": []}]}},
+                "techniques": []}
+        self._fill_vocab()
+
+    def _fill_vocab(self) -> None:
+        vocab = self.draft.analysis_vocab
+        self.analysis_stack.setCurrentIndex(0 if vocab is None else 1)
+        if vocab is None:
+            return
+        self._family_shown = None
+        self.family_list.blockSignals(True)
+        self.family_list.clear()
+        for fid, fam in vocab.get("families", {}).items():
+            item = QListWidgetItem(f"{fid}  --  {fam.get('label', '')}" if fam.get("label") else fid)
+            item.setData(Qt.ItemDataRole.UserRole, fid)
+            item.setToolTip(f"{fid}: {fam.get('label', '')} ({len(fam.get('settings', []))} settings)")
+            self.family_list.addItem(item)
+        self.family_list.blockSignals(False)
+        self.tech_table.setRowCount(0)
+        for t in vocab.get("techniques", []):
+            self._add_technique_row(t)
+        if self.family_list.count():
+            self.family_list.setCurrentRow(0)
+            self._show_family(0)
+        self._count_vocab()
+
+    def _count_vocab(self) -> None:
+        vocab = self.draft.analysis_vocab or {}
+        n = sum(len(f.get("settings", [])) for f in vocab.get("families", {}).values())
+        self.vocab_count.setText(f"{self.tech_table.rowCount()} techniques, {len(vocab.get('families', {}))} "
+                                 f"families, {n} settings")
+
+    def _add_setting_row(self, st: dict, edit: bool = False) -> None:
+        t = self.setting_table
+        r = t.rowCount()
+        t.insertRow(r)
+        t.setItem(r, 0, QTableWidgetItem(st.get("name", "")))
+        combo = QComboBox()
+        for label, data in self._unit_choices():
+            combo.addItem(label, data)
+        unit = "#" if st.get("integer") else st.get("unit", "")
+        i = combo.findData(unit)
+        if i < 0:                                  # a unit the app doesn't convert to: kept, shown as it is
+            combo.addItem(unit, unit)
+            i = combo.count() - 1
+        combo.setCurrentIndex(i)
+        t.setCellWidget(r, 1, in_cell(combo))
+        t.setItem(r, 2, QTableWidgetItem(st.get("description", "")))
+        t.setItem(r, 3, QTableWidgetItem(", ".join(st.get("aliases", []))))
+        if edit:
+            t.setCurrentCell(r, 0)
+            t.editItem(t.item(r, 0))
+
+    def _settings_from_table(self) -> List[dict]:
+        t, out = self.setting_table, []
+        for r in range(t.rowCount()):
+            name = t.item(r, 0).text().strip() if t.item(r, 0) else ""
+            if not name:
+                continue
+            unit = t.cellWidget(r, 1).findChild(QComboBox).currentData()
+            entry = {"name": name, "unit": "" if unit == "#" else unit,
+                     "description": t.item(r, 2).text().strip() if t.item(r, 2) else "",
+                     "aliases": _split(t.item(r, 3).text() if t.item(r, 3) else "")}
+            if unit == "#":
+                entry = {"name": name, "unit": "", "integer": True, **{k: entry[k] for k in ("description", "aliases")}}
+            out.append(entry)
+        return out
+
+    def _store_family(self) -> None:
+        if self.draft.analysis_vocab is None or self._family_shown is None:
+            return
+        fam = self.draft.analysis_vocab["families"].get(self._family_shown)
+        if fam is not None:
+            fam["settings"] = self._settings_from_table()
+
+    def _show_family(self, row: int) -> None:
+        self._store_family()
+        item = self.family_list.item(row) if row >= 0 else None
+        self._family_shown = item.data(Qt.ItemDataRole.UserRole) if item else None
+        self.setting_table.setRowCount(0)
+        if self._family_shown is None:
+            return
+        fam = self.draft.analysis_vocab["families"][self._family_shown]
+        self.family_title.setText(f"<b>Settings of {self._family_shown}</b>  ({fam.get('label', '')})")
+        for st in fam.get("settings", []):
+            self._add_setting_row(st)
+        self._count_vocab()
+
+    def _add_family(self) -> None:
+        fid, ok = QInputDialog.getText(self, "Add an instrument family", "Family id (lower case, e.g. "
+                                                                          "'circular_dichroism'):")
+        fid = (fid or "").strip().lower().replace(" ", "_")
+        if not ok or not fid:
+            return
+        if fid in self.draft.analysis_vocab["families"]:
+            QMessageBox.information(self, "Add family", f"There is already a family '{fid}'.")
+            return
+        label, _ = QInputDialog.getText(self, "Add an instrument family", "What it covers (shown next to the id):")
+        self._store_family()
+        self.draft.analysis_vocab["families"][fid] = {"label": label.strip(), "settings": []}
+        self._fill_vocab()
+        self.family_list.setCurrentRow(self.family_list.count() - 1)
+
+    def _remove_family(self) -> None:
+        item = self.family_list.currentItem()
+        if not item:
+            return
+        fid = item.data(Qt.ItemDataRole.UserRole)
+        users = [self.tech_table.item(r, 0).text() for r in range(self.tech_table.rowCount())
+                 if fid in _split(self.tech_table.item(r, 1).text() if self.tech_table.item(r, 1) else "")]
+        if users and QMessageBox.question(self, "Remove family", f"{len(users)} technique(s) use '{fid}' (e.g. "
+                                          f"{users[0]}). Remove it anyway?") != QMessageBox.StandardButton.Yes:
+            return
+        self.draft.analysis_vocab["techniques"] = self._techniques_from_table()
+        self.draft.analysis_vocab["families"].pop(fid, None)
+        self._family_shown = None
+        self._fill_vocab()
+
+    def _move_setting(self, step: int) -> None:
+        t = self.setting_table
+        r = t.currentRow()
+        if r < 0 or not 0 <= r + step < t.rowCount():
+            return
+        rows = self._settings_from_table()
+        rows[r], rows[r + step] = rows[r + step], rows[r]
+        t.setRowCount(0)
+        for st in rows:
+            self._add_setting_row(st)
+        t.setCurrentCell(r + step, 0)
+
+    @staticmethod
+    def _remove_rows(t: QTableWidget) -> None:
+        for r in sorted({i.row() for i in t.selectedIndexes()} | ({t.currentRow()} if t.currentRow() >= 0 else set()),
+                        reverse=True):
+            t.removeRow(r)
+
+    def _add_technique_row(self, tech: dict, edit: bool = False) -> None:
+        t = self.tech_table
+        r = t.rowCount()
+        t.insertRow(r)
+        for c, text in enumerate((tech.get("name", ""), ", ".join(tech.get("families", [])),
+                                  tech.get("description", ""), ", ".join(tech.get("aliases", [])))):
+            t.setItem(r, c, QTableWidgetItem(text))
+        if edit:
+            self.tech_filter.clear()
+            t.setCurrentCell(r, 0)
+            t.editItem(t.item(r, 0))
+
+    def _techniques_from_table(self) -> List[dict]:
+        t, out = self.tech_table, []
+        for r in range(t.rowCount()):
+            cell = lambda c: t.item(r, c).text().strip() if t.item(r, c) else ""
+            if cell(0):
+                out.append({"name": cell(0), "families": _split(cell(1)), "description": cell(2),
+                            "aliases": _split(cell(3))})
+        return out
+
+    def _filter_techniques(self, text: str) -> None:
+        text = text.lower()
+        for r in range(self.tech_table.rowCount()):
+            row_text = " ".join(self.tech_table.item(r, c).text() for c in range(4) if self.tech_table.item(r, c))
+            self.tech_table.setRowHidden(r, bool(text) and text not in row_text.lower())
 
     def _add_column_item(self, column: str) -> None:
         item = QListWidgetItem(column)
@@ -1187,7 +1608,10 @@ class PackEditor(QDialog):
         if not m["formulas"] and "_about_formulas" not in m:
             m.pop("formulas", None)
         self.draft.columns = [self.column_list.item(i).text() for i in range(self.column_list.count())]
-        self.draft.species = self.species_edit.toPlainText().splitlines()
+        self.draft.compounds = self._compounds_from_table()
+        self._store_family()
+        if self.draft.analysis_vocab is not None:
+            self.draft.analysis_vocab["techniques"] = self._techniques_from_table()
         self._store_stage()
         self._store_rules()
         self._update_column_tips()

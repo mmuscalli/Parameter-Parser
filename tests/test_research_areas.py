@@ -179,6 +179,15 @@ def test_remembered_variables_window():
                                                    "category": "analysis", "type": "text"}
         assert saved["builtin_columns"] == {PRE: {"replicates": {"category": "analysis", "type": "text"}},
                                             EXO: {"pl_orbper": {"category": "other"}}}
+        # one area at a time (opened from a research area's window): that area's groups and the Standard ones
+        dlg = RegistryDialog(path, area=EXO)
+        visible = lambda tree: [tree.topLevelItem(i).data(0, 0x0100)[1] for i in range(tree.topLevelItemCount())
+                                if not tree.topLevelItem(i).isHidden()]
+        assert dlg.area_combo.currentData() == EXO and visible(dlg.builtin_tree) == [STANDARD, EXO]
+        dlg.area_combo.setCurrentIndex(0)                                    # all research areas
+        assert visible(dlg.builtin_tree) == [STANDARD, EXO, PRE]
+        assert [dlg.tabs.tabText(i) for i in range(dlg.tabs.count())] == [
+            "Accepted columns", "Synonyms", "Compound names", "Changes to pack columns"]
         dlg = RegistryDialog(path)
         dlg._reset_all_builtin()
         dlg._save()

@@ -139,11 +139,11 @@ def test_windows():
         editor.optimization_btn.setChecked(True)
         assert editor.optimization_box.isVisibleTo(editor) and editor.focused_box.isVisibleTo(editor)
         assert not editor.advanced_box.isVisibleTo(editor) and editor.help_buttons()
-        editor.tabs.setCurrentIndex(2)
+        editor.tabs.setCurrentIndex(editor.tab_index("Stages"))
         editor._add_parameter({"column": "depth_cm", "unit": "cm", "description": "sampling depth"})
         editor.s_keywords.setText("soil, depth")
         # rules are rows (the file's '- ' lines): the template's two example rules, then ours instead
-        editor.tabs.setCurrentIndex(3)
+        editor.tabs.setCurrentIndex(editor.tab_index("Rules"))
         assert len(editor.rules_items()) == 2 and editor.rules_items()[0].startswith("EXAMPLE RULES")
         editor.set_rules_items(["One row per soil sample.", "A depth profile is one set."])
         editor._add_rule("Controls get no rows.", edit=False)
@@ -167,6 +167,67 @@ def test_windows():
         built_in = PackEditor(packs.available()["prebiotic_chemistry"].folder)
         assert built_in.read_only and not built_in.save_btn.isEnabled() and built_in.label_edit.isReadOnly()
         assert built_in.rules_combo.isEnabled()                                     # its rules can be looked at
+
+
+def test_compound_and_analysis_tabs():
+    """Compounds and Analysis methods tabs (2026-11-07): enabled with their built-in step, edits saved to the pack's
+    species list + species_cids.json and analysis_vocab.json, problems checked."""
+    from PySide6.QtWidgets import QApplication, QComboBox
+    app = QApplication.instance() or QApplication([])
+    from parameter_extractor.gui.pack_windows import PackEditor
+    from parameter_extractor.pack_editing import analysis_problems
+    built_in = PackEditor(packs.available()["prebiotic_chemistry"].folder)
+    assert built_in.tabs.isTabEnabled(built_in.tab_index("Compounds"))
+    assert built_in.compound_table.rowCount() == len(built_in.draft.species) > 100
+    assert "with a PubChem CID" in built_in.compound_count.text()
+    assert built_in.analysis_stack.currentIndex() == 1 and built_in.tech_table.rowCount() > 40
+    assert built_in.family_list.count() == len(built_in.draft.analysis_vocab["families"])
+    built_in.close()
+    with tempfile.TemporaryDirectory() as tmp, patch.object(packs, "user_packs_dir", lambda: Path(tmp)):
+        pack = packs.create_pack("lab_area", "Lab area", base=Path(tmp))
+        editor = PackEditor(pack.folder)
+        compounds, analysis = editor.tab_index("Compounds"), editor.tab_index("Analysis methods")
+        assert not editor.tabs.isTabEnabled(compounds) and not editor.tabs.isTabEnabled(analysis)
+        editor.builtin_boxes["chemistry"].setChecked(True)
+        editor.builtin_boxes["analysis"].setChecked(True)
+        assert editor.tabs.isTabEnabled(compounds) and editor.tabs.isTabEnabled(analysis)
+        # compounds: a name and its CID
+        editor._add_compound_row({"name": "NaCl", "cid": 5234})
+        editor._add_compound_row({"name": "Gly-Gly"})
+        # analysis: no vocabulary yet -> start from the prebiotic one, then edit it
+        assert editor.analysis_stack.currentIndex() == 0
+        editor._start_vocab(True)
+        assert editor.analysis_stack.currentIndex() == 1
+        editor.family_list.setCurrentRow(list(editor.draft.analysis_vocab["families"]).index("maldi"))
+        editor._add_setting_row({"name": "detector-voltage", "unit": "kV", "description": "detector voltage"})
+        editor._add_setting_row({"name": "spots", "integer": True, "description": "spots per sample"})
+        combo = editor.setting_table.cellWidget(editor.setting_table.rowCount() - 1, 1).findChild(QComboBox)
+        assert combo.currentText() == "whole number"
+        editor._add_technique_row({"name": "QCM", "families": ["general"], "description": "quartz crystal "
+                                   "microbalance", "aliases": ["quartz crystal microbalance"]})
+        editor.collect()
+        assert editor.save() is True
+        d = PackDraft.load(pack.folder)
+        assert d.species == ["NaCl", "Gly-Gly"] and d.manifest["species_cids"] == "species_cids.json"
+        assert d.compounds[0]["cid"] == 5234 and d.compounds[1]["cid"] == 0
+        maldi = {s["name"]: s for s in d.analysis_vocab["families"]["maldi"]["settings"]}
+        assert maldi["detector-voltage"]["unit"] == "kV" and maldi["spots"]["integer"] is True
+        assert maldi["laser-intensity"]["unit"] == "%"                       # the started-from settings kept
+        assert any(t["name"] == "QCM" for t in d.analysis_vocab["techniques"])
+        assert "analysis" in d.manifest["builtin_stages"]
+        # the saved vocabulary is the one the app uses
+        from parameter_extractor import analysis_vocab as av
+        assert av.is_vocab_column("analysis_QCM_instrument", packs.available()["lab_area"])
+        editor.close()
+    bad = {"families": {"lc": {"settings": [{"name": "flow rate", "unit": "mL/min"},
+                                            {"name": "x", "unit": "furlongs", "description": "d"}]}},
+           "techniques": [{"name": "HPLC", "families": ["lc", "nope"], "aliases": ["LC"]},
+                          {"name": "UHPLC", "families": ["lc"], "aliases": ["LC"]}]}
+    messages = [p.message for p in analysis_problems(bad)]
+    assert any("'flow rate'" in m and "hyphens" in m for m in messages)
+    assert any("unknown family 'nope'" in m for m in messages)
+    assert any("'furlongs'" in m for m in messages)
+    assert any("'LC' names both HPLC and UHPLC" in m for m in messages)
 
 
 def test_delete_pack():
@@ -240,7 +301,7 @@ def test_formula_columns_list():
         pack = packs.create_pack("cols_area", "Cols", base=Path(tmp))
         editor = PackEditor(pack.folder)
         editor.show()
-        editor.tabs.setCurrentIndex(4)
+        editor.tabs.setCurrentIndex(editor.tab_index("Formulas"))
         app.processEvents()
         names = [editor.f_columns.item(i).text() for i in range(editor.f_columns.count())]
         assert {"temperature_C", "product_yield_pct", "temperature_K", "paper_title"} <= set(names)
@@ -270,10 +331,12 @@ def test_menu():
     from parameter_extractor.gui import main_window
     w = main_window.MainWindow()
     titles = [a.text() for a in w.menuBar().actions()]
-    assert titles[:3] == ["File", "Variables", "Data Packs"], titles
+    # one menu for research areas: what packs define, then what you taught the app in reviews (2026-11-07)
+    assert titles[:2] == ["File", "Data Packs"] and "Variables" not in titles, titles
     menu = next(a.menu() for a in w.menuBar().actions() if a.text() == "Data Packs")
     assert [a.text() for a in menu.actions() if a.text()] == ["New research area…", "Edit research area…",
                                                              "Copy a research area…", "Check research area…",
+                                                             "Remembered from your reviews…", "Variable categories…",
                                                              "Remove research area…", "Open research areas folder"]
     w._set_inputs_enabled(False)                                                     # locked during a run
     assert not w.new_pack_action.isEnabled() and not w.edit_pack_action.isEnabled()

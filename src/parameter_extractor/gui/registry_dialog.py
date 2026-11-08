@@ -107,9 +107,9 @@ class RegistryDialog(QDialog):
     B_COLUMN, B_SOURCE, B_CATEGORY, B_TYPE, B_DEFAULT = range(5)
     C_NAME, C_ACTIVE, C_CID, C_SOURCE, C_SYNONYMS = range(5)
 
-    def __init__(self, registry_path: Path, parent=None):
+    def __init__(self, registry_path: Path, parent=None, area: Optional[str] = None):
         super().__init__(parent)
-        self.setWindowTitle("Remembered variables")
+        self.setWindowTitle("Remembered from your reviews")
         self.resize(1050, 650)
         self.path = Path(registry_path)
         self.registry = VariableRegistry(self.path)        # edits apply to this copy until Save
@@ -122,10 +122,25 @@ class RegistryDialog(QDialog):
 
         layout = QVBoxLayout(self)
         layout.addWidget(QLabel(
-            "Choices remembered from earlier reviews, by research area: Standard ones apply to every area. "
-            "They're applied automatically to future papers; CSVs already written stay as they are. "
-            "Click a Research area, Category, Data type or column cell to change it.", wordWrap=True))
+            "What you've taught the app while reviewing papers -- columns you accepted, the names that map to them, "
+            "the names compounds are written under, and your changes to the data packs' own columns. Kept apart "
+            "from the data packs (Data Packs > Edit research area shows what a pack itself defines), so they "
+            "apply on top of any pack and survive app updates. Standard entries apply to every research area. "
+            "They're used automatically for future papers; CSVs already written stay as they are. Click a "
+            "Research area, Category, Data type or column cell to change it.", wordWrap=True))
         filter_row = QHBoxLayout()
+        filter_row.addWidget(QLabel("Research area:"))
+        self.area_combo = QComboBox()
+        self.area_combo.addItem("All research areas", None)
+        for a, label in areas():
+            if a != STANDARD:
+                self.area_combo.addItem(label, a)
+        self.area_combo.addItem("Standard only (every area)", STANDARD)
+        self.area_combo.setToolTip("Show one research area's entries (with the Standard ones, which apply to it too).")
+        if area is not None:
+            self.area_combo.setCurrentIndex(max(self.area_combo.findData(area), 0))
+        self.area_combo.currentIndexChanged.connect(lambda _i: self._apply_filter())
+        filter_row.addWidget(self.area_combo)
         filter_row.addWidget(QLabel("Filter:"))
         self.filter_edit = QLineEdit(placeholderText="part of a column or name", clearButtonEnabled=True)
         self.filter_edit.textChanged.connect(self._apply_filter)
@@ -133,10 +148,10 @@ class RegistryDialog(QDialog):
         layout.addLayout(filter_row)
 
         self.tabs = QTabWidget()
-        self.tabs.addTab(self._build_columns_tab(), "Added columns")
+        self.tabs.addTab(self._build_columns_tab(), "Accepted columns")
         self.tabs.addTab(self._build_aliases_tab(), "Synonyms")
-        self.tabs.addTab(self._build_compounds_tab(), "Compounds")
-        self.tabs.addTab(self._build_builtin_tab(), "Built-in")
+        self.tabs.addTab(self._build_compounds_tab(), "Compound names")
+        self.tabs.addTab(self._build_builtin_tab(), "Changes to pack columns")
         layout.addWidget(self.tabs, 1)
 
         bottom = QHBoxLayout()
@@ -453,9 +468,14 @@ class RegistryDialog(QDialog):
 
     def _apply_filter(self) -> None:
         text = self.filter_edit.text().strip().lower()
+        area = self.area_combo.currentData()
         for tree in (self.columns_tree, self.alias_tree, self.compound_tree, self.builtin_tree):
             for i in range(tree.topLevelItemCount()):
                 group = tree.topLevelItem(i)
+                group_area = (group.data(0, ROLE) or ("", "", ""))[1]
+                if area is not None and group_area not in (area, STANDARD):
+                    group.setHidden(True)
+                    continue
                 shown = 0
                 for j in range(group.childCount()):
                     item = group.child(j)

@@ -146,21 +146,29 @@ class MainWindow(QMainWindow):
         file_menu.addAction(quit_action)
         self._focused_window = None
         self._queue_window = None
-        variables_menu = self.menuBar().addMenu("Variables")
-        self.registry_action = QAction("Remembered variables…", self, triggered=self.open_registry)
-        variables_menu.addAction(self.registry_action)
-        self.categories_action = QAction("Variable categories…", self, triggered=self.open_categories)
-        variables_menu.addAction(self.categories_action)
-        # research areas made and edited in the app (Mickey, 2026-11-05; gui/pack_windows.py)
+        # one menu for everything about research areas (Mickey, 2026-11-07: the Variables and Data Packs menus
+        # overlapped). Two layers: what a pack DEFINES (its window: columns, compounds, analysis methods, stages,
+        # rules, formulas) and what YOU taught the app in reviews (accepted columns, synonyms, compound names,
+        # changes to pack columns, categories) -- kept apart so they apply on top of any pack.
         packs_menu = self.menuBar().addMenu("Data Packs")
         self.new_pack_action = QAction("New research area…", self, triggered=lambda: self.new_pack())
         self.edit_pack_action = QAction("Edit research area…", self, triggered=lambda: self.edit_pack())
+        self.edit_pack_action.setToolTip("What the pack defines: columns, compounds, analysis methods, stages, "
+                                         "rules, formulas")
         self.copy_pack_action = QAction("Copy a research area…", self, triggered=lambda: self.copy_pack())
         self.check_pack_action = QAction("Check research area…", self, triggered=lambda: self.check_pack())
         self.remove_pack_action = QAction("Remove research area…", self, triggered=lambda: self.remove_pack())
         self.packs_folder_action = QAction("Open research areas folder", self, triggered=self.open_packs_folder)
+        self.registry_action = QAction("Remembered from your reviews…", self, triggered=self.open_registry)
+        self.registry_action.setToolTip("Columns you accepted, synonyms, compound names and your changes to pack "
+                                        "columns, by research area")
+        self.categories_action = QAction("Variable categories…", self, triggered=self.open_categories)
+        packs_menu.setToolTipsVisible(True)
         for action in (self.new_pack_action, self.edit_pack_action, self.copy_pack_action, self.check_pack_action):
             packs_menu.addAction(action)
+        packs_menu.addSeparator()
+        packs_menu.addAction(self.registry_action)
+        packs_menu.addAction(self.categories_action)
         packs_menu.addSeparator()
         packs_menu.addAction(self.remove_pack_action)
         packs_menu.addAction(self.packs_folder_action)
@@ -833,10 +841,10 @@ class MainWindow(QMainWindow):
                             + f", {n_flags} item(s) flagged for review. Saved to {result.run_dir}")
         self.show_result(result)
 
-    def open_registry(self) -> None:
-        """View / undo what the variable registry remembered from earlier reviews."""
+    def open_registry(self, area: Optional[str] = None) -> None:
+        """View / undo what the variable registry remembered from earlier reviews (`area`: shown filtered)."""
         from parameter_extractor.gui.registry_dialog import RegistryDialog
-        RegistryDialog(self.registry_path, parent=self).exec()
+        RegistryDialog(self.registry_path, parent=self, area=area if isinstance(area, str) else None).exec()
         self._load_category_edits()
 
     # ---- Data Packs menu ------------------------------------------------------------------

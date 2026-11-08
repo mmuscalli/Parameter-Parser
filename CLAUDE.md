@@ -2195,3 +2195,26 @@ not voted; skipped for non-experimental papers):
   printed), organic acid analyzer, IC, TOC. Fixes from the runs: preparative purification isn't analysis;
   replicate-measurements != replicate experiments; `shot-sets` added (Riggi: 5 sets x 1000 shots).
   tests/test_analysis_step.py. Not built: an editor tab for analysis_vocab.json (edit the JSON for now).
+
+## Vocabulary editors; research areas in one menu, two layers (2026-11-07, Mickey)
+
+Mickey: vocabulary-defined columns are written directly (no review) for now. The GUI had two menus (Variables, Data
+Packs) whose windows overlapped. Organisation now, said in each window's intro:
+- **Pack definition** (Data Packs > Edit research area; app packs read-only, copy to change): General, Columns,
+  **Compounds** (new tab: the compound vocabulary -- name, PubChem CID, title, synonyms from species_cids.json; add /
+  remove / filter / "Look up missing CIDs on PubChem"; was a plain-text box under Columns), **Analysis methods** (new
+  tab: analysis_vocab.json -- family list, the selected family's settings table [name, unit combo incl. 'text' /
+  'whole number', description, aliases; add / remove / up / down], techniques table [name, families, description,
+  aliases; filter]; no vocabulary -> "Start from the prebiotic chemistry vocabulary" / "Start empty"), Stages, Rules,
+  Formulas, Check. Compounds / Analysis methods tabs are enabled only while their built-in step is ticked
+  (`_follow_step`). Tests find tabs by name (`PackEditor.tab_index`), not position.
+- **Remembered from your reviews** (registry, per user, on top of any pack): RegistryDialog renamed, tabs Accepted
+  columns / Synonyms / Compound names / Changes to pack columns (was Added columns / Compounds / Built-in), a
+  Research area selector (`area=`; shows that area + Standard); the pack editor's "Remembered from your reviews…"
+  opens it filtered to the area.
+- One "Data Packs" menu: New / Edit / Copy / Check, then Remembered from your reviews… / Variable categories…, then
+  Remove / Open folder. The Variables menu is gone (action attributes registry_action / categories_action kept).
+- PackDraft: `analysis_vocab` (None = no file), `cids_file`, `compounds` property (setter keeps a compound's stored
+  title/synonyms while its CID is unchanged; sets manifest species_cids on first save); `analysis_problems(vocab)`
+  in check (names as column slots, duplicates, unknown families, units the app doesn't convert, an alias naming two
+  techniques); duplicate compound names. Saving clears analysis_vocab's cache.

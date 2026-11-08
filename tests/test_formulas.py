@@ -125,7 +125,8 @@ def test_formulas_tab():
         packs.add_search_dir(Path(tmp))
         pack = packs.create_pack("tab_area", "Tab", base=Path(tmp))
         editor = PackEditor(pack.folder)
-        assert editor.tabs.tabText(5).startswith("Check") and editor.tabs.tabText(4) == "Formulas"
+        assert editor.tabs.tabText(editor.tabs.count() - 1).startswith("Check")
+        assert editor.tabs.tabText(editor.tabs.count() - 2) == "Formulas"
         assert editor.f_table.rowCount() == 1                                       # the template's example
         editor._add_formula({})
         editor.f_table.item(1, 0).setText("yield_fraction")

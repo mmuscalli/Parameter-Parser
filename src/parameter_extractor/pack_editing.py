@@ -138,6 +138,10 @@ class PackDraft:
     rules: Dict[str, str]                  # prompt name -> its rules text ('' = none)
     own_prompts: List[str] = field(default_factory=list)     # whole prompts of its own (prompts/<name>.md)
     removed_stage_files: List[str] = field(default_factory=list)
+    # the analysis step's techniques and settings (analysis_vocab.json; None = the pack has none) and the compound
+    # vocabulary's PubChem identities (species_cids.json: {"species": {name: {cid, title, synonyms, ...}}})
+    analysis_vocab: Optional[dict] = None
+    cids_file: dict = field(default_factory=lambda: {"species": {}})
 
     # ---- loading ---------------------------------------------------------------------
 
@@ -153,7 +157,11 @@ class PackDraft:
         rules = {name: (prompts / f"{name}.rules.md").read_text() if (prompts / f"{name}.rules.md").is_file() else ""
                  for name in RULE_PROMPTS}
         own = sorted(p.stem for p in prompts.glob("*.md") if not p.name.endswith(".rules.md")) if prompts.is_dir() else []
-        return cls(folder, manifest, columns, standard, stages, rules, own)
+        analysis = _read(folder / ANALYSIS_FILE, None)
+        cids = _read(folder / manifest["species_cids"], {"species": {}}) if manifest.get("species_cids") \
+            else {"species": {}}
+        cids.setdefault("species", {})
+        return cls(folder, manifest, columns, standard, stages, rules, own, analysis_vocab=analysis, cids_file=cids)
 
     @property
     def builtin(self) -> bool:
@@ -181,6 +189,28 @@ class PackDraft:
     @species.setter
     def species(self, value: List[str]) -> None:
         self.columns_file["species_names"] = [s.strip() for s in value if s.strip()]
+
+    @property
+    def compounds(self) -> List[dict]:
+        """The compound vocabulary with its PubChem identities: [{name, cid, title, synonyms}] in list order."""
+        known = self.cids_file.get("species", {})
+        return [{"name": n, "cid": (known.get(n) or {}).get("cid", 0) or 0, "title": (known.get(n) or {}).get("title", ""),
+                 "synonyms": list((known.get(n) or {}).get("synonyms", []))} for n in self.species]
+
+    @compounds.setter
+    def compounds(self, rows: List[dict]) -> None:
+        """Names (in order) and CIDs; a compound whose CID is unchanged keeps its stored title and synonyms."""
+        self.species = [r["name"] for r in rows]
+        old = self.cids_file.get("species", {})
+        new = {}
+        for r in rows:
+            name, cid = r["name"].strip(), int(r.get("cid") or 0)
+            if not name or not cid:
+                continue
+            entry = dict(old.get(name, {})) if (old.get(name) or {}).get("cid") == cid else {}
+            entry["cid"] = cid
+            new[name] = entry
+        self.cids_file["species"] = new
 
     def stage_columns(self) -> Dict[str, List[str]]:
         """column -> the stages that fill it."""
@@ -240,7 +270,13 @@ class PackDraft:
         if self.builtin:
             raise PermissionError("The app's own research areas can't be changed: copy one to a new research area.")
         f = self.folder
+        if self.cids_file.get("species") and not self.manifest.get("species_cids"):
+            self.manifest["species_cids"] = "species_cids.json"
         (f / "pack.json").write_text(json.dumps(self.manifest, indent=2, ensure_ascii=False) + "\n")
+        if self.manifest.get("species_cids"):
+            (f / self.manifest["species_cids"]).write_text(json.dumps(self.cids_file, indent=2, ensure_ascii=False) + "\n")
+        if self.analysis_vocab is not None:
+            (f / ANALYSIS_FILE).write_text(json.dumps(self.analysis_vocab, indent=2, ensure_ascii=False) + "\n")
         template = self.manifest.get("template") or "columns.json"
         self.manifest["template"] = template
         (f / template).write_text(json.dumps(self.columns_file, indent=2, ensure_ascii=False) + "\n")
@@ -266,10 +302,58 @@ class PackDraft:
 
 def _forget_cached(folder: Path) -> None:
     """Saved files are read again: stage specs and the active pack are cached."""
+    from parameter_extractor import analysis_vocab
     from parameter_extractor.stages import optional
     optional._specs_in.cache_clear()
+    analysis_vocab._load.cache_clear()
     if packs._current is not None and Path(packs._current.folder).resolve() == Path(folder).resolve():
         packs._current = None
+
+
+ANALYSIS_FILE = "analysis_vocab.json"
+
+
+def analysis_problems(vocab: dict) -> List["Problem"]:
+    """The analysis vocabulary's problems: names that can't be column slots, unknown families, duplicates,
+    units the app doesn't convert, aliases shared by two techniques."""
+    from parameter_extractor.analysis_vocab import UNIT_TOKENS, _key, token
+    out, where = [], "Analysis methods"
+    add = lambda level, message: out.append(Problem(level, where, message))
+    fams = vocab.get("families", {}) or {}
+    if "general" not in fams:
+        add("note", "there is no 'general' family (settings every technique has: instrument, calibration, ...).")
+    for fid, fam in fams.items():
+        seen = set()
+        for st in fam.get("settings", []):
+            name = st.get("name", "")
+            if not name or token(name) != name:
+                add("error", f"setting '{name}' ({fid}): a name is words joined by hyphens -- no spaces, "
+                             f"underscores or brackets (it becomes part of a column name).")
+            if name in seen:
+                add("error", f"setting '{name}' is listed twice in {fid}.")
+            seen.add(name)
+            if st.get("unit") and st["unit"] not in UNIT_TOKENS:
+                add("warning", f"setting '{name}' ({fid}): the unit '{st['unit']}' isn't one the app converts to; "
+                               f"values will be kept as printed.")
+            if not st.get("description"):
+                add("note", f"setting '{name}' ({fid}) has no description.")
+    names, owner = set(), {}
+    for t in vocab.get("techniques", []):
+        name = t.get("name", "")
+        if not name or token(name) != name:
+            add("error", f"technique '{name}': a name is words joined by hyphens -- no spaces or underscores.")
+        if name in names:
+            add("error", f"technique '{name}' is listed twice.")
+        names.add(name)
+        for f in t.get("families", []):
+            if f not in fams:
+                add("error", f"technique '{name}' names an unknown family '{f}'.")
+        for a in [name] + list(t.get("aliases", [])):
+            k = _key(a)
+            if k in owner and owner[k] != name:
+                add("warning", f"'{a}' names both {owner[k]} and {name}: the first listed wins.")
+            owner.setdefault(k, name)
+    return out
 
 
 # ---- the check ---------------------------------------------------------------------------
@@ -311,30 +395,17 @@ def check(draft: PackDraft) -> List[Problem]:
     for c in columns:
         if BAD_COLUMN_CHARS.search(c) or c != c.strip() or " " in c:
             add("error", "Columns", f"'{c}': column names can't contain spaces, commas, quotes or tabs.")
-    if "analysis" in m.get("builtin_stages", []):
-        vocab_file = draft.folder / "analysis_vocab.json"
-        if not vocab_file.is_file():
-            add("warning", "General", "the analysis step has no analysis_vocab.json in the folder: every technique "
-                                      "and setting it finds will go to the review.")
-        else:
-            try:
-                raw = json.loads(vocab_file.read_text())
-                fams = set(raw.get("families", {}))
-                for t in raw.get("techniques", []):
-                    for f in t.get("families", []):
-                        if f not in fams:
-                            add("error", "analysis_vocab.json", f"technique '{t.get('name')}' names an unknown "
-                                                                f"family '{f}'.")
-                    if "_" in t.get("name", ""):
-                        add("error", "analysis_vocab.json", f"technique '{t.get('name')}': names use hyphens, not "
-                                                            f"underscores (they are column slots).")
-                for fid, fam in raw.get("families", {}).items():
-                    for st in fam.get("settings", []):
-                        if "_" in st.get("name", "") or " " in st.get("name", ""):
-                            add("error", "analysis_vocab.json", f"setting '{st.get('name')}' ({fid}): names use "
-                                                                f"hyphens, not underscores or spaces.")
-            except Exception as e:
-                add("error", "analysis_vocab.json", f"not valid JSON: {e}")
+    if "analysis" in m.get("builtin_stages", []) and draft.analysis_vocab is None:
+        add("warning", "Analysis methods", "the analysis step has no vocabulary (analysis_vocab.json): every technique "
+                                           "and setting it finds will go to the review.")
+    if draft.analysis_vocab is not None:
+        out += analysis_problems(draft.analysis_vocab)
+        if "analysis" not in m.get("builtin_stages", []):
+            add("note", "Analysis methods", "the vocabulary is only used by the analysis step, which isn't ticked "
+                                            "under Built-in extraction steps.")
+    names = draft.species
+    for n in sorted({n for n in names if names.count(n) > 1}):
+        add("error", "Compounds", f"'{n}' is listed twice.")
     if "chemistry" in m.get("builtin_stages", []) and not draft.species:
         add("warning", "Columns", "the chemistry step uses a compound vocabulary, but none is listed.")
 
