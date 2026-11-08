@@ -2344,3 +2344,32 @@ audits, usage) is unchanged; cost 0.0 in _record.
   conditions step filled flow / solid-material columns that don't apply. A 12B model is a framework check, not a
   usable extractor for this pack; larger models (30B+) are the realistic floor. A step's elapsed_sec includes its wait
   for the server's other requests.
+
+## Drafting a research area from sample papers (2026-11-08, Mickey)
+
+`pack_drafting.py`: Data Packs > New research area… > Start from "A draft made from sample papers (uses the API)"
+(NewPackDialog `DRAFT`, shown only when the dialog gets `config=` -- the main window passes `current_config`; papers via
+the shared PaperListPanel, progress bar, Cancel stops after the current request) or CLI `--draft-pack ID --area-name
+NAME [--area-description TEXT] --papers LIST | --pdf | --paper`.
+1. `survey_paper` per paper (4 at a time; text + table images via focused_search._paper_text; stage `pack_survey`,
+   Claude Haiku 5.5 forced through RunConfig.models + profile "standard" in `_config`, budget 8K): `PaperSurvey` --
+   field, row_unit, set_unit, variables [name, column WITHOUT unit, unit, kind number/integer/text, role, description,
+   level row/set/paper, uncertainty, where, example]. Prompt prompts/pack_survey.md (bibliographic details and a
+   sample's time point excluded). A failed paper is reported, not fatal; none surveyed -> PipelineError, no pack.
+2. `synthesize` (stage `pack_synthesis`, Sonnet 5.5, budget 16K; input = compact JSON lines per paper):
+   `PackProposal` -- description, set/sample words, 3-7 categories, 1-4 stages (per, keywords [] = always, parameters
+   with column/unit/kind/description/category/choices/uncertainties/papers, rules, other_hint), row_rules.
+   prompts/pack_synthesis.md (general columns over per-substance ones; merge synonyms; no metadata/methodology/other ids).
+3. `write_pack`: packs.create_pack from the template, then PackDraft: example stage + formula removed; categories
+   (table_order 30, 40, ...; reserved ids renamed '<id>_area'); category_columns (set_type -> methodology, duration_hr ->
+   the first category); `column_for(base, unit, kind)` adds the app's suffix (variable_categories.unit_suffix: '°C' ->
+   _C, K stored as °C, % -> _pct, min -> _hr, s-1 -> _per_hr), else the unit as a token ('_eV'), but NO suffix when the
+   token would be misread ('% h-1' -> '_per_h' reads as hours); 'ph' -> 'pH'; a column already used by an earlier stage
+   is dropped (`dropped`). Stages open_ended with the proposal's hint. Row rules -> structure_planner.rules.md.
+   `check_new_id` validates before anything is paid for. Report drafted_from.md (pack folder + work folder
+   <output>/pack_draft_<id>_<stamp>/ with each paper's audits and surveys.json).
+- Live (3 prebiotic papers: eder1994, kim2019, faisal2005; standard): 41 s, $0.055, 21 parameters in 3 stages
+  (conditions + materials, results, methods), 5 row rules, no check problems. A full eder1994 extraction with the
+  drafted pack: 42 rows (= the hand-made pack's), $0.35, T / duration / Gly 1000 mM / NaCl 3330 mM / diglycine yields
+  right; triglycine yields lost -- the draft chose one product + product_yield_pct per row (a general-columns choice the
+  user can change in the editor). tests/test_pack_drafting.py (canned answers; the dialog end to end).

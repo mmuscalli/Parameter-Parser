@@ -1070,8 +1070,15 @@ class MainWindow(QMainWindow):
 
     def new_pack(self, source: Optional[str] = None) -> None:
         from parameter_extractor.gui.pack_windows import NewPackDialog
-        dlg = NewPackDialog(self, source=source)
+        dlg = NewPackDialog(self, source=source, config=self.current_config)
         if dlg.exec() and dlg.created is not None:
+            if dlg.draft_result is not None:
+                r = dlg.draft_result
+                surveyed = sum(1 for p in r.papers if p.survey)
+                self.status.setText(f"Drafted '{dlg.created.label}' from {surveyed} paper(s) (${r.cost_usd:.3f}): "
+                                    f"{sum(len(s.parameters) for s in r.proposal.stages)} parameters in "
+                                    f"{len(r.proposal.stages)} stage(s). Check and edit it in the editor; "
+                                    f"drafted_from.md in its folder lists where each parameter came from.")
             self.refresh_packs(select=dlg.created.id)
             self._open_pack_editor(dlg.created.folder)
 

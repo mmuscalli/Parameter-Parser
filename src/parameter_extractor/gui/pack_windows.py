@@ -20,12 +20,12 @@ import re
 from pathlib import Path
 from typing import List, Optional, Tuple
 
-from PySide6.QtCore import Qt, QUrl, Signal
+from PySide6.QtCore import QObject, Qt, QUrl, Signal
 from PySide6.QtGui import QBrush, QColor, QDesktopServices
 from PySide6.QtWidgets import (QAbstractItemView, QCheckBox, QComboBox, QDialog, QDialogButtonBox, QFormLayout,
                                QGridLayout,
                                QGroupBox, QHBoxLayout, QHeaderView, QInputDialog, QLabel, QLineEdit, QListWidget,
-                               QListWidgetItem, QMessageBox, QPlainTextEdit, QPushButton, QScrollArea, QSplitter,
+                               QListWidgetItem, QMessageBox, QPlainTextEdit, QProgressBar, QPushButton, QScrollArea, QSplitter,
                                QTabWidget, QToolButton,
                                QTableWidget, QTableWidgetItem, QVBoxLayout, QWidget)
 
@@ -115,14 +115,33 @@ def _hint(text: str) -> QLabel:
 
 # ---- New research area -------------------------------------------------------------------------
 
-class NewPackDialog(QDialog):
-    """Name a new research area and choose what it starts from; `created` is the new pack after Create."""
+DRAFT = "__draft__"            # source_combo: drafted from sample papers (pack_drafting.py)
+DRAFT_HELP = ("The app reads a few typical papers of the field -- a cheap survey of what each reports (Claude Haiku, a "
+              "few cents a paper), then one request (Claude Sonnet) that designs the research area: columns with "
+              "units, categories, extraction stages and rules for the rows. Nothing is extracted yet. The result opens "
+              "in the editor to fine-tune; drafted_from.md in its folder lists each parameter with the papers that "
+              "reported it. 3-5 papers that differ from each other work best. Uses the models set in Settings (a "
+              "local model server, if chosen there).")
 
-    def __init__(self, parent=None, source: Optional[str] = None):
+
+class _DraftSignals(QObject):
+    progress = Signal(int, int, str)
+    done = Signal(object)              # DraftResult or an Exception
+
+
+class NewPackDialog(QDialog):
+    """Name a new research area and choose what it starts from; `created` is the new pack after Create.
+    `config`: a callable giving the run configuration (API key, models) -- needed to draft from sample papers;
+    without it that choice isn't offered."""
+
+    def __init__(self, parent=None, source: Optional[str] = None, config=None):
         super().__init__(parent)
         self.setWindowTitle("New research area")
         self.resize(620, 420)
         self.created: Optional[packs.Pack] = None
+        self.draft_result = None
+        self._config = config
+        self._cancel = None
         self._id_edited = False
         layout = QVBoxLayout(self)
         layout.addWidget(_titled("A new research area", "A research area (a data pack) decides the dataset's columns, how a paper's results "
@@ -140,6 +159,9 @@ class NewPackDialog(QDialog):
         self.sample_edit = QLineEdit("sample")
         self.source_combo = QComboBox()
         self.source_combo.addItem("The template (example columns, stage and rules to replace)", "")
+        if config is not None:
+            self.source_combo.addItem("A draft made from sample papers (uses the API)", DRAFT)
+            self.source_combo.setItemData(1, DRAFT_HELP, Qt.ItemDataRole.ToolTipRole)
         for pack_id, pack in sorted(packs.available().items(), key=lambda kv: kv[1].label):
             self.source_combo.addItem(f"A copy of: {pack.label}", pack_id)
         if source:
@@ -151,6 +173,23 @@ class NewPackDialog(QDialog):
         form.addRow("One row is called:", self.sample_edit)
         form.addRow("Start from:", self.source_combo)
         layout.addLayout(form)
+        # drafting from sample papers: the papers, progress, what it costs
+        from parameter_extractor.gui.paper_list import PaperListPanel
+        self.draft_box = QWidget(visible=False)
+        dv = QVBoxLayout(self.draft_box)
+        dv.setContentsMargins(0, 0, 0, 0)
+        note = QLabel(DRAFT_HELP, wordWrap=True)
+        note.setStyleSheet("color: palette(placeholder-text);")
+        dv.addWidget(note)
+        self.papers = PaperListPanel()
+        self.papers.setMinimumHeight(170)
+        self.papers.message.connect(lambda m: self.error.setText(m))
+        dv.addWidget(self.papers)
+        self.draft_progress = QProgressBar(visible=False, textVisible=False)
+        self.draft_status = QLabel(wordWrap=True)
+        dv.addWidget(self.draft_progress)
+        dv.addWidget(self.draft_status)
+        layout.addWidget(self.draft_box, 1)
         self.error = QLabel(wordWrap=True)
         self.error.setStyleSheet(f"color: {LEVEL_COLORS['error'].name()};")
         layout.addWidget(self.error)
@@ -158,7 +197,7 @@ class NewPackDialog(QDialog):
         buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Cancel)
         self.create_btn = buttons.addButton("Create", QDialogButtonBox.ButtonRole.AcceptRole)
         buttons.accepted.connect(self.create)
-        buttons.rejected.connect(self.reject)
+        buttons.rejected.connect(self._cancel_or_close)
         layout.addWidget(buttons)
         self.label_edit.textChanged.connect(self._on_label)
         self.id_edit.textEdited.connect(lambda _t: setattr(self, "_id_edited", True))
@@ -169,12 +208,20 @@ class NewPackDialog(QDialog):
             self.id_edit.setText(suggest_id(text))
 
     def _on_source(self, _index: int) -> None:
+        drafting = self.source_combo.currentData() == DRAFT
+        self.draft_box.setVisible(drafting)
+        self.create_btn.setText("Draft from these papers" if drafting else "Create")
+        if drafting:
+            self.resize(max(self.width(), 720), max(self.height(), 640))
         source = packs.available().get(self.source_combo.currentData() or "")
         if source is not None:                      # a copy keeps the words of what it's copied from
             self.set_edit.setText(source.manifest.units.get("set", "set"))
             self.sample_edit.setText(source.manifest.units.get("sample", "sample"))
 
     def create(self) -> None:
+        if self.source_combo.currentData() == DRAFT:
+            self._start_draft()
+            return
         source = packs.available().get(self.source_combo.currentData() or "")
         try:
             self.created = packs.create_pack(self.id_edit.text().strip(), self.label_edit.text(),
@@ -184,6 +231,75 @@ class NewPackDialog(QDialog):
             self.error.setText(str(e))
             return
         self.accept()
+
+
+    # ---- drafting from sample papers ------------------------------------------------------------
+    def _start_draft(self) -> None:
+        import threading
+        from parameter_extractor import pack_drafting
+        label, pack_id = self.label_edit.text(), self.id_edit.text().strip()
+        try:
+            pack_drafting.check_new_id(pack_id, label)
+        except ValueError as e:
+            self.error.setText(str(e))
+            return
+        items = self.papers.items()
+        if not items:
+            self.error.setText("Add a few sample papers (PDFs, or arXiv IDs / DOIs).")
+            return
+        config = self._config()
+        if config.needs_api_key and not config.api_key:
+            self.error.setText("Drafting reads the papers with the API: add your Anthropic API key in Settings first "
+                               "(or choose a local model server there).")
+            return
+        self.error.setText("")
+        self._cancel = threading.Event()
+        self._signals = _DraftSignals()
+        self._signals.progress.connect(self._draft_progress)
+        self._signals.done.connect(self._draft_done)
+        self._set_drafting(True)
+        description = self.desc_edit.toPlainText()
+
+        def work():
+            try:
+                result = pack_drafting.draft_pack(items, pack_id, label, description, config,
+                                                  on_progress=self._signals.progress.emit, cancel_event=self._cancel)
+            except BaseException as e:           # shown in the dialog
+                result = e
+            self._signals.done.emit(result)
+        self._thread = threading.Thread(target=work, daemon=True, name="pack-draft")
+        self._thread.start()
+
+    def _set_drafting(self, on: bool) -> None:
+        for w in (self.label_edit, self.id_edit, self.desc_edit, self.set_edit, self.sample_edit, self.source_combo,
+                  self.create_btn):
+            w.setEnabled(not on)
+        self.papers.set_locked(on)
+        self.draft_progress.setVisible(on)
+        self.draft_progress.setRange(0, 0)
+
+    def _draft_progress(self, done: int, total: int, message: str) -> None:
+        self.draft_progress.setRange(0, max(total, 1))
+        self.draft_progress.setValue(done)
+        self.draft_status.setText(message)
+
+    def _draft_done(self, result) -> None:
+        self._set_drafting(False)
+        self._cancel = None
+        if isinstance(result, BaseException):
+            from parameter_extractor.errors import RunCancelledError
+            self.error.setText("Drafting cancelled." if isinstance(result, RunCancelledError) else str(result))
+            return
+        self.draft_result = result
+        self.created = result.pack
+        self.accept()
+
+    def _cancel_or_close(self) -> None:
+        if self._cancel is not None:             # a draft is running: stop it (the dialog stays open)
+            self._cancel.set()
+            self.draft_status.setText("Cancelling after the current request…")
+            return
+        self.reject()
 
 
 # ---- Edit a research area ----------------------------------------------------------------------

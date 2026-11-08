@@ -108,6 +108,12 @@ def main() -> int:
                              "--local-settings). No API key or cost; results aren't validated like the API's")
     parser.add_argument("--local-settings", type=Path, default=None,
                         help="local model settings file (default: the app's local_models.json)")
+    parser.add_argument("--draft-pack", metavar="ID", default=None,
+                        help="Draft a NEW research area from sample papers (--papers LIST / --pdf / --paper): a cheap "
+                             "survey of each paper's variables, then one request that designs columns, categories, "
+                             "stages and row rules; written to your research areas folder (needs --area-name)")
+    parser.add_argument("--area-name", default="", help="Name of the research area to draft (--draft-pack)")
+    parser.add_argument("--area-description", default="", help="A sentence on the field (--draft-pack)")
     parser.add_argument("--list-local-models", action="store_true",
                         help="List the local server's models and your local profiles, then exit")
     parser.add_argument("--passes", type=int, default=1, choices=[1, 2, 3],
@@ -165,6 +171,8 @@ def main() -> int:
         return 0
     if args.list_local_models:
         return _list_local_models(args)
+    if args.draft_pack:
+        return _draft_pack(args, parser)
     if args.focus:
         return _focused(args, parser)
     if not args.pdf and not args.paper and not args.queue:
@@ -347,4 +355,32 @@ def _list_local_models(args) -> int:
     for name, roles in local.profiles.items():
         print(f"profile {name}: " + "; ".join(f"{dict(local_models.PROFILE_ROLES)[r]}: {m}"
                                               for r, m in roles.items() if m))
+    return 0
+
+
+def _draft_pack(args, parser) -> int:
+    from parameter_extractor import pack_drafting
+    from parameter_extractor.errors import PipelineError
+    from parameter_extractor.focused_search import read_paper_list
+    items = list(read_paper_list(args.papers)) if args.papers else []
+    items += [Path(args.pdf)] if args.pdf else []
+    items += [args.paper] if args.paper else []
+    if not items:
+        parser.error("--draft-pack needs sample papers: --papers LIST, --pdf or --paper")
+    if not args.area_name:
+        parser.error("--draft-pack needs --area-name")
+    overrides = {"prefer_arxiv": args.arxiv, "include_supplements": not args.no_si}
+    if args.out:
+        overrides["output_dir"] = args.out
+    overrides.update(_provider_overrides(args, parser))
+    config = RunConfig.from_settings(**overrides)
+    try:
+        result = pack_drafting.draft_pack(items, args.draft_pack, args.area_name, args.area_description, config,
+                                          on_progress=lambda d, n, m: print(f"[{d}/{n}] {m}"))
+    except (PipelineError, ValueError) as e:
+        print(f"Error: {e}", file=sys.stderr)
+        return 1
+    print(f"Research area written to {result.pack.folder} (report: drafted_from.md; work files: {result.work_dir})")
+    for p in result.problems:
+        print(f"  {p}")
     return 0
