@@ -16,6 +16,15 @@ order, exactly as printed -- "nd" for a product the paper reports as not
 detected, "detected" for one present without an amount, "" for an empty or
 not-measured cell. A table whose rows belong to several sets lists each
 row with its own `set`. Don't repeat table values in `groups`.
+TABLES IN "TABLE GRIDS" (marked "=== TABLE GRID ..." in or after the paper
+text -- the app has already read their cells; r = row number, [n] = column
+number): for each of them you
+MUST answer with a mapping instead of copying numbers -- `grid` its id ("G1"),
+each column `gc` its column number [n], each row `gr` its row number r, and
+NO `v`: the app reads every mapped cell. Only rows that are samples in the
+plan; never map a header row. Copy values with `v` only for a table that is
+NOT in TABLE GRIDS, for cells marked "not readable", or when the grid
+clearly differs from the table image (a column split wrongly).
 
 `groups`: everything NOT in a table -- values stated in the text, and the
 starting composition when it's given in the text (as it usually is): one

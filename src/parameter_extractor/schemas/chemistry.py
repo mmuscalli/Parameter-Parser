@@ -257,6 +257,8 @@ class TableColumn(BaseModel):
     phase: Phase = Field(alias="ph", description=PHASE_DESC)
     unit: str = Field(alias="u", description="The column's unit exactly as printed, e.g. '%', 'mmol/L'.")
     label: str = Field(alias="lbl", description="The column header as printed, e.g. '% (Gly)2'.")
+    grid_col: int = Field(default=-1, alias="gc", description="With a grid: the column number [n] holding this "
+                                                              "species' values; leave out otherwise.")
     identified_by: str = Field(default="", alias="how",
                                description="Only when the header doesn't name the species: how you identified "
                                            "it, at most 15 words.")
@@ -274,14 +276,17 @@ class TableColumn(BaseModel):
 
 
 class TableRow(BaseModel):
-    model_config = ConfigDict(populate_by_name=True, json_schema_extra=_required(["set", "sample", "row", "v"]))
+    model_config = ConfigDict(populate_by_name=True, json_schema_extra=_required(["set", "sample", "row"]))
     set_label: str = Field(alias="set", description="Exact structure-plan set_label of this row.")
     sample_label: str = Field(alias="sample", description="Exact structure-plan sample_label of this row.")
     label: str = Field(alias="row", description="The row's label as printed, e.g. '97.3' (a time), 'Entry 3'.")
-    values: List[str] = Field(alias="v", description="One per column, in column order, exactly as printed "
-                                                     "('2.77'); 'nd' where the paper reports the product as "
-                                                     "not detected, 'detected' where it's present without an "
-                                                     "amount, '' for an empty or not-measured cell.")
+    grid_row: int = Field(default=-1, alias="gr", description="With a grid: the row number r of this row; then "
+                                                              "leave out `v` (the app reads the cells).")
+    values: List[str] = Field(default_factory=list, alias="v",
+                              description="Without a grid: one per column, in column order, exactly as printed "
+                                          "('2.77'); 'nd' where the paper reports the product as not detected, "
+                                          "'detected' where it's present without an amount, '' for an empty or "
+                                          "not-measured cell.")
 
 
 class TableResults(BaseModel):
@@ -292,12 +297,33 @@ class TableResults(BaseModel):
     the source table, row and column."""
     model_config = ConfigDict(populate_by_name=True, json_schema_extra=_required(["src", "cols", "rows", "c"]))
     source: str = Field(alias="src", description="The table, e.g. 'Table 1' (or 'Table 2, upper part').")
+    grid: str = Field(default="", alias="grid", description="The TABLE GRIDS id ('G2') when this table is one; "
+                                                            "leave out otherwise.")
     columns: List[TableColumn] = Field(alias="cols")
     rows: List[TableRow]
     confidence: Literal["high", "medium", "low"] = Field(alias="c")
 
     _ND = {"nd", "n.d.", "n.d", "not detected", "<lod", "bdl", "b.d.l."}
     _DETECTED = {"detected", "+", "present", "yes"}
+
+    @property
+    def needs_grid(self) -> bool:
+        """Mapped onto a grid and not yet filled from it (the app reads the cells: fill_from_grid)."""
+        return bool(self.grid) and any(r.grid_row >= 0 and not r.values for r in self.rows)
+
+    def fill_from_grid(self, grid) -> List[str]:
+        """Each row's values read from the grid's cells (rows mapped with `gr`, columns with `gc`); problems."""
+        problems = []
+        for row in self.rows:
+            if row.values or row.grid_row < 0:
+                continue
+            from parameter_extractor.ingestion.table_grid import plain
+            row.values = [plain(grid.cell(row.grid_row, col.grid_col)) if col.grid_col >= 0 else ""
+                          for col in self.columns]
+        bad = [c.label or c.name for c in self.columns if c.grid_col >= grid.n_cols]
+        if bad:
+            problems.append(f"{self.source}: column(s) {', '.join(bad)} point past {grid.grid_id}'s last column")
+        return problems
 
     def entries(self) -> List["SoluteEntry"]:
         out = []
@@ -334,6 +360,7 @@ class ChemistryExtraction(BaseModel):
                               json_schema_extra=_required(["tables", "groups", "unmapped_species",
                                                            "added_solutions", "molar_ratios", "mixture_totals"]))
     paper_id: SkipJsonSchema[str] = ""
+    grid_problems: SkipJsonSchema[List[str]] = Field(default_factory=list)
     tables: List[TableResults] = Field(default_factory=list,
                                        description="Every table of values, in its own layout: columns once, "
                                                    "one row per sample.")
@@ -373,10 +400,31 @@ class ChemistryExtraction(BaseModel):
                 entry.set_label = group.set_label or None
                 entry.sample_label = group.sample_label or None
                 self.solutes.append(entry)
+        waiting = []
         for table in self.tables:
-            self.solutes.extend(table.entries())
-        self.groups, self.tables = [], []    # kept once, in `solutes` (what's saved and replayed)
+            if table.needs_grid:              # filled from the app's reading of the table (fill_grids)
+                waiting.append(table)
+            else:
+                self.solutes.extend(table.entries())
+        self.groups, self.tables = [], waiting    # kept once, in `solutes` (what's saved and replayed)
         return self
+
+    def fill_grids(self, grids) -> List[str]:
+        """Tables the model mapped onto grids (table_grid.py): their cells read from the grids and expanded into
+        `solutes` like any table. Returns problems (an unknown grid id, columns past the grid)."""
+        by_id = {g.grid_id: g for g in grids or []}
+        problems = []
+        for table in self.tables:
+            grid = by_id.get(table.grid)
+            if grid is None:
+                problems.append(f"{table.source}: mapped onto {table.grid}, which isn't one of the table grids "
+                                f"-- its values were not read")
+                continue
+            problems += table.fill_from_grid(grid)
+            self.solutes.extend(table.entries())
+        self.tables = []
+        self.grid_problems = problems
+        return problems
 
     def conflicting_set_species(self) -> set:
         """(set_label, name) pairs with several DIFFERENT initial values for the same

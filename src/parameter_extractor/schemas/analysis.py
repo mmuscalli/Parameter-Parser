@@ -34,15 +34,15 @@ class AnalysisSetting(BaseModel):
     unit: str = Field("", alias="u", description="The unit as printed ('mL/min', 'kV', '%', 'nm', 'Å'); '' for text.")
     text: str = Field("", alias="txt", description="The value as printed, for a text setting (column, matrix, "
                                                    "mobile phase, ion polarity).")
-    quote: str = Field(alias="q", description=QUOTE_DESC)
-    source: str = Field(alias="src", description=SOURCE_DESC)
-    confidence: Confidence = Field(alias="c")
+    quote: str = Field("", alias="q", description=QUOTE_DESC)
+    source: str = Field("", alias="src", description=SOURCE_DESC)
+    confidence: Confidence = Field("medium", alias="c")
     note: str = Field("", alias="n", description=NOTE_DESC)
 
 
 class AnalysisMethod(BaseModel):
     model_config = ConfigDict(populate_by_name=True, json_schema_extra=_required(
-        ["tech", "nm", "set", "settings", "q", "src", "c"]))
+        ["tech", "nm", "set", "settings"]))
     technique: str = Field(alias="tech", description=(
         "The technique's name from the vocabulary ('RP-HPLC', 'MALDI-TOF-MS', 'NMR-31P'); one it lacks: the "
         "paper's usual abbreviation, hyphenated ('DOSY-NMR')."))
@@ -55,9 +55,10 @@ class AnalysisMethod(BaseModel):
     settings: List[AnalysisSetting] = Field(alias="settings", description=(
         "Every setting the paper states for this technique, one entry each -- including `measured` (what it "
         "measured) and `instrument` when given."))
-    quote: str = Field(alias="q", description=QUOTE_DESC)
-    source: str = Field(alias="src", description=SOURCE_DESC)
-    confidence: Confidence = Field(alias="c")
+    # optional: each setting has its own quote (eder1994: the model left these out, and the answer failed)
+    quote: str = Field("", alias="q", description="Where the paper describes this technique (optional).")
+    source: str = Field("", alias="src", description=SOURCE_DESC)
+    confidence: Confidence = Field("high", alias="c")
 
 
 class AnalysisResult(BaseModel):

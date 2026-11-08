@@ -254,6 +254,8 @@ class Extraction:
     source: Optional["ResolvedPaper"] = None        # what was read (paper_source)
     table_images: List[Path] = field(default_factory=list)   # rendered table pages sent with the paper
     tables: List[dict] = field(default_factory=list)         # table crops for the Tables tab (table_finder.py)
+    grids: list = field(default_factory=list)                # tables the app read itself (table_grid.Grid)
+    grid_problems: List[str] = field(default_factory=list)   # mapped cells the app couldn't read (flagged)
     ambient_notes: List[str] = field(default_factory=list)   # ambient conditions filled in (calculators/ambient.py)
     abbreviations: Dict[str, str] = field(default_factory=dict)  # species: full name -> the paper's abbreviation
     skipped_kind: str = ""      # a review / perspective / theory paper / abstract: the extraction steps were skipped
@@ -366,10 +368,43 @@ def read_paper(
         vocab["all_columns"] + VariableRegistry(config.registry_path).known_columns())))
     if tables:
         (ctx.run_dir / "tables.json").write_text(json.dumps(tables, indent=2, ensure_ascii=False))
+    grids = _table_grids(ctx, pdf_path, parsed, tables, source) if config.table_grids else []
     ex = Extraction(ctx=ctx, pdf_path=pdf_path, started=started, parsed=parsed, vocab=vocab,
                     figures=figures, equations=equations, source=source, table_images=table_images, tables=tables,
-                    terms=terms, always_on=always_on)
+                    terms=terms, always_on=always_on, grids=grids)
     return ex
+
+
+def _table_grids(ctx: RunContext, pdf_path, parsed, tables: List[dict], source) -> list:
+    """The tables whose cells the app can read reliably (table_grid.py): from the PDF (main paper and supplement;
+    tables found again into a temporary folder when images aren't saved) or from an arXiv text's ' | ' rows.
+    Saved as table_grids.json; a failure only means the model reads the tables as before."""
+    from parameter_extractor.ingestion import table_grid
+    try:
+        if not parsed.paged:
+            grids = table_grid.text_grids(parsed.text)
+        else:
+            found = tables
+            if not found and parsed.table_pages:
+                import tempfile
+                own = parsed.supplements[0]["offset"] if parsed.supplements else parsed.page_count
+                with tempfile.TemporaryDirectory() as tmp:
+                    found = find_tables(str(pdf_path), [p for p in sorted(parsed.table_pages) if p <= own],
+                                        Path(tmp), rotations={p: d for p, d in parsed.page_rotations.items() if p <= own})
+            own_tables = [t for t in found if not str(t.get("page_label", "")).startswith("S")]
+            grids = table_grid.pdf_grids(str(pdf_path), own_tables)
+            for s in parsed.supplements:
+                si = [t for t in found if str(t.get("page_label", "")).startswith("S")]
+                grids += table_grid.pdf_grids(s["file"], si, start=len(grids) + 1)
+    except Exception as e:                       # never stops a run
+        ctx.note("parse", f"Tables not read by the app ({type(e).__name__}: {e}); the model reads them")
+        return []
+    if grids:
+        (ctx.run_dir / "table_grids.json").write_text(json.dumps(
+            [{"grid": g.grid_id, "table": g.table_id, "page": g.page, "rows": g.rows} for g in grids],
+            indent=2, ensure_ascii=False))
+        ctx.note("parse", f"Tables read by the app: {', '.join(g.table_id for g in grids)}")
+    return grids
 
 
 def _range_flags(rows: List[ExtractedRow]) -> List[Flag]:
@@ -430,6 +465,10 @@ def extract_steps(ex: "Extraction") -> "Extraction":
 
     # the text sent to the model: long runs of layout spaces collapsed if the pack asks
     text = compact_text(parsed.text) if packs.current().manifest.compact_text else parsed.text
+    if ex.grids:                     # the tables the app read, numbered: steps answer with a mapping
+        from parameter_extractor.ingestion.table_grid import inline, render_all
+        # a text source's tables are replaced in place; a PDF's grids follow the text (its table text is garbled)
+        text = inline(text, ex.grids) if not parsed.paged else text + render_all(ex.grids)
     # every paper-reading step gets the same paper first -- cached once, read at a fraction of the
     # price by the steps after the structure planner (api_client, RunConfig.prompt_caching)
     ctx.paper = PaperContext(text=text, images=list(table_images),
@@ -473,7 +512,8 @@ def extract_steps(ex: "Extraction") -> "Extraction":
         if pack.uses("chemistry") and not skip:
             running["chemistry"] = pool.submit(
                 _voted, ctx, "chemistry", passes, run_chemistry_extraction,
-                (ctx, text, ex.structure, vocab["species_names"]), {"table_images": table_images}, vote_chemistry)
+                (ctx, text, ex.structure, vocab["species_names"]), {"table_images": table_images, **({"grids": ex.grids} if ex.grids else {})},
+                vote_chemistry)
         if pack.uses("fit_models") and config.optional_stages.get("fit_models", "auto") != "off" and not skip:
             ctx.total_steps += 1
             running["fit_models"] = pool.submit(run_fit_models, ctx, text, ex.structure, table_images)
@@ -491,7 +531,7 @@ def extract_steps(ex: "Extraction") -> "Extraction":
                 ctx.total_steps += 1
             running[spec.name] = pool.submit(
                 _voted, ctx, spec.name, passes, run_optional_stage, (ctx, spec, text, ex.structure, table_images),
-                {}, lambda results, spec=spec: vote_stage(spec, results))
+                {"grids": ex.grids} if ex.grids else {}, lambda results, spec=spec: vote_stage(spec, results))
         results = _collect(ctx, running)
         # a domain pack without these stages gets empty stand-ins, so the rest works unchanged
         ex.metadata = results["metadata"]
@@ -501,6 +541,8 @@ def extract_steps(ex: "Extraction") -> "Extraction":
         ex.fit_models = results.get("fit_models")
         ex.analysis = results.get("analysis")
         ex.optional = {spec.name: (spec, results[spec.name]) for spec in specs}
+        ex.grid_problems = list(getattr(ex.chemistry, "grid_problems", []) or []) + [
+            p for spec in specs for p in (getattr(results[spec.name], "_grid_problems", None) or [])]
         if pack.uses("ambient_conditions"):     # 'ambient temperature' -> 25 °C, 'ambient pressure' -> 1 bar
             from parameter_extractor.calculators.ambient import apply_ambient
             ex.ambient_notes = [m for spec, result in ex.optional_list for m in apply_ambient(spec, result)]
@@ -1106,6 +1148,7 @@ def finish(
     new_vars = collect_new_variables(ex.methodology, ex.chemistry, registry, index, ex.term_search,
                                      optional=ex.optional_list, structure=ex.structure)
     new_vars += fig_new_vars
+    paper_flags += [Flag("value_not_read", m) for m in ex.grid_problems]      # mapped table cells not read
     if pack.uses("analysis") and ex.analysis is not None:     # instrument settings -> analysis_* columns
         from parameter_extractor.calculators.analysis_columns import apply_analysis
         analysis_vars, analysis_flags = apply_analysis(rows, ex.analysis, registry,

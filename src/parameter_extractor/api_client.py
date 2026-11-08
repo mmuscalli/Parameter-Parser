@@ -486,6 +486,9 @@ def _send_mapping_errors(ctx: RunContext, stage: str, model: str, **kwargs):
         kind = getattr(e, "type", None) or ""
         if _out_of_credits(getattr(e, "status_code", 0), kind, e.message):
             raise credits(e.message) from None
+        if getattr(e, "status_code", 0) == 529 or "overloaded" in str(e.message).lower():
+            raise errors.ApiRequestError(f"Anthropic's API is overloaded right now (the '{stage}' step was retried "
+                                         f"several times). Try the paper again in a few minutes.") from None
         raise errors.ApiRequestError(f"The Anthropic API returned an error during the "
                                      f"'{stage}' step: {e.message}") from None
     except ValidationError as e:

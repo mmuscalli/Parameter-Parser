@@ -202,6 +202,7 @@ def _find_on_page(page, page_no: int) -> List[dict]:
             letter, number, label = table_number(m)
             found.append({"number": number, "letter": letter, "label": label, "page_no": page_no,
                           "caption": _caption_text(caption), "box": box,
+                          "caption_box": (caption[0]["top"], caption[-1]["bottom"]),
                           "size": statistics.mean(w["size"] for l in caption for w in l["words"]),
                           "height": box[3] - box[1],
                           "xrange": (0.0, page.width) if wide or one_column else
@@ -254,7 +255,9 @@ def find_tables(pdf_path: str, pages: List[int], out_dir: Path, supplement: bool
             tables.append({"table_id": table_name(prefix, c["label"]), "number": number, "prefix": prefix,
                            "page": c["page_no"] + page_offset,
                            "page_label": f"S{c['page_no']}" if supplement else str(c["page_no"]),
-                           "caption": c["caption"], "image": str(path)})
+                           "caption": c["caption"], "image": str(path),
+                           # where it is, for reading its cells (table_grid.py)
+                           "page_no": c["page_no"], "box": list(c["box"]), "caption_box": list(c["caption_box"])})
         for p in turned:              # landscape page: the whole page, upright, cropped to its content
             img = pdf[p - 1].render(scale=scale, rotation=rotations[p]).to_pil().convert("RGB")
             x0, y0, x1, y1 = _content_box(_ink(img))
@@ -272,7 +275,7 @@ def find_tables(pdf_path: str, pages: List[int], out_dir: Path, supplement: bool
                            "number": number, "prefix": prefix, "page": p + page_offset,
                            "page_label": f"S{p}" if supplement else str(p),
                            "caption": (caption + " " if caption else "") + "(landscape page, shown whole)",
-                           "image": str(path)})
+                           "image": str(path), "page_no": p, "turned": rotations[p]})
     finally:
         pdf.close()
     tables.sort(key=lambda t: (t["number"] == 0, t.get("prefix", "") != "", t.get("prefix", ""), t["number"]))

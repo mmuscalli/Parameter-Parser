@@ -45,7 +45,7 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Dict, List, Literal, Optional, Tuple
 
-from pydantic import BaseModel, ConfigDict, Field, create_model, model_validator
+from pydantic import BaseModel, ConfigDict, Field, PrivateAttr, create_model, model_validator
 from pydantic.json_schema import SkipJsonSchema
 
 from parameter_extractor.schemas.common import NOTE_DESC, QUOTE_DESC, SOURCE_DESC, Basis
@@ -139,6 +139,25 @@ class StageSpec(BaseModel):
                          "several quantities (a tube's volume, diameter and length) is one entry per quantity. "
                          "Leave `other` empty if there's nothing else.")
         if self.table_images:
+            rules.append("TABLES IN 'TABLE GRIDS' (marked '=== TABLE GRID' in or after the paper text; the app has already "
+                         "read their cells "
+                         "-- r = row number, [n] = column number): you MUST answer for them with a mapping in "
+                         "`grids` and NOT copy their values into `rows`. Map: `grid` the "
+                         "id; parameters in COLUMNS: `cols` each grid column [n] holding a parameter (`c` its number, "
+                         "`col` the parameter, `u` the unit printed in its header"
+                         + (", `part` 'err' / 'err_plus' / 'err_minus' for a column of uncertainties" if
+                            self.has_uncertainties else "")
+                         + ") and `rows` each grid row r holding a set's or sample's values (`r`, `set`"
+                         + (", `sample`" if self.per == "sample" else "") + "); OR parameters in ROWS (a parameter "
+                         "table: one row per parameter, one column per object or solution): `prows` each grid row "
+                         "holding a parameter (`r`, `col`, `u` the unit printed in the row's label"
+                         + (", `part`" if self.has_uncertainties else "") + ") and `scols` each grid column holding "
+                         "a set's or sample's values (`c`, `set`" + (", `sample`" if self.per == "sample" else "")
+                         + "). The app reads every mapped cell "
+                         "(value, uncertainties, limits, ranges). A column can be listed twice for two parameters "
+                         "(the reaction temperature as initial AND sampled temperature). Never map header rows. "
+                         "Values a grid doesn't hold, cells marked 'not readable', or a cell that clearly differs "
+                         "from the table image go in `rows` as usual.")
             rules.append("Page images, if attached, are renders of the pages with tables (sideways ones shown "
                          "upright). Read table values and their uncertainties from the images; the text layer "
                          "of a table can be scrambled.")
@@ -314,6 +333,8 @@ class _CompactResult(BaseModel):
     `parameters` list the code works with (rows flattened, plus answers recorded in the old format)."""
     model_config = ConfigDict(populate_by_name=True, json_schema_extra=_required(["rows", "notes"]))
     _columns: frozenset = frozenset()          # the stage's parameters (set by _models)
+    _grid_items: list = PrivateAttr(default_factory=list)      # values read from TABLE GRIDS (fill_grids)
+    _grid_problems: list = PrivateAttr(default_factory=list)
 
     @model_validator(mode="before")
     @classmethod
@@ -331,6 +352,11 @@ class _CompactResult(BaseModel):
             data["rows"] = [dict(r, values=[v for v in r.get("values", []) if known(v)])
                             if isinstance(r, dict) and isinstance(r.get("values"), list) else r
                             for r in data["rows"]]
+        if isinstance(data.get("grids"), list):           # a grid map naming an unknown parameter: that entry only
+            data["grids"] = [dict(g, **{k: [e for e in g[k] if known(e)] for k in ("cols", "prows", "columns",
+                                                                                 "param_rows")
+                                        if isinstance(g.get(k), list)})
+                             if isinstance(g, dict) else g for g in data["grids"]]
         return data
 
     @property
@@ -341,7 +367,7 @@ class _CompactResult(BaseModel):
             if "sample_label" in type(row).model_fields:
                 labels["sample_label"] = row.sample_label
             out += [v.model_copy(update=labels) for v in row.values]
-        return out
+        return out + list(self._grid_items)
 
 
 @lru_cache(maxsize=None)
@@ -441,10 +467,71 @@ def _models(spec_json: str, categories: Tuple[str, ...] = ()) -> Tuple[type, typ
     )
     other_field = {"other": (List[Other], Field(default_factory=list, description=(
         "Other conditions that have no parameter of their own."))) } if spec.open_ended else {}
+    grid_field = {}
+    if spec.table_images:
+        # a table the app read itself (TABLE GRIDS, ingestion/table_grid.py): which grid column holds which
+        # parameter and which grid row is which set / sample -- the app reads the cells (fill_grids)
+        parts = ["value", "err", "err_plus", "err_minus"] if spec.has_uncertainties else ["value"]
+        GridCol = create_model(
+            f"{name}GridCol",
+            __config__=ConfigDict(populate_by_name=True, json_schema_extra=_required(["c", "col", "u"])),
+            column=(int, Field(alias="c", description="The grid column number [n].")),
+            parameter=(Literal[tuple(spec.columns)], Field(alias="col", description="The parameter it holds.")),
+            unit=(str, Field(default="", alias="u", description="The unit printed in the column's header (or '' "
+                                                               "if the cells carry their unit).")),
+            part=(Literal[tuple(parts)], Field(default="value", alias="part", description=(
+                "'value' (the default: the cells hold the values, with any uncertainties in the same cell)"
+                + ("; 'err' for a column of symmetric uncertainties (±) of the parameter, 'err_plus' / 'err_minus' "
+                   "for separate upper / lower uncertainty columns" if spec.has_uncertainties else "") + "."))),
+        )
+        grid_sample = {} if spec.per == "set" else {"sample_label": (str, Field(default="", alias="sample",
+                                                                                  description="Exact sample_label."))}
+        GridRow = create_model(
+            f"{name}GridRow",
+            __config__=ConfigDict(populate_by_name=True, json_schema_extra=_required(["r", "set"])),
+            row=(int, Field(alias="r", description="The grid row number r.")),
+            set_label=(str, Field(alias="set", description="Exact structure-plan set_label of this row.")),
+            **grid_sample,
+        )
+        # the same, transposed (parameter tables: one row per parameter, one column per object / solution)
+        ParamRow = create_model(
+            f"{name}GridParamRow",
+            __config__=ConfigDict(populate_by_name=True, json_schema_extra=_required(["r", "col", "u"])),
+            row=(int, Field(alias="r", description="The grid row number r.")),
+            parameter=(Literal[tuple(spec.columns)], Field(alias="col", description="The parameter it holds.")),
+            unit=(str, Field(default="", alias="u", description="The unit printed in the row's label (or '').")),
+            part=(Literal[tuple(parts)], Field(default="value", alias="part", description="As for a column.")),
+        )
+        SampleCol = create_model(
+            f"{name}GridSampleCol",
+            __config__=ConfigDict(populate_by_name=True, json_schema_extra=_required(["c", "set"])),
+            column=(int, Field(alias="c", description="The grid column number [n].")),
+            set_label=(str, Field(alias="set", description="Exact structure-plan set_label of this column.")),
+            **grid_sample,
+        )
+        GridMap = create_model(
+            f"{name}GridMap",
+            __config__=ConfigDict(populate_by_name=True, json_schema_extra=_required(["grid"])),
+            grid=(str, Field(alias="grid", description="The grid id, e.g. 'G1'.")),
+            columns=(List[GridCol], Field(default_factory=list, alias="cols",
+                                          description="Parameters in columns: each grid column holding a parameter.")),
+            rows=(List[GridRow], Field(default_factory=list, alias="rows",
+                                       description="...with each grid row holding a set's / sample's values.")),
+            param_rows=(List[ParamRow], Field(default_factory=list, alias="prows",
+                                              description="OR parameters in rows (a parameter table): each grid row "
+                                                          "holding a parameter...")),
+            sample_cols=(List[SampleCol], Field(default_factory=list, alias="scols",
+                                                description="...with each grid column holding a set's / sample's "
+                                                            "values.")),
+            confidence=(Literal["high", "medium", "low"], Field(default="high", alias="c")),
+        )
+        grid_field = {"grids": (List[GridMap], Field(default_factory=list, description=(
+            "Tables in TABLE GRIDS: map their columns and rows here instead of copying the values into `rows`.")))}
     Result = create_model(
         name,
         __base__=_CompactResult,
         **other_field,
+        **grid_field,
         rows=(List[Row], Field(default_factory=list, description="Values grouped by set (and sample): one entry per "
                                                                  "set/sample with values. Only values the paper "
                                                                  "states.")),
@@ -491,8 +578,80 @@ GAVE_UP = re.compile(r"\b(extraction failed|failed to extract|unable to (?:extra
                      r"(?:extract|complete))\b", re.IGNORECASE)
 
 
+def fill_grids(spec: StageSpec, result, grids) -> List[str]:
+    """Values of the tables the model mapped onto TABLE GRIDS (`result.grids`), read from the cells by the app
+    (ingestion/table_grid.py): one item per mapped value cell, like the items the model writes -- uncertainties,
+    limits and ranges read from the cell (or from mapped uncertainty columns / rows), the quote the row's label and
+    the cell, the source the table, row and column. A map has parameters in columns (`cols` x `rows`) or, for a
+    parameter table, in rows (`prows` x `scols`). Returns problems (unknown grid, unreadable cells), also kept on the
+    result."""
+    from parameter_extractor.ingestion.table_grid import cell_value
+    maps = getattr(result, "grids", None) or []
+    if not maps:
+        return []
+    Item, _ = spec.models()
+    by_id = {g.grid_id: g for g in grids or []}
+    params = {p.column: p for p in spec.parameters}
+    items, problems = [], []
+    for m in maps:
+        grid = by_id.get(m.grid)
+        if grid is None:
+            problems.append(f"{spec.label}: the answer mapped {m.grid}, which isn't one of the table grids -- "
+                            f"its values were not read")
+            continue
+        # (row, column, parameter entry, set/sample entry, uncertainty cells of that parameter) per value cell
+        cells = []
+        for row in m.rows:
+            for col in [c for c in m.columns if c.part == "value"]:
+                errs = [(row.row, e.column, e.part) for e in m.columns
+                        if e.parameter == col.parameter and e.part != "value"]
+                cells.append((row.row, col.column, col, row, errs))
+        for scol in m.sample_cols:
+            for prow in [p for p in m.param_rows if p.part == "value"]:
+                errs = [(e.row, scol.column, e.part) for e in m.param_rows
+                        if e.parameter == prow.parameter and e.part != "value"]
+                cells.append((prow.row, scol.column, prow, scol, errs))
+        first = min([r for r, *_ in cells] or [0])
+        for r, c, param, target, errs in cells:
+            raw = grid.cell(r, c)
+            if not raw.strip() or raw.strip() in ("-", "–", "—", "...", "…", "$\\cdots$"):
+                continue
+            label = grid.cell(r, 0)
+            header = grid.header(c, first) or f"column {c}"
+            fields = dict(parameter=param.parameter, unit=param.unit, quote=f"{label} {raw}".strip()[:200],
+                          source=f"{grid.table_id}, row {label or r}, column {header}",
+                          confidence=m.confidence, set_label=target.set_label,
+                          sample_label=getattr(target, "sample_label", "") or "")
+            p = params.get(param.parameter)
+            cv = cell_value(raw)
+            if p is not None and p.kind == "text":
+                fields.update(value=0.0, text=raw.strip())
+            elif cv.value is None:
+                problems.append(f"{spec.label}: {grid.table_id} row {label or r}, {param.parameter} = '{raw}' isn't "
+                                f"a number -- not read")
+                continue
+            else:
+                fields.update(value=cv.value, high=cv.high)
+                if cv.unit and not param.unit:
+                    fields["unit"] = cv.unit
+                ep, em = cv.err_plus, cv.err_minus
+                for er, ec, part in errs:
+                    ev = cell_value(grid.cell(er, ec))
+                    if ev.value is None:
+                        continue
+                    if part in ("err", "err_plus"):
+                        ep = abs(ev.value)
+                    if part in ("err", "err_minus"):
+                        em = -abs(ev.value)
+                fields.update(err_plus=ep, err_minus=em, limit={1: "upper", -1: "lower"}.get(cv.limit, ""))
+            items.append(Item(**{k: v for k, v in fields.items() if k in Item.model_fields}))
+    result._grid_items = items
+    result._grid_problems = problems
+    return problems
+
+
 def run_optional_stage(ctx, spec: StageSpec, paper_text: str, structure: StructurePlan,
-                       table_images: Optional[List[Path]] = None):
+                       table_images: Optional[List[Path]] = None, grids: Optional[list] = None):
     from parameter_extractor.api_client import call_structured
     _, Result = spec.models()
     ask = lambda: call_structured(
@@ -513,6 +672,7 @@ def run_optional_stage(ctx, spec: StageSpec, paper_text: str, structure: Structu
         if GAVE_UP.search(result.notes or ""):
             result.notes = (f"[The model reported a failure twice -- its values may be incomplete.] "
                             f"{result.notes}")
+    fill_grids(spec, result, grids)       # tables mapped onto the app's grids: cells read here
     return result
 
 

@@ -75,6 +75,12 @@ class RunConfig:
     # tool adds ~3.5K tokens to every run's cached prefix -- 0/1/3 figures: +$0.016 / +$0.005 / +$0.028 input
     figure_suggestions_on_paper: bool = False
     save_images: bool = True
+    # tables the app reads itself (ingestion/table_grid.py, 2026-11-07): their cells go in the paper as numbered
+    # grids, and the chemistry and table-reading stages answer with which grid column / row is which variable /
+    # sample instead of copying every number. Off: the model transcribes tables as before.
+    # OFF by default (measured 2026-11-07, eval/table_grids_2026-11-07.md): on the reference papers it saved no money
+    # -- the compact table formats had already removed most of the per-cell output, and the grids add input.
+    table_grids: bool = False
     save_all_figure_images: bool = False
     # Digitize EASY figures without the editor (Mickey, 2026-11-03; digitizing/auto_figure.py): a figure chosen for
     # digitizing whose suggestions parse cleanly (bar chart or scatter plot, axes calibrated, every point sorted

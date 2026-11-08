@@ -103,10 +103,22 @@ def _missing_solutions(chemistry: ChemistryExtraction, set_label: Optional[str],
     (kim2019 live run, 2026-10-26: the 20 µL nucleobase solution listed only for the 1:1 sets -- its
     concentration was stated for 1:1 -- made the 1:2 / 1:3 mixtures 13 µL instead of 33 µL.)"""
     present = {_key(s.solution) for s in solutions_for(chemistry, set_label, sample_label)}
+    # a solution only one other set uses is that set's own (kim2017 live run, 2026-11-07: a planned
+    # 'preparative synthesis' set with its own 'CaCl2 prep stock' blocked every other set's mixture): missing
+    # here only when at least half of the other sets list it
+    other_sets = {sol.set_label for sol in chemistry.added_solutions if sol.set_label and sol.set_label != set_label}
+    sets_with = {}
+    for sol in chemistry.added_solutions:
+        if sol.set_label and sol.set_label != set_label:
+            sets_with.setdefault(_key(sol.solution), set()).add(sol.set_label)
     elsewhere = {}
     for sol in chemistry.added_solutions:
-        other = (sol.set_label and sol.set_label != set_label) or (sol.sample_label and sol.sample_label != sample_label)
-        if other and _key(sol.solution) not in present:
+        if _key(sol.solution) in present:
+            continue
+        other_set = sol.set_label and sol.set_label != set_label
+        other_sample = not other_set and sol.sample_label and sol.sample_label != sample_label
+        common = len(sets_with.get(_key(sol.solution), ())) >= max(1, len(other_sets) / 2)
+        if (other_set and common) or other_sample:
             elsewhere.setdefault(_key(sol.solution), sol.solution)
     return sorted(elsewhere.values())
 

@@ -102,7 +102,7 @@ def test_compact_answer_format():
         assert {"ep", "em", "lim", "mode", "meth", "n", "b"} <= set(item["properties"])
         row = schema["$defs"][f"{spec.model_name}Row"]
         assert row["required"] == ["set", "values"] and "sample" in row["properties"]
-        assert set(schema["properties"]) == {"rows", "notes"}
+        assert set(schema["properties"]) == {"rows", "notes", "grids"}    # grids: tables the app read (2026-11-07)
         answer = Result.model_validate({"rows": [
             {"set": "HD 14067", "sample": "HD 14067 b [joint fit]", "values": [
                 {"col": "pl_orbper", "v": 7.513, "u": "yr", "ep": 0.044, "em": -0.038, "q": "7.513", "src": "Table 4",

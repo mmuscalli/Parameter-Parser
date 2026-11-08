@@ -2218,3 +2218,18 @@ Packs) whose windows overlapped. Organisation now, said in each window's intro:
   title/synonyms while its CID is unchanged; sets manifest species_cids on first save); `analysis_problems(vocab)`
   in check (names as column slots, duplicates, unknown families, units the app doesn't convert, an alias naming two
   techniques); duplicate compound names. Saving clears analysis_vocab's cache.
+
+## Table grids: built, measured, OFF (2026-11-07, Mickey: structural change (1) of the cost discussion)
+
+Full write-up: `eval/table_grids_2026-11-07.md`. `ingestion/table_grid.py` reads table cells locally (PDF text layer:
+lines + column gaps through numeric lines, sub/superscripts as ^{..}/_{..}, split decimals joined, dot leaders
+dropped, landscape pages upright; scanned pages -- text render mode 3 -- never; arXiv ' | ' rows replaced in place)
+into numbered grids; chemistry `tables` can map `grid` + `gc`/`gr` (`ChemistryExtraction.fill_grids`), table-reading
+spec stages `grids` (cols x rows, or `prows` x `scols` for parameter tables; `optional.fill_grids`); table_finder
+entries now carry page_no / box / caption_box. Live on the references: no saving (+6% mean cost, accuracy within
+run-to-run noise) -- the compact table formats had already removed the per-cell output; the remaining output is labels,
+text values, solutions, free text. So `RunConfig.table_grids` defaults to False. `scripts/eval_references.py` = live
+runs scored against runs/reference expected CSVs (rows paired by content; `--src` for a baseline checkout; `--score`).
+Fixes found: mixing `_missing_solutions` ignores a solution only one other set lists (kim2017 CaCl2); sampled
+temperature isn't a quench temperature (faisal2005); analysis method-level q/src/c optional; 529 overloaded message.
+Open (Mickey): truman2024 (a review reproducing data) gets no rows since the 2026-11-03 review rule.

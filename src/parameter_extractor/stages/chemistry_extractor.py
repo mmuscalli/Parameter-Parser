@@ -18,7 +18,7 @@ def chemistry_budget(structure: StructurePlan) -> int:
 
 def run_chemistry_extraction(
     ctx: RunContext, paper_text: str, structure_plan: StructurePlan,
-    controlled_vocab: list[str], table_images: Optional[List[Path]] = None,
+    controlled_vocab: list[str], table_images: Optional[List[Path]] = None, grids: Optional[list] = None,
 ) -> ChemistryExtraction:
     prompt = load_prompt(
         "chemistry",
@@ -26,7 +26,7 @@ def run_chemistry_extraction(
         STRUCTURE_PLAN_JSON=structure_plan.model_dump_json(indent=2),
         CONTROLLED_VOCAB_JSON=json.dumps(controlled_vocab),
     )
-    return call_structured(
+    result = call_structured(
         ctx,
         stage="chemistry",
         system_prompt="Extract every species and concentration from text and tables only "
@@ -38,3 +38,5 @@ def run_chemistry_extraction(
         max_tokens=chemistry_budget(structure_plan),
         image_paths=table_images,
     )
+    result.fill_grids(grids)          # tables mapped onto the app's grids: cells read here (table_grid.py)
+    return result
