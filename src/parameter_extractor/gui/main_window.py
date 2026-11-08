@@ -1,13 +1,16 @@
 """
-The main window: choose a PDF, enter an API key, run, review the results.
+The main window -- one search page (Mickey, 2026-11-08: the Focused search and Paper queue windows folded in).
 
 Layout, top to bottom:
-  - inputs: paper PDF, API key (optionally remembered in the system
-    keychain), output folder, and a notice that the paper is sent to Anthropic
+  - the research area and a line saying what the run will do (mode)
+  - three panes: Papers (one or many: PDFs, identifiers, a CSV list; a status per paper), Parameters (the area's
+    stages and their parameters, ticked: everything = a full extraction, a stage unticked = without it, single
+    parameters unticked = a focused search), Run options (grouped; the options for several papers or for a
+    focused search only appear when they apply)
   - (a draggable splitter handle: inputs above, everything below it resizes)
-  - Extract / Cancel buttons, progress bar and status line
-  - results tabs: Rows (the CSV, flagged rows highlighted), Flags (with the
-    supporting quote and source for each), Summary (tokens, files)
+  - Run / Cancel buttons, progress bar and status line
+  - results tabs: Rows, Flags, Figures, Tables, Equations, Summary, and Search results for a focused search
+Settings (API key, ADS token, results folder, online lookups) are in the Settings menu.
 """
 from __future__ import annotations
 import csv
@@ -79,7 +82,7 @@ class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("Parameter Extractor")
-        self.resize(1100, 760)
+        self.resize(1300, 900)
         self.setAcceptDrops(True)
 
         self._settings = QSettings()        # non-secret preferences only (never the key)
@@ -114,12 +117,13 @@ class MainWindow(QMainWindow):
         self.main_split.setChildrenCollapsible(False)
         self.main_split.setHandleWidth(10)
         self.main_split.setStretchFactor(1, 1)             # a taller window grows the results
-        self.main_split.setSizes([210, 550])               # the run options start collapsed
-        saved = self._settings.value("main_split")
+        self.main_split.setSizes([470, 430])
+        # a new key: the one-paper layout's saved position (inputs ~210 px) would squeeze the three panes
+        saved = self._settings.value("main_split_v2")
         if saved is not None:
             self.main_split.restoreState(saved)
         self.main_split.splitterMoved.connect(
-            lambda *_: self._settings.setValue("main_split", self.main_split.saveState()))
+            lambda *_: self._settings.setValue("main_split_v2", self.main_split.saveState()))
         central = QWidget()
         layout = QVBoxLayout(central)
         layout.addWidget(self.main_split)
@@ -130,22 +134,32 @@ class MainWindow(QMainWindow):
         quit_action.setMenuRole(QAction.MenuRole.QuitRole)
         self.addAction(quit_action)
         file_menu = self.menuBar().addMenu("File")
-        file_menu.addAction(QAction("Open PDF…", self, shortcut=QKeySequence.StandardKey.Open,
-                                    triggered=self._choose_pdf))
-        self.focused_action = QAction("Focused search across papers…", self, shortcut="Ctrl+Shift+F",
-                                      triggered=self.open_focused_search)
-        file_menu.addAction(self.focused_action)
-        self.queue_action = QAction("Paper queue (full extraction)…", self, shortcut="Ctrl+Shift+Q",
-                                    triggered=self.open_queue)
-        file_menu.addAction(self.queue_action)
+        self.add_pdfs_action = QAction("Add PDFs…", self, shortcut=QKeySequence.StandardKey.Open,
+                                       triggered=self._choose_pdf)
+        self.add_list_action = QAction("Add papers from a list (CSV)…", self, triggered=lambda: self.papers.add_list())
+        file_menu.addAction(self.add_pdfs_action)
+        file_menu.addAction(self.add_list_action)
         file_menu.addSeparator()
+        file_menu.addAction(quit_action)
+        # Settings: a menu like Data Packs (Mickey, 2026-11-08), not a button
+        settings_menu = self.menuBar().addMenu("Settings")
         self.settings_action = QAction("Settings…", self, shortcut=QKeySequence.StandardKey.Preferences,
                                        triggered=self.open_settings)
-        self.settings_action.setMenuRole(QAction.MenuRole.PreferencesRole)   # macOS: in the app menu
-        file_menu.addAction(self.settings_action)
-        file_menu.addAction(quit_action)
-        self._focused_window = None
-        self._queue_window = None
+        self.settings_action.setMenuRole(QAction.MenuRole.PreferencesRole)   # macOS: also in the app menu
+        self.settings_menu_action = QAction("API keys, results folder and lookups…", self,
+                                            triggered=self.open_settings)
+        self.output_action = QAction("Choose the results folder…", self, triggered=self._choose_output_dir)
+        self.open_output_action = QAction("Open the results folder", self,
+                                          triggered=lambda: self._open(Path(self.out_edit.text().strip()).expanduser()))
+        self.lookups_action = QAction("Online lookups (PubChem, NASA Exoplanet Archive)", self, checkable=True)
+        self.lookups_action.setToolTip("Names compounds through PubChem and checks exoplanet values against the "
+                                       "NASA Exoplanet Archive (no paper text is sent there).")
+        for action in (self.settings_menu_action, self.settings_action):
+            settings_menu.addAction(action)
+        settings_menu.addSeparator()
+        for action in (self.output_action, self.open_output_action, self.lookups_action):
+            settings_menu.addAction(action)
+        settings_menu.setToolTipsVisible(True)
         # one menu for everything about research areas (Mickey, 2026-11-07: the Variables and Data Packs menus
         # overlapped). Two layers: what a pack DEFINES (its window: columns, compounds, analysis methods, stages,
         # rules, formulas) and what YOU taught the app in reviews (accepted columns, synonyms, compound names,
@@ -173,15 +187,26 @@ class MainWindow(QMainWindow):
         packs_menu.addAction(self.remove_pack_action)
         packs_menu.addAction(self.packs_folder_action)
 
+        from parameter_extractor.gui.multi_runs import FocusedRun, QueueRun
+        self.focused_run = FocusedRun(self)
+        self.focused_run.finished.connect(self._multi_done)
+        self.queue_run = QueueRun(self)
+        self.queue_run.finished.connect(self._multi_done)
+        self.lookups_action.setChecked(self.pubchem_box.isChecked())
+        self.lookups_action.toggled.connect(self.pubchem_box.setChecked)
+        self.pubchem_box.toggled.connect(self.lookups_action.setChecked)
+
         self._load_preferences()
         self._update_run_enabled()
 
     # ---- layout ---------------------------------------------------------------
 
     def _build_inputs(self) -> QWidget:
-        """The paper, the research area and the run options (collapsible; Mickey, 2026-10-24: keep the
-        window uncluttered). Set-once things (API key, ADS token, output folder, online lookups) are
-        in Settings (gui/settings_dialog.py); their widgets keep their names here."""
+        """The research area, then three panes -- Papers, Parameters, Run options -- and the notes below them.
+        Set-once things (API key, ADS token, results folder, online lookups) are in Settings
+        (gui/settings_dialog.py, the Settings menu); their widgets keep their names here."""
+        from parameter_extractor.gui.paper_list import PaperListPanel
+        from parameter_extractor.gui.parameter_panel import ParameterPanel
         from parameter_extractor.gui.settings_dialog import SettingsDialog
         self.settings_dialog = SettingsDialog(self)
         self.settings_dialog.closed.connect(self._save_preferences)
@@ -195,15 +220,11 @@ class MainWindow(QMainWindow):
             d.handoff_box.toggled.connect(self._update_run_enabled)
             d.handoff_edit.textChanged.connect(self._update_run_enabled)
 
-        box = QGroupBox()
-        form = QFormLayout(box)
-        self.pdf_edit = QLineEdit(placeholderText="Choose a PDF or drop one here -- or type an arXiv ID, DOI "
-                                                  "or ADS bibcode")
-        self.pdf_edit.setToolTip("A local PDF, or a paper to read from arXiv: an arXiv ID (2308.05343), a DOI "
-                                 "(10.1093/pasj/psad056) or an ADS bibcode (needs an ADS token in Settings).")
-        self.pdf_edit.textChanged.connect(self._update_run_enabled)
-        pdf_btn = QPushButton("Choose…", clicked=self._choose_pdf)
-        form.addRow("Paper:", self._row(self.pdf_edit, pdf_btn))
+        page = QWidget()
+        v = QVBoxLayout(page)
+        v.setContentsMargins(0, 0, 0, 0)
+        head = QHBoxLayout()
+        head.addWidget(QLabel("<b>Research area:</b>"))
         from parameter_extractor import packs
         self.pack_combo = QComboBox()
         for pack_id, pack in sorted(packs.available().items(), key=lambda kv: kv[1].label):
@@ -211,163 +232,243 @@ class MainWindow(QMainWindow):
             self.pack_combo.setItemData(self.pack_combo.count() - 1, pack.manifest.description,
                                         Qt.ItemDataRole.ToolTipRole)
         self.pack_combo.setToolTip("The research area: which dataset columns, vocabulary, prompts and "
-                                   "extraction stages are used (domain packs).")
+                                   "extraction stages are used (Data Packs menu).")
         self.pack_combo.currentIndexChanged.connect(self._on_pack_changed)
-        form.addRow("Research area:", self.pack_combo)
+        head.addWidget(self.pack_combo)
+        head.addSpacing(16)
+        self.mode_label = QLabel()                    # what the run will do
+        self.mode_label.setStyleSheet("QLabel { font-weight: 600; color: palette(link); }")
+        self.mode_label.setToolTip("What Run will do: a full extraction (every parameter ticked; a stage unticked "
+                                   "is skipped), one after another for several papers, or a focused search when "
+                                   "single parameters are unticked.")
+        head.addWidget(self.mode_label)
+        head.addStretch(1)
+        v.addLayout(head)
 
-        # run options: a toggle with a one-line summary; the options themselves below it
-        self.options_btn = QToolButton(text="Run options", checkable=True)
-        self.options_btn.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
-        self.options_btn.setArrowType(Qt.ArrowType.RightArrow)
-        self.options_btn.setStyleSheet("QToolButton { border: none; font-weight: 600; }")
-        self.options_summary = QLabel()
-        self.options_summary.setStyleSheet("color: palette(placeholder-text);")
-        form.addRow(self._row(self.options_btn, self.options_summary))
-        self.options_widget = QWidget()
-        options = QFormLayout(self.options_widget)
-        options.setContentsMargins(18, 0, 0, 0)
+        self.top_split = QSplitter(Qt.Orientation.Horizontal)
+        papers_box = QGroupBox("Papers")
+        pl = QVBoxLayout(papers_box)
+        self.papers = PaperListPanel()
+        self.papers.changed.connect(self._update_run_enabled)
+        self.papers.message.connect(self.status_message)
+        self.papers.selected.connect(self._paper_selected)
+        self.pdf_edit = self.papers.id_edit            # the typed paper: run directly, or Enter adds it
+        self.pdf_edit.textChanged.connect(self._update_run_enabled)
+        pl.addWidget(self.papers)
+        self.top_split.addWidget(papers_box)
+
+        params_box = QGroupBox("Parameters")
+        ql = QVBoxLayout(params_box)
+        self.params = ParameterPanel()
+        self.params.changed.connect(self._update_run_enabled)
+        ql.addWidget(self.params)
+        self.top_split.addWidget(params_box)
+
+        options_box = QGroupBox("Run options")
+        ol = QVBoxLayout(options_box)
+        ol.setContentsMargins(4, 4, 4, 4)
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QFrame.Shape.NoFrame)
+        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        scroll.setWidget(self._build_options())
+        ol.addWidget(scroll)
+        self.top_split.addWidget(options_box)
+        self.top_split.setStretchFactor(0, 3)
+        self.top_split.setStretchFactor(1, 4)
+        self.top_split.setStretchFactor(2, 3)
+        self.top_split.setSizes([330, 430, 330])
+        saved = self._settings.value("top_split")
+        if saved is not None:
+            self.top_split.restoreState(saved)
+        self.top_split.splitterMoved.connect(lambda *_: self._settings.setValue("top_split",
+                                                                                 self.top_split.saveState()))
+        v.addWidget(self.top_split, 1)
+
+        self.settings_hint = QLabel(wordWrap=True)
+        self.settings_hint.linkActivated.connect(lambda _: self.open_settings())
+        v.addWidget(self.settings_hint)
+        note = QLabel(PRIVACY_NOTE, wordWrap=True)
+        note.setStyleSheet("color: palette(placeholder-text);")
+        v.addWidget(note)
+        return page
+
+    @staticmethod
+    def _section(title: str) -> QLabel:
+        label = QLabel(title)
+        label.setStyleSheet("QLabel { font-weight: 600; margin-top: 8px; }")
+        return label
+
+    def _build_options(self) -> QWidget:
+        """The run options, grouped (Mickey, 2026-11-08: they had outgrown one dropdown). The groups for several
+        papers and for a focused search only show when they apply."""
+        w = QWidget()
+        v = QVBoxLayout(w)
+        v.setContentsMargins(6, 0, 6, 6)
+        v.setSpacing(4)
+
+        v.addWidget(self._section("Models and cost"))
+        form = QFormLayout()
+        form.setFieldGrowthPolicy(QFormLayout.FieldGrowthPolicy.AllNonFixedFieldsGrow)
         self.profile_combo = QComboBox()
         for key, label, tip in MODEL_PROFILE_CHOICES:
-            self.profile_combo.addItem(label, key)
+            self.profile_combo.addItem(label.split(" -- ")[0], key)       # the details are in the tooltip
             self.profile_combo.setItemData(self.profile_combo.count() - 1, tip, Qt.ItemDataRole.ToolTipRole)
         self.profile_combo.setToolTip("Which Claude models read the paper:<br><br>"
                                       + "<br><br>".join(tip for _, _, tip in MODEL_PROFILE_CHOICES)
                                       + "<br><br>Figure-digitizing suggestions and LaTeX conversion (when you ask "
                                         "for them) always use Sonnet 5.5.")
-        options.addRow("Models:", self.profile_combo)
+        form.addRow("Models:", self.profile_combo)
         self.passes_combo = QComboBox()
-        for n, label in ((1, "1 pass"), (2, "2 passes, keep values by vote"), (3, "3 passes, keep values by vote")):
+        for n, label in ((1, "1 pass"), (2, "2 passes, vote"), (3, "3 passes, vote")):
             self.passes_combo.addItem(label, n)
         self.passes_combo.setToolTip(
             "Runs the extraction steps after the row plan 2 or 3 times and keeps each value by majority. "
             "Recommended: 3 passes with Economy (recovers values a single pass drops at random); 1 pass with "
             "Standard or Balanced. Each extra pass adds the cost of those steps again (the paper is read from "
             "cache). Disagreements between passes are flagged.")
-        options.addRow("Passes:", self.passes_combo)
+        form.addRow("Passes:", self.passes_combo)
+        self._models_form = form
+        v.addLayout(form)
         self.batch_box = QCheckBox("Batch mode -- half price, slower")
         self.batch_box.setToolTip("Sends every request through Anthropic's Message Batches API at half the price. "
                                   "Each step then waits in Anthropic's batch queue: usually a few minutes, at "
                                   "most 24 hours, so a paper can take much longer. Results are the same. Best for "
                                   "papers you don't need right away.")
+        v.addWidget(self.batch_box)
+
+        v.addWidget(self._section("Paper text"))
         self.arxiv_box = QCheckBox("Use arXiv text when available")
         self.arxiv_box.setToolTip("When the PDF names its arXiv ID or DOI and arXiv has the paper's full text, read "
                                   "that instead of the PDF: about 40% fewer tokens and exact table values. It is "
                                   "the arXiv preprint (the version read is named in the flags), and figures "
                                   "can't be digitized from it. Papers typed as an ID always come from arXiv.")
-        self.equations_box = QCheckBox("Convert labelled equations to LaTeX")
-        self.equations_box.setToolTip("Equations the authors number or name ('(1)', 'Eq. 2') are always found and "
-                                      "shown in the Equations tab. Ticked, they're also transcribed to LaTeX: "
-                                      "one small API call (about 2 cents for a dozen equations).")
-        self.suggest_box = QCheckBox("Suggest new variables")
-        self.suggest_box.setChecked(True)
-        self.suggest_box.setToolTip("Also lists conditions and species the dataset has no column for (e.g. a "
-                                    "reaction time, a stirring rate) and offers them at the end, grouped by "
-                                    "category, to add as new columns. Unticked: no suggestions and a shorter "
-                                    "review (about 1.5% fewer tokens); parameters you ask to look for and "
-                                    "assumed values are still reviewed, and what was left out is listed in "
-                                    "one flag.")
         self.si_box = QCheckBox("Include supplementary information")
         self.si_box.setChecked(True)
         self.si_box.setToolTip("A PDF next to the paper named like '<paper>_SI.pdf' (or ' SI', '-ESI', "
                                "'_supplementary', '_supporting information') is read with it: its text and tables "
                                "are used, its pages shown as S1, S2, ..., and everything is reported under the "
                                "paper. In a paper list, SI files are folded into their papers.")
-        self.images_box = QCheckBox("Save table and figure images")
-        self.images_box.setChecked(True)
-        self.images_box.setToolTip("Keep a crop of every table (the Tables tab) and the images of the figures you "
-                                   "digitize in the run folder, for checking values and flags against the paper.")
-        self.all_figures_box = QCheckBox("Also keep images of figures not digitized")
-        self.all_figures_box.setChecked(False)
-        self.all_figures_box.setToolTip("Figures are rendered for the figure review; normally only the ones you "
-                                        "digitize are kept. Tick to keep every figure's image.")
-        self.images_box.toggled.connect(self.all_figures_box.setEnabled)
+        v.addWidget(self.arxiv_box)
+        v.addWidget(self.si_box)
+
+        self.review_widget = QWidget()            # not used by a focused search: hidden then
+        rv = QVBoxLayout(self.review_widget)
+        rv.setContentsMargins(0, 0, 0, 0)
+        rv.setSpacing(4)
+        rv.addWidget(self._section("Review"))
+        self.suggest_box = QCheckBox("Suggest new variables")
+        self.suggest_box.setChecked(True)
+        self.suggest_box.setToolTip("Also lists conditions and species the dataset has no column for (e.g. a "
+                                    "reaction time, a stirring rate) and offers them at the end, grouped by "
+                                    "category, to add as new columns. Unticked: no suggestions and a shorter "
+                                    "review (about 1.5% fewer tokens); assumed values are still reviewed, and "
+                                    "what was left out is listed in one flag.")
         self.auto_figures_box = QCheckBox("Digitize easy figures automatically")
-        self.auto_figures_box.setChecked(False)
         self.auto_figures_box.setToolTip(
             "Figures you choose to digitize are first parsed from their suggestions: a bar chart or scatter plot whose "
             "axes calibrate and whose points all sort into the suggested series is saved without opening the "
-            "digitizer (flagged, so you can check it). Anything else opens in the digitizer as usual. Paper queues "
-            "and command-line runs also try every figure (one suggestion request each).")
-        # the on/off options in one dropdown (it will grow); checkboxes inside keep the menu open
-        self.toggles_btn = QToolButton()
-        self.toggles_btn.setPopupMode(QToolButton.ToolButtonPopupMode.InstantPopup)
-        self.toggles_btn.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextOnly)
-        self.toggles_btn.setToolTip("Switch run options on or off: batch mode, arXiv text, LaTeX equations, "
-                                    "new-variable suggestions.")
-        menu = QMenu(self.toggles_btn)
-        menu.setToolTipsVisible(True)
-        for toggle in self.option_toggles():
-            holder = QWidget()
-            row = QHBoxLayout(holder)
-            row.setContentsMargins(10, 3, 12, 3)
-            row.addWidget(toggle)
-            action = QWidgetAction(menu)
-            action.setDefaultWidget(holder)
-            menu.addAction(action)
-        self.toggles_btn.setMenu(menu)
-        options.addRow("Options:", self.toggles_btn)
-        # the area's switchable extraction stages (stages/optional.toggleable_stages), rebuilt on change
-        self.stages_widget = QWidget()
-        self.stages_layout = QVBoxLayout(self.stages_widget)
-        self.stages_layout.setContentsMargins(0, 0, 0, 0)
-        self.stages_layout.setSpacing(2)
-        self.stage_boxes: dict = {}
-        options.addRow("Extraction stages:", self.stages_widget)
-        self.terms_edit = QPlainTextEdit()
-        self.terms_edit.setPlaceholderText("Optional: parameters you especially want found, one per line "
-                                           "(e.g. extraction solvent volume, flowthrough recirculation time)")
-        self.terms_edit.setFixedHeight(54)
-        self.terms_edit.setToolTip("Each term gets an explicit answer from a targeted search -- its value, "
-                                   "or 'not stated in the paper'. One extra API call when used.")
-        options.addRow("Parameters to look for:", self.terms_edit)
-        self._inputs_form = options
-        form.addRow(self.options_widget)
-        self.options_btn.toggled.connect(self._show_options)
-        for w in (self.profile_combo, self.passes_combo):
-            w.currentIndexChanged.connect(self._update_options_summary)
-        for w in self.option_toggles():
-            w.toggled.connect(self._update_options_summary)
-        self.terms_edit.textChanged.connect(self._update_options_summary)
+            "digitizer (flagged, so you can check it). Anything else opens in the digitizer as usual. Runs of "
+            "several papers without figure review and command-line runs also try every figure.")
+        rv.addWidget(self.suggest_box)
+        rv.addWidget(self.auto_figures_box)
 
-        self.settings_hint = QLabel(wordWrap=True)
-        self.settings_hint.linkActivated.connect(lambda _: self.open_settings())
-        form.addRow("", self.settings_hint)
-        note = QLabel(PRIVACY_NOTE, wordWrap=True)
-        note.setStyleSheet("color: palette(placeholder-text);")
-        form.addRow("", note)
-        return box
+        rv.addWidget(self._section("Saved with the results"))
+        self.images_box = QCheckBox("Table and figure images")
+        self.images_box.setChecked(True)
+        self.images_box.setToolTip("Keep a crop of every table (the Tables tab) and the images of the figures you "
+                                   "digitize in the run folder, for checking values and flags against the paper.")
+        self.all_figures_box = QCheckBox("Also images of figures not digitized")
+        self.all_figures_box.setToolTip("Figures are rendered for the figure review; normally only the ones you "
+                                        "digitize are kept. Tick to keep every figure's image.")
+        self.images_box.toggled.connect(self.all_figures_box.setEnabled)
+        self.equations_box = QCheckBox("Labelled equations as LaTeX")
+        self.equations_box.setToolTip("Equations the authors number or name ('(1)', 'Eq. 2') are always found and "
+                                      "shown in the Equations tab. Ticked, they're also transcribed to LaTeX: "
+                                      "one small API call (about 2 cents for a dozen equations).")
+        for box in (self.images_box, self.all_figures_box, self.equations_box):
+            rv.addWidget(box)
+        v.addWidget(self.review_widget)
 
-    def _show_options(self, shown: bool) -> None:
-        self.options_widget.setVisible(shown)
-        self.options_btn.setArrowType(Qt.ArrowType.DownArrow if shown else Qt.ArrowType.RightArrow)
-        self._settings.setValue("options_shown", shown)
+        # only with several papers (a full extraction runs them as a queue)
+        self.multi_widget = QWidget()
+        mv = QVBoxLayout(self.multi_widget)
+        mv.setContentsMargins(0, 0, 0, 0)
+        mv.setSpacing(4)
+        mv.addWidget(self._section("Several papers"))
+        self.review_figures_box = QCheckBox("Review figures as the papers are read")
+        self.review_figures_box.setToolTip("Each paper is read first; its figures open in the figure review right "
+                                           "away (choose, then digitize) while the extraction carries on.")
+        self.review_variables_box = QCheckBox("Review new variables at the end")
+        self.review_variables_box.setToolTip("When every paper is extracted, each paper's new-variable review opens "
+                                             "in turn (choices carry over). Unticked, new variables stay out of the "
+                                             "CSV (listed in each paper's new_variables.json).")
+        mv.addWidget(self.review_figures_box)
+        mv.addWidget(self.review_variables_box)
+        v.insertWidget(0, self.multi_widget)          # the groups that apply to this run come first
+
+        # only for a focused search (single parameters unticked)
+        self.focused_widget = QWidget()
+        fv = QVBoxLayout(self.focused_widget)
+        fv.setContentsMargins(0, 0, 0, 0)
+        fv.setSpacing(4)
+        fv.addWidget(self._section("Focused search"))
+        self.words_edit = QLineEdit(placeholderText="Search words, e.g. EXOFAST (optional)")
+        self.words_edit.setToolTip("A paper is searched only if its text contains one of these words (comma-"
+                                   "separated; case doesn't matter); the passages around them are what the model "
+                                   "reads. Default: words from the parameters' descriptions.")
+        self.tables_box = QCheckBox("Keep whole tables")
+        self.tables_box.setToolTip("A match in or just above a table sends the whole table. Table rows rarely contain "
+                                   "the search words, so without this most of a table is left out. About 10-45% more "
+                                   "tokens than the matching lines alone.")
+        self.plan_box = QCheckBox("Rows as in a full extraction (plan rows first)")
+        self.plan_box.setToolTip("Runs the research area's row planner on each paper first, then asks for the "
+                                 "parameters on those rows: one row per sample, as a full extraction makes them. "
+                                 "Roughly doubles the cost of a search.")
+        self.whole_box = QCheckBox("Whole paper (finds more, costs more)")
+        self.whole_box.toggled.connect(lambda on: self.tables_box.setEnabled(not on))
+        for x in (self.words_edit, self.tables_box, self.plan_box, self.whole_box):
+            fv.addWidget(x)
+        v.insertWidget(0, self.focused_widget)
+        v.addStretch(1)
+        return w
 
     def option_toggles(self) -> List[QCheckBox]:
-        """The on/off run options in the Options dropdown, in menu order."""
-        return [self.batch_box, self.arxiv_box, self.equations_box, self.suggest_box, self.si_box,
-                self.images_box, self.all_figures_box, self.auto_figures_box]
+        """The on/off run options, in the panel's order."""
+        return [self.batch_box, self.arxiv_box, self.si_box, self.suggest_box, self.auto_figures_box,
+                self.images_box, self.all_figures_box, self.equations_box]
 
     def _update_options_summary(self, *_args) -> None:
-        """One line for the collapsed run options: what this run will do (and the dropdown's
-        own text: the options that are on)."""
-        short = {self.batch_box: "Batch", self.arxiv_box: "arXiv text", self.equations_box: "LaTeX",
-                 self.suggest_box: "Variable suggestions", self.si_box: "SI",
-                 self.images_box: "Images", self.all_figures_box: "All figure images",
-                 self.auto_figures_box: "Auto figures"}
-        on = [short[b] for b in self.option_toggles() if b.isChecked()]
-        self.toggles_btn.setText(", ".join(on) if on else "None on")
-        stages = [b for b in self.stage_boxes.values()]
-        passes = self.passes_combo.currentData() or 1
-        parts = [self.profile_combo.currentText().split(" (")[0] + " models",
-                 f"{passes} passes with vote" if passes > 1 else "",
-                 "batch" if self.batch_box.isChecked() else "",
-                 "arXiv text when available" if self.arxiv_box.isChecked() else "",
-                 "equations to LaTeX" if self.equations_box.isChecked() else "",
-                 "" if self.suggest_box.isChecked() else "no new-variable suggestions",
-                 "" if self.si_box.isChecked() else "no supplementary information",
-                 f"{sum(b.isChecked() for b in stages)} of {len(stages)} stages" if stages else "",
-                 f"{len(self.focus_terms())} parameter(s) to look for" if self.focus_terms() else ""]
-        self.options_summary.setText(" · ".join(p for p in parts if p))
+        """Kept for callers of the old summary line: the mode line says what the run will do now."""
+        self._update_mode()
+
+    def run_items(self) -> list:
+        """The papers to run: the list, plus a paper typed in the field and not yet added."""
+        items = self.papers.items()
+        typed = self.paper_item() if self.pdf_edit.text().strip() else None
+        if typed is not None and str(typed) not in {str(i) for i in items}:
+            items = items + [typed]
+        return items
+
+    def _update_mode(self) -> None:
+        """The mode line, the Run button's text, and which option groups show: several papers -> a queue
+        (multi_widget), single parameters unticked -> a focused search (focused_widget)."""
+        n = len(self.run_items())
+        focused = self.params.focused
+        self.multi_widget.setVisible(n > 1 and not focused)
+        self.focused_widget.setVisible(focused)
+        self.review_widget.setVisible(not focused)     # figures, new variables, saved images: full extraction only
+        self._models_form.setRowVisible(self.passes_combo, not focused)   # a focused search: one call per paper
+        if focused:
+            k = len(self.params.checked_columns())
+            self.mode_label.setText(f"Focused search: {k} parameter{'s' if k != 1 else ''}"
+                                    + (f" in {n} papers" if n > 1 else ""))
+            self.run_btn.setText(f"Search {n} paper{'s' if n != 1 else ''}" if n else "Search")
+        else:
+            off = self.params.stages_off()
+            self.mode_label.setText("Full extraction" + (f" of {n} papers (one after another)" if n > 1 else "")
+                                    + (f" -- without {', '.join(off)}" if off else ""))
+            self.run_btn.setText(f"Extract data from {n} papers" if n > 1 else "Extract data")
 
     def open_settings(self) -> None:
         self.settings_dialog.show()
@@ -377,28 +478,25 @@ class MainWindow(QMainWindow):
     def _build_run_controls(self) -> QVBoxLayout:
         self.run_btn = QPushButton("Extract data", clicked=self._start_run, default=True)
         self.cancel_btn = QPushButton("Cancel", clicked=self._cancel_run, enabled=False)
-        self.settings_btn = QPushButton("Settings…", clicked=self.open_settings)
-        # the focused search is its own mode: a few parameters across many papers (gui/focused_window.py)
-        self.focused_btn = QPushButton("Focused search…", clicked=self.open_focused_search)
-        self.queue_btn = QPushButton("Paper queue…", clicked=self.open_queue)
-        self.queue_btn.setToolTip("The full extraction over many papers: review every paper's figures first, "
-                                  "then the rest runs without you until the end (one combined CSV).")
-        self.focused_btn.setToolTip("Search many papers for a few chosen parameters only (e.g. which papers used "
-                                    "EXOFAST): a separate, much cheaper search with its own window.")
+        self.skip_figures_btn = QPushButton("Skip figures of the remaining papers", clicked=self._skip_figures)
+        self.skip_figures_btn.setHidden(True)
+        self.retry_btn = QPushButton("Retry failed papers", clicked=self._retry_failed)
+        self.retry_btn.setToolTip("Search again only the papers whose result was 'Couldn't search' (e.g. arXiv was "
+                                  "busy), with the same parameters.")
+        self.retry_btn.setHidden(True)
         self.progress = QProgressBar(minimum=0, maximum=6, value=0, textVisible=False)
-        self.status = QLabel("Choose a paper and enter an API key to begin.")
-
+        self.status = QLabel("Add a paper and enter an API key to begin.", wordWrap=True)
         buttons = QHBoxLayout()
-        buttons.addWidget(self.run_btn)
-        buttons.addWidget(self.cancel_btn)
+        for b in (self.run_btn, self.cancel_btn, self.skip_figures_btn, self.retry_btn):
+            buttons.addWidget(b)
         buttons.addWidget(self.progress, stretch=1)
-        buttons.addWidget(self.queue_btn)
-        buttons.addWidget(self.focused_btn)
-        buttons.addWidget(self.settings_btn)
         col = QVBoxLayout()
         col.addLayout(buttons)
         col.addWidget(self.status)
         return col
+
+    def status_message(self, text: str) -> None:
+        self.status.setText(text)
 
     def _build_results(self) -> QTabWidget:
         tabs = QTabWidget()
@@ -458,6 +556,13 @@ class MainWindow(QMainWindow):
         s_layout.addLayout(s_buttons)
         tabs.addTab(summary, "Summary")
 
+        # a focused search's results: one row per paper and object, a column per parameter (focused_results.csv)
+        self.search_table = QTableWidget(0, 4)
+        self.search_table.setHorizontalHeaderLabels(["Paper", "Set", "Object", "Result"])
+        self.search_table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
+        self.search_index = tabs.addTab(self.search_table, "Search results")
+        tabs.setTabVisible(self.search_index, False)
+
         tabs.setEnabled(False)
         return tabs
 
@@ -474,12 +579,11 @@ class MainWindow(QMainWindow):
 
     def _load_preferences(self) -> None:
         self.out_edit.setText(self._settings.value("output_dir", str(DEFAULT_OUTPUT_DIR)))
-        self.terms_edit.setPlainText(self._settings.value("focus_terms", ""))
         self.pubchem_box.setChecked(self._settings.value("use_pubchem", True, type=bool))
         saved_pack = self._settings.value("pack", "prebiotic_chemistry")
         index = self.pack_combo.findData(saved_pack)
         self.pack_combo.setCurrentIndex(index if index >= 0 else self.pack_combo.findData("prebiotic_chemistry"))
-        self._rebuild_stage_boxes(self.pack_combo.currentData())     # no change signal if index 0 was kept
+        self.params.load(self.pack_combo.currentData())           # no change signal if index 0 was kept
         self.equations_box.setChecked(self._settings.value("equations_to_latex", False, type=bool))
         index = self.profile_combo.findData(self._settings.value("model_profile", "standard"))
         self.profile_combo.setCurrentIndex(max(index, 0))
@@ -495,9 +599,12 @@ class MainWindow(QMainWindow):
         if self.settings_dialog.handoff_box is not None:
             self.settings_dialog.handoff_edit.setText(self._settings.value("dev/handoff_dir", ""))
             self.settings_dialog.handoff_box.setChecked(self._settings.value("dev/handoff", False, type=bool))
-        shown = self._settings.value("options_shown", False, type=bool)
-        self.options_btn.setChecked(shown)
-        self._show_options(shown)
+        self.review_figures_box.setChecked(self._settings.value("queue/review_figures", True, type=bool))
+        self.review_variables_box.setChecked(self._settings.value("queue/review_variables", True, type=bool))
+        self.words_edit.setText(self._settings.value("focused/search_words", ""))
+        self.whole_box.setChecked(self._settings.value("focused/whole_paper", False, type=bool))
+        self.tables_box.setChecked(self._settings.value("focused/whole_tables", True, type=bool))
+        self._load_plan_box()
         stored_ads = key_store.load_key(key_store.ADS_ACCOUNT)
         self._ads_was_stored = bool(stored_ads)
         if stored_ads:
@@ -511,48 +618,39 @@ class MainWindow(QMainWindow):
             self.remember_key_box.setChecked(True)
 
     def _on_pack_changed(self, _index: int) -> None:
-        """Windows opened before a run (Remembered variables) show the chosen area's columns."""
+        """The chosen area's stages and parameters (and its pack active for the windows opened before a run)."""
         from parameter_extractor import packs
         pack_id = self.pack_combo.currentData()
         if pack_id:
             packs.activate(pack_id)
-            self._rebuild_stage_boxes(pack_id)
+            self.params.load(pack_id)
+            self._load_plan_box()
 
-    def _rebuild_stage_boxes(self, pack_id: str) -> None:
-        """One checkbox per switchable stage of the chosen research area; each area remembers
-        its own choices (QSettings stages/<pack>/<stage>). Unticked = the stage is skipped."""
+    def _load_plan_box(self) -> None:
+        """'Rows as in a full extraction', per research area, defaulting to the pack's setting."""
         from parameter_extractor import packs
-        from parameter_extractor.stages.optional import toggleable_stages
-        for box in self.stage_boxes.values():
-            self.stages_layout.removeWidget(box)
-            box.hide()                     # deleteLater waits for the event loop; don't leave it drawn
-            box.setParent(None)
-            box.deleteLater()
-        self.stage_boxes = {}
+        pack_id = self.pack_combo.currentData() or "prebiotic_chemistry"
         pack = packs.available().get(pack_id)
-        toggles = toggleable_stages(pack) if pack else []
-        for t in toggles:
-            box = QCheckBox(t.label + (" (when the paper calls for it)" if t.conditional else ""))
-            box.setToolTip(t.description)
-            box.setChecked(self._settings.value(f"stages/{pack_id}/{t.name}", True, type=bool))
-            box.toggled.connect(lambda on, key=f"stages/{pack_id}/{t.name}": self._settings.setValue(key, on))
-            box.toggled.connect(self._update_options_summary)
-            self.stages_layout.addWidget(box)
-            self.stage_boxes[t.name] = box
-        self._inputs_form.setRowVisible(self.stages_widget, bool(toggles))
-        self._update_options_summary()
+        default = bool(pack and pack.manifest.focused_row_plan)
+        self.plan_box.setChecked(self._settings.value(f"focused/{pack_id}/plan_rows", default, type=bool))
 
     def optional_stage_choices(self) -> dict:
-        """RunConfig.optional_stages: unticked stages are 'off'; ticked ones run as usual."""
-        return {name: "auto" if box.isChecked() else "off" for name, box in self.stage_boxes.items()}
+        """RunConfig.optional_stages: stages unticked in the Parameters panel are 'off'; the rest run as usual."""
+        return self.params.optional_stage_choices()
 
     def focus_terms(self) -> list:
-        text = self.terms_edit.toPlainText().replace(";", "\n")
-        return [t.strip() for t in text.splitlines() if t.strip()]
+        """'Parameters to look for' left the window (Mickey, 2026-11-08); the backend option stays (CLI --look-for)."""
+        return []
 
     def _save_preferences(self) -> None:
         self._settings.setValue("output_dir", self.out_edit.text().strip())
-        self._settings.setValue("focus_terms", self.terms_edit.toPlainText())
+        self._settings.setValue("queue/review_figures", self.review_figures_box.isChecked())
+        self._settings.setValue("queue/review_variables", self.review_variables_box.isChecked())
+        self._settings.setValue("focused/search_words", self.words_edit.text())
+        self._settings.setValue("focused/whole_paper", self.whole_box.isChecked())
+        self._settings.setValue("focused/whole_tables", self.tables_box.isChecked())
+        if self.pack_combo.currentData():
+            self._settings.setValue(f"focused/{self.pack_combo.currentData()}/plan_rows", self.plan_box.isChecked())
         self._settings.setValue("use_pubchem", self.pubchem_box.isChecked())
         self._settings.setValue("pack", self.pack_combo.currentData())
         self._settings.setValue("equations_to_latex", self.equations_box.isChecked())
@@ -589,13 +687,10 @@ class MainWindow(QMainWindow):
     # ---- input handling -------------------------------------------------------
 
     def _choose_pdf(self) -> None:
-        start = self._settings.value("last_pdf_dir", str(Path.home()))
-        path, _ = QFileDialog.getOpenFileName(self, "Choose a paper", start, "PDF files (*.pdf)")
-        if path:
-            self._set_pdf(Path(path))
+        self.papers.add_pdfs()
 
     def _set_pdf(self, path: Path) -> None:
-        self.pdf_edit.setText(str(path))
+        self.papers.add_items([path])
         self._settings.setValue("last_pdf_dir", str(path.parent))
 
     def _choose_output_dir(self) -> None:
@@ -604,20 +699,18 @@ class MainWindow(QMainWindow):
             self.out_edit.setText(path)
 
     def dragEnterEvent(self, event) -> None:
-        if self._dropped_pdf(event) and not self._running:
+        if self._dropped_pdfs(event) and not self._busy:
             event.acceptProposedAction()
 
     def dropEvent(self, event) -> None:
-        pdf = self._dropped_pdf(event)
-        if pdf:
-            self._set_pdf(pdf)
+        pdfs = self._dropped_pdfs(event)
+        if pdfs:
+            self.papers.add_items(pdfs)
 
     @staticmethod
-    def _dropped_pdf(event) -> Optional[Path]:
-        for url in event.mimeData().urls():
-            if url.isLocalFile() and url.toLocalFile().lower().endswith(".pdf"):
-                return Path(url.toLocalFile())
-        return None
+    def _dropped_pdfs(event) -> List[Path]:
+        return [Path(u.toLocalFile()) for u in event.mimeData().urls()
+                if u.isLocalFile() and u.toLocalFile().lower().endswith(".pdf")]
 
     @property
     def _running(self) -> bool:
@@ -626,15 +719,16 @@ class MainWindow(QMainWindow):
 
     @property
     def _busy(self) -> bool:
-        """A run is in progress: extracting, and/or the figure review is open -- or a focused search."""
-        return (self._running or self._review is not None
-                or bool(self._focused_window is not None and self._focused_window.running)
-                or bool(self._queue_window is not None and self._queue_window.running))
+        """Something is running: a single paper's extraction and/or its figure review, a run of several papers,
+        or a focused search."""
+        return self._running or self._review is not None or self.focused_run.running or self.queue_run.running
 
-    def _update_run_enabled(self) -> None:
+    def _update_run_enabled(self, *_args) -> None:
         handoff = self.settings_dialog.handoff_dir() is not None      # developer mode: no key needed
-        ready = bool(self.pdf_edit.text().strip() and (handoff or self.key_edit.text().strip())
-                     and self.out_edit.text().strip())
+        items = self.run_items()
+        ready = bool(items and (handoff or self.key_edit.text().strip()) and self.out_edit.text().strip())
+        if self.params.focused and not self.params.checked_columns():
+            ready = False
         self.run_btn.setEnabled(ready and not self._busy)
         missing = [what for what, edit in (("your Anthropic API key", self.key_edit),
                                            ("a folder for the results", self.out_edit))
@@ -642,6 +736,7 @@ class MainWindow(QMainWindow):
         self.settings_hint.setText(f"Add {' and '.join(missing)} in <a href='settings'>Settings…</a>"
                                    if missing else "")
         self.settings_hint.setVisible(bool(missing))
+        self._update_mode()
 
     # ---- running ---------------------------------------------------------------
     #
@@ -673,23 +768,6 @@ class MainWindow(QMainWindow):
                          handoff_dir=self.settings_dialog.handoff_dir(),
                          pubchem_cache_path=default_pubchem_cache_path(), arxiv_cache_dir=default_arxiv_cache_dir())
 
-    def open_queue(self) -> None:
-        from parameter_extractor.gui.queue_window import QueueWindow
-        if self._queue_window is None:
-            self._queue_window = QueueWindow(self)
-        self._queue_window._update_ready()
-        self._queue_window.show()
-        self._queue_window.raise_()
-        self._queue_window.activateWindow()
-
-    def open_focused_search(self) -> None:
-        from parameter_extractor.gui.focused_window import FocusedSearchWindow
-        if self._focused_window is None:
-            self._focused_window = FocusedSearchWindow(self)
-        self._focused_window.show()
-        self._focused_window.raise_()
-        self._focused_window.activateWindow()
-
     def paper_item(self):
         """The paper field: a PDF path, or an arXiv ID / DOI / ADS bibcode (paper_source); None if
         it's neither."""
@@ -704,16 +782,39 @@ class MainWindow(QMainWindow):
         return pdf if pdf.is_file() else None
 
     def _start_run(self) -> None:
-        pdf = self.paper_item()
-        if pdf is None:
+        """One paper, all parameters: the full extraction with its figure review (below). Several papers: a queue
+        (gui/multi_runs.QueueRun). Single parameters unticked: a focused search (gui/multi_runs.FocusedRun)."""
+        items = self.run_items()
+        if not items:
             QMessageBox.warning(self, "Paper not found",
                                 f"There's no PDF at:\n{self.pdf_edit.text().strip()}\n\nand it isn't an arXiv "
                                 f"ID, DOI or ADS bibcode either.")
             return
-        out_dir = Path(self.out_edit.text().strip()).expanduser()
+        missing = [str(i) for i in items if isinstance(i, Path) and not i.is_file()]
+        if missing:
+            QMessageBox.warning(self, "Papers not found", "No PDF at:\n" + "\n".join(missing[:10]))
+            return
         self._save_preferences()
-
         config = self.current_config()
+        if self.params.focused or len(items) > 1:
+            if self.pdf_edit.text().strip():          # the typed paper joins the list it runs with
+                self.papers.add_typed()
+            self.papers.clear_statuses()
+            self.retry_btn.setHidden(True)
+            if self.params.focused:
+                words = [w.strip() for w in self.words_edit.text().split(",") if w.strip()]
+                self.focused_run.start(items, self.params.checked_columns(), config, words, self.whole_box.isChecked(),
+                                       self.tables_box.isChecked(), self.plan_box.isChecked())
+            else:
+                self.skip_figures_btn.setHidden(not self.review_figures_box.isChecked())
+                self.skip_figures_btn.setEnabled(True)
+                self.queue_run.start(items, config, self.review_figures_box.isChecked(),
+                                     self.review_variables_box.isChecked())
+            self._set_inputs_enabled(False)          # after starting: it counts as running now
+            self.cancel_btn.setEnabled(True)
+            return
+        pdf = items[0]
+
         self._extraction, self._extraction_ok, self._review = None, False, None
         self._worker = PipelineWorker(pdf, config)
         self._thread = QThread(self)
@@ -732,11 +833,64 @@ class MainWindow(QMainWindow):
         self.status.setText(f"Starting on {pdf.name if isinstance(pdf, Path) else pdf}…")
         self._thread.start()
 
+    def _multi_done(self) -> None:
+        """A run of several papers, or a focused search, has ended."""
+        self.cancel_btn.setEnabled(False)
+        self.skip_figures_btn.setHidden(True)
+        failed = self.focused_run.failed_items() if self.focused_run.result is not None else []
+        self.retry_btn.setText(f"Retry failed papers ({len(failed)})")
+        self.retry_btn.setHidden(not failed)
+        if self.queue_run.summary:
+            s = self.queue_run.summary
+            self._last_run_dir, self._last_csv = self.queue_run.queue.out_dir, Path(s["csv"]) if "csv" in s else None
+            first = next((r for r in range(self.papers.count()) if self.queue_run.result_of(r) is not None), None)
+            if first is not None:
+                self.papers.table.selectRow(first)        # its results in the tabs; select another paper to switch
+        self._set_inputs_enabled(True)
+
+    def _skip_figures(self) -> None:
+        self.queue_run.skip_figures()
+        self.skip_figures_btn.setEnabled(False)
+
+    def _retry_failed(self) -> None:
+        """The paper list becomes the papers the focused search couldn't search (labels kept), and it runs again."""
+        failed = self.focused_run.failed_items()
+        if failed:
+            self.papers.clear()
+            self.papers.add_items(failed)
+            self._start_run()
+
+    def _paper_selected(self, row: int) -> None:
+        """After a run of several papers: the selected paper's results in the tabs."""
+        if self._busy:
+            return
+        result = self.queue_run.result_of(row)
+        if result is not None:
+            self.show_result(result)
+            self.status.setText(f"Showing {self.papers.table.item(row, 0).text()}: {len(result.rows)} rows. "
+                                f"All papers: {self.queue_run.queue.out_dir}")
+
+    def show_search_results(self, run) -> None:
+        self.tabs.setEnabled(True)
+        self.tabs.setTabVisible(self.search_index, True)
+        self.tabs.setCurrentIndex(self.search_index)
+        self._last_run_dir, self._last_csv = run.out_dir, run.results_csv
+        self.open_folder_btn.setEnabled(True)
+        self.open_csv_btn.setEnabled(True)
+
+    def report_failure(self, title: str, message: str) -> None:
+        self.status.setText(f"{title}.")
+        QMessageBox.critical(self, title, message)
+
     def _cancel_run(self) -> None:
-        if self._worker:
+        if self.focused_run.running:
+            self.focused_run.cancel()
+        elif self.queue_run.running:
+            self.queue_run.cancel()
+        elif self._worker:
             self._worker.cancel()
-            self.cancel_btn.setEnabled(False)
             self.status.setText("Cancelling — stopping after the current step finishes…")
+        self.cancel_btn.setEnabled(False)
 
     def _on_progress(self, step: int, total: int, message: str) -> None:
         self.progress.setMaximum(total)
@@ -920,16 +1074,18 @@ class MainWindow(QMainWindow):
             variable_categories.use_local({})
 
     def _set_inputs_enabled(self, enabled: bool) -> None:
-        for w in (self.pdf_edit, self.terms_edit, self.registry_action, self.categories_action, self.pack_combo,
-                  self.new_pack_action, self.edit_pack_action, self.copy_pack_action, self.remove_pack_action,
-                  self.stages_widget, self.profile_combo, self.passes_combo, self.toggles_btn,
-                  *self.option_toggles()):   # the pack is active during a run
+        """Locked while anything runs (the pack is active during a run; one run at a time)."""
+        for w in (self.registry_action, self.categories_action, self.pack_combo, self.new_pack_action,
+                  self.edit_pack_action, self.copy_pack_action, self.remove_pack_action, self.params,
+                  self.profile_combo, self.passes_combo, self.words_edit, self.add_pdfs_action, self.add_list_action,
+                  self.output_action, self.lookups_action, *self.option_toggles(), self.review_figures_box,
+                  self.review_variables_box, self.tables_box, self.plan_box, self.whole_box):
             w.setEnabled(enabled)
+        if enabled:
+            self.all_figures_box.setEnabled(self.images_box.isChecked())
+            self.tables_box.setEnabled(not self.whole_box.isChecked())
+        self.papers.set_locked(not enabled)
         self.settings_dialog.lock(not enabled)
-        others_running = ((self._focused_window is not None and self._focused_window.running)
-                          or (self._queue_window is not None and self._queue_window.running))
-        for w in (self.focused_action, self.focused_btn, self.queue_action, self.queue_btn):
-            w.setEnabled(enabled and not others_running)  # one thing at a time
         self._update_run_enabled()
 
     # ---- results ---------------------------------------------------------------

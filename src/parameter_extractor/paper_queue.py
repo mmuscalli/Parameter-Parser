@@ -16,7 +16,7 @@ or arXiv IDs / DOIs / ADS bibcodes / reference links, from a list) but running t
    paper_prefix: 001..., 002..., ...), its observations and a papers.csv summary.
 
 Each paper keeps its normal run folder, inside the queue's folder. No GUI code here: the window
-(gui/queue_window.py) and the command line (--queue) drive it.
+(the main window, gui/multi_runs.py) and the command line (--queue) drive it.
 """
 from __future__ import annotations
 import csv

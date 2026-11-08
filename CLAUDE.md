@@ -2247,3 +2247,22 @@ Open (Mickey): truman2024 (a review reproducing data) gets no rows since the 202
   cached system prompt instead of copying it. PaperQueue warm-up: the first paper extracts alone until its structure
   plan is back (`_warm`, not batch). Measured (eval/shared_instructions_2026-11-07.md): 5-paper queue -17% total, -32%
   input; single paper +6% (hence off); +22 s per queue. tests/test_shared_instructions.py, test_paper_queue.
+
+## One search page: Focused search and Paper queue folded into the main window (2026-11-08, Mickey)
+
+The Focused search and Paper queue windows (gui/focused_window.py, gui/queue_window.py) are gone; the main window does
+all three. Layout: Research area + a mode line (`mode_label`); three panes in `top_split` -- Papers
+(`gui/paper_list.PaperListPanel`: a table Paper | Status, `id_edit` = `pdf_edit` (Enter adds; a typed, not-added paper
+still runs: `run_items()`), Add PDFs / list (CSV) / Remove / Clear, PDFs dropped on the window), Parameters
+(`gui/parameter_panel.ParameterPanel`: each switchable stage a tri-state group with its parameters; QSettings
+stages/<pack>/<stage> as before), Run options (grouped, `_build_options`: the groups that apply first -- Several papers
+`multi_widget` (n > 1, full), Focused search `focused_widget` (single parameters unticked) -- then Models and cost,
+Paper text, Review + Saved with the results `review_widget` (hidden for a focused search; Passes row too)).
+Mode rules: everything ticked = full extraction; a whole stage unticked = full extraction without it
+(`optional_stage_choices`); single parameters unticked = focused search (`params.focused`); several papers + full =
+queue. `_start_run` dispatches: one paper -> the usual run + figure review; `gui/multi_runs.QueueRun` /
+`FocusedRun` (controllers reporting to the main window: statuses in the Papers list, "Search results" tab
+`search_table`, Skip figures / Retry failed buttons; selecting a paper after a queue shows its results). Settings is a
+menu (Settings… with PreferencesRole, results folder, open folder, Online lookups mirroring `pubchem_box`); File has
+Add PDFs / Add list. "Parameters to look for" left the window (`focus_terms()` returns []; CLI --look-for stays).
+`main_split` position now saved as main_split_v2 (the old one-paper layout's would squeeze the panes).

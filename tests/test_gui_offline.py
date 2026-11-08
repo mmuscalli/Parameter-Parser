@@ -105,7 +105,6 @@ def _window(keys: FakeKeyStore, out: Path):
         w = main_window.MainWindow()
     w.out_edit.setText(str(out))
     w.registry_path = out / "test_registry.json"     # never the user's real variable registry
-    w.terms_edit.setPlainText("")
     return w
 
 
@@ -579,9 +578,9 @@ def test_archive_adopted_rows():
 
 
 def test_stage_toggles():
-    """Research area -> its switchable stages; unticked stages are skipped (checked with a
-    cycling paper, truman2024, whose wet-dry stage would otherwise run); choices are kept
-    per area; area and stages are locked during a run. No API calls."""
+    """Research area -> its switchable stages, as groups in the Parameters panel (2026-11-08); a stage unticked is
+    skipped (checked with a cycling paper, truman2024, whose wet-dry stage would otherwise run); choices are kept per
+    area; area and parameters are locked during a run. No API calls."""
     from test_pipeline_offline import make_replay
     root = Path(__file__).resolve().parents[1]
     truman = root.parent / "Paper Files" / "Paper Lists" / "Initial Easy Papers" / "Truman2024" / "truman2024.pdf"
@@ -589,24 +588,23 @@ def test_stage_toggles():
     with tempfile.TemporaryDirectory() as tmp, patch.object(main_window, "key_store", keys):
         w = _window(keys, Path(tmp))
         w.pack_combo.setCurrentIndex(w.pack_combo.findData("exoplanets"))
-        assert list(w.stage_boxes) == ["planet_parameters", "stellar_parameters", "system_and_discovery",
-                                       "fit_models"]
-        assert all(b.isChecked() for b in w.stage_boxes.values())
-        assert "EXOFAST" in w.stage_boxes["fit_models"].toolTip()
-        w.stage_boxes["fit_models"].setChecked(False)
-        assert w.optional_stage_choices()["fit_models"] == "off"
+        assert list(w.params.groups) == ["planet_parameters", "stellar_parameters", "system_and_discovery",
+                                         "fit_models"]
+        assert all(w.params.stage_on(n) for n in w.params.groups)
+        assert "EXOFAST" in w.params.groups["fit_models"].toolTip(0)
+        w.params.set_stage("fit_models", False)
+        assert w.optional_stage_choices()["fit_models"] == "off" and not w.params.focused
+        assert "without Fitting models" in w.mode_label.text()                 # still a full extraction
         w.pack_combo.setCurrentIndex(w.pack_combo.findData("prebiotic_chemistry"))
-        assert list(w.stage_boxes) == ["experimental_conditions", "kinetics", "wet_dry", "analysis"]
-        from PySide6.QtWidgets import QCheckBox
-        assert len(w.stages_widget.findChildren(QCheckBox)) == 4          # the old area's boxes are gone
-        assert "when the paper calls for it" in w.stage_boxes["wet_dry"].text()
+        assert list(w.params.groups) == ["experimental_conditions", "kinetics", "wet_dry", "analysis"]
+        assert "when the paper calls for it" in w.params.groups["wet_dry"].text(0)
         w.pack_combo.setCurrentIndex(w.pack_combo.findData("exoplanets"))
-        assert not w.stage_boxes["fit_models"].isChecked()                  # remembered for this area
+        assert not w.params.stage_on("fit_models")                            # remembered for this area
         w.pack_combo.setCurrentIndex(w.pack_combo.findData("prebiotic_chemistry"))
         w.close()
         w2 = main_window.MainWindow()                                       # and across restarts
         w2.pack_combo.setCurrentIndex(w2.pack_combo.findData("exoplanets"))
-        assert not w2.stage_boxes["fit_models"].isChecked()
+        assert not w2.params.stage_on("fit_models")
         w2.pack_combo.setCurrentIndex(w2.pack_combo.findData("prebiotic_chemistry"))
         w2.close()
         if not truman.is_file():
@@ -625,25 +623,25 @@ def test_stage_toggles():
             w = _window(keys, Path(tmp))
             w.registry_path = None                                           # template + standard columns only
             w.pack_combo.setCurrentIndex(w.pack_combo.findData("prebiotic_chemistry"))
-            w.stage_boxes["wet_dry"].setChecked(ticked)
+            w.params.set_stage("wet_dry", ticked)
             w.pdf_edit.setText(str(truman)); w.key_edit.setText("replay-not-a-real-key")
             w.run_btn.click()
-            assert not w.pack_combo.isEnabled() and not w.stages_widget.isEnabled()   # locked while running
+            assert not w.pack_combo.isEnabled() and not w.params.isEnabled()   # locked while running
             for _ in range(1200):
                 _pump()
                 if "Done:" in w.status.text() or "failed" in w.status.text().lower():
                     break
             assert "Done:" in w.status.text(), w.status.text()
             assert ("WetDryConditions" in calls) == ticked, calls
-            assert w.pack_combo.isEnabled() and w.stages_widget.isEnabled()
+            assert w.pack_combo.isEnabled() and w.params.isEnabled()
             summary = w.summary_text.toPlainText()
             assert ("Wet-dry" in summary) == ticked, summary
             w.close()
 
 
-
 def test_settings_and_run_options():
-    """Mickey, 2026-10-24: set-once things in Settings, per-run choices in a collapsible section."""
+    """Set-once things in Settings (a menu since 2026-11-08), per-run choices in the grouped Run options pane; the
+    options for several papers / a focused search only show when they apply."""
     keys = FakeKeyStore(ads="ads-stored")
     with tempfile.TemporaryDirectory() as tmp, patch.object(main_window, "key_store", keys):
         w = _window(keys, Path(tmp))
@@ -651,33 +649,32 @@ def test_settings_and_run_options():
         _pump()
         assert w.key_edit.window() is w.settings_dialog and w.out_edit.window() is w.settings_dialog
         assert w.ads_edit.text() == "ads-stored" and w.remember_ads_box.isChecked()   # from the keychain
-        assert not w.options_widget.isVisible()                                         # collapsed at first
-        assert "Standard models" in w.options_summary.text() and "stages" in w.options_summary.text()
-        w.options_btn.click()
-        assert w.options_widget.isVisible() and QSettings().value("options_shown", type=bool)
+        titles = [a.text() for a in w.menuBar().actions()]
+        assert titles[:3] == ["File", "Settings", "Data Packs"], titles
         assert w.suggest_box.isChecked() and w.current_config().suggest_new_variables   # on by default
-        assert w.toggles_btn.text() == "Variable suggestions, SI, Images"            # the dropdown says what's on
         cfg = w.current_config()
-        assert cfg.save_images and not cfg.save_all_figure_images                       # image defaults
+        assert cfg.save_images and not cfg.save_all_figure_images and cfg.focus_terms == []
         w.images_box.setChecked(False)
         assert not w.all_figures_box.isEnabled()
         w.images_box.setChecked(True)
         w.batch_box.setChecked(True)
         w.arxiv_box.setChecked(True)
         w.suggest_box.setChecked(False)
-        assert "batch" in w.options_summary.text() and "arXiv text" in w.options_summary.text()
-        assert "no new-variable suggestions" in w.options_summary.text()
-        assert w.toggles_btn.text().startswith("Batch, arXiv text")
-        assert len(w.toggles_btn.menu().actions()) == 8 and w.current_config().include_supplements   # + auto figures
         w.auto_figures_box.setChecked(True)
-        assert w.current_config().auto_digitize_figures and "Auto figures" in w.toggles_btn.text()
+        assert w.current_config().auto_digitize_figures
         w.auto_figures_box.setChecked(False)
+        # mode-dependent groups: hidden for one paper and a full extraction
+        assert not w.multi_widget.isVisible() and not w.focused_widget.isVisible()
+        assert w.mode_label.text() == "Full extraction"
         assert w.settings_hint.isVisible() and "API key" in w.settings_hint.text()       # no key yet
         w.key_edit.setText("k")
         assert not w.settings_hint.isVisible()
         w.open_settings()
         assert w.settings_dialog.isVisible()
         w.settings_dialog.hide()
+        w.lookups_action.setChecked(False)
+        assert not w.pubchem_box.isChecked() and not w.current_config().use_pubchem   # the Settings menu's switch
+        w.lookups_action.setChecked(True)
         config = w.current_config()
         assert config.prefer_arxiv and config.batch_mode and config.ads_token == "ads-stored"
         assert not config.suggest_new_variables
@@ -691,6 +688,7 @@ def test_settings_and_run_options():
                                (str(Path(tmp) / "missing.pdf"), None)):
             w.pdf_edit.setText(text)
             assert w.paper_item() == expected, text
+        w.pdf_edit.setText("")
         _screenshot(w, "settings_main")
         w.close()
 
@@ -746,7 +744,8 @@ def test_a_paper_by_arxiv_id_from_the_window():
         packs.activate("prebiotic_chemistry")
 
 
-def test_focused_search_window():
+def test_focused_search_from_the_main_page():
+    """Single parameters unticked -> a focused search over the papers, from the main page (2026-11-08)."""
     from parameter_extractor import packs
     from parameter_extractor.ingestion import arxiv_source as ax
     from test_arxiv_source import fake_get
@@ -757,57 +756,62 @@ def test_focused_search_window():
         with tempfile.TemporaryDirectory() as tmp, patch.object(api_client, "_send", _fake_send(calls)), \
                 patch.object(ax, "_get", fake_get()), patch.object(main_window, "key_store", keys):
             w = _window(keys, Path(tmp))
+            w.show(); _pump()
             w.key_edit.setText("x")
             w.pack_combo.setCurrentIndex(w.pack_combo.findData("exoplanets"))
-            w.focused_btn.click()                                  # the button and File menu both open it
-            f = w._focused_window
-            assert f.isVisible() and not f.run_btn.isEnabled()
-            groups = [f.params_tree.topLevelItem(i).text(0) for i in range(f.params_tree.topLevelItemCount())]
+            groups = [w.params.tree.topLevelItem(i).text(0) for i in range(w.params.tree.topLevelItemCount())]
             assert groups[:3] == ["Planet parameters", "Stellar parameters", "System and discovery"]
             assert "Fitting models" in groups
-            f.filter_edit.setText("exofast")
-            visible = [f.params_tree.topLevelItem(i) for i in range(f.params_tree.topLevelItemCount())
-                       if not f.params_tree.topLevelItem(i).isHidden()]
+            # untick everything, then tick two fitting-model columns: a focused search
+            for name in list(w.params.groups):
+                w.params.set_stage(name, False)
+            assert not w.params.focused and not w.run_btn.isEnabled()          # nothing to run
+            w.params.filter_edit.setText("exofast")
+            visible = [w.params.tree.topLevelItem(i) for i in range(w.params.tree.topLevelItemCount())
+                       if not w.params.tree.topLevelItem(i).isHidden()]
             assert [g.text(0) for g in visible] == ["Fitting models"]
-            fit = visible[0]
-            for j in range(fit.childCount()):
-                if fit.child(j).text(0) in ("pl_fitsoftware", "pl_fitexofastver"):
-                    fit.child(j).setCheckState(0, Qt.CheckState.Checked)
-            assert f.checked_columns() == ["pl_fitsoftware", "pl_fitexofastver"]
-            f.id_edit.setText("arXiv:1811.01882, not-an-id")
-            f._add_typed()
-            assert f.papers_list.count() == 1 and f.id_edit.text() == "not-an-id"
-            f.add_items([PDF])
-            f.words_edit.setText("EXOFAST")
-            assert f.tables_box.isChecked() and f.tables_box.isEnabled()          # whole tables by default
-            f.whole_box.setChecked(True)
-            assert not f.tables_box.isEnabled()                                    # whole paper covers them
-            f.whole_box.setChecked(False)
-            assert f.run_btn.isEnabled()
-            f.run_btn.click()
-            assert not w.run_btn.isEnabled() and not w.pack_combo.isEnabled()      # main window locked
+            w.params.filter_edit.setText("")
+            for column in ("pl_fitsoftware", "pl_fitexofastver"):
+                w.params.set_column(column, True)
+            assert w.params.focused and w.params.checked_columns() == ["pl_fitsoftware", "pl_fitexofastver"]
+            assert w.focused_widget.isVisible() and not w.multi_widget.isVisible()
+            w.pdf_edit.setText("arXiv:1811.01882, not-an-id")
+            w.papers.add_typed()
+            assert w.papers.count() == 1 and w.pdf_edit.text() == "not-an-id"
+            w.pdf_edit.setText("")
+            w.papers.add_items([PDF])
+            assert "Focused search: 2 parameters in 2 papers" == w.mode_label.text()
+            assert w.run_btn.text() == "Search 2 papers"
+            w.words_edit.setText("EXOFAST")
+            assert w.tables_box.isChecked() and w.tables_box.isEnabled()           # whole tables by default
+            w.whole_box.setChecked(True)
+            assert not w.tables_box.isEnabled()                                     # whole paper covers them
+            w.whole_box.setChecked(False)
+            assert w.run_btn.isEnabled()
+            w.run_btn.click()
+            assert not w.run_btn.isEnabled() and not w.pack_combo.isEnabled()       # locked while searching
             for _ in range(600):
-                if not f.running:
+                if not w.focused_run.running:
                     break
                 _pump()
-            assert not f.running and "Done:" in f.status.text(), f.status.text()
-            assert f.results.rowCount() == 2 and len(calls) == 1
-            headers = [f.results.horizontalHeaderItem(c).text() for c in range(f.results.columnCount())]
+            assert "Done:" in w.status.text(), w.status.text()
+            t = w.search_table
+            assert t.rowCount() == 2 and len(calls) == 1
+            assert w.tabs.currentIndex() == w.search_index and w.tabs.isTabVisible(w.search_index)
+            headers = [t.horizontalHeaderItem(c).text() for c in range(t.columnCount())]
             assert headers == ["Paper", "Planetary system", "Planet", "Result", "pl_fitsoftware", "pl_fitexofastver",
-                               "Read from"]                                    # the pack's row words
-            by_result = {f.results.item(r, 3).text(): r for r in range(2)}
+                               "Read from"]                                     # the pack's row words
+            by_result = {t.item(r, 3).text(): r for r in range(2)}
             found = by_result["Found"]
-            assert (f.results.item(found, 4).text(), f.results.item(found, 5).text()) == ("EXOFASTv2", "2")
-            assert "using EXOFASTv2" in f.results.item(found, 5).toolTip()          # the quote on hover
+            assert (t.item(found, 4).text(), t.item(found, 5).text()) == ("EXOFASTv2", "2")
+            assert "using EXOFASTv2" in t.item(found, 5).toolTip()                 # the quote on hover
             assert "Not mentioned (no API call)" in by_result
-            assert f.open_csv_btn.isEnabled() and w.pack_combo.isEnabled()
-            assert not f.retry_btn.isEnabled()                                   # nothing failed
-            _screenshot(f, "focused_search")
-            f.close()
+            assert sorted(w.papers.table.item(r, 1).text() for r in range(2)) == ["Found", "Not mentioned (no API call)"]
+            assert w.open_csv_btn.isEnabled() and w.pack_combo.isEnabled() and w.retry_btn.isHidden()
+            _screenshot(w, "focused_search")
             w.close()
     finally:
         packs.activate("prebiotic_chemistry")
-
 
 class SkipReview(QObject):
     """Stands in for FigureReviewDialog in the queue: opens, then skips every figure."""
@@ -821,9 +825,9 @@ class SkipReview(QObject):
     def show(self): QTimer.singleShot(50, lambda: self.finished.emit(0))
 
 
-def test_paper_queue_window():
-    """File > Paper queue: papers read first, each paper's figures reviewed as it's read, the rest
-    without the user, then a combined CSV."""
+def test_several_papers_from_the_main_page():
+    """A full extraction of several papers from the main page (2026-11-08): papers read first, each paper's figures
+    reviewed as it's read, the rest without the user, then a combined CSV; each paper's results selectable."""
     from parameter_extractor.gui import figure_dialog
     from test_paper_queue import EDER, TRUMAN, routed_send
     if not (EDER.is_file() and TRUMAN.is_file()):
@@ -833,29 +837,32 @@ def test_paper_queue_window():
     with tempfile.TemporaryDirectory() as tmp, patch.object(api_client, "_send", routed_send), \
             patch.object(main_window, "key_store", keys), patch.object(figure_dialog, "FigureReviewDialog", SkipReview):
         w = _window(keys, Path(tmp))
+        w.show(); _pump()
         w.key_edit.setText("x")
-        w.queue_btn.click()
-        q = w._queue_window
-        assert q.isVisible() and not q.run_btn.isEnabled()
-        q.paper_panel.add_items([EDER, TRUMAN])
-        q.variables_box.setChecked(False)                     # unattended to the end
-        q.run_btn.click()
-        assert q.running and not w.run_btn.isEnabled() and not w.focused_btn.isEnabled()
+        w.papers.add_items([EDER, TRUMAN])
+        assert w.multi_widget.isVisible() and w.run_btn.text() == "Extract data from 2 papers"
+        assert w.mode_label.text().startswith("Full extraction of 2 papers")
+        w.review_variables_box.setChecked(False)              # unattended to the end
+        w.run_btn.click()
+        assert w.queue_run.running and not w.run_btn.isEnabled() and not w.skip_figures_btn.isHidden()
         for _ in range(1200):
-            if q._summary:
+            if w.queue_run.summary:
                 break
             _pump()
-        assert q._summary, q.status.text()
+        s = w.queue_run.summary
+        assert s, w.status.text()
         assert SkipReview.opened == ["Figures -- eder1994 (001)", "Figures -- truman2024 (002)"]   # in list order
-        statuses = [q.table.item(r, 1).text() for r in range(q.table.rowCount())]
-        assert statuses == ["Done", "Done"], statuses
-        assert q.table.item(0, 2).text() == "0 digitized / 5" and q.table.item(0, 4).text() == "42"
-        assert q._summary["rows"] == 42 + int(q.table.item(1, 4).text())
-        assert Path(q._summary["csv"]).is_file() and q.open_csv_btn.isEnabled()
-        assert w.queue_btn.isEnabled() and w.pack_combo.isEnabled()        # the main window is free again
-        _screenshot(q, "paper_queue")
-        q.close()
+        statuses = [w.papers.table.item(r, 1).text() for r in range(2)]
+        assert statuses[0].startswith("Done, 42 rows, 0/5 figures digitized"), statuses
+        assert statuses[1].startswith("Done"), statuses
+        assert Path(s["csv"]).is_file() and w.pack_combo.isEnabled() and w.skip_figures_btn.isHidden()
+        assert w.rows_table.rowCount() == 42                    # the first paper's results shown
+        w.papers.table.selectRow(1)
+        _pump()
+        assert w.rows_table.rowCount() == s["rows"] - 42        # the second paper's
+        _screenshot(w, "several_papers")
         w.close()
+
 
 if __name__ == "__main__":
     try:

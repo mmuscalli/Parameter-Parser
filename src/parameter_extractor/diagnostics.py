@@ -83,7 +83,7 @@ def run_checks(pdf: Optional[Path] = None, api_key: Optional[str] = None) -> Lis
         """arXiv full text and the focused search are bundled and work (no network needed)."""
         import ssl
         from parameter_extractor.focused_search import passages
-        from parameter_extractor.gui import focused_window, paper_list, queue_window, settings_dialog  # noqa: F401
+        from parameter_extractor.gui import multi_runs, paper_list, parameter_panel, settings_dialog  # noqa: F401
         from parameter_extractor import paper_queue  # noqa: F401 (bundled?)
         from parameter_extractor.ingestion.arxiv_source import parse_identifier
         from parameter_extractor.ingestion.html_text import html_to_text
