@@ -2285,3 +2285,19 @@ description, items=[ScopeItem(key, label, tip, detail)]); `scopes.groups(pack, r
 - All unticked -> optional_stages[step] 'off'; `pipeline._chemistry_on` now gates chemistry (step count, tools,
   submit) like the spec stages. Mode line: "Full extraction -- only compounds: 5 of 129; analysis methods: NMR".
 - CLI: no flags yet (RunConfig.scopes works from code). tests/test_scopes.py (eder1994 replay with scope Gly).
+
+## Digitizer: settings for every coordinate system; layout pass (2026-11-08, Mickey)
+
+- "Use in every coordinate system" (Axes tab, menu): Rounding / Columns and multipliers / Log scales / Categories (x axis)
+  / All of these -> `DigitizerWidget.apply_to_all_panels(what)` copies the current coordinate system's settings to the
+  others; points of panels whose rounding changed snap; one undo step ("panel settings": AxisVariables, log flags and
+  points restored). Riggi Fig. 2 (5 bar panels) needed the y rounding set five times before.
+- Layout: suggestions box hidden while empty (`_NoteLabel`), Tool buttons in a 3 x 2 grid, then tabs (`self.tabs`):
+  Axes (coordinate system + Add + name; calibration grid Marker 1 / Marker 2 / log scale; categories; Columns form with
+  x multiplier and hints; Rounding X / Y; copy menu; Automatic calibration: Calibrate current / Calibrate all
+  (`auto_calibrate_all`: only systems without markers) / Clear markers + checkbox; Whole figure: Data reproduced from),
+  Series (list, Add / Remove / Show only this series; Read against, Notes; Conditions and Initial composition with
+  +/- buttons; Additional options), Points (`points_series_combo` synced with the list; Find in current / Find in all,
+  error bars, when-suggestions-arrive; Find similar points + similarity; status; points table). No horizontal scroll
+  in the tools pane; it opens at >= 480 px / 40%. Round choices shortened ("whole ±3 px, else 1 decimal"). Attribute
+  names unchanged. Checked natively. tests/test_digitizer_copy_settings.py.
