@@ -2457,3 +2457,27 @@ paper buttons. Found too: ImpA -> 'isopropyl methylphosphonate' and RCP -> 'CP-6
 - Live redraft of Sam Papers (11 PDFs, 2 passes): 133 compounds from the surveys, 108 with CIDs, codes without a listed
   synonym left without one; renames pH / reaction_pH / final_pH / reaction temperature / wet-dry cycles; reaction time
   dropped. tests/test_compound_setup.py (test_reported_misses_and_conventions, test_survey_passes_are_merged).
+
+## Columns tab by category; pre-parse evaluated (2026-11-08, Mickey)
+
+- **Columns tab** (pack editor): a `_ColumnTree` (QTreeWidget) -- one bold, link-coloured header per variable category
+  (ColumnOrder of the pack on disk: every category, also empty ones, in table_order; Row / Provenance blocks first /
+  last), 40 px header rows for the space between categories, columns as children with Unit (unit_for_column) and
+  Filled by (stage_columns; 'not filled by a stage' muted). Double-click renames; drag reorders, a drop ONTO a column
+  is refused (never a child of a column), a drop on a category moves the column there. Save: columns.json in tree order
+  (= the dataset's order within a block), and columns placed under a category other than their default become explicit
+  entries of it (`_store_column_categories`, only the moved ones). `add_column_named` adds to the selected category
+  (else Other). `column_list` is gone (tests use add_column_named).
+- **Compound columns get their own blocks** (compound_setup.apply): categories starting_compounds ("Starting
+  Compounds") and products ("Products"), model_assigns false, after the area's own, with PATTERNS
+  (`COMPOUND_CATEGORIES`: initial/stock_<n>_<phase>_mM, sampled_<n>_<phase>_<measure>) -- not explicit columns, so
+  compounds accepted in later reviews land there too (they had gone to 'Reaction conditions').
+- **Pre-parse** (Mickey: switch off parameters papers don't report before a multi-paper run?): `preparse.py` (Haiku,
+  text only, the stage parameters listed) + `RunConfig.parameters_off` (for_run / triggered_specs / _paper_tools /
+  step instructions drop them; a stage with none left doesn't run). Live A/B on the references
+  (eval/preparse_2026-11-08.md): prebiotic mean $0.272 -> $0.263 incl. the pre-parse (-3%), accuracy 97.5% -> 89.7% --
+  savings came from values then missed; the pre-parse drops parameters filled by rule/inference (sampled_temperature_C,
+  summed solvent volume). NOT wired into the GUI (Mickey can decide otherwise); preparse.py kept as an evaluation tool.
+- Risk-free saving kept: `StageSpec.could_trigger(paper_text)` -- a keyword-only-triggered stage (kinetics) whose words
+  aren't in the paper isn't in a SINGLE paper's tool list (~3.6K cached tokens); with shared instructions (queues) the
+  tool list stays fixed for the cross-paper cache.

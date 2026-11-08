@@ -111,8 +111,11 @@ def test_find_and_apply_compounds():
         params = [p["column"] for s in d.stages.values() for p in s["parameters"]]
         assert "mgcl2_concentration_mM" not in params and "nacl_concentration_mM" in params
         assert "initial_MgCl2_aq_mM" in d.columns and "mgcl2_concentration_mM" not in d.columns
-        assert "initial_MgCl2_aq_mM" in d.manifest["category_columns"]["composition"]["columns"]
-        assert "sampled_UMP_aq_%yield" in d.manifest["category_columns"]["results"]["columns"]
+        from parameter_extractor.column_order import ColumnOrder        # compounds in their own blocks
+        order = ColumnOrder(pack=packs.Pack(pack.folder))
+        assert order.category_of("initial_MgCl2_aq_mM") == "starting_compounds"
+        assert order.category_of("sampled_UMP_aq_%yield") == "products"
+        assert order.category_of("initial_temperature_C") != "starting_compounds"
         assert all(compound_setup.CHEMISTRY_RULE in s["rules"] for s in d.stages.values())
         assert (pack.folder / "prompts" / "chemistry.md").is_file()
         assert not [p for p in problems if p.level == "error"], problems

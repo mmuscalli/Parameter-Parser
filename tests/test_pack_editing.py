@@ -115,7 +115,7 @@ def test_windows():
 
         editor = PackEditor(new.created.folder)
         editor.label_edit.setText("Soil carbon cycling")
-        editor.column_list.addItem("depth_cm")
+        editor.add_column_named("depth_cm")
         # calculations: none suits the template's (no) built-in steps -> all under "Other calculations"; ticking one
         # moves it up (2026-11-05)
         # (tables since 2026-11-06: Calculator, Description, Requirements, Written for)

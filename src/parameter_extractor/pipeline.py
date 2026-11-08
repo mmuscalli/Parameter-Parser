@@ -472,7 +472,7 @@ def extract_steps(ex: "Extraction") -> "Extraction":
         text = inline(text, ex.grids) if not parsed.paged else text + render_all(ex.grids)
     # every paper-reading step gets the same paper first -- cached once, read at a fraction of the
     # price by the steps after the structure planner (api_client, RunConfig.prompt_caching)
-    tools = _paper_tools(pack, config, terms, has_figures=bool(ex.figures))
+    tools = _paper_tools(pack, config, terms, has_figures=bool(ex.figures), paper_text=ex.parsed.text)
     ctx.paper = PaperContext(text=text, images=list(table_images), tools=tools,
                              instructions=_step_instructions(pack, config, tools, vocab),
                              long_lived=bool(config.batch_mode))
@@ -528,7 +528,8 @@ def extract_steps(ex: "Extraction") -> "Extraction":
             running["term_search"] = pool.submit(run_term_search, ctx, terms, text, ex.structure, columns)
         # optional stages whose trigger matches this paper (decided locally, no API call)
         specs = [] if skip else triggered_specs(ex.structure, parsed.text, config.optional_stages,
-                                                config.suggest_new_variables, set(running))
+                                                config.suggest_new_variables, set(running),
+                                                set(config.parameters_off))
         for spec in specs:
             if spec.name not in always_on:
                 ctx.total_steps += 1
@@ -670,12 +671,12 @@ def _step_instructions(pack, config: RunConfig, tools: dict, vocab: dict) -> dic
         elif stage == "fit_models":
             out[stage] = fit_stage.prompt_text(PAPER_ABOVE, PLAN_MARK)
         elif stage in specs:
-            out[stage] = for_run(specs[stage], config.suggest_new_variables, running).prompt_text(PAPER_ABOVE,
-                                                                                                    PLAN_MARK)
+            out[stage] = for_run(specs[stage], config.suggest_new_variables, running,
+                                 set(config.parameters_off)).prompt_text(PAPER_ABOVE, PLAN_MARK)
     return out
 
 
-def _paper_tools(pack, config: RunConfig, terms, has_figures: bool = False) -> dict:
+def _paper_tools(pack, config: RunConfig, terms, has_figures: bool = False, paper_text: Optional[str] = None) -> dict:
     """Every paper-reading step this run may make, with its answer schema -- sent as the same tool
     list in every request (api_client), so all of them share the cached paper. Fixed before the
     structure is planned: optional stages are included unless switched off, triggered or not."""
@@ -691,9 +692,17 @@ def _paper_tools(pack, config: RunConfig, terms, has_figures: bool = False) -> d
         tools["fit_models"] = FitModels
     if pack.uses("analysis") and config.optional_stages.get("analysis", "auto") != "off":
         tools["analysis"] = AnalysisResult
+    left_out = set(config.parameters_off)
     for name, spec in load_specs().items():
-        if config.optional_stages.get(name, "auto") != "off":
-            tools[name] = for_run(spec, config.suggest_new_variables).models()[1]
+        choice = config.optional_stages.get(name, "auto")
+        # a keyword-triggered stage the paper can't trigger: no tool to send -- unless papers share the cached tool
+        # list (shared instructions, paper queues): there one list for all papers saves more
+        per_paper = paper_text is not None and not config.shared_instructions
+        if choice == "off" or (choice == "auto" and per_paper and not spec.could_trigger(paper_text)):
+            continue
+        spec = for_run(spec, config.suggest_new_variables, left_out=left_out)
+        if spec.parameters:
+            tools[name] = spec.models()[1]
     if has_figures and config.figure_suggestions_on_paper:
         # figure suggestions read the paper the extraction steps cached (stages/figure_planner.py): a
         # request shares the cache only with the same tool list

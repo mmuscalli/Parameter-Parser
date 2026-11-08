@@ -49,6 +49,9 @@ class RunConfig:
     # narrowed constructed-parameter steps (scopes.py, 2026-11-08): {"chemistry": [compound default names],
     # "analysis": [instrument family ids]}; a step missing = everything
     scopes: Dict[str, List[str]] = field(default_factory=dict)
+    # parameters a full extraction leaves out (columns of the pack's stages; preparse.py: a pre-parse found them
+    # absent from the papers) -- not in the stage's prompt or answer schema; a stage left with none doesn't run
+    parameters_off: List[str] = field(default_factory=list)
     pubchem_cache_path: Optional[Path] = None
     # Send the paper (text + table images) first, marked for caching, with the same tool list in
     # every paper-reading step (api_client): the structure planner writes the cache, the later steps

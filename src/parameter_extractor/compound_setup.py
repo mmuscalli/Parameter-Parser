@@ -50,6 +50,12 @@ NAMING_WORDS = {"name", "names", "identity", "id", "type", "species", "compositi
                 "or", "and", "solvent", "added", "studied", "starting", "initial", "primary"}
 RESULT_WORDS = {"product", "measured", "yield", "target", "species", "final", "sampled", "formed"}
 CHEMISTRY_POSTPROCESS = ["normalize_species", "mixing", "molar_ratios"]
+# (id, label, description, pattern, place after the area's own categories)
+COMPOUND_CATEGORIES = [
+    ("starting_compounds", "Starting Compounds", "concentrations of the compounds in the starting solution",
+     r"^(?:initial|stock)_.+_(?:aq|gas|s)(?:_avg)?_mM", 5),
+    ("products", "Products", "amounts and yields of the compounds formed or measured at the end",
+     r"^(?:total_)?sampled_.+_(?:aq|gas|s)(?:_avg)?_(?:mM|%yield|%recovered|ratio|rate_mM_hr)", 6)]
 SURVEYS_FILE = "drafted_surveys.json"
 
 
@@ -530,20 +536,23 @@ def apply(draft, plan: CompoundPlan) -> List[str]:
     cc = draft.manifest.setdefault("category_columns", {})
     for entry in cc.values():
         entry["columns"] = list(dict.fromkeys(renamed.get(c, c) for c in entry.get("columns", []) if c not in removed))
-    first = next(iter(cc), "")
-    ids = [c.get("id", "") for c in draft.manifest.get("variable_categories", [])] or list(cc)
-    by_role = {"sampled": next((i for i in ids if re.search(r"result|product|measure", i)), first),
-               "initial": next((i for i in ids if re.search(r"compos|material|reactant|solution|condition", i)), first)}
+    # compound columns get their own blocks, as in the prebiotic pack: Starting compounds, then Products (by pattern,
+    # so compounds accepted in reviews later land there too)
+    if chosen:
+        cats = draft.manifest.setdefault("variable_categories", [])
+        ids = {c.get("id") for c in cats}
+        top = max([c.get("table_order", 0) for c in cats] + [50])
+        for cid, label, desc, pattern, step in COMPOUND_CATEGORIES:
+            if cid not in ids:
+                cats.append({"id": cid, "table_order": top + step, "label": label, "value_type": "number",
+                             "model_assigns": False, "description": desc})
+            entry = cc.setdefault(cid, {"columns": []})
+            if pattern not in entry.setdefault("patterns", []):
+                entry["patterns"].append(pattern)
     for c in chosen:
         for col in c.columns():
             if col not in columns:
                 columns.append(col)
-            role = col.split("_", 1)[0]
-            category = c.categories.get(role) or by_role.get(role) or first
-            if category:
-                entry = cc.setdefault(category, {"columns": []})
-                if col not in entry["columns"]:
-                    entry["columns"].append(col)
     draft.columns = columns
     # the chemistry step, its calculations and its prompt
     m = draft.manifest

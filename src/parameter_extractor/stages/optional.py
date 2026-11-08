@@ -244,6 +244,14 @@ class StageSpec(BaseModel):
             return True
         return any(re.search(rf"\b{re.escape(k)}\b", paper_text, re.IGNORECASE) for k in t.keywords)
 
+    def could_trigger(self, paper_text: str) -> bool:
+        """Before the rows are planned: False only for a stage triggered by keywords alone whose words aren't in the
+        paper (kinetics on most papers) -- its tool needn't be sent with the cached paper (2026-11-08: ~3.6K tokens)."""
+        t = self.trigger
+        if t.always or t.set_types or t.sample_fields or t.set_patterns or not t.keywords:
+            return True
+        return any(re.search(rf"\b{re.escape(k)}\b", paper_text, re.IGNORECASE) for k in t.keywords)
+
     def target_sets(self, structure: StructurePlan) -> List[str]:
         """The sets a value with set_label '' applies to: those that match the trigger's set
         conditions, or every set when the stage was triggered by keywords or always runs."""
@@ -908,7 +916,7 @@ def optional_results(optional=None, wet_dry=None) -> List[Tuple[StageSpec, objec
 
 def triggered_specs(structure: StructurePlan, paper_text: str,
                     choices: Optional[Dict[str, str]] = None, suggest: bool = True,
-                    running: Optional[set] = None) -> List[StageSpec]:
+                    running: Optional[set] = None, left_out=()) -> List[StageSpec]:
     """The stages to run: triggered ones, unless the user turned them off ('off'), plus
     any forced on ('on'). `suggest` False: without their open-ended part (see for_run). `running`: the
     other steps this run makes (for hint_by_stage)."""
@@ -917,14 +925,19 @@ def triggered_specs(structure: StructurePlan, paper_text: str,
     for name, spec in load_specs().items():
         choice = choices.get(name, "auto")
         if choice == "on" or (choice == "auto" and spec.triggered(structure, paper_text)):
-            out.append(for_run(spec, suggest, running))
+            spec = for_run(spec, suggest, running, left_out)
+            if spec.parameters:                     # every parameter left out: nothing to ask
+                out.append(spec)
     return out
 
 
-def for_run(spec: StageSpec, suggest: bool = True, running: Optional[set] = None) -> StageSpec:
+def for_run(spec: StageSpec, suggest: bool = True, running: Optional[set] = None, left_out=()) -> StageSpec:
     """The spec as a run uses it: with new-variable suggestions off (RunConfig.suggest_new_variables),
-    an open-ended stage doesn't ask for `other` conditions; hint_by_stage's wording for the steps that run."""
+    an open-ended stage doesn't ask for `other` conditions; hint_by_stage's wording for the steps that run;
+    `left_out` parameters (RunConfig.parameters_off -- a pre-parse found them irrelevant) aren't asked for."""
     update = {}
+    if left_out and any(p.column in left_out for p in spec.parameters):
+        update["parameters"] = [p for p in spec.parameters if p.column not in left_out]
     if not suggest and spec.open_ended:
         update["open_ended"] = False
     if spec.hint_by_stage:

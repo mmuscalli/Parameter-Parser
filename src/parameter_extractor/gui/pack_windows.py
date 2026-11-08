@@ -18,16 +18,17 @@ import copy
 import json
 import re
 from pathlib import Path
-from typing import List, Optional, Tuple
+from typing import Dict, List, Optional, Tuple
 
 from PySide6.QtCore import QObject, Qt, QUrl, Signal
-from PySide6.QtGui import QBrush, QColor, QDesktopServices
+from PySide6.QtCore import QSize
+from PySide6.QtGui import QBrush, QColor, QDesktopServices, QFont, QPalette
 from PySide6.QtWidgets import (QAbstractItemView, QCheckBox, QComboBox, QDialog, QDialogButtonBox, QFormLayout,
                                QGridLayout,
                                QGroupBox, QHBoxLayout, QHeaderView, QInputDialog, QLabel, QLineEdit, QListWidget,
                                QListWidgetItem, QMessageBox, QPlainTextEdit, QProgressBar, QPushButton, QScrollArea, QSplitter,
                                QTabWidget, QToolButton,
-                               QTableWidget, QTableWidgetItem, QVBoxLayout, QWidget)
+                               QTableWidget, QTableWidgetItem, QTreeWidget, QTreeWidgetItem, QVBoxLayout, QWidget)
 
 from parameter_extractor import packs
 from parameter_extractor.pack_editing import (BUILTIN_STAGES, CALCULATION_NEEDS, CALCULATION_STEP, CALCULATIONS, RULE_PROMPTS,
@@ -114,6 +115,30 @@ def _hint(text: str) -> QLabel:
 
 
 # ---- New research area -------------------------------------------------------------------------
+
+class _ColumnTree(QTreeWidget):
+    """The Columns tab's tree: categories hold columns; a column dropped on a column lands next to it, in that
+    column's category (never inside it)."""
+
+    def __init__(self):
+        super().__init__()
+        self.setDragDropMode(QAbstractItemView.DragDropMode.InternalMove)
+        self.setSelectionMode(QAbstractItemView.SelectionMode.ExtendedSelection)
+        self.setRootIsDecorated(True)
+        self.setIndentation(18)
+        self.setAlternatingRowColors(False)
+        self.invisibleRootItem().setFlags(Qt.ItemFlag.ItemIsEnabled)      # nothing dropped outside a category
+
+    def dropEvent(self, event) -> None:
+        target = self.itemAt(event.position().toPoint())
+        if target is not None and target.parent() is not None and \
+                self.dropIndicatorPosition() == QAbstractItemView.DropIndicatorPosition.OnItem:
+            event.ignore()                           # onto a column: not as its child
+            return
+        super().dropEvent(event)
+        for i in range(self.topLevelItemCount()):
+            self.topLevelItem(i).setExpanded(True)
+
 
 DRAFT = "__draft__"            # source_combo: drafted from sample papers (pack_drafting.py)
 DRAFT_HELP = ("The app reads a few typical papers of the field -- a cheap survey of what each reports (Claude Haiku, a "
@@ -640,25 +665,142 @@ class PackEditor(QDialog):
     def _columns_tab(self) -> QWidget:
         w = QWidget()
         v = QVBoxLayout(w)
-        v.addWidget(_titled("The dataset's columns, in order", "The dataset's columns, in order. Put the unit at the end of a name (temperature_C, "
-                          "pressure_bar, mass_g, yield_pct): values are converted into it. The shared columns "
-                          "(paper, authors, DOI, ...) and row identifiers are added automatically. Columns a stage "
-                          "fills but that aren't listed here are added after these. Double-click to rename; drag to "
-                          "reorder."))
+        v.addWidget(_titled("The dataset's columns, by category", "The dataset's columns, grouped by variable "
+                          "category in the order the dataset writes them. Put the unit at the end of a name "
+                          "(temperature_C, pressure_bar, mass_g, yield_pct): values are converted into it. The shared "
+                          "columns (paper, authors, DOI, ...) and row identifiers are added automatically. Columns a "
+                          "stage fills but that aren't listed here are added after these. Double-click a column to "
+                          "rename it; drag it to reorder, or onto another category to move it there."))
         row = QHBoxLayout()
-        self.column_list = QListWidget()
-        self.column_list.setDragDropMode(QAbstractItemView.DragDropMode.InternalMove)
-        for c in self.draft.columns:
-            self._add_column_item(c)
-        row.addWidget(self.column_list, 1)
+        self.column_tree = _ColumnTree()
+        self.column_tree.setHeaderLabels(["Column", "Unit", "Filled by"])
+        self.column_tree.header().setSectionResizeMode(0, QHeaderView.ResizeMode.Interactive)
+        self.column_tree.header().setStretchLastSection(True)
+        self.column_tree.setColumnWidth(0, 360)
+        self.column_tree.setColumnWidth(1, 90)
+        self._fill_column_tree(self.draft.columns)
+        row.addWidget(self.column_tree, 1)
         side = QVBoxLayout()
         for text, slot in (("Add…", self._add_column), ("Remove", self._remove_column)):
             side.addWidget(QPushButton(text, clicked=slot))
         side.addStretch(1)
         row.addLayout(side)
         v.addLayout(row, 1)
-        self._update_column_tips()
         return w
+
+    # the Columns tab: one header per variable category, its columns below (2026-11-08)
+    def _fill_column_tree(self, columns: List[str]) -> None:
+        from parameter_extractor.column_order import ColumnOrder, IDENTIFIERS_LABEL, PROVENANCE_LABEL
+        from parameter_extractor.ingestion.observations import unit_for_column
+        try:
+            order = ColumnOrder(pack=packs.Pack(self.draft.folder))
+        except Exception:                            # a pack that doesn't load yet: one block
+            order = None
+        self._column_order = order
+        self._home_category = {c: order.category_of(c) for c in columns} if order else {}
+        tree = self.column_tree
+        tree.clear()
+        groups: Dict[str, QTreeWidgetItem] = {}
+        fills = self.draft.stage_columns()
+        header_font = QFont(tree.font())
+        header_font.setBold(True)
+        header_font.setPointSizeF(header_font.pointSizeF() + 1)
+
+        def header(key: str, label: str, droppable: bool) -> QTreeWidgetItem:
+            item = QTreeWidgetItem([label, "", ""])
+            item.setData(0, Qt.ItemDataRole.UserRole, key)
+            item.setFont(0, header_font)
+            item.setForeground(0, QBrush(tree.palette().color(QPalette.ColorRole.Link)))
+            item.setSizeHint(0, QSize(0, 40))              # the space above each category
+            item.setFirstColumnSpanned(True)
+            flags = Qt.ItemFlag.ItemIsEnabled | (Qt.ItemFlag.ItemIsDropEnabled if droppable else Qt.ItemFlag.NoItemFlags)
+            item.setFlags(flags)
+            tree.addTopLevelItem(item)
+            item.setExpanded(True)
+            return item
+        if order is not None:
+            for cat in order.display:                    # every category, so columns can be moved into an empty one
+                groups[cat.id] = header(cat.id, cat.label, True)
+        ordered = order.ordered(columns) if order else list(columns)
+        for c in ordered:
+            if order is None:
+                key, label = "", "Columns"
+            else:
+                label = order.label_of(c)
+                key = {IDENTIFIERS_LABEL: "__row__", PROVENANCE_LABEL: "__provenance__"}.get(label, order.category_of(c))
+            if key not in groups:
+                groups[key] = header(key, label, not key.startswith("__"))
+            self._column_item(groups[key], c, unit_for_column(c), fills.get(c))
+        for key, item in groups.items():                 # counts; empty categories say so
+            n = item.childCount()
+            item.setText(1, f"{n} column{'s' if n != 1 else ''}" if n else "empty")
+            if not n:
+                item.setToolTip(0, "No columns yet: drag columns here to put them in this category.")
+            item.setForeground(1, QBrush(tree.palette().color(QPalette.ColorRole.PlaceholderText)))
+        # Row / Provenance blocks first and last, as the dataset writes them
+        for key, index in (("__row__", 0), ("__provenance__", tree.topLevelItemCount() - 1)):
+            if key in groups:
+                tree.insertTopLevelItem(index, tree.takeTopLevelItem(tree.indexOfTopLevelItem(groups[key])))
+                groups[key].setExpanded(True)
+
+    def _column_item(self, parent: QTreeWidgetItem, column: str, unit: str, stages) -> QTreeWidgetItem:
+        item = QTreeWidgetItem([column, unit or "", ", ".join(stages) if stages else ""])
+        item.setFlags(Qt.ItemFlag.ItemIsEnabled | Qt.ItemFlag.ItemIsSelectable | Qt.ItemFlag.ItemIsEditable
+                      | Qt.ItemFlag.ItemIsDragEnabled)
+        item.setToolTip(0, f"Filled by: {', '.join(stages)}" if stages else "No stage fills this column yet.")
+        if not stages:
+            item.setForeground(2, QBrush(self.column_tree.palette().color(QPalette.ColorRole.PlaceholderText)))
+            item.setText(2, "not filled by a stage")
+        parent.addChild(item)
+        return item
+
+    def _refresh_column_fills(self) -> None:
+        """'Filled by' after the stages changed."""
+        fills = self.draft.stage_columns()
+        muted = QBrush(self.column_tree.palette().color(QPalette.ColorRole.PlaceholderText))
+        for i in range(self.column_tree.topLevelItemCount()):
+            group = self.column_tree.topLevelItem(i)
+            for j in range(group.childCount()):
+                item = group.child(j)
+                stages = fills.get(item.text(0).strip())
+                item.setText(2, ", ".join(stages) if stages else "not filled by a stage")
+                item.setForeground(2, QBrush() if stages else muted)
+                item.setToolTip(0, f"Filled by: {', '.join(stages)}" if stages else "No stage fills this column yet.")
+
+    def _tree_columns(self) -> List[str]:
+        """The columns as the tree lists them (category by category)."""
+        out = []
+        for i in range(self.column_tree.topLevelItemCount()):
+            group = self.column_tree.topLevelItem(i)
+            out += [group.child(j).text(0).strip() for j in range(group.childCount()) if group.child(j).text(0).strip()]
+        return out
+
+    def _moved_categories(self) -> Dict[str, str]:
+        """column -> category for columns the user put under a different category than they'd go to by default."""
+        out = {}
+        for i in range(self.column_tree.topLevelItemCount()):
+            group = self.column_tree.topLevelItem(i)
+            key = group.data(0, Qt.ItemDataRole.UserRole) or ""
+            if not key or key.startswith("__"):
+                continue
+            for j in range(group.childCount()):
+                col = group.child(j).text(0).strip()
+                home = self._home_category.get(col)
+                if col and (home is None and self._column_order is not None
+                            and self._column_order.category_of(col) != key or home is not None and home != key):
+                    out[col] = key
+        return out
+
+    def _store_column_categories(self) -> None:
+        """Moved columns become explicit entries of their new category (pack.json category_columns)."""
+        moved = self._moved_categories()
+        if not moved:
+            return
+        cc = self.draft.manifest.setdefault("category_columns", {})
+        for entry in cc.values():
+            entry["columns"] = [c for c in entry.get("columns", []) if c not in moved]
+        for col, cat in moved.items():
+            cc.setdefault(cat, {"columns": []}).setdefault("columns", []).append(col)
 
     # ---- tabs that follow a built-in step ------------------------------------------------------
 
@@ -1073,28 +1215,34 @@ class PackEditor(QDialog):
             row_text = " ".join(self.tech_table.item(r, c).text() for c in range(4) if self.tech_table.item(r, c))
             self.tech_table.setRowHidden(r, bool(text) and text not in row_text.lower())
 
-    def _add_column_item(self, column: str) -> None:
-        item = QListWidgetItem(column)
-        item.setFlags(item.flags() | Qt.ItemFlag.ItemIsEditable)
-        self.column_list.addItem(item)
+    def add_column_named(self, name: str) -> None:
+        """A new column, in the selected category (or the one of the selected column; else Other / the last)."""
+        from parameter_extractor.ingestion.observations import unit_for_column
+        tree = self.column_tree
+        current = tree.currentItem()
+        group = (current if current is not None and current.parent() is None else
+                 current.parent() if current is not None else None)
+        if group is None or (group.data(0, Qt.ItemDataRole.UserRole) or "").startswith("__"):
+            group = next((tree.topLevelItem(i) for i in range(tree.topLevelItemCount())
+                          if tree.topLevelItem(i).data(0, Qt.ItemDataRole.UserRole) == "other"),
+                         tree.topLevelItem(max(0, tree.topLevelItemCount() - 1)))
+        if group is None:
+            return
+        item = self._column_item(group, name, unit_for_column(name), self.draft.stage_columns().get(name))
+        group.setExpanded(True)
+        tree.setCurrentItem(item)
+        tree.scrollToItem(item)
 
     def _add_column(self) -> None:
         name, ok = QInputDialog.getText(self, "Add a column", "Column name (unit at the end, e.g. mass_g):")
         name = (name or "").strip()
         if ok and name:
-            self._add_column_item(name)
-            self.column_list.setCurrentRow(self.column_list.count() - 1)
+            self.add_column_named(name)
 
     def _remove_column(self) -> None:
-        for item in self.column_list.selectedItems():
-            self.column_list.takeItem(self.column_list.row(item))
-
-    def _update_column_tips(self) -> None:
-        fills = self.draft.stage_columns()
-        for i in range(self.column_list.count()):
-            item = self.column_list.item(i)
-            stages = fills.get(item.text())
-            item.setToolTip(f"Filled by: {', '.join(stages)}" if stages else "No stage fills this column yet.")
+        for item in self.column_tree.selectedItems():
+            if item.parent() is not None:
+                item.parent().removeChild(item)
 
     # ---- Stages -------------------------------------------------------------------------
 
@@ -1571,8 +1719,8 @@ class PackEditor(QDialog):
         """The columns as the tabs have them now (the Columns / Stages tabs may have changed them)."""
         if not hasattr(self, "f_columns"):
             return
-        if not self.read_only and hasattr(self, "column_list"):
-            self.draft.columns = [self.column_list.item(i).text() for i in range(self.column_list.count())]
+        if not self.read_only and hasattr(self, "column_tree"):
+            self.draft.columns = self._tree_columns()
             self._store_stage()
         names = list(dict.fromkeys(self.draft.all_columns()
                                    + [f["column"] for f in self._formulas_from_table() if f["column"]]))
@@ -1786,14 +1934,15 @@ class PackEditor(QDialog):
         m["formulas"] = self._formulas_from_table()
         if not m["formulas"] and "_about_formulas" not in m:
             m.pop("formulas", None)
-        self.draft.columns = [self.column_list.item(i).text() for i in range(self.column_list.count())]
+        self.draft.columns = self._tree_columns()
+        self._store_column_categories()
         self.draft.compounds = self._compounds_from_table()
         self._store_family()
         if self.draft.analysis_vocab is not None:
             self.draft.analysis_vocab["techniques"] = self._techniques_from_table()
         self._store_stage()
         self._store_rules()
-        self._update_column_tips()
+        self._refresh_column_fills()
 
     def save(self) -> bool:
         problems = self.run_check()
