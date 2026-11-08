@@ -1077,8 +1077,10 @@ class MainWindow(QMainWindow):
                 surveyed = sum(1 for p in r.papers if p.survey)
                 self.status.setText(f"Drafted '{dlg.created.label}' from {surveyed} paper(s) (${r.cost_usd:.3f}): "
                                     f"{sum(len(s.parameters) for s in r.proposal.stages)} parameters in "
-                                    f"{len(r.proposal.stages)} stage(s). Check and edit it in the editor; "
-                                    f"drafted_from.md in its folder lists where each parameter came from.")
+                                    f"{len(r.proposal.stages)} stage(s)"
+                                    + (f"; {r.compound_lines[0]}" if r.compound_lines else "")
+                                    + ". Check and edit it in the editor; drafted_from.md in its folder lists where "
+                                      "each parameter came from.")
             self.refresh_packs(select=dlg.created.id)
             self._open_pack_editor(dlg.created.folder)
 
@@ -1096,7 +1098,7 @@ class MainWindow(QMainWindow):
 
     def _open_pack_editor(self, folder, tab: int = 0) -> None:
         from parameter_extractor.gui.pack_windows import PackEditor
-        editor = PackEditor(folder, self, self.registry_path)
+        editor = PackEditor(folder, self, self.registry_path, config=self.current_config)
         editor.saved.connect(lambda pack_id: self.refresh_packs(select=pack_id))
         editor.tabs.setCurrentIndex(tab)
         editor.exec()

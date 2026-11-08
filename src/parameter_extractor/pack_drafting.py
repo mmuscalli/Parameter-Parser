@@ -126,6 +126,7 @@ class DraftResult:
     work_dir: Path
     cost_usd: float = 0.0
     dropped: List[str] = field(default_factory=list)      # duplicate columns left out
+    compound_lines: List[str] = field(default_factory=list)   # compound_setup, when asked for with the draft
 
 
 # ---- column names --------------------------------------------------------------------------------------------------
@@ -365,6 +366,299 @@ def check_new_id(pack_id: str, label: str) -> None:
         raise ValueError("Give the research area a name.")
 
 
+# ---- suggestions for an existing research area -------------------------------------------------------------------
+
+class SuggestedParameter(ProposedParameter):
+    stage: str = Field(description="An existing stage's name, or a name from new_stages.")
+    reason: str = Field(description="Why it's needed, a few words.")
+
+
+class SuggestedStage(BaseModel):
+    name: str
+    label: str
+    description: str
+    per: Literal["sample", "set"]
+    keywords: List[str]
+
+
+class SuggestedRule(BaseModel):
+    target: str = Field(description="'rows' (planning the rows) or a stage name.")
+    rule: str
+    reason: str
+
+
+class SuggestedCompound(BaseModel):
+    name: str = Field(description="The compound's usual short name or abbreviation as the papers write it.")
+    role: Literal["initial", "sampled"] = Field(description="initial: a starting substance; sampled: a product.")
+    papers: int
+    reason: str
+
+
+class PackAdditions(BaseModel):
+    parameters: List[SuggestedParameter]
+    new_stages: List[SuggestedStage]
+    categories: List[ProposedCategory]
+    rules: List[SuggestedRule]
+    compounds: List[SuggestedCompound]
+    notes: str
+
+
+@dataclass
+class Suggestion:
+    """One addition, as the review lists it (`include` = ticked)."""
+    kind: str                  # parameter / stage / category / rule / compound
+    title: str
+    detail: str
+    reason: str = ""
+    papers: int = 0
+    payload: object = None
+    include: bool = True
+
+
+@dataclass
+class AdditionsResult:
+    suggestions: List[Suggestion]
+    papers: List[SurveyedPaper]
+    work_dir: Path
+    cost_usd: float = 0.0
+    left_out: List[str] = field(default_factory=list)       # suggested but already covered
+    notes: str = ""
+
+
+def _pack_summary(draft) -> tuple:
+    """(summary text, uses chemistry) of an existing pack for the additions request."""
+    m = draft.manifest
+    lines = ["CATEGORIES (the app also has metadata, methodology and other):"]
+    for c in m.get("variable_categories", []):
+        lines.append(f"- {c.get('id')}: {c.get('label')} -- {c.get('description', '')}")
+    lines.append("STAGES:")
+    for spec in draft.stages.values():
+        lines.append(f"- stage `{spec.get('name')}` ({spec.get('label')}): {spec.get('description', '')}")
+        for p in spec.get("parameters", []):
+            lines.append(f"    - {p['column']}" + (f" [{p['unit']}]" if p.get("unit") else "")
+                         + f": {p.get('description', '')[:110]}")
+    from parameter_extractor.pack_editing import BUILTIN_STAGES
+    steps = [f"{n} ({BUILTIN_STAGES.get(n, '')})" for n in m.get("builtin_stages", [])]
+    if steps:
+        lines.append("BUILT-IN STEPS (they fill their own columns -- suggest nothing they already record): "
+                     + "; ".join(steps))
+    others = [c for c in draft.columns if c not in draft.stage_columns()]
+    lines.append("OTHER COLUMNS (filled by built-in steps): " + ", ".join(others[:250]))
+    rules_file = draft.folder / "prompts" / "structure_planner.md"
+    if draft.rules.get("structure_planner"):
+        lines.append("ROW RULES:\n" + draft.rules["structure_planner"].strip())
+    elif rules_file.is_file():
+        lines.append("ROW PLANNING PROMPT (excerpt):\n" + rules_file.read_text()[:3500])
+    chemistry = "chemistry" in m.get("builtin_stages", [])
+    if chemistry:
+        lines.append("COMPOUND VOCABULARY (the chemistry step records dissolved compounds per compound): "
+                     + ", ".join(draft.species[:300]))
+    return "\n".join(lines), chemistry
+
+
+def _already(draft, column: str) -> bool:
+    return column in set(draft.all_columns())
+
+
+def suggest_additions(folder: Path, items: Sequence, config: RunConfig,
+                      on_progress: Optional[Callable[[int, int, str], None]] = None,
+                      cancel_event: Optional[threading.Event] = None, workers: int = 4) -> AdditionsResult:
+    """Survey new sample papers and ask what an existing research area lacks; nothing is changed (see
+    apply_additions)."""
+    from parameter_extractor.api_client import call_structured
+    from parameter_extractor.errors import ApiKeyMissingError
+    from parameter_extractor.names import match_species
+    from parameter_extractor.pack_editing import PackDraft
+    from parameter_extractor.run_context import RunContext, total_cost
+    if config.needs_api_key and not config.api_key:
+        raise ApiKeyMissingError()
+    draft = PackDraft.load(folder)
+    items = list(dict.fromkeys(items))
+    if not items:
+        raise PipelineError("Add at least one sample paper.")
+    config = _config(config)
+    report = on_progress or (lambda *a: None)
+    pack_id = draft.manifest.get("id", "pack")
+    work_dir = Path(config.output_dir) / f"pack_additions_{pack_id}_{datetime.now():%Y%m%d-%H%M%S}"
+    work_dir.mkdir(parents=True, exist_ok=True)
+    area, description = draft.manifest.get("label", pack_id), draft.manifest.get("description", "")
+    total = len(items) + 1
+    report(0, total, f"Surveying {len(items)} paper(s) for their variables")
+    papers: List[SurveyedPaper] = []
+    with ThreadPoolExecutor(max_workers=max(1, min(workers, len(items))), thread_name_prefix="survey") as pool:
+        futures = [pool.submit(survey_paper, item, config, work_dir, area, description, cancel_event)
+                   for item in items]
+        for f in as_completed(futures):
+            p = f.result()
+            papers.append(p)
+            report(len(papers), total, f"{p.name}: " + (f"{len(p.survey.variables)} variables" if p.survey
+                                                        else f"not surveyed ({p.error})"))
+    good = [p for p in papers if p.survey and p.survey.variables]
+    if not good:
+        raise PipelineError("None of the papers could be surveyed: " + "; ".join(f"{p.name}: {p.error or 'no variables'}"
+                                                                              for p in papers))
+    if cancel_event is not None and cancel_event.is_set():
+        raise RunCancelledError()
+    report(len(items), total, "Comparing the papers with the research area")
+    summary, chemistry = _pack_summary(draft)
+    prompt = _prompt("pack_additions", AREA=area, AREA_DESCRIPTION=description, N_PAPERS=len(good),
+                     COMPOUND_NOTE=" and its compound vocabulary" if chemistry else "",
+                     COMPOUND_INSTRUCTION=("dissolved compounds the papers use or form that the compound vocabulary "
+                                           "lacks (the chemistry step records them; don't also add parameters for "
+                                           "them); else []." if chemistry else "[] (this research area has no "
+                                                                               "chemistry step)."))
+    ctx = RunContext(config=config, run_dir=work_dir, total_steps=1, cancel_event=cancel_event)
+    answer = call_structured(ctx, stage="pack_additions", system_prompt="Suggest additions to a dataset's extraction "
+                             "setup from surveys of new sample papers.",
+                             user_content=f"{prompt}\n\nTHE RESEARCH AREA NOW:\n{summary}\n\nSURVEYS:\n"
+                                          f"{_survey_digest(good)}",
+                             response_model=PackAdditions, max_tokens=SYNTHESIS_BUDGET)
+    cost = round(sum(p.cost_usd for p in papers) + (total_cost(ctx.usage) or 0.0), 4)
+    # local checks: what's already there is left out
+    out, left_out = [], []
+    stage_names = {s.get("name") for s in draft.stages.values()}
+    new_stage_names = {_slug(s.name) for s in answer.new_stages}
+    existing_categories = {c.get("id") for c in draft.manifest.get("variable_categories", [])} | RESERVED_CATEGORIES
+    for c in answer.categories:
+        if _slug(c.id) in existing_categories:
+            continue
+        out.append(Suggestion("category", c.label, f"id {_slug(c.id)}: {c.description}", payload=c))
+    for st in answer.new_stages:
+        if _slug(st.name) in stage_names:
+            continue
+        out.append(Suggestion("stage", st.label, f"`{_slug(st.name)}`: {st.description}"
+                              + (f" (runs for papers mentioning {', '.join(st.keywords)})" if st.keywords else ""),
+                              payload=st))
+    seen = set()
+    for p in answer.parameters:
+        column, unit = column_for(p.column, p.unit, p.kind)
+        if _already(draft, column) or column in seen:
+            left_out.append(f"{column} (already a column)")
+            continue
+        seen.add(column)
+        stage = _slug(p.stage)
+        where = stage if stage in stage_names or stage in new_stage_names else next(iter(stage_names), stage)
+        out.append(Suggestion("parameter", column, f"{p.description}" + (f" [{unit}]" if unit else "")
+                              + f" -- stage `{where}`, category {p.category}", reason=p.reason, papers=p.papers,
+                              payload=(where, p)))
+    for r in answer.rules:
+        target = "rows" if r.target.strip().lower() in ("rows", "row", "row planning") else _slug(r.target)
+        out.append(Suggestion("rule", r.rule, "planning the rows" if target == "rows" else f"stage `{target}`",
+                              reason=r.reason, payload=(target, r.rule)))
+    known = {s.lower() for s in draft.species}
+    for c in answer.compounds if chemistry else []:
+        matched = match_species(c.name, vocab=tuple(draft.species) or ("",))
+        if c.name.lower() in known or (matched and matched[0].lower() in known):
+            left_out.append(f"{c.name} (already a compound)")
+            continue
+        out.append(Suggestion("compound", c.name, f"{'starting compound' if c.role == 'initial' else 'product'}",
+                              reason=c.reason, papers=c.papers, payload=c))
+    result = AdditionsResult(suggestions=out, papers=papers, work_dir=work_dir, cost_usd=cost, left_out=left_out,
+                             notes=answer.notes)
+    (work_dir / "suggestions.json").write_text(json.dumps(answer.model_dump(), indent=2, ensure_ascii=False))
+    report(total, total, f"{len(out)} suggestion(s) for '{area}'; ${cost:.3f}")
+    return result
+
+
+def apply_additions(folder: Path, suggestions: Sequence[Suggestion], pubchem=None) -> tuple:
+    """Write the ticked suggestions into the pack; (lines done, check problems). Compounds are looked up on PubChem
+    (free) and get their columns like compound_setup's."""
+    from parameter_extractor.compound_setup import _Resolver, FoundCompound
+    from parameter_extractor.pack_editing import PackDraft, check, items_to_rules, rules_to_items
+    draft = PackDraft.load(folder)
+    m = draft.manifest
+    chosen = [s for s in suggestions if s.include]
+    done: List[str] = []
+    cats = m.setdefault("variable_categories", [])
+    order = max([c.get("table_order", 0) for c in cats] + [20])
+    for s in (x for x in chosen if x.kind == "category"):
+        order += 10
+        c = s.payload
+        cats.append({"id": _slug(c.id), "table_order": order, "label": c.label, "value_type": c.value_type,
+                     "model_assigns": True, "description": c.description})
+        done.append(f"category '{c.label}'")
+    files = {spec.get("name"): f for f, spec in draft.stages.items()}
+    for s in (x for x in chosen if x.kind == "stage"):
+        st = s.payload
+        file = draft.new_stage(_slug(st.name), st.label)
+        draft.stages[file].update(description=st.description, per=st.per, open_ended=True,
+                                  trigger={"keywords": st.keywords} if st.keywords else {"always": True},
+                                  open_ended_hint="other values of the experiments that have no column. Not the "
+                                                  "values of the parameters above.")
+        files[_slug(st.name)] = file
+        done.append(f"stage '{st.label}'")
+    columns = draft.columns
+    cc = m.setdefault("category_columns", {})
+    category_ids = {c.get("id") for c in cats}
+    for s in (x for x in chosen if x.kind == "parameter"):
+        stage, p = s.payload
+        file = files.get(stage) or next(iter(files.values()), None)
+        if file is None:
+            file = draft.new_stage("additions", "Additions")
+            files["additions"] = file
+        column, unit = column_for(p.column, p.unit, p.kind)
+        entry = {"column": column, "description": p.description}
+        if unit:
+            entry["unit"] = unit
+        if p.kind == "text":
+            entry["kind"] = "text"
+        if p.kind == "integer":
+            entry["integer"] = True
+        if p.choices and p.kind == "text":
+            entry["choices"] = [c for c in p.choices if c.strip()]
+        if p.uncertainties and p.kind != "text":
+            entry["uncertainties"] = True
+        draft.stages[file].setdefault("parameters", []).append(entry)
+        if column not in columns:
+            columns.append(column)
+        cat = _slug(p.category)
+        if cat in category_ids or cat in RESERVED_CATEGORIES:
+            cc.setdefault(cat, {"columns": []})["columns"].append(column)
+        done.append(f"parameter {column} (stage {draft.stages[file].get('name')})")
+    row_rules = [s.payload[1] for s in chosen if s.kind == "rule" and s.payload[0] == "rows"]
+    for s in (x for x in chosen if x.kind == "rule" and x.payload[0] != "rows"):
+        target, rule = s.payload
+        file = files.get(target)
+        if file is not None:
+            draft.stages[file].setdefault("rules", []).append(rule)
+            done.append(f"rule for stage {target}")
+    own_planner = draft.folder / "prompts" / "structure_planner.md"
+    to_prompt = []
+    if row_rules:
+        if own_planner.is_file() and "{{PACK_RULES}}" not in own_planner.read_text():
+            to_prompt = row_rules            # the pack's own whole prompt: appended to it after saving
+        else:
+            draft.rules["structure_planner"] = items_to_rules(
+                rules_to_items(draft.rules.get("structure_planner", "")) + row_rules)
+        done.append(f"{len(row_rules)} row-planning rule(s)")
+    compounds = [s for s in chosen if s.kind == "compound"]
+    if compounds:
+        resolver = _Resolver(pubchem)
+        species = list(draft.species)
+        entries = draft.cids_file.setdefault("species", {})
+        for s in compounds:
+            c = s.payload
+            hit = resolver.resolve(c.name)
+            name, cid, title, synonyms = hit if hit else (c.name, 0, "", [])
+            if name not in species:
+                species.append(name)
+            if cid:
+                entries[name] = {"cid": cid, "title": title, "synonyms": list(synonyms)}
+            for col in FoundCompound(name=name, roles={c.role}, measures={"mM"}).columns():
+                if col not in columns:
+                    columns.append(col)
+            done.append(f"compound {name}" + (f" (CID {cid})" if cid else " (not found on PubChem)"))
+        draft.species = species
+        if pubchem is not None:
+            pubchem.save()
+    draft.columns = columns
+    draft.save()
+    if to_prompt:
+        own_planner.write_text(own_planner.read_text().rstrip() + "\n\nAdditional rules (suggested from sample "
+                               "papers):\n" + "\n".join(f"- {r}" for r in to_prompt) + "\n")
+    return done, check(PackDraft.load(folder))
+
+
 # ---- the whole thing ---------------------------------------------------------------------------------------------------
 
 def draft_pack(items: Sequence, pack_id: str, label: str, description: str, config: RunConfig,
@@ -414,6 +708,10 @@ def draft_pack(items: Sequence, pack_id: str, label: str, description: str, conf
     text = write_report(result, by_column, area)
     (pack.folder / "drafted_from.md").write_text(text)
     (work_dir / "drafted_from.md").write_text(text)
+    surveys = json.dumps(
+        [{"paper": p.name, "item": p.item, "error": p.error, "survey": p.survey.model_dump() if p.survey else None}
+         for p in papers], indent=2, ensure_ascii=False)
+    (pack.folder / "drafted_surveys.json").write_text(surveys)      # examples for compound_setup
     (work_dir / "surveys.json").write_text(json.dumps(
         [{"paper": p.name, "item": p.item, "error": p.error, "survey": p.survey.model_dump() if p.survey else None}
          for p in papers], indent=2, ensure_ascii=False))

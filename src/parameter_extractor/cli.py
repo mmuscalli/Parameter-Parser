@@ -113,6 +113,15 @@ def main() -> int:
                              "survey of each paper's variables, then one request that designs columns, categories, "
                              "stages and row rules; written to your research areas folder (needs --area-name)")
     parser.add_argument("--area-name", default="", help="Name of the research area to draft (--draft-pack)")
+    parser.add_argument("--find-compounds", nargs="?", const="", default=None, metavar="ID",
+                        help="Find the compounds named in a research area's columns and examples (local + PubChem, no "
+                             "model) and switch its chemistry step on for them. With --draft-pack: right after "
+                             "drafting; else give the id of one of your research areas")
+    parser.add_argument("--suggest-additions", metavar="ID", default=None,
+                        help="Survey sample papers (--papers / --pdf / --paper) and suggest what one of your research "
+                             "areas lacks (parameters, stages, categories, rules, compounds); prints them")
+    parser.add_argument("--apply-suggestions", action="store_true",
+                        help="With --suggest-additions: write every suggestion into the research area")
     parser.add_argument("--area-description", default="", help="A sentence on the field (--draft-pack)")
     parser.add_argument("--list-local-models", action="store_true",
                         help="List the local server's models and your local profiles, then exit")
@@ -173,6 +182,10 @@ def main() -> int:
         return _list_local_models(args)
     if args.draft_pack:
         return _draft_pack(args, parser)
+    if args.suggest_additions:
+        return _suggest_additions(args, parser)
+    if args.find_compounds:
+        return _find_compounds(args.find_compounds, args)
     if args.focus:
         return _focused(args, parser)
     if not args.pdf and not args.paper and not args.queue:
@@ -383,4 +396,68 @@ def _draft_pack(args, parser) -> int:
     print(f"Research area written to {result.pack.folder} (report: drafted_from.md; work files: {result.work_dir})")
     for p in result.problems:
         print(f"  {p}")
+    if args.find_compounds is not None:
+        return _find_compounds(args.draft_pack, args)
+    return 0
+
+
+def _user_pack(pack_id: str):
+    from parameter_extractor import packs
+    pack = packs.available().get(pack_id)
+    if pack is None or not str(pack.folder).startswith(str(packs.user_packs_dir())):
+        raise SystemExit(f"'{pack_id}' isn't one of your research areas (the app's own can't be changed: copy one "
+                         f"first). Yours: {', '.join(p for p, x in packs.available().items() if str(x.folder).startswith(str(packs.user_packs_dir()))) or 'none'}")
+    return pack
+
+
+def _find_compounds(pack_id: str, args) -> int:
+    from parameter_extractor import compound_setup
+    from parameter_extractor.pubchem import PubChem
+    from parameter_extractor.registry import default_pubchem_cache_path
+    pack = _user_pack(pack_id)
+    plan, done, problems = compound_setup.set_up_compounds(
+        pack.folder, None if args.no_pubchem else PubChem(default_pubchem_cache_path()))
+    for c in plan.compounds:
+        print(f"  {c.name:30} CID {c.cid or '-':<10} {', '.join(c.columns())}   ({'; '.join(c.sources)})")
+    for line in done:
+        print(line)
+    if plan.not_identified:
+        print("not identified: " + ", ".join(plan.not_identified))
+    for p in problems:
+        print(f"  {p}")
+    return 0
+
+
+def _suggest_additions(args, parser) -> int:
+    from parameter_extractor import pack_drafting
+    from parameter_extractor.errors import PipelineError
+    from parameter_extractor.focused_search import read_paper_list
+    from parameter_extractor.pubchem import PubChem
+    from parameter_extractor.registry import default_pubchem_cache_path
+    pack = _user_pack(args.suggest_additions)
+    items = list(read_paper_list(args.papers)) if args.papers else []
+    items += [Path(args.pdf)] if args.pdf else []
+    items += [args.paper] if args.paper else []
+    if not items:
+        parser.error("--suggest-additions needs sample papers: --papers LIST, --pdf or --paper")
+    overrides = {"prefer_arxiv": args.arxiv, "include_supplements": not args.no_si}
+    if args.out:
+        overrides["output_dir"] = args.out
+    overrides.update(_provider_overrides(args, parser))
+    try:
+        result = pack_drafting.suggest_additions(pack.folder, items, RunConfig.from_settings(**overrides),
+                                                 on_progress=lambda d, n, m: print(f"[{d}/{n}] {m}"))
+    except PipelineError as e:
+        print(f"Error: {e}", file=sys.stderr)
+        return 1
+    for s in result.suggestions:
+        print(f"  [{s.kind}] {s.title}: {s.detail}" + (f"  ({s.reason})" if s.reason else ""))
+    if result.left_out:
+        print("already covered: " + ", ".join(result.left_out))
+    if args.apply_suggestions and result.suggestions:
+        done, problems = pack_drafting.apply_additions(pack.folder, result.suggestions,
+                                                       None if args.no_pubchem else PubChem(default_pubchem_cache_path()))
+        print("\n".join(done))
+        for p in problems:
+            print(f"  {p}")
     return 0

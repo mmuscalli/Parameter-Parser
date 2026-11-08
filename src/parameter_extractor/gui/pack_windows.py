@@ -185,6 +185,15 @@ class NewPackDialog(QDialog):
         self.papers.setMinimumHeight(170)
         self.papers.message.connect(lambda m: self.error.setText(m))
         dv.addWidget(self.papers)
+        self.compounds_box = QCheckBox("Then find compounds in the drafted columns and set up the chemistry step "
+                                       "(local + PubChem, no extra model cost)")
+        self.compounds_box.setToolTip("For chemistry papers: substances named in the drafted columns and the papers' "
+                                      "examples become compounds of the chemistry step (one column per compound, "
+                                      "PubChem identities). Can also be done later in the editor (Find compounds…).")
+        from PySide6.QtCore import QSettings
+        self.compounds_box.setChecked(QSettings().value("draft/find_compounds", False, type=bool))
+        self.compounds_box.toggled.connect(lambda on: QSettings().setValue("draft/find_compounds", on))
+        dv.addWidget(self.compounds_box)
         self.draft_progress = QProgressBar(visible=False, textVisible=False)
         self.draft_status = QLabel(wordWrap=True)
         dv.addWidget(self.draft_progress)
@@ -259,11 +268,21 @@ class NewPackDialog(QDialog):
         self._signals.done.connect(self._draft_done)
         self._set_drafting(True)
         description = self.desc_edit.toPlainText()
+        compounds = self.compounds_box.isChecked()
 
         def work():
             try:
                 result = pack_drafting.draft_pack(items, pack_id, label, description, config,
                                                   on_progress=self._signals.progress.emit, cancel_event=self._cancel)
+                if compounds:
+                    from parameter_extractor import compound_setup
+                    from parameter_extractor.pubchem import PubChem
+                    from parameter_extractor.registry import default_pubchem_cache_path
+                    self._signals.progress.emit(1, 1, "Finding compounds in the drafted columns (PubChem)")
+                    pubchem = PubChem(config.pubchem_cache_path or default_pubchem_cache_path()) \
+                        if config.use_pubchem else None
+                    _, result.compound_lines, result.problems = compound_setup.set_up_compounds(result.pack.folder,
+                                                                                                pubchem)
             except BaseException as e:           # shown in the dialog
                 result = e
             self._signals.done.emit(result)
@@ -272,7 +291,7 @@ class NewPackDialog(QDialog):
 
     def _set_drafting(self, on: bool) -> None:
         for w in (self.label_edit, self.id_edit, self.desc_edit, self.set_edit, self.sample_edit, self.source_combo,
-                  self.create_btn):
+                  self.create_btn, self.compounds_box):
             w.setEnabled(not on)
         self.papers.set_locked(on)
         self.draft_progress.setVisible(on)
@@ -308,10 +327,11 @@ class PackEditor(QDialog):
     """One research area's files as tabs (see the module docstring). `saved` fires after a save."""
     saved = Signal(str)
 
-    def __init__(self, folder: Path, parent=None, registry_path: Optional[Path] = None):
+    def __init__(self, folder: Path, parent=None, registry_path: Optional[Path] = None, config=None):
         super().__init__(parent)
         self.draft = PackDraft.load(folder)
         self.registry_path = registry_path
+        self._config = config                    # callable -> RunConfig (suggestions from papers use the API)
         self.read_only = self.draft.builtin
         self._stage = None                         # the stage file shown in the Stages tab
         self._rules_shown = None
@@ -352,6 +372,22 @@ class PackEditor(QDialog):
                                   "columns, synonyms, compound names, changes to this pack's columns). Kept apart "
                                   "from the pack, so it applies on top of it.")
             bottom.addWidget(remembered)
+        self.compounds_btn = QPushButton("Find compounds…", clicked=self._find_compounds)
+        self.compounds_btn.setToolTip("Find the compounds named in this research area's columns and examples, identify "
+                                      "them on PubChem (free, no model) and switch the chemistry step on for them -- "
+                                      "you review everything before it's changed. Saves your edits first.")
+        self.suggest_btn = QPushButton("Suggest additions from papers…", clicked=self._suggest_additions)
+        self.suggest_btn.setToolTip("Survey a few new sample papers (cheap) and get suggestions for what this research "
+                                    "area lacks: parameters, stages, categories, rules, compounds. You choose what's "
+                                    "added. Saves your edits first.")
+        for b in (self.compounds_btn, self.suggest_btn):
+            b.setEnabled(not self.read_only)
+            bottom.addWidget(b)
+        if self.read_only:
+            for b in (self.compounds_btn, self.suggest_btn):
+                b.setToolTip("Copy this research area first: the app's own can't be changed.")
+        if config is None:
+            self.suggest_btn.setEnabled(False)
         bottom.addWidget(QPushButton("Close", clicked=self.reject))
         self.save_btn = QPushButton("Save", clicked=self.save, default=True)
         self.save_btn.setEnabled(not self.read_only)
@@ -1752,12 +1788,39 @@ class PackEditor(QDialog):
         self.saved.emit(self.draft.manifest.get("id", ""))
         return True
 
+    def _find_compounds(self) -> None:
+        from parameter_extractor.gui.pack_assist import CompoundSetupDialog
+        if not self.save():
+            return
+        dlg = CompoundSetupDialog(self.draft.folder, self)
+        if dlg.exec():
+            self._reopen("Compounds set up", dlg.applied, dlg.problems)
+
+    def _suggest_additions(self) -> None:
+        from parameter_extractor.gui.pack_assist import AdditionsDialog
+        if self._config is None or not self.save():
+            return
+        dlg = AdditionsDialog(self.draft.folder, self._config, self)
+        if dlg.exec():
+            self._reopen("Suggestions applied", dlg.applied, dlg.problems)
+
+    def _reopen(self, title: str, done: list, problems: list) -> None:
+        """After a helper changed the pack's files: tell what was done, then the editor again on the new files."""
+        errors_ = [p for p in problems if p.level == "error"]
+        QMessageBox.information(self, title, "\n".join(f"• {d}" for d in done[:30]) + (
+            f"\n\nThe check found {len(errors_)} error(s) -- see the Check tab." if errors_ else ""))
+        self.saved.emit(self.draft.manifest.get("id", ""))
+        self.accept()
+        editor = PackEditor(self.draft.folder, self.parent(), self.registry_path, self._config)
+        editor.saved.connect(self.saved.emit)
+        editor.exec()
+
     def _copy(self) -> None:
-        dlg = NewPackDialog(self, source=self.draft.manifest.get("id"))
+        dlg = NewPackDialog(self, source=self.draft.manifest.get("id"), config=self._config)
         if dlg.exec() and dlg.created is not None:
             self.saved.emit(dlg.created.id)
             self.accept()
-            editor = PackEditor(dlg.created.folder, self.parent(), self.registry_path)
+            editor = PackEditor(dlg.created.folder, self.parent(), self.registry_path, self._config)
             editor.saved.connect(self.saved.emit)
             editor.exec()
 

@@ -2373,3 +2373,40 @@ NAME [--area-description TEXT] --papers LIST | --pdf | --paper`.
   drafted pack: 42 rows (= the hand-made pack's), $0.35, T / duration / Gly 1000 mM / NaCl 3330 mM / diglycine yields
   right; triglycine yields lost -- the draft chose one product + product_yield_pct per row (a general-columns choice the
   user can change in the editor). tests/test_pack_drafting.py (canned answers; the dialog end to end).
+
+## Compounds for drafted packs; suggested additions to existing packs (2026-11-08, Mickey)
+
+- **`compound_setup.py`** (local + PubChem, no model): `find_compounds(draft, pubchem)` -> `CompoundPlan` (compounds
+  with CID / PubChem title / synonyms / roles / measures / categories / sources; `Replacement`s; not_identified):
+  (1) substance PAIRS -- a text parameter whose name/description says species/reactant/product/additive/... + numeric
+  parameters sharing its first word with a concentration or % unit (reactant_species + reactant_concentration_mM;
+  product_name + product_yield_pct) -> replaced; compounds from the description's 'e.g. / such as' lists, choices and
+  the draft's survey examples (`drafted_surveys.json`, now written to the pack folder by draft_pack);
+  (2) compound-named columns ('mgcl2_concentration_mM': `names_in_column` drops GENERIC words, `formula_case` restores
+  element case -- a digit, or 2-4 elements); (3) class columns with examples ('activating_agent_concentration_mM', e.g.
+  diamidophosphate). A candidate counts when names.match_species (against the PREBIOTIC vocabulary: 'sodium_triMP') or
+  PubChem identifies it; same CID = one compound. Role: product words / results category -> sampled, else initial;
+  columns initial_<n>_aq_mM, sampled_<n>_aq_mM / _aq_%yield (species_column) in the replaced parameter's category.
+  `apply` (ticked parts only): vocabulary + species_cids entries {cid, title, synonyms}, replaced parameters removed,
+  CHEMISTRY_RULE added to every stage, builtin chemistry + postprocess normalize_species/mixing/molar_ratios;
+  `ensure_chemistry_prompt` copies the prebiotic chemistry.md into the pack (the app has no generic one -- before this,
+  ticking chemistry in a drafted pack had no prompt). `set_up_compounds(folder, pubchem, plan)` = find + apply + save.
+  On Mickey's 'Prebiotic (Sam Papers)' draft (a copy): 7 compounds, all with CIDs (MgCl2, NaCl, UMP, 2',3'-cGMP, ribose,
+  diamidophosphate, trimetaphosphate), 8 parameters replaced, check clean.
+- **Additions** (`pack_drafting.suggest_additions(folder, papers, config)`): the same per-paper survey, then one request
+  (stage `pack_additions`, prompts/pack_additions.md) with `_pack_summary` (categories, built-in steps, stages +
+  parameters, other columns, row rules or the pack's own structure prompt excerpt, compound vocabulary) -> `PackAdditions`
+  (parameters with stage + reason, new_stages, categories, rules with target rows/stage, compounds -- only with
+  chemistry, notes). Local filter: a column already in all_columns() or a compound already in the vocabulary ->
+  `left_out`. `Suggestion`s (kind/title/detail/reason/papers/payload/include); `apply_additions` writes the ticked ones
+  (compounds resolved on PubChem; row rules into structure_planner.rules.md, or appended to the pack's own whole
+  structure_planner.md when it has no {{PACK_RULES}} slot). Live (prebiotic copy; Bujdak1994, Chang1969, Flores1973 --
+  Flores read nothing): 26 s, $0.047, 3 conservative suggestions (irradiation wavelength, energy input mode, detector
+  wavelength -- the last overlapped the analysis step, hence built-in steps in the summary now).
+- GUI: PackEditor bottom bar "Find compounds…" (`gui/pack_assist.CompoundSetupDialog`: tables of compounds and
+  replaced parameters with ticks) and "Suggest additions from papers…" (`AdditionsDialog`: papers panel, Get
+  suggestions on a thread, table with ticks, Apply); both save the editor first, then `_reopen` (summary message, the
+  editor again on the new files). Off for the app's own packs (copy first); suggestions need `config` (PackEditor's new
+  argument; the main window passes current_config). NewPackDialog draft option "Then find compounds…" (QSettings
+  draft/find_compounds; DraftResult.compound_lines). CLI: `--find-compounds [ID]` (alone, or after --draft-pack),
+  `--suggest-additions ID --papers ... [--apply-suggestions]`. tests/test_compound_setup.py.
