@@ -2337,3 +2337,10 @@ audits, usage) is unchanged; cost 0.0 in _record.
   model support".
 - Installed for the live test (Mickey's OK): Homebrew `ollama` 0.40.15 (started with `ollama serve`; not a login
   service) + `gemma3:12b` (8.2 GB, vision, 128K max context). M2 / 24 GB: ~10 tokens/s generation.
+- Live test (2026-11-08, eder1994, Ollama gemma3:12b, 64K context, images on, 1 request at a time): finished end to end
+  in 33 min, $0, 91K in / 8.5K out (structure 6 min, chemistry 10 min; ~10 tok/s). Quality is the model's, as
+  expected: 31 rows (reference 42), durations and temperatures right, Table 1's yield numbers read correctly but
+  labelled as starting Gly instead of Gly-Gly / Gly3 yields -> no peptide yields, no salt concentrations; the
+  conditions step filled flow / solid-material columns that don't apply. A 12B model is a framework check, not a
+  usable extractor for this pack; larger models (30B+) are the realistic floor. A step's elapsed_sec includes its wait
+  for the server's other requests.
