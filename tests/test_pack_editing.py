@@ -15,6 +15,7 @@ from unittest.mock import patch
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+os.environ.setdefault("PARAMETER_EXTRACTOR_NO_KEYCHAIN", "1")      # never the real keychain (macOS asks)
 
 from parameter_extractor import packs
 from parameter_extractor.pack_editing import PackDraft, check

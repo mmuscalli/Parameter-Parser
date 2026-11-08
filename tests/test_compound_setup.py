@@ -12,6 +12,7 @@ from types import SimpleNamespace
 from unittest.mock import patch
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+os.environ.setdefault("PARAMETER_EXTRACTOR_NO_KEYCHAIN", "1")      # never the real keychain (macOS asks)
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 

@@ -22,7 +22,7 @@ TIMES = ROOT / "tests" / ".last_times.json"     # last run's time per file: the 
 
 def run(path: Path) -> dict:
     start = time.time()
-    env = dict(os.environ, QT_QPA_PLATFORM="offscreen")
+    env = dict(os.environ, QT_QPA_PLATFORM="offscreen", PARAMETER_EXTRACTOR_NO_KEYCHAIN="1")   # never the real keychain
     proc = subprocess.run([sys.executable, str(path)], cwd=ROOT, env=env, capture_output=True, text=True)
     out = proc.stdout + proc.stderr
     return {"file": path.name, "seconds": round(time.time() - start, 1), "code": proc.returncode,

@@ -6,6 +6,7 @@ Also: profiles -> models, settings file, refusing a paper that won't fit, an unr
 No network beyond 127.0.0.1, no API.
 """
 import json
+import os
 import sys
 import tempfile
 import threading
@@ -15,6 +16,8 @@ from pathlib import Path
 from unittest.mock import patch
 
 from PySide6.QtWidgets import QCheckBox
+
+os.environ.setdefault("PARAMETER_EXTRACTOR_NO_KEYCHAIN", "1")      # never the real keychain (macOS asks)
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))

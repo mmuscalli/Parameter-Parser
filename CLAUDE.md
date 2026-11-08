@@ -2410,3 +2410,17 @@ NAME [--area-description TEXT] --papers LIST | --pdf | --paper`.
   argument; the main window passes current_config). NewPackDialog draft option "Then find compounds…" (QSettings
   draft/find_compounds; DraftResult.compound_lines). CLI: `--find-compounds [ID]` (alone, or after --draft-pack),
   `--suggest-additions ID --papers ... [--apply-suggestions]`. tests/test_compound_setup.py.
+
+## Keychain access across rebuilds (2026-11-08, Mickey: password asked twice after every rebuild)
+
+macOS ties a keychain item's "Always Allow" to the app's code signature; PyInstaller's ad-hoc signature changes with
+every build, so the stored keys (Anthropic + ADS) were asked for again each time. `packaging/make_signing_identity.sh`
+(Mickey runs it once -- adding a certificate to his login keychain needs his OK) creates a self-signed code-signing
+identity "Parameter Extractor Local Signing" (system LibreSSL: its .p12 imports into the keychain; OpenSSL 3+ would need
+-legacy; key ACL -T /usr/bin/codesign; codesign accepts the UNTRUSTED certificate -- checked in a throwaway keychain --
+so no password / trust setting). build_macos.sh re-signs the .app with it when present (`SIGN_IDENTITY` overrides the
+name); the designated requirement is then 'identifier <bundle id> and certificate leaf = H"..."', the same on every
+build -> one "Always Allow" per app (public and Dev have different bundle ids). Not a distribution signature.
+Tests and dev scripts: PARAMETER_EXTRACTOR_NO_KEYCHAIN=1 makes key_store a no-op (scripts/run_tests.py sets it for every
+test; the GUI tests set it too) -- reading the keychain from the venv Python had also prompted. Use it in any ad-hoc
+script that builds a MainWindow.

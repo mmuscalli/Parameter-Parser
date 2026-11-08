@@ -7,8 +7,10 @@
 # `pip install -e ".[gui]"` and pyinstaller installed:
 #   PYTHON=../.venv/bin/python packaging/build_macos.sh
 #
-# The app is NOT code-signed or notarized: on other Macs, Gatekeeper will block
-# it until it is (needs an Apple Developer ID). See packaging/README.md.
+# The app is NOT signed for distribution or notarized: on other Macs, Gatekeeper will block
+# it until it is (needs an Apple Developer ID). See packaging/README.md. Locally it's signed
+# with a self-signed identity when packaging/make_signing_identity.sh has created one, so the
+# keychain's "Always Allow" for the stored keys survives rebuilds.
 # Developer build (adds the developer-only handoff mode; never distribute it):
 #   PYTHON=../.venv/bin/python packaging/build_macos.sh --dev   -> dist/Parameter Extractor Dev.app
 set -euo pipefail
@@ -27,6 +29,16 @@ ARCH="$(uname -m)"
 "$PY" -m PyInstaller --noconfirm --clean --distpath dist --workpath build packaging/parameter_extractor.spec
 
 APP="dist/${NAME}.app"
+# the same signing identity on every build keeps the keychain's "Always Allow" for the stored API keys
+# (packaging/make_signing_identity.sh creates one); without it PyInstaller's ad-hoc signature stays
+SIGN_ID="${SIGN_IDENTITY:-Parameter Extractor Local Signing}"
+if security find-identity -p codesigning 2>/dev/null | grep -q "\"$SIGN_ID\""; then
+  codesign --force --deep --sign "$SIGN_ID" "$APP" 2>/dev/null
+  echo "Signed with '$SIGN_ID' (keychain access is kept across rebuilds)."
+else
+  echo "Ad-hoc signed: macOS asks again for keychain access after every rebuild."
+  echo "  Run packaging/make_signing_identity.sh once to keep it."
+fi
 echo "Built: $APP ($(du -sh "$APP" | cut -f1))"
 if [[ -n "${PE_DEV_BUILD:-}" ]]; then
   echo "Developer build: no .dmg (not for distribution)."
