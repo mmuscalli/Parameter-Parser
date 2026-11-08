@@ -273,6 +273,10 @@ class StageSpec(BaseModel):
         return _models(self.model_dump_json(), categories)
 
     def prompt(self, structure: StructurePlan, paper_text: str) -> str:
+        return self.prompt_text(paper_text, structure.model_dump_json(indent=2))
+
+    def prompt_text(self, paper_text: str, plan_json: str) -> str:
+        """The stage's prompt (also the static instructions cached for every paper of a run: api_client)."""
         from parameter_extractor.stages.prompt_loader import load_prompt
         listing = "\n".join(f"- `{p.column}`" + (f" ({p.unit})" if p.unit else "") + f": {p.description}"
                             + (f" One of: {', '.join(p.choices)}." if p.choices else "")
@@ -286,7 +290,7 @@ class StageSpec(BaseModel):
                                 f"values belong to one {self.units('sample')} only; leave `sample` out for values "
                                 f"of the whole set."]
                                if self.per == "sample" else [])),
-                           STRUCTURE_PLAN_JSON=structure.model_dump_json(indent=2), PAPER_TEXT=paper_text)
+                           STRUCTURE_PLAN_JSON=plan_json, PAPER_TEXT=paper_text)
 
 
 ALTERNATIVES_RULE = (

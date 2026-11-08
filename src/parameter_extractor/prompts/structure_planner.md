@@ -10,8 +10,10 @@ The dataset has one row per {{SAMPLE_WORD}}, grouped into sets:
 {{PACK_RULES}}
 Answer format (short field names): `kind` what the paper is ("experimental"
 when it reports results of its own -- measurements, observations, fits;
-"review", "perspective", "theory", "abstract" or "other" otherwise -- a paper
-that isn't experimental gets no sets and the extraction steps are skipped),
+"review", "perspective", "theory", "abstract" or "other" otherwise. A review or
+other paper that reproduces results of earlier work in its tables plans them as
+sets like any results, with `ds` naming the original publication; only a paper
+with no results of any kind gets no sets, and its extraction steps are skipped),
 `sets` -- one entry per set: `set` its label, `type` the set type, `varies`
 what distinguishes it from the other sets, `src` the table or section it comes
 from, `ds` the original reference when the data is reproduced from another

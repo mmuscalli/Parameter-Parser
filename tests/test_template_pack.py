@@ -70,7 +70,9 @@ def test_a_pack_created_from_the_template_runs():
 
         def send(ctx, *, model, system_prompt, content, response_model, **kw):
             name = response_model.__name__
-            seen[name] = content if isinstance(content, str) else content[-1]["text"]
+            # the step's instructions may be in the cached system prompt (2026-11-07): both are what the model reads
+            system = system_prompt if isinstance(system_prompt, str) else system_prompt[0]["text"]
+            seen[name] = system + (content if isinstance(content, str) else content[-1]["text"])
             if name == "StructurePlan":
                 out = response_model.model_validate({"kind": "experimental", "n_rows": 2, "sets": [
                     {"set": "Run A", "type": "Time Series", "varies": "time", "src": "Table 1",

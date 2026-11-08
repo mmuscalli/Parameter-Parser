@@ -24,17 +24,21 @@ def output_budget(structure: StructurePlan) -> int:
     return 6000 + 400 * len(structure.experiment_sets)
 
 
+def prompt_text(paper_text: str, plan_json: str) -> str:
+    """The step's prompt (also the static instructions cached for every paper of a run: api_client)."""
+    vocab = vocabulary()
+    return load_prompt("analysis", STRUCTURE_PLAN_JSON=plan_json,
+                       ANALYSIS_VOCABULARY=prompt_listing(vocab) if vocab else "", PAPER_TEXT=paper_text)
+
+
 def run_analysis(ctx: RunContext, paper_text: str, structure: StructurePlan,
                  table_images: Optional[List[Path]] = None) -> AnalysisResult:
-    vocab = vocabulary()
     return call_structured(
         ctx,
         stage="analysis",
         system_prompt="You record how a chemistry paper analysed its products: the analytical techniques and "
                       "their instrument settings. Report only what the paper states.",
-        user_content=load_prompt("analysis", STRUCTURE_PLAN_JSON=structure.model_dump_json(indent=2),
-                                 ANALYSIS_VOCABULARY=prompt_listing(vocab) if vocab else "",
-                                 PAPER_TEXT=paper_text),
+        user_content=prompt_text(paper_text, structure.model_dump_json(indent=2)),
         response_model=AnalysisResult,
         paper_text=paper_text,
         image_paths=table_images,

@@ -75,10 +75,11 @@ Guidance:
 - `kind`: "experimental" when the paper reports experiments of its own (even
   if only in figures); "review", "perspective", "theory" (models or
   calculations only), "abstract" (a short conference abstract without data)
-  or "other" otherwise. A paper that isn't experimental gets no sets (data it
-  reproduces from other papers is listed in `excluded`) -- the extraction
-  steps are then skipped. A comparison table inside an experimental paper is
-  planned as usual, with `ds` for the rows from other publications.
+  or "other" otherwise. Data a review (or any paper) reproduces from other
+  publications in its tables IS planned as sets like any results, with `ds`
+  naming the original publication -- the rows are marked with their source.
+  Only a paper with no results of any kind gets no sets; its extraction steps
+  are then skipped.
 - Compound numbers and citations: a bold number after a compound name is its label ("nicotinamide
   6"), and digits printed inline after a word are usually reference citations ("ammonia.14") -- not
   conditions or samples. In set labels name compounds by name, not by number.

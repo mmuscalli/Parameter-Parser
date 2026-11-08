@@ -55,7 +55,7 @@ def test_the_paper_is_one_cached_prefix():
         print(f"SKIP: needs {PDF}"); return
     try:
         with tempfile.TemporaryDirectory() as tmp:
-            result, sent = _run(tmp, prompt_caching=True)
+            result, sent = _run(tmp, prompt_caching=True, shared_instructions=True)
             assert result.csv_path.read_text() == (REF / "nielsen2019_extracted.csv").read_text()   # same result
             prefixes = []
             tool_lists = set()
@@ -65,12 +65,13 @@ def test_the_paper_is_one_cached_prefix():
                 assert tool is not None and tool[0] in [t["name"] for t in tool[1]]
                 assert sent[name][2][-1]["text"].endswith(f"Answer by calling the `{tool[0]}` tool.")
                 tool_lists.add(json.dumps(tool[1]))
-                assert system == api_client.SHARED_SYSTEM
+                # one cached system prompt for every step: the shared line + every step's instructions (2026-11-07)
+                assert system[0]["text"].startswith(api_client.SHARED_SYSTEM) and "cache_control" in system[0]
                 marked = [i for i, b in enumerate(content) if "cache_control" in b]
                 assert len(marked) == 1 and content[marked[0]]["text"].startswith("PAPER TEXT:")
                 prefixes.append(json.dumps(content[:marked[0] + 1]))
                 task = content[-1]["text"]
-                assert task.startswith("YOUR TASK: ") and api_client.PAPER_ABOVE in task
+                assert task.startswith("YOUR TASK: ") and f"Follow the instructions for step `{tool[0]}`" in task
                 paper = content[marked[0]]["text"]
                 assert paper[200:700] not in task and len(task) < len(paper)  # the paper isn't sent twice
             assert len(set(prefixes)) == 1                                       # byte-identical prefix

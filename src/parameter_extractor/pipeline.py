@@ -471,8 +471,10 @@ def extract_steps(ex: "Extraction") -> "Extraction":
         text = inline(text, ex.grids) if not parsed.paged else text + render_all(ex.grids)
     # every paper-reading step gets the same paper first -- cached once, read at a fraction of the
     # price by the steps after the structure planner (api_client, RunConfig.prompt_caching)
-    ctx.paper = PaperContext(text=text, images=list(table_images),
-                             tools=_paper_tools(pack, config, terms, has_figures=bool(ex.figures)))
+    tools = _paper_tools(pack, config, terms, has_figures=bool(ex.figures))
+    ctx.paper = PaperContext(text=text, images=list(table_images), tools=tools,
+                             instructions=_step_instructions(pack, config, tools, vocab),
+                             long_lived=bool(config.batch_mode))
     convert_equations = bool(config.equations_to_latex and equations)
     if convert_equations:
         ctx.total_steps += 1            # optional (RunConfig.equations_to_latex), one small call
@@ -634,6 +636,35 @@ def _paper_wide_methodology(ex: "Extraction"):
                 setattr(view, field, Extracted(value=v.value, status="found", quote=v.quote, source=v.source,
                                                confidence=v.confidence))
     return view
+
+
+def _step_instructions(pack, config: RunConfig, tools: dict, vocab: dict) -> dict:
+    """Every paper-reading step's static instructions (its prompt, with the structure plan's place marked), sent
+    in the cached system prompt BEFORE the paper (2026-11-07): identical for every paper of a pack and settings, so
+    in a queue (or any run within the cache's lifetime) they and the tool list are paid once and read at 10% by
+    the following papers. Steps whose prompt has other per-paper parts (the user's search terms) aren't listed and
+    send their prompt as before; nothing is listed without prompt caching or in developer handoff."""
+    if not config.prompt_caching or config.handoff_dir or not config.shared_instructions:
+        return {}
+    from parameter_extractor.api_client import PAPER_ABOVE, PLAN_MARK
+    from parameter_extractor.stages import analysis as analysis_stage, fit_models as fit_stage
+    from parameter_extractor.stages import chemistry_extractor, structure_planner as planner_stage
+    running = {name for name in ("analysis", "fit_models", "chemistry") if name in tools}
+    specs = load_specs()
+    out = {}
+    for stage in tools:
+        if stage == "structure_planner":
+            out[stage] = planner_stage.prompt_text(PAPER_ABOVE)
+        elif stage == "chemistry":
+            out[stage] = chemistry_extractor.prompt_text(PAPER_ABOVE, PLAN_MARK, vocab["species_names"])
+        elif stage == "analysis":
+            out[stage] = analysis_stage.prompt_text(PAPER_ABOVE, PLAN_MARK)
+        elif stage == "fit_models":
+            out[stage] = fit_stage.prompt_text(PAPER_ABOVE, PLAN_MARK)
+        elif stage in specs:
+            out[stage] = for_run(specs[stage], config.suggest_new_variables, running).prompt_text(PAPER_ABOVE,
+                                                                                                    PLAN_MARK)
+    return out
 
 
 def _paper_tools(pack, config: RunConfig, terms, has_figures: bool = False) -> dict:

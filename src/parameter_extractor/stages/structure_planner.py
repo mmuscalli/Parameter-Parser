@@ -7,13 +7,19 @@ from parameter_extractor.schemas.structure_plan import StructurePlan
 from .prompt_loader import load_prompt
 
 
+def prompt_text(paper_text: str) -> str:
+    """The step's prompt (also the static instructions cached for every paper of a run: api_client)."""
+    from parameter_extractor.packs import current
+    units = current().manifest.units      # what the pack calls a set / a row (the shared prompt's slots)
+    return load_prompt("structure_planner", PAPER_TEXT=paper_text, SET_WORD=units.get("set", "set"),
+                       SAMPLE_WORD=units.get("sample", "sample"))
+
+
 def run_structure_planner(
     ctx: RunContext, paper_text: str, table_images: Optional[List[Path]] = None,
 ) -> StructurePlan:
     from parameter_extractor.packs import current
-    units = current().manifest.units      # what the pack calls a set / a row (the shared prompt's slots)
-    prompt = load_prompt("structure_planner", PAPER_TEXT=paper_text, SET_WORD=units.get("set", "set"),
-                         SAMPLE_WORD=units.get("sample", "sample"))
+    prompt = prompt_text(paper_text)
     plan = call_structured(
         ctx,
         stage="structure_planner",

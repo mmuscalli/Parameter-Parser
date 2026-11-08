@@ -73,6 +73,37 @@ class PaperContext:
     tools: Dict[str, type] = field(default_factory=dict)
     _definitions: Optional[list] = None
     last_used: float = 0.0           # when a request last read or wrote the cached paper (it lives 5 min / 1 h)
+    # every step's static instructions (stage -> its prompt with PLAN_MARK where the paper's structure plan goes;
+    # 2026-11-07): sent in the system prompt, cached BEFORE the paper -- the same for every paper of a run's pack
+    # and settings, so a queue's later papers read them (and the tool list) at 10% instead of paying them again
+    instructions: Dict[str, str] = field(default_factory=dict)
+    long_lived: bool = False
+
+    def system_blocks(self):
+        """The system prompt: the shared line, then every step's instructions, cached (tools + this = a prefix
+        shared across papers). Just the shared line when there are no instructions."""
+        if not self.instructions:
+            return SHARED_SYSTEM
+        cache = {"type": "ephemeral", "ttl": "1h"} if self.long_lived else {"type": "ephemeral"}
+        steps = "\n\n".join(f"### STEP `{stage}`\n\n{text}" for stage, text in self.instructions.items())
+        return [{"type": "text", "cache_control": cache, "text": (
+            f"{SHARED_SYSTEM}\n\nINSTRUCTIONS FOR EACH STEP (each request names its step; where a step's "
+            f"instructions show {PLAN_MARK}, the structure plan is in the request):\n\n{steps}")}]
+
+    def task_for(self, stage: str, task_text: str) -> Optional[str]:
+        """The request text for a step whose instructions are in the system prompt: only what's specific to this
+        paper (the structure plan). None when the step's prompt doesn't match its stored instructions (then the
+        whole prompt is sent, as before)."""
+        static = self.instructions.get(stage)
+        if not static:
+            return None
+        if PLAN_MARK not in static:
+            return "" if task_text == static else None
+        head, tail = static.split(PLAN_MARK, 1)
+        if not (task_text.startswith(head) and task_text.endswith(tail)) or len(task_text) < len(head) + len(tail):
+            return None
+        plan = task_text[len(head):len(task_text) - len(tail)]
+        return f"STRUCTURE PLAN for this paper:\n\n{plan}"
 
     def fresh(self, long_lived: bool = False) -> bool:
         """The cached paper is probably still there: used within the last 4.5 minutes (55 with the 1-hour
@@ -119,6 +150,7 @@ SHARED_SYSTEM = ("You extract information from one scientific paper for a resear
                  "paper states. The paper (its text, and images of its table pages) comes first; your task for "
                  "this step follows it.")
 PAPER_ABOVE = "(The paper's full text is given above, before these instructions, with images of its table pages.)"
+PLAN_MARK = "[THIS PAPER'S STRUCTURE PLAN -- given in the request]"
 
 
 def _image_blocks(image_paths) -> list:
@@ -541,7 +573,7 @@ def call_structured(
                        "cache_control": cache}]
                    + (_image_blocks(image_paths) if image_paths else [])
                    + [{"type": "text", "text": f"{user_content}\n\nAnswer by calling the `{stage}` tool."}])
-        system_prompt = SHARED_SYSTEM
+        system_prompt = ctx.paper.system_blocks()
         _streamed.tool = (stage, ctx.paper.tool_definitions())
         shared = True                  # the paper's cache was read: keep it marked fresh
     elif shared:
@@ -549,10 +581,15 @@ def call_structured(
         # tools (`ctx.paper.tools`), every step sends the same tool list and is made to call its own:
         # the API's cache key includes a request's output schema, so a different schema per step
         # (output_format) would give every step its own cache entry (measured 2026-10-22)
+        task_text = user_content.replace(paper_text, PAPER_ABOVE)
+        own = ctx.paper.task_for(stage, task_text)
+        if own is not None:            # the step's instructions are in the cached system prompt
+            task_text = (f"Follow the instructions for step `{stage}` in the system prompt."
+                         + (f"\n\n{own}" if own else ""))
         content = _paper_blocks(ctx.paper, ctx.config.batch_mode) + [{"type": "text", "text": (
-            f"YOUR TASK: {system_prompt}\n\n" + user_content.replace(paper_text, PAPER_ABOVE)
+            f"YOUR TASK: {system_prompt}\n\n" + task_text
             + (f"\n\nAnswer by calling the `{stage}` tool." if stage in ctx.paper.tools else ""))}]
-        system_prompt = SHARED_SYSTEM
+        system_prompt = ctx.paper.system_blocks()
         image_paths = ctx.paper.images
         if stage in ctx.paper.tools:
             _streamed.tool = (stage, ctx.paper.tool_definitions())
@@ -615,7 +652,9 @@ def call_structured(
         "estimated_cost_usd": usage.cost_usd,
         "batch_id": getattr(_streamed, "batch_id", None) if ctx.config.batch_mode else None,
         "images_attached": [str(p) for p in (image_paths or [])],
-        "system_prompt": system_prompt,
+        # the cached system prompt holds every step's instructions: named, not copied into every audit
+        "system_prompt": system_prompt if isinstance(system_prompt, str) else
+        f"{SHARED_SYSTEM} + cached instructions for steps: {', '.join(ctx.paper.instructions) if ctx.paper else ''}",
         "user_content": user_content,
         "cached_prefix": cached_prefix,
         "stop_reason": response.stop_reason,

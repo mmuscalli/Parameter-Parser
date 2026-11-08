@@ -81,6 +81,11 @@ class RunConfig:
     # OFF by default (measured 2026-11-07, eval/table_grids_2026-11-07.md): on the reference papers it saved no money
     # -- the compact table formats had already removed most of the per-cell output, and the grids add input.
     table_grids: bool = False
+    # every step's static instructions in the cached system prompt, before the paper (api_client.PaperContext,
+    # 2026-11-07): a queue's later papers read them -- and the tool list -- from the cache instead of paying again.
+    # None = automatic: on in paper queues (5 papers: -17% total, -32% input), off for a single paper (+6%: the
+    # ~25K-token block is cached for one paper only). eval/shared_instructions_2026-11-07.md
+    shared_instructions: Optional[bool] = None
     save_all_figure_images: bool = False
     # Digitize EASY figures without the editor (Mickey, 2026-11-03; digitizing/auto_figure.py): a figure chosen for
     # digitizing whose suggestions parse cleanly (bar chart or scatter plot, axes calibrated, every point sorted

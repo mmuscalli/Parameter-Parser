@@ -83,6 +83,31 @@ def test_queue_without_a_person_and_cancelling():
         assert stopped.wait(60) and {p.status for p in stopped.papers} == {"cancelled"}
 
 
+def test_the_first_paper_caches_the_shared_instructions_before_the_rest_start():
+    """Shared, cached instructions (2026-11-07): the second paper sends nothing until the first paper's structure
+    plan is back -- otherwise both would pay to write the same cached prefix."""
+    if not (EDER.is_file() and TRUMAN.is_file()):
+        print("SKIP: needs eder1994.pdf and truman2024.pdf"); return
+    import threading
+    calls, lock = [], threading.Lock()
+
+    def send(ctx, **kw):
+        name = Path(ctx.run_dir).name.split("_")[0]
+        with lock:
+            calls.append((name, api_client._streamed.stage, "start"))
+        out = routed_send(ctx, **kw)
+        with lock:
+            calls.append((name, api_client._streamed.stage, "end"))
+        return out
+    with tempfile.TemporaryDirectory() as tmp, patch.object(api_client, "_send", send):
+        queue = PaperQueue([EDER, TRUMAN], RunConfig.from_settings(api_key="x", output_dir=Path(tmp)), parallel=3)
+        queue.start()
+        assert queue.wait(300)
+    first_plan_done = calls.index(("eder1994", "structure_planner", "end"))
+    truman_start = min(i for i, c in enumerate(calls) if c[0] == "truman2024" and c[2] == "start")
+    assert truman_start > first_plan_done, calls[:8]
+
+
 if __name__ == "__main__":
     for name, fn in list(globals().items()):
         if name.startswith("test_") and callable(fn):

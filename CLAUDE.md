@@ -2233,3 +2233,17 @@ runs scored against runs/reference expected CSVs (rows paired by content; `--src
 Fixes found: mixing `_missing_solutions` ignores a solution only one other set lists (kim2017 CaCl2); sampled
 temperature isn't a quench temperature (faisal2005); analysis method-level q/src/c optional; 529 overloaded message.
 Open (Mickey): truman2024 (a review reproducing data) gets no rows since the 2026-11-03 review rule.
+
+## Shared cached step instructions; reviews' reproduced data are rows again (2026-11-07, Mickey)
+
+- Reviews: structure prompts (generic, prebiotic, exoplanets) plan data a review reproduces from other papers as sets
+  with `ds` (source-marked, accepted by default); only a paper with no results at all gets no sets (skipped). Rescinds
+  the 2026-11-03 "non-experimental -> no sets" rule.
+- Structural change (2): `RunConfig.shared_instructions` (None = automatic: on in PaperQueue, off for single runs).
+  `PaperContext.instructions` = every paper-reading step's static prompt (each step's `prompt_text(...)` with
+  `api_client.PLAN_MARK` for the plan; built by `pipeline._step_instructions` for the run's tool list; not in handoff),
+  sent as a cached system block (`system_blocks`) before the paper; a step's request carries only "Follow the
+  instructions for step X" + its plan (`task_for`; falls back to the whole prompt on any mismatch). Audits name the
+  cached system prompt instead of copying it. PaperQueue warm-up: the first paper extracts alone until its structure
+  plan is back (`_warm`, not batch). Measured (eval/shared_instructions_2026-11-07.md): 5-paper queue -17% total, -32%
+  input; single paper +6% (hence off); +22 s per queue. tests/test_shared_instructions.py, test_paper_queue.

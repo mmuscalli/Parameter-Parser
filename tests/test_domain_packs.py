@@ -76,7 +76,9 @@ def test_a_second_pack_runs_end_to_end():
         def send(ctx, *, model, system_prompt, content, response_model, **kw):
             name = response_model.__name__
             text = content if isinstance(content, str) else content[-1]["text"]
-            prompts_seen[name] = text
+            # the step's instructions may be in the cached system prompt (2026-11-07): both are what the model reads
+            system = system_prompt if isinstance(system_prompt, str) else system_prompt[0]["text"]
+            prompts_seen[name] = system + text
             if name == "StructurePlan":
                 out = response_model.model_validate({
                     "paper_id": "p", "total_planned_rows": 3, "experiment_sets": [

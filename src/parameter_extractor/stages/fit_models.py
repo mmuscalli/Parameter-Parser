@@ -18,6 +18,11 @@ DESCRIPTION = ("How the values were obtained: the models fit, the data in each (
                "filters), joint fits, software (EXOFAST version), priors and key assumptions. One API call.")
 
 
+def prompt_text(paper_text: str, plan_json: str) -> str:
+    """The step's prompt (also the static instructions cached for every paper of a run: api_client)."""
+    return load_prompt("fit_models", STRUCTURE_PLAN_JSON=plan_json, PAPER_TEXT=paper_text)
+
+
 def run_fit_models(ctx: RunContext, paper_text: str, structure: StructurePlan,
                    table_images: Optional[List[Path]] = None) -> FitModels:
     return call_structured(
@@ -25,8 +30,7 @@ def run_fit_models(ctx: RunContext, paper_text: str, structure: StructurePlan,
         stage="fit_models",
         system_prompt="You record how an astronomy paper derived its reported parameters: models, data, "
                       "priors and assumptions. Report only what the paper states.",
-        user_content=load_prompt("fit_models", STRUCTURE_PLAN_JSON=structure.model_dump_json(indent=2),
-                                 PAPER_TEXT=paper_text),
+        user_content=prompt_text(paper_text, structure.model_dump_json(indent=2)),
         response_model=FitModels,
         paper_text=paper_text,
         image_paths=table_images,

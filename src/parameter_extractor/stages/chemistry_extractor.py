@@ -16,16 +16,17 @@ def chemistry_budget(structure: StructurePlan) -> int:
     return 10000 + 900 * rows
 
 
+def prompt_text(paper_text: str, plan_json: str, controlled_vocab: list) -> str:
+    """The step's prompt (also the static instructions cached for every paper of a run: api_client)."""
+    return load_prompt("chemistry", PAPER_TEXT=paper_text, STRUCTURE_PLAN_JSON=plan_json,
+                       CONTROLLED_VOCAB_JSON=json.dumps(controlled_vocab))
+
+
 def run_chemistry_extraction(
     ctx: RunContext, paper_text: str, structure_plan: StructurePlan,
     controlled_vocab: list[str], table_images: Optional[List[Path]] = None, grids: Optional[list] = None,
 ) -> ChemistryExtraction:
-    prompt = load_prompt(
-        "chemistry",
-        PAPER_TEXT=paper_text,
-        STRUCTURE_PLAN_JSON=structure_plan.model_dump_json(indent=2),
-        CONTROLLED_VOCAB_JSON=json.dumps(controlled_vocab),
-    )
+    prompt = prompt_text(paper_text, structure_plan.model_dump_json(indent=2), controlled_vocab)
     result = call_structured(
         ctx,
         stage="chemistry",

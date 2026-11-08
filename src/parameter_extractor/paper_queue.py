@@ -60,6 +60,10 @@ class QueuedPaper:
         return self.status == "extracted" and (self.figures_reviewed or not self.figures)
 
 
+WARMUP_MAX = 300          # s: the most the other papers wait for the first one's structure plan
+_FIRST_LOCK = threading.Lock()
+
+
 class PaperQueue:
     def __init__(self, items: Sequence[PaperItem], config: RunConfig,
                  on_change: Optional[Callable[[QueuedPaper], None]] = None,
@@ -83,6 +87,17 @@ class PaperQueue:
         self._pool: Optional[ThreadPoolExecutor] = None
         self._reader: Optional[threading.Thread] = None
         self.reading_done = threading.Event()
+        # the shared, cached prefix (tool list + every step's instructions, api_client.PaperContext) is written by
+        # the first request that sends it; papers started together would each write it (measured 2026-11-07: 3 of
+        # 5 did). So the first paper's extraction goes alone until its structure plan is back, then the rest
+        # follow and read the prefix at 10%. Not in batch mode (requests wait in Anthropic's queue anyway).
+        if config.shared_instructions is None:     # automatic: on for a queue (several papers share the prefix)
+            config = dataclasses.replace(config, shared_instructions=True)
+            self.config = config
+        self._warm = (config.prompt_caching and config.shared_instructions and not config.batch_mode
+                      and not config.handoff_dir)
+        self._warmed = threading.Event()
+        self._first: Optional[QueuedPaper] = None
 
     # ---- running --------------------------------------------------------------------------------
     def start(self) -> None:
@@ -137,9 +152,24 @@ class PaperQueue:
 
     def _extract(self, paper: QueuedPaper) -> None:
         from parameter_extractor.pipeline import extract_steps
+        first = False
         try:
             if self.cancel_event.is_set():
                 raise RunCancelledError()
+            if self._warm:
+                with _FIRST_LOCK:
+                    first = self._first is None
+                    if first:
+                        self._first = paper
+                if first:                    # its structure plan back = the shared prefix is in the cache
+                    ex = paper.extraction
+                    threading.Thread(target=lambda: (ex.structure_ready.wait(WARMUP_MAX), self._warmed.set()),
+                                     daemon=True).start()
+                else:
+                    self._set(paper, step="Waiting for the first paper's cached instructions")
+                    while not self._warmed.wait(1.0):
+                        if self.cancel_event.is_set():
+                            raise RunCancelledError()
             paper.extraction.ctx.on_progress = lambda e, p=paper: self._set(p, step=e.message)
             extract_steps(paper.extraction)
             self._set(paper, "extracted", "Extracted -- waiting to be assembled")
@@ -150,6 +180,8 @@ class PaperQueue:
         except Exception as e:
             self._set(paper, "failed", error=f"{type(e).__name__}: {e}")
         finally:
+            if first:
+                self._warmed.set()          # failed or done: never keep the others waiting
             paper.extracted.set()
 
     def wait(self, timeout: Optional[float] = None) -> bool:
