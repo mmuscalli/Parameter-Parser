@@ -226,6 +226,14 @@ def _categorised(v: NewVariable, category: str, keep_column: bool = False) -> Ne
         suffix = categories.unit_suffix(unit)
         if suffix and not keep_column and v.proposed_column and not v.proposed_column.endswith(suffix):
             v.proposed_column += suffix
+    if v.proposed_column and not keep_column and v.kind == "parameter":
+        # the app's naming conventions, as for drafted and suggested parameters (conventions.py): 'final pH' ->
+        # sampled_pH, 'reaction temperature' -> initial_temperature_C (then an existing column, accepted directly)
+        from parameter_extractor.conventions import canonical
+        numeric = v.value is not None or bool(re.search(r"\d", v.value_text or ""))       # '8.5' for a pH: a number
+        conv = canonical(v.proposed_column, v.unit or "", "number" if numeric else "text", v.value_text or "")
+        if conv is not None and conv.column:          # (a row column like duration_hr: left as proposed, reviewed)
+            v.proposed_column = conv.column
     return v
 
 

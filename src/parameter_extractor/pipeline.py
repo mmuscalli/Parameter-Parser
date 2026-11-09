@@ -940,6 +940,19 @@ def _where(v) -> str:
     return f"set '{v.set_label}'" if v.set_label else "every row (paper-wide)"
 
 
+def _not_a_compound_flags(chemistry) -> List[Flag]:
+    """Species names that look like a class, an enzyme, a dye or a kit rather than one compound ('RNA oligomers',
+    'phosphate buffer', 'DNase I') -- the same test Find compounds and Suggest additions use
+    (compound_setup.is_compound_name). Flagged, never dropped (over-flag, don't lose data)."""
+    from parameter_extractor.compound_setup import is_compound_name
+    odd = sorted({s.name for s in chemistry.solutes if s.name and not is_compound_name(s.name)})
+    if not odd:
+        return []
+    return [Flag("not_a_compound", "Recorded as compounds, but the names look like a class of molecules, an enzyme, a "
+                                   "dye or a reagent mixture rather than one compound: " + ", ".join(odd[:12])
+                 + (" ..." if len(odd) > 12 else "") + ". Check them (and their columns) in the review.")]
+
+
 def _identity_flags(chemistry, page_texts=None) -> List[Flag]:
     """Values whose quote doesn't name the species (Chen2007: products drawn as structures in a
     table, a general procedure's 'the carboxylic acid (3 mmol)'): the number is supported, WHICH
@@ -1111,6 +1124,7 @@ def finish(
     paper_flags += stage_flags
     paper_flags += [Flag("assumed_default", m) for m in ex.ambient_notes]
     paper_flags += _identity_flags(ex.chemistry, ex.parsed.pages_for_lookup)
+    paper_flags += _not_a_compound_flags(ex.chemistry)
     paper_flags += [Flag("unit_conversion", n.message, quote=n.quote or None, source=n.source or None)
                     for n in normalization if n.kind == "unit_corrected"]
     if pubchem and pubchem.unavailable_reason:

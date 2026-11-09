@@ -235,7 +235,9 @@ def survey_paper(item, config: RunConfig, work_dir: Path, area: str, description
     ctx = RunContext(config=config, run_dir=run_dir, total_steps=1, cancel_event=cancel_event)
     try:
         ctx.check_cancelled()
-        source = resolve_paper(item, run_dir, prefer_arxiv=config.prefer_arxiv, ads_token=config.ads_token)
+        from parameter_extractor.ingestion.arxiv_source import LookupCache
+        source = resolve_paper(item, run_dir, prefer_arxiv=config.prefer_arxiv, ads_token=config.ads_token,
+                               cache=LookupCache(config.arxiv_cache_dir) if config.arxiv_cache_dir else None)
         text, images = _paper_text(source, run_dir, True, config.rasterize_table_pages, config.table_raster_dpi,
                                    config.include_supplements)
         prompt = _prompt("pack_survey", AREA=area, AREA_DESCRIPTION=description)
@@ -300,6 +302,35 @@ def tidy_parameter(column: str, unit: str, kind: str, description: str = ""):
         f"{column} -> {conv.column or '(dropped)'}: {conv.reason}"
 
 
+MAX_ALWAYS_STAGES = 2
+
+
+def _disciplined_stages(stages: List[ProposedStage], notes: List[str]) -> List[ProposedStage]:
+    """A stage costs a request on every paper it runs for (Mickey, 2026-11-08): a stage with fewer than three
+    parameters joins the stage closest to it, and at most two stages (the ones with the most parameters) run on every
+    paper -- the others get trigger words (the model's, else derived from their parameters)."""
+    stages = [s.model_copy(deep=True) for s in stages]
+    if len(stages) > 1:
+        for st in sorted([s for s in stages if len(s.parameters) < MIN_NEW_STAGE_PARAMETERS],
+                         key=lambda s: len(s.parameters)):
+            others = [o for o in stages if o is not st]
+            if not others or st not in stages:
+                continue
+            want = set(_words(" ".join([st.label, st.description] + [p.column + " " + p.description
+                                                                     for p in st.parameters])))
+            target = max(others, key=lambda o: len(want & set(_words(" ".join(
+                [o.label, o.description] + [p.column + " " + p.description for p in o.parameters])))))
+            target.parameters.extend(st.parameters)
+            stages.remove(st)
+            notes.append(f"stage {st.name} ({len(st.parameters)} parameter(s)) merged into stage {target.name}")
+    always = sorted([s for s in stages if not any(k.strip() for k in s.keywords)], key=lambda s: -len(s.parameters))
+    for st in always[MAX_ALWAYS_STAGES:]:
+        st.keywords = _derived_keywords(st, st.parameters)
+        notes.append(f"stage {st.name} runs only for papers mentioning {', '.join(st.keywords)} (edit in the Stages "
+                     f"tab)")
+    return stages
+
+
 def write_pack(proposal: PackProposal, pack_id: str, label: str, description: str = "",
                base: Optional[Path] = None, tidy: bool = True) -> tuple:
     """A new pack from the proposal (packs.create_pack from the template, examples replaced); (pack, dropped
@@ -325,7 +356,8 @@ def write_pack(proposal: PackProposal, pack_id: str, label: str, description: st
     first = categories[0]["id"] if categories else "methodology"
     category_columns.setdefault(first, {"columns": []})["columns"].append("duration_hr")
     columns, seen, dropped, by_column, tidied = ["set_type", "duration_hr"], set(), [], {}, []
-    for st in proposal.stages:
+    stages = _disciplined_stages(proposal.stages, tidied)
+    for st in stages:
         name = _slug(st.name)
         try:
             file = draft.new_stage(name, st.label)
@@ -455,7 +487,8 @@ class SuggestedStage(BaseModel):
     label: str
     description: str
     per: Literal["sample", "set"]
-    keywords: List[str]
+    keywords: List[str] = Field(description="REQUIRED, 3-8 words or short phrases found in the papers that need this "
+                                            "stage; it runs only for papers containing one of them.")
 
 
 class SuggestedRule(BaseModel):
@@ -533,8 +566,44 @@ def _pack_summary(draft) -> tuple:
     return "\n".join(lines), chemistry
 
 
-def _already(draft, column: str) -> bool:
-    return column in set(draft.all_columns())
+MIN_NEW_STAGE_PARAMETERS = 3
+_STOP = set("""the and for with from that this into each per value values number amount concentration ratio measured
+total initial final sample samples paper papers experiment experiments stage parameter parameters data result results
+used given other their than when which also only about""".split())
+
+
+def _words(text: str) -> List[str]:
+    return [w for w in re.findall(r"[a-z][a-z\-]{3,}", (text or "").lower()) if w not in _STOP]
+
+
+def _derived_keywords(stage, params) -> List[str]:
+    """Trigger words for a suggested stage that came without any: the most frequent content words of its name, label,
+    description and parameters' names -- the user can edit them in the Stages tab."""
+    counts: Dict[str, int] = {}
+    for text in [stage.name.replace("_", " "), stage.label, stage.description] + \
+            [p.column.replace("_", " ") + " " + p.description for p in params]:
+        for w in _words(text):
+            counts[w] = counts.get(w, 0) + 1
+    return [w for w, _ in sorted(counts.items(), key=lambda kv: (-kv[1], kv[0]))[:6]] or [_slug(stage.name)]
+
+
+def _closest_stage(draft, params, stage) -> str:
+    """The existing stage whose parameters share the most words with the given ones (else the first)."""
+    want = set(_words(" ".join([stage.label, stage.description] + [p.column.replace("_", " ") + " " + p.description
+                                                                    for p in params])))
+    best, score = None, -1
+    for spec in draft.stages.values():
+        have = set(_words(" ".join([spec.get("label", ""), spec.get("description", "")] +
+                                   [q["column"].replace("_", " ") + " " + q.get("description", "")
+                                    for q in spec.get("parameters", [])])))
+        if len(want & have) > score:
+            best, score = spec.get("name"), len(want & have)
+    return best or "additions"
+
+
+def _already(draft, column: str, remembered=()) -> bool:
+    """A column the pack has, or one the user accepted for this area in reviews (Remembered from your reviews)."""
+    return column in set(draft.all_columns()) or column in remembered
 
 
 def suggest_additions(folder: Path, items: Sequence, config: RunConfig,
@@ -592,8 +661,15 @@ def suggest_additions(folder: Path, items: Sequence, config: RunConfig,
                                           f"{_survey_digest(good)}",
                              response_model=PackAdditions, max_tokens=SYNTHESIS_BUDGET)
     cost = round(sum(p.cost_usd for p in papers) + (total_cost(ctx.usage) or 0.0), 4)
-    # local checks: what's already there is left out
+    # local checks: what's already there is left out -- the pack's columns and the user's accepted ones
     out, left_out = [], []
+    remembered = set()
+    if config.registry_path:
+        try:
+            from parameter_extractor.registry import VariableRegistry
+            remembered = set(VariableRegistry(config.registry_path, pack=packs.Pack(Path(folder))).added_columns)
+        except Exception:
+            remembered = set()
     stage_names = {s.get("name") for s in draft.stages.values()}
     new_stage_names = {_slug(s.name) for s in answer.new_stages}
     existing_categories = {c.get("id") for c in draft.manifest.get("variable_categories", [])} | RESERVED_CATEGORIES
@@ -601,13 +677,8 @@ def suggest_additions(folder: Path, items: Sequence, config: RunConfig,
         if _slug(c.id) in existing_categories:
             continue
         out.append(Suggestion("category", c.label, f"id {_slug(c.id)}: {c.description}", payload=c))
-    for st in answer.new_stages:
-        if _slug(st.name) in stage_names:
-            continue
-        out.append(Suggestion("stage", st.label, f"`{_slug(st.name)}`: {st.description}"
-                              + (f" (runs for papers mentioning {', '.join(st.keywords)})" if st.keywords else ""),
-                              payload=st))
     seen = set()
+    param_suggestions = []
     for p in answer.parameters:
         column, unit = column_for(p.column, p.unit, p.kind)
         if tidy:
@@ -618,14 +689,39 @@ def suggest_additions(folder: Path, items: Sequence, config: RunConfig,
             if new != column:
                 p = p.model_copy(update={"column": new, "kind": "integer" if integer else kind, "unit": unit})
                 column = new
-        if _already(draft, column) or column in seen:
+        if _already(draft, column, remembered) or column in seen:
             left_out.append(f"{column} (already a column)")
             continue
         seen.add(column)
         stage = _slug(p.stage)
         where = stage if stage in stage_names or stage in new_stage_names else next(iter(stage_names), stage)
+        param_suggestions.append((where, column, unit, p))
+    # a new stage costs a request on every paper it runs for: only with enough parameters of its own (else they join
+    # the closest existing stage) and always with trigger words (never run on every paper by default) -- Mickey
+    counts = {}
+    for where, *_ in param_suggestions:
+        counts[where] = counts.get(where, 0) + 1
+    moved = {}
+    for st in answer.new_stages:
+        name = _slug(st.name)
+        if name in stage_names:
+            continue
+        if counts.get(name, 0) < MIN_NEW_STAGE_PARAMETERS:
+            target = _closest_stage(draft, [p for w, _, _, p in param_suggestions if w == name], st)
+            moved[name] = target
+            left_out.append(f"stage {name} ({counts.get(name, 0)} parameter(s): added to stage {target} instead)")
+            continue
+        keywords = [k for k in st.keywords if k.strip()] or _derived_keywords(
+            st, [p for w, _, _, p in param_suggestions if w == name])
+        st = st.model_copy(update={"keywords": keywords})
+        out.append(Suggestion("stage", st.label, f"`{name}`: {st.description} (runs only for papers mentioning "
+                              f"{', '.join(keywords)} -- editable in the Stages tab)", payload=st))
+    for where, column, unit, p in param_suggestions:
+        note = ""
+        if where in moved:
+            note, where = f" (suggested for a new stage `{where}`, too small for its own)", moved[where]
         out.append(Suggestion("parameter", column, f"{p.description}" + (f" [{unit}]" if unit else "")
-                              + f" -- stage `{where}`, category {p.category}", reason=p.reason, papers=p.papers,
+                              + f" -- stage `{where}`{note}, category {p.category}", reason=p.reason, papers=p.papers,
                               payload=(where, p)))
     for r in answer.rules:
         target = "rows" if r.target.strip().lower() in ("rows", "row", "row planning") else _slug(r.target)
@@ -687,8 +783,9 @@ def apply_additions(folder: Path, suggestions: Sequence[Suggestion], pubchem=Non
     for s in (x for x in chosen if x.kind == "stage"):
         st = s.payload
         file = draft.new_stage(_slug(st.name), st.label)
+        keywords = [k for k in st.keywords if k.strip()] or _derived_keywords(st, [])
         draft.stages[file].update(description=st.description, per=st.per, open_ended=True,
-                                  trigger={"keywords": st.keywords} if st.keywords else {"always": True},
+                                  trigger={"keywords": keywords},                  # a suggested stage never always runs
                                   open_ended_hint="other values of the experiments that have no column. Not the "
                                                   "values of the parameters above.")
         files[_slug(st.name)] = file

@@ -14,9 +14,10 @@ Design:
   unit), text or any. Don't create ids 'metadata', 'methodology' or 'other' -- the app has those already.
 - `stages` (1-4): each stage is one request that reads a paper and fills its parameters for every row. Group
   parameters that are read the same way (e.g. conditions and materials in one stage, measured results in another).
-  `per`: sample (values can belong to single rows -- the usual choice) or set. `keywords`: leave EMPTY for a stage
-  every paper needs; give a few words only for a stage that applies to some papers (it then runs only for papers
-  containing one of the words).
+  `per`: sample (values can belong to single rows -- the usual choice) or set. Every stage is one more request on
+  every paper it runs for: make a stage only for at least three parameters, and leave `keywords` EMPTY for at most
+  two core stages every paper needs; every other stage needs 3-8 `keywords` (words found in the papers that need it)
+  and then runs only for papers containing one of them.
 - Each parameter: `column` snake_case WITHOUT a unit (the app adds the unit suffix); `unit` the unit to store values
   in (one standard unit per variable: °C for temperatures, h for times, mM for concentrations, bar for pressures, %
   for percentages, g for masses, mL for volumes, nm for wavelengths, or the field's own unit); `kind` number, integer

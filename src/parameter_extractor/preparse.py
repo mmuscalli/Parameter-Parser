@@ -105,7 +105,9 @@ def check_paper(item, params: List[tuple], config: RunConfig, work_dir: Path,
     columns = {c for _, c, _, _ in params}
     try:
         ctx.check_cancelled()
-        source = resolve_paper(item, run_dir, prefer_arxiv=config.prefer_arxiv, ads_token=config.ads_token)
+        from parameter_extractor.ingestion.arxiv_source import LookupCache
+        source = resolve_paper(item, run_dir, prefer_arxiv=config.prefer_arxiv, ads_token=config.ads_token,
+                               cache=LookupCache(config.arxiv_cache_dir) if config.arxiv_cache_dir else None)
         text, _ = _paper_text(source, run_dir, False, False, config.table_raster_dpi, config.include_supplements)
         prompt = ("Below is a list of parameters a dataset records for each experiment, then a research paper. Say "
                   "which parameters the paper gives a value for (`reported`), with a few words of evidence each. "

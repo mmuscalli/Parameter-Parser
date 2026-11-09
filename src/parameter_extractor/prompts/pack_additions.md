@@ -13,8 +13,11 @@ Suggest ADDITIONS that would let the research area capture these papers -- and s
   exactly what belongs in the column; `category` an existing or new category id; `choices` for a text parameter with
   few values (else []); `uncertainties` when papers give them; `papers` how many sample papers report it; `reason` a
   few words.
-- `new_stages`: only when the new parameters are read differently from every existing stage (else []). `keywords` []
-  for a stage every paper needs, else words that trigger it.
+- `new_stages`: rarely -- a new stage is one more request on every paper it runs for. Only when there is an abundant
+  case: at least three new parameters that no existing stage could hold (they are read from a different kind of
+  experiment or table). Otherwise put the parameters in the closest existing stage. Never a stage whose content an
+  existing stage already covers. `keywords` (REQUIRED, 3-8): words or short phrases that appear in the papers that need
+  the stage ('thermal gradient', 'thermophoresis') -- the stage runs only for papers containing one of them.
 - `categories`: new categories only when no existing one fits (else []); never 'metadata', 'methodology' or 'other'.
 - `rules`: extraction or row-planning rules the papers show are missing (`target` 'rows' for planning the rows, else
   a stage name), one sentence each, with a reason. Not rules the existing ones already state.

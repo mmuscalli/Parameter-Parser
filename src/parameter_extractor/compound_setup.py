@@ -237,11 +237,14 @@ class _Resolver:
         self.reference = _reference_cids()
 
     def _pubchem(self, name: str, code: bool = False):
-        hit = self.pubchem.lookup(name) if self.pubchem is not None and name else None
+        if self.pubchem is None or not name:
+            return None
+        checked = getattr(self.pubchem, "lookup_checked", None)
+        hit = self.pubchem.lookup(name) if checked is None else checked(name)
         if hit is None:
             return None
         synonyms = self.pubchem.synonyms(hit.cid)
-        if code and name not in synonyms and name != hit.title:   # a code must be one of the compound's own names
+        if checked is None and code and name not in synonyms and name != hit.title:   # (test doubles without it)
             return None
         return hit.cid, hit.title, synonyms
 

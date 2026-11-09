@@ -2490,3 +2490,18 @@ output), consistency 74% vs 84%; a few valid extra columns (exchangeable cation,
 steadier compound names, but vocabulary junk caused misnamings (dTMP -> 'TMP', ppA -> p2A) and it missed sampled_pH.
 Fix from it: suggest_additions filters compounds with compound_setup.is_compound_name (also for the model's own list),
 splits 'X/Y', compares names with primes normalised; NOT_A_COMPOUND also covers ssDNA/dsDNA, oligo*, Cy5, FAM, Alexa*.
+
+## Stage discipline; cross-path audit (2026-11-08, Mickey)
+
+- **New stages cost a request per paper**: suggest_additions -- a suggested stage needs >= MIN_NEW_STAGE_PARAMETERS (3)
+  parameters, else they join the closest existing stage (`_closest_stage`, word overlap; left_out note); its trigger is
+  keywords only (the model's, else `_derived_keywords`; apply_additions never writes {"always": true}); prompt asks for
+  stages rarely and keywords REQUIRED. Drafting -- `_disciplined_stages`: stages with < 3 parameters merged, at most
+  MAX_ALWAYS_STAGES (2, most parameters) without keywords, the others get derived ones (notes in drafted_from.md).
+- **Audit** (eval/audit_2026-11-08.md, improvements x paths). Fixed: normalize_chemistry -- a PubChem hit for a CODE
+  counts only when corroborated (template CID, accepted CID, another non-code name of the paper with that CID, PubChem
+  synonym, title), else a note; `PubChem.lookup_checked` (synonym check) for Find compounds; review suggestions
+  (`new_variables._categorised`, kind parameter) proposed under conventions.canonical ('final pH' -> sampled_pH);
+  pipeline flag `not_a_compound` (compound_setup.is_compound_name; never dropped); suggest_additions leaves out the
+  user's accepted columns for the area (registry) too; drafting / suggestions / preparse pass the arXiv LookupCache.
+  tests/test_audit_consistency.py.

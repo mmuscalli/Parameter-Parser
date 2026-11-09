@@ -130,6 +130,18 @@ class PubChem:
         self._dirty = True
         return found
 
+    def lookup_checked(self, name: str) -> Optional[Compound]:
+        """`lookup`, but a CODE ('ImpA', 'RCP', 'p2A' -- compound_setup.is_abbreviation) counts only when PubChem lists it
+        among the compound's names: PubChem's first hit for a code is often another compound (ImpA -> isopropyl
+        methylphosphonate). Used by every path that identifies compounds (normalize_chemistry, Find compounds)."""
+        found = self.lookup(name)
+        if found is None:
+            return None
+        from parameter_extractor.compound_setup import is_abbreviation
+        if is_abbreviation(name.strip()) and name.strip() != found.title and name.strip() not in self.synonyms(found.cid):
+            return None
+        return found
+
     def synonyms(self, cid: int) -> List[str]:
         """A compound's names on PubChem (useful_synonyms); [] when unknown or PubChem can't be reached."""
         key = str(int(cid))

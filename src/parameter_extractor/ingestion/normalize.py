@@ -57,6 +57,8 @@ def _identify(chemistry: ChemistryExtraction, pubchem, registry, notes: List[Nor
     seen_in_paper = {}                            # CID -> first name used for it in this paper
     from parameter_extractor.compound_names import CompoundNames
     names = CompoundNames(registry)               # PubChem synonyms kept offline (bundled + accepted compounds)
+    from parameter_extractor.compound_setup import is_abbreviation
+    pending = []
     for s in chemistry.solutes:
         if s.name in vocab or id(s) in rule_matched:     # the rules' names (e.g. (Gly)14) stand
             continue
@@ -68,8 +70,20 @@ def _identify(chemistry: ChemistryExtraction, pubchem, registry, notes: List[Nor
             if known != s.name:
                 _rename(s, known, f"a PubChem synonym of {known}", notes)
             continue
-        found = pubchem.lookup(s.name) if pubchem else None
+        pending.append((s, pubchem.lookup(s.name) if pubchem else None))
+    # a CODE's hit ('ImpA', 'RCP' -- often another compound on PubChem: ImpA -> isopropyl methylphosphonate) counts only
+    # when something corroborates it: the vocabulary's or an accepted compound's CID, another (non-code) name in this
+    # paper with the same CID, or PubChem listing the code among the compound's names (2026-11-08 audit)
+    full_name_cids = {f.cid for s, f in pending if f is not None and not is_abbreviation(s.name)}
+    for s, found in pending:
         if found is None:
+            continue
+        if is_abbreviation(s.name) and not (
+                found.cid in template_cids or found.cid in full_name_cids
+                or (registry is not None and registry.species_for_cid(found.cid))
+                or s.name in pubchem.synonyms(found.cid) or s.name == found.title):
+            _append_note(s, f"PubChem's match for the code '{s.name}' ({found.title}, CID {found.cid}) not used: "
+                            f"nothing confirms it")
             continue
         s.pubchem_cid, s.pubchem_title = found.cid, found.title
         how = f"same compound on PubChem, CID {found.cid}"

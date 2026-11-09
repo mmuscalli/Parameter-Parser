@@ -147,9 +147,18 @@ def test_suggest_and_apply_additions():
                         SuggestedParameter(stage="experimental_conditions", column="initial_temperature", unit="°C",
                                            description="already there", **common),
                         SuggestedParameter(stage="photochemistry", column="photon_flux", unit="",
-                                           description="flux", **common)],
+                                           description="photon flux of the lamp", **common),
+                        SuggestedParameter(stage="photochemistry", column="lamp_power", unit="W",
+                                           description="lamp power", **common),
+                        SuggestedParameter(stage="photochemistry", column="irradiation_time", unit="h",
+                                           description="irradiation time under the lamp", **common),
+                        SuggestedParameter(stage="buffers", column="buffer_pka", unit="",
+                                           description="pKa of the buffer used in the experimental conditions",
+                                           **common)],
             new_stages=[SuggestedStage(name="photochemistry", label="Photochemistry", description="light",
-                                       per="sample", keywords=["irradiat"])],
+                                       per="sample", keywords=[]),                 # no trigger words given
+                        SuggestedStage(name="buffers", label="Buffers", description="buffer chemistry",
+                                       per="sample", keywords=["buffer"])],          # one parameter: too small
             categories=[ProposedCategory(id="light", label="Light", description="irradiation", value_type="number")],
             rules=[SuggestedRule(target="rows", rule="Dark controls are not rows.", reason="r"),
                    SuggestedRule(target="experimental_conditions", rule="Lamp power goes in other.", reason="r")],
@@ -167,6 +176,9 @@ def test_suggest_and_apply_additions():
         kinds = [(s.kind, s.title) for s in r.suggestions]
         assert ("parameter", "irradiation_wavelength_nm") in kinds and ("compound", "Tris") in kinds
         assert ("stage", "Photochemistry") in kinds and ("category", "Light") in kinds
+        assert ("stage", "Buffers") not in kinds and any("stage buffers" in x for x in r.left_out)
+        stage_of = {s.title: s.payload[0] for s in r.suggestions if s.kind == "parameter"}
+        assert stage_of["buffer_pka"] in {"experimental_conditions", "kinetics", "wet_dry"}   # an existing stage
         compounds = sorted(t for k, t in kinds if k == "compound")
         assert compounds == ["Tris"], compounds      # KCl, MgCl2, Gly-Gly are in the vocabulary already; A, SYBR, DNase, ab dropped
         assert not any(t == "initial_temperature_C" for _, t in kinds)                 # already a column
@@ -177,7 +189,8 @@ def test_suggest_and_apply_additions():
         assert any(p["column"] == "irradiation_wavelength_nm" for p in cond["parameters"])
         assert "Lamp power goes in other." in cond["rules"]
         photo = next(s for s in d.stages.values() if s["name"] == "photochemistry")
-        assert photo["trigger"] == {"keywords": ["irradiat"]} and photo["parameters"][0]["column"] == "photon_flux"
+        assert set(photo["trigger"]) == {"keywords"} and photo["trigger"]["keywords"]   # derived; never 'always'
+        assert [p["column"] for p in photo["parameters"]][:1] == ["photon_flux"]
         assert any(c["id"] == "light" for c in d.manifest["variable_categories"])
         assert "Tris" in d.species and d.cids_file["species"]["Tris"]["cid"] == 6503
         assert "initial_Tris_aq_mM" in d.columns

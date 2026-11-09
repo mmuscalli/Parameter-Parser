@@ -189,6 +189,28 @@ def test_new_pack_dialog_drafts():
         assert d.draft_result.cost_usd == 0 and (d.created.folder / "drafted_from.md").is_file()
 
 
+def test_stage_discipline():
+    """A stage costs a request per paper: < 3 parameters -> merged into the closest stage; at most two stages run on
+    every paper, the others get trigger words (2026-11-08)."""
+    from parameter_extractor.pack_drafting import _disciplined_stages
+    par = lambda c, d: ProposedParameter(column=c, unit="", kind="number", description=d, category="x", choices=[],
+                                         uncertainties=False, papers=1)
+    st = lambda name, params, kw=(): ProposedStage(name=name, label=name, description=name, per="sample",
+                                                   keywords=list(kw), parameters=params, rules=[], other_hint="")
+    stages = [st("conditions", [par("temperature", "reaction temperature"), par("ph", "solution ph"),
+                                par("pressure", "reaction pressure")]),
+              st("results", [par("yield", "product yield"), par("length", "oligomer length"), par("rate", "rate")]),
+              st("transport", [par("gradient", "thermal gradient across chamber"), par("thickness", "chamber gap"),
+                               par("velocity", "flow velocity in the chamber")]),
+              st("extra_temperature", [par("cold_side_temperature", "cold side temperature of the reaction")])]
+    notes = []
+    out = _disciplined_stages(stages, notes)
+    assert [s.name for s in out] == ["conditions", "results", "transport"]
+    assert any(p.column == "cold_side_temperature" for p in out[0].parameters)       # merged into conditions
+    assert not out[0].keywords and not out[1].keywords and out[2].keywords             # only two always run
+    assert any("merged into stage conditions" in n for n in notes)
+
+
 if __name__ == "__main__":
     for name, fn in list(globals().items()):
         if name.startswith("test_"):
