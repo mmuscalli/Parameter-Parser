@@ -2524,3 +2524,14 @@ splits 'X/Y', compares names with primes normalised; NOT_A_COMPOUND also covers 
   focused search "Searching for a few values" / mode "Search for N values only"; parameter panel "Step / value",
   "Find a value…" and a plain explanation; Summary tab "Cost of each step" with tokens explained. Attribute names
   unchanged (tests: mode text "Search for 2 values only in 2 papers", menu "New data pack…").
+
+## Editor opening speed (2026-11-08, Mickey: the data pack editor froze on opening)
+
+Measured: opening the editor took 47 s for his 'Prebio Chem DUPE' pack (12 s for prebiotic) -- 1.7M calls of
+RowSeparatorDelegate.sizeHint: `widgets.style_rows` queued a full resizeRowsToContents for EVERY inserted row and EVERY
+filled cell (dataChanged), O(n^2) for the 277-row compound table. Now one restartable single-shot QTimer per table
+coalesces a burst into one refit, and a hidden table (another tab) refits when shown (`_RefitOnShow`). After: 0.18 s /
+0.46 s, every tab switch <= 0.06 s; all style_rows tables benefit (categories, suggestions, compound review).
+Remembered-from-reviews window 0.92 -> 0.56 s: `category_options` cached per area per fill (was recomputed for ~4,800
+rows), `variable_categories.bundled_shared` reads its file once (mtime-checked). scripts/run_tests.py appends every
+failing file's full output to tests/.last_failures.log (a rare flaky failure hasn't been reproducible).

@@ -183,6 +183,14 @@ class RegistryDialog(QDialog):
         return self._orders[pack_id]
 
     def category_options(self, area: str) -> List[Tuple[str, str]]:
+        """(label, id) of an area's categories -- computed once per area and fill (it was once per row: ~4,800
+        recomputations, each reading the categories file, when the Built-in tab was filled)."""
+        cache = self.__dict__.setdefault("_category_cache", {})
+        if area not in cache:
+            cache[area] = self._category_options(area)
+        return cache[area]
+
+    def _category_options(self, area: str) -> List[Tuple[str, str]]:
         if area == STANDARD:
             cats = variable_categories.table_categories(local=self.registry.local_categories, area=STANDARD)
         elif area in self.packs:
@@ -306,6 +314,7 @@ class RegistryDialog(QDialog):
     # ---- refresh -------------------------------------------------------------------
 
     def _refresh(self) -> None:
+        self._category_cache = {}            # categories may have changed since the last fill
         self._filling = True
         try:
             self._fill_columns()

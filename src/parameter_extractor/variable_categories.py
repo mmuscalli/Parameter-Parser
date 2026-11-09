@@ -83,8 +83,15 @@ def _edited(cats: List[VariableCategory], edits: dict) -> List[VariableCategory]
     return out + [VariableCategory(**c) for c in edits.get("added", [])]
 
 
+_shared_cache: dict = {}
+
+
 def bundled_shared() -> List[VariableCategory]:
-    return [VariableCategory(**c) for c in json.loads(SHARED_FILE.read_text())["categories"]]
+    """The shared categories file, read once (again only when it changes on disk)."""
+    stamp = SHARED_FILE.stat().st_mtime
+    if _shared_cache.get("stamp") != stamp:
+        _shared_cache.update(stamp=stamp, data=json.loads(SHARED_FILE.read_text())["categories"])
+    return [VariableCategory(**c) for c in _shared_cache["data"]]
 
 
 def bundled_own(pack: Pack) -> List[VariableCategory]:

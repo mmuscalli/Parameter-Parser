@@ -13,3 +13,4 @@ runs/
 tests/fixtures/arxiv_nielsen2019/*.html.gz
 .claude/
 tests/.last_times.json
+tests/.last_failures.log

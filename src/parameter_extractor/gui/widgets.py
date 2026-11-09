@@ -2,7 +2,7 @@
 from __future__ import annotations
 import html
 
-from PySide6.QtCore import QEvent, QRect, QSize, Qt, QTimer
+from PySide6.QtCore import QEvent, QObject, QRect, QSize, Qt, QTimer
 from PySide6.QtGui import QColor, QPainter, QPalette, QPen
 from PySide6.QtWidgets import (QAbstractItemView, QDialog, QDialogButtonBox, QLabel, QLineEdit, QPlainTextEdit, QStyle,
                                QStyledItemDelegate, QTableWidget,
@@ -172,6 +172,16 @@ def in_cell(widget: QWidget) -> QWidget:
     return holder
 
 
+class _RefitOnShow(QObject):
+    """Refits a styled table's rows when it becomes visible, if changes arrived while it was hidden."""
+
+    def eventFilter(self, obj, event):
+        if event.type() == QEvent.Type.Show and getattr(obj, "_refit_pending", False):
+            obj._refit_pending = False
+            obj._refit_timer.start()
+        return False
+
+
 def style_rows(table: QTableWidget, delegate: "RowSeparatorDelegate" = None) -> None:
     """The spaced-rows style for a multi-column list: no grid, a faint line between rows, long texts wrapped (no
     '...'), row heights following the column widths (refitted once the layout settles). The default for every
@@ -181,7 +191,23 @@ def style_rows(table: QTableWidget, delegate: "RowSeparatorDelegate" = None) -> 
     table.setTextElideMode(Qt.TextElideMode.ElideNone)
     table.setItemDelegate(delegate or RowSeparatorDelegate(table))
     table.setVerticalScrollMode(QAbstractItemView.ScrollMode.ScrollPerPixel)
-    refit = lambda *_: QTimer.singleShot(0, table.resizeRowsToContents)
+    # ONE refit per burst of changes (2026-11-08): every inserted row and every cell filled used to queue its own
+    # resizeRowsToContents -- filling a 277-compound table queued ~1,100 full passes (1.7M size hints, ~45 s to open
+    # the pack editor). A single-shot timer restarted by each change runs once, after the burst; a hidden table
+    # (another tab) is refitted when it is shown.
+    timer = QTimer(table)
+    timer.setSingleShot(True)
+    timer.setInterval(0)
+
+    def refit_now():
+        if table.isVisible():
+            table.resizeRowsToContents()
+        else:
+            table._refit_pending = True
+    timer.timeout.connect(refit_now)
+    refit = lambda *_: timer.start()
     table.horizontalHeader().sectionResized.connect(refit)
     table.model().rowsInserted.connect(refit)
     table.model().dataChanged.connect(refit)
+    table._refit_timer = timer
+    table.installEventFilter(_RefitOnShow(table))

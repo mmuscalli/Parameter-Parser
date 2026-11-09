@@ -17,6 +17,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
+FAILURES = ROOT / "tests" / ".last_failures.log"   # every failing file's full output (gitignored)
 TIMES = ROOT / "tests" / ".last_times.json"     # last run's time per file: the slowest start first next time
 
 
@@ -26,7 +27,7 @@ def run(path: Path) -> dict:
     proc = subprocess.run([sys.executable, str(path)], cwd=ROOT, env=env, capture_output=True, text=True)
     out = proc.stdout + proc.stderr
     return {"file": path.name, "seconds": round(time.time() - start, 1), "code": proc.returncode,
-            "skipped": "SKIP" in out, "tail": "\n".join(out.strip().splitlines()[-8:])}
+            "skipped": "SKIP" in out, "tail": "\n".join(out.strip().splitlines()[-8:]), "out": out}
 
 
 def main() -> int:
@@ -50,6 +51,10 @@ def main() -> int:
     if not args.words:
         TIMES.write_text(json.dumps({r["file"]: r["seconds"] for r in results}, indent=1))
     failed = [r for r in results if r["code"]]
+    if failed:                  # the whole output of every failure, appended with a time stamp (rare, flaky ones)
+        with FAILURES.open("a") as f:
+            for r in failed:
+                f.write(f"\n===== {time.strftime('%Y-%m-%d %H:%M:%S')} {r['file']} (exit {r['code']})\n{r['out']}\n")
     skipped = [r for r in results if r["skipped"] and not r["code"]]
     for label, group in (("FAILED", failed), ("SKIPPED", skipped)):
         for r in group:
