@@ -784,7 +784,7 @@ def test_focused_search_from_the_main_page():
             assert w.papers.count() == 1 and w.pdf_edit.text() == "not-an-id"
             w.pdf_edit.setText("")
             w.papers.add_items([PDF])
-            assert "Focused search: 2 parameters in 2 papers" == w.mode_label.text()
+            assert "Search for 2 values only in 2 papers" == w.mode_label.text()
             assert w.run_btn.text() == "Search 2 papers"
             w.words_edit.setText("EXOFAST")
             assert w.tables_box.isChecked() and w.tables_box.isEnabled()           # whole tables by default

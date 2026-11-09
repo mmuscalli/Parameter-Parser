@@ -1,5 +1,5 @@
 """
-Domain packs: everything that ties the app to one research area, kept out of
+Domain packs: everything that ties the app to one data pack, kept out of
 the code so another area is a new folder, not a rewrite.
 
 A pack is a folder with a pack.json manifest:
@@ -23,7 +23,7 @@ A pack is a folder with a pack.json manifest:
   formulas          calculations without code: [{column, expression, description, if_present}], run on every
                     row after the review, in order (formulas.py: the expression language)
   is_template       the TEMPLATE pack (packs/_template/, 2026-11-05): a complete, working pack with every
-                    file explained, copied by create_pack() to start a new research area. Never listed
+                    file explained, copied by create_pack() to start a new data pack. Never listed
                     (available() leaves it out) and never run directly.
 
 and, next to it:
@@ -198,7 +198,7 @@ def template_pack() -> Pack:
 
 def create_pack(pack_id: str, label: str, description: str = "", base: Optional[Path] = None,
                 source: Optional[Pack] = None, units: Optional[Dict[str, str]] = None) -> Pack:
-    """A new research area: a copy of the template pack (or of `source`, another pack -- the way to change one of
+    """A new data pack: a copy of the template pack (or of `source`, another pack -- the way to change one of
     the app's own) in `base` (default the user's packs folder) with its own id, label, description and, given
     `units`, words for a set / a row. The copy is a working pack straight away, to be edited into the new area's
     own (Data Packs menu). Raises ValueError for a bad or taken id."""
@@ -207,9 +207,9 @@ def create_pack(pack_id: str, label: str, description: str = "", base: Optional[
         raise ValueError(f"'{pack_id}' isn't a usable id: lower-case letters, digits and '_', starting with a letter "
                          f"(2-41 characters).")
     if pack_id in available(include_template=True):
-        raise ValueError(f"A research area with the id '{pack_id}' already exists.")
+        raise ValueError(f"A data pack with the id '{pack_id}' already exists.")
     if not (label or "").strip():
-        raise ValueError("Give the research area a name.")
+        raise ValueError("Give the data pack a name.")
     folder = Path(base or user_packs_dir()) / pack_id
     if folder.exists():
         raise ValueError(f"The folder {folder} already exists.")
@@ -244,14 +244,14 @@ def current() -> Pack:
 
 
 def delete_pack(pack_id: str) -> Path:
-    """Remove one of the user's research areas: its folder is deleted (Data Packs > Remove research area, after two
+    """Remove one of the user's data packs: its folder is deleted (Data Packs > Remove data pack, after two
     confirmations). The app's own packs and the template can't be removed. Remembered variables and categories kept
     under its id stay in the registry (harmless; they come back if an area with that id is made again). Returns the
     folder removed."""
     import shutil
     pack = available().get(pack_id)
     if pack is None:
-        raise ValueError(f"There is no research area '{pack_id}'.")
+        raise ValueError(f"There is no data pack '{pack_id}'.")
     folder = Path(pack.folder).resolve()
     if pack.manifest.is_template or folder == BUILTIN_DIR.resolve() or BUILTIN_DIR.resolve() in folder.parents:
         raise PermissionError(f"'{pack.label}' is part of the app and can't be removed.")

@@ -2,7 +2,7 @@
 The main window -- one search page (Mickey, 2026-11-08: the Focused search and Paper queue windows folded in).
 
 Layout, top to bottom:
-  - the research area and a line saying what the run will do (mode)
+  - the data pack and a line saying what the run will do (mode)
   - three panes: Papers (one or many: PDFs, identifiers, a CSV list; a status per paper), Parameters (the area's
     stages and their parameters, ticked: everything = a full extraction, a stage unticked = without it, single
     parameters unticked = a focused search), Run options (grouped; the options for several papers or for a
@@ -50,8 +50,36 @@ GROUP_TINT = QColor(110, 140, 210, 28)       # every other block of columns (cat
 MAX_COLUMN_WIDTH = 260
 # Rows tab column order: identify the row, then the measured data, then the
 # paper-level details that repeat on every row (DOI, title, ...).
-PRIVACY_NOTE = ("The paper's text, and images of its table pages, are sent to Anthropic's API "
-                "to extract the data. API usage is billed to the key you enter.")
+GETTING_STARTED = (
+    "<h3>Extracting data from papers</h3>"
+    "<p><b>Once:</b> enter your Anthropic API key in <i>Settings</i> (it is kept in the system keychain) and choose "
+    "where results are saved.</p>"
+    "<ol>"
+    "<li><b>Data pack</b> -- what to extract. Pick the pack for your field. To make your own, use <i>New…</i>: start from "
+    "a template, copy an existing pack, or let the app draft one from a few sample papers.</li>"
+    "<li><b>Papers</b> -- add PDFs (or drop them on the window), type an arXiv ID or DOI, or add a list.</li>"
+    "<li><b>What to extract</b> -- everything ticked gives the full dataset. Untick steps or values you don't need: "
+    "fewer values means a cheaper, quicker search.</li>"
+    "<li><b>Options</b> -- the AI model (cost vs. accuracy) and extras. Hover over any option for an explanation.</li>"
+    "<li><b>Run</b> -- press <i>Extract data</i>. You may be asked to choose figures to digitize, and at the end to "
+    "review values the pack has no column for yet.</li>"
+    "</ol>"
+    "<p><b>Results</b> appear in the tabs at the bottom and are saved as CSV files in the results folder. "
+    "<i>Things to check</i> lists values worth a second look. Hover over a value in <i>Extracted data</i> to see "
+    "where in the paper it came from.</p>")
+START_TEXT = ("Start here: choose a data pack (1), add papers (2), tick what to extract (3), then press Extract data "
+              "(5). Results appear below. New to the app? <a href='help'>Getting started</a>")
+
+
+def _step(number: str, title: str, tip: str) -> QLabel:
+    """A numbered step of the workflow ('1  Data pack'), with its explanation on hover."""
+    label = QLabel(f"<span style='color: palette(link); font-weight: 700;'>{number}</span>&nbsp;&nbsp;<b>{title}</b>")
+    label.setToolTip(tip)
+    return label
+
+
+PRIVACY_NOTE = ("Privacy and cost: each paper's text and table images are sent to Anthropic (or to your own model "
+                "server, if set up in Settings) to read the values; usage is billed to your API key.")
 
 
 STEP_LABELS = {"structure_planner": "Experiment structure", "metadata": "Bibliographic metadata",
@@ -68,12 +96,12 @@ MODEL_PROFILE_CHOICES = [
      "<b>Standard</b> (recommended): Sonnet 5.5 for every step.<br>"
      "Most accurate. Chemistry papers ~$0.15-0.25; long exoplanet papers up to ~$1.50."),
     ("balanced", "Balanced (Sonnet plans, Haiku extracts) -- half price",
-     "<b>Balanced</b>: Sonnet 5.5 plans the rows, Haiku 5.5 extracts the values.<br>"
+     "<b>Balanced</b>: Sonnet 5.5 works out each paper's samples, Haiku 5.5 reads the values.<br>"
      "About half Standard's cost (~$0.07-0.12 per chemistry paper), ~99% of its values. "
-     "Use 1 pass. Not recommended for exoplanets (Economy is cheaper there and as accurate)."),
+     "Read values once. Not recommended for exoplanets (Economy is cheaper there and as accurate)."),
     ("economy", "Economy (Claude Haiku 5.5) -- cheapest",
      "<b>Economy</b>: Haiku 5.5 for every step.<br>"
-     "~1-4 cents per paper; ~96% of Standard's values with 1 pass, ~99% with 3. "
+     "~1-4 cents per paper; ~96% of Standard's values reading once, ~99% reading three times. "
      "Can miss values stated only in the text. Good for screening many papers."),
 ]
 
@@ -165,17 +193,17 @@ class MainWindow(QMainWindow):
         # rules, formulas) and what YOU taught the app in reviews (accepted columns, synonyms, compound names,
         # changes to pack columns, categories) -- kept apart so they apply on top of any pack.
         packs_menu = self.menuBar().addMenu("Data Packs")
-        self.new_pack_action = QAction("New research area…", self, triggered=lambda: self.new_pack())
-        self.edit_pack_action = QAction("Edit research area…", self, triggered=lambda: self.edit_pack())
+        self.new_pack_action = QAction("New data pack…", self, triggered=lambda: self.new_pack())
+        self.edit_pack_action = QAction("Edit data pack…", self, triggered=lambda: self.edit_pack())
         self.edit_pack_action.setToolTip("What the pack defines: columns, compounds, analysis methods, stages, "
                                          "rules, formulas")
-        self.copy_pack_action = QAction("Copy a research area…", self, triggered=lambda: self.copy_pack())
-        self.check_pack_action = QAction("Check research area…", self, triggered=lambda: self.check_pack())
-        self.remove_pack_action = QAction("Remove research area…", self, triggered=lambda: self.remove_pack())
-        self.packs_folder_action = QAction("Open research areas folder", self, triggered=self.open_packs_folder)
+        self.copy_pack_action = QAction("Copy a data pack…", self, triggered=lambda: self.copy_pack())
+        self.check_pack_action = QAction("Check data pack…", self, triggered=lambda: self.check_pack())
+        self.remove_pack_action = QAction("Remove data pack…", self, triggered=lambda: self.remove_pack())
+        self.packs_folder_action = QAction("Open data packs folder", self, triggered=self.open_packs_folder)
         self.registry_action = QAction("Remembered from your reviews…", self, triggered=self.open_registry)
         self.registry_action.setToolTip("Columns you accepted, synonyms, compound names and your changes to pack "
-                                        "columns, by research area")
+                                        "columns, by data pack")
         self.categories_action = QAction("Variable categories…", self, triggered=self.open_categories)
         packs_menu.setToolTipsVisible(True)
         for action in (self.new_pack_action, self.edit_pack_action, self.copy_pack_action, self.check_pack_action):
@@ -186,6 +214,9 @@ class MainWindow(QMainWindow):
         packs_menu.addSeparator()
         packs_menu.addAction(self.remove_pack_action)
         packs_menu.addAction(self.packs_folder_action)
+        help_menu = self.menuBar().addMenu("Help")
+        self.getting_started_action = QAction("Getting started…", self, triggered=self.show_getting_started)
+        help_menu.addAction(self.getting_started_action)
 
         from parameter_extractor.gui.multi_runs import FocusedRun, QueueRun
         self.focused_run = FocusedRun(self)
@@ -202,7 +233,7 @@ class MainWindow(QMainWindow):
     # ---- layout ---------------------------------------------------------------
 
     def _build_inputs(self) -> QWidget:
-        """The research area, then three panes -- Papers, Parameters, Run options -- and the notes below them.
+        """The data pack, then three panes -- Papers, Parameters, Run options -- and the notes below them.
         Set-once things (API key, ADS token, results folder, online lookups) are in Settings
         (gui/settings_dialog.py, the Settings menu); their widgets keep their names here."""
         from parameter_extractor.gui.paper_list import PaperListPanel
@@ -225,30 +256,49 @@ class MainWindow(QMainWindow):
         page = QWidget()
         v = QVBoxLayout(page)
         v.setContentsMargins(0, 0, 0, 0)
+        # the workflow, numbered (Mickey, 2026-11-08: scientists new to the app): 1 data pack, 2 papers, 3 what to
+        # extract, 4 options, 5 run -- results below
         head = QHBoxLayout()
-        head.addWidget(QLabel("<b>Research area:</b>"))
+        head.addWidget(_step("1", "Data pack",
+                             "A data pack decides what is extracted: the dataset's columns, the compounds and "
+                             "methods it knows, and the steps that read a paper. Choose the one for your field, or "
+                             "make your own (New…)."))
         from parameter_extractor import packs
         self.pack_combo = QComboBox()
         for pack_id, pack in sorted(packs.available().items(), key=lambda kv: kv[1].label):
             self.pack_combo.addItem(pack.label, pack_id)
             self.pack_combo.setItemData(self.pack_combo.count() - 1, pack.manifest.description,
                                         Qt.ItemDataRole.ToolTipRole)
-        self.pack_combo.setToolTip("The research area: which dataset columns, vocabulary, prompts and "
-                                   "extraction stages are used (Data Packs menu).")
+        self.pack_combo.setToolTip("The data pack used for this run: which columns the dataset has and what is read "
+                                   "from each paper. Hover over a pack in the list for its description.")
         self.pack_combo.currentIndexChanged.connect(self._on_pack_changed)
+        self.pack_combo.setMinimumContentsLength(22)
         head.addWidget(self.pack_combo)
-        head.addSpacing(16)
-        self.mode_label = QLabel()                    # what the run will do
-        self.mode_label.setStyleSheet("QLabel { font-weight: 600; color: palette(link); }")
-        self.mode_label.setToolTip("What Run will do: a full extraction (every parameter ticked; a stage unticked "
-                                   "is skipped), one after another for several papers, or a focused search when "
-                                   "single parameters are unticked.")
-        head.addWidget(self.mode_label)
-        head.addStretch(1)
+        self.new_pack_btn = QPushButton("New…", clicked=lambda: self.new_pack())
+        self.new_pack_btn.setToolTip("Make a data pack for your own field: from a template, a copy of another pack, "
+                                     "or drafted automatically from a few sample papers.")
+        self.edit_pack_btn = QPushButton("Edit…", clicked=self._edit_current_pack)
+        self.edit_pack_btn.setToolTip("Look at or change this data pack: its columns, compounds, steps and rules. "
+                                      "The app's own packs can be viewed and copied.")
+        head.addWidget(self.new_pack_btn)
+        head.addWidget(self.edit_pack_btn)
+        head.addSpacing(12)
+        self.pack_description = QLabel()
+        self.pack_description.setStyleSheet("color: palette(placeholder-text);")
+        self.pack_description.setMinimumWidth(100)
+        head.addWidget(self.pack_description, 1)
         v.addLayout(head)
+        self.mode_label = QLabel()                    # what the run will do (shown beside the Run button)
+        self.mode_label.setStyleSheet("QLabel { font-weight: 600; color: palette(link); }")
+        self.mode_label.setToolTip("What pressing the button will do. Everything ticked under 'What to extract': a "
+                                   "full extraction (several papers: one after another). A whole step unticked: "
+                                   "the extraction skips it. Single values unticked: a quick, cheaper search for just "
+                                   "those values (a 'focused search').")
 
         self.top_split = QSplitter(Qt.Orientation.Horizontal)
-        papers_box = QGroupBox("Papers")
+        papers_box = QGroupBox("2   Papers")
+        papers_box.setToolTip("The papers to read: add PDFs (or drop them on the window), type an arXiv ID or DOI, "
+                              "or add a list.")
         pl = QVBoxLayout(papers_box)
         self.papers = PaperListPanel()
         self.papers.changed.connect(self._update_run_enabled)
@@ -259,14 +309,18 @@ class MainWindow(QMainWindow):
         pl.addWidget(self.papers)
         self.top_split.addWidget(papers_box)
 
-        params_box = QGroupBox("Parameters")
+        params_box = QGroupBox("3   What to extract")
+        params_box.setToolTip("The data pack's steps and the values each one reads. Everything ticked = the full "
+                              "dataset. Untick what you don't need.")
         ql = QVBoxLayout(params_box)
         self.params = ParameterPanel()
         self.params.changed.connect(self._update_run_enabled)
         ql.addWidget(self.params)
         self.top_split.addWidget(params_box)
 
-        options_box = QGroupBox("Run options")
+        options_box = QGroupBox("4   Options")
+        options_box.setToolTip("How the papers are read: which AI model (cost vs. accuracy), and what else is done "
+                               "and saved.")
         ol = QVBoxLayout(options_box)
         ol.setContentsMargins(4, 4, 4, 4)
         scroll = QScrollArea()
@@ -287,13 +341,30 @@ class MainWindow(QMainWindow):
                                                                                  self.top_split.saveState()))
         v.addWidget(self.top_split, 1)
 
-        self.settings_hint = QLabel(wordWrap=True)
-        self.settings_hint.linkActivated.connect(lambda _: self.open_settings())
-        v.addWidget(self.settings_hint)
-        note = QLabel(PRIVACY_NOTE, wordWrap=True)
-        note.setStyleSheet("color: palette(placeholder-text);")
-        v.addWidget(note)
         return page
+
+    def show_getting_started(self) -> None:
+        """The workflow in a few lines (Help menu; also offered on first launch)."""
+        box = QMessageBox(self)
+        box.setWindowTitle("Getting started")
+        box.setTextFormat(Qt.TextFormat.RichText)
+        box.setText(GETTING_STARTED)
+        box.exec()
+
+    def _edit_current_pack(self) -> None:
+        """The editor for the pack chosen above (the menu's Edit… asks which one)."""
+        from parameter_extractor import packs
+        pack = packs.available().get(self.pack_combo.currentData() or "")
+        if pack is not None:
+            self._open_pack_editor(pack.folder)
+
+    def _show_pack_description(self) -> None:
+        from parameter_extractor import packs
+        pack = packs.available().get(self.pack_combo.currentData() or "")
+        text = (pack.manifest.description or "") if pack else ""
+        first = text.split(". ")[0].rstrip(".") + "." if text else ""
+        self.pack_description.setText(first if len(first) < 140 else first[:137] + "…")
+        self.pack_description.setToolTip(text)
 
     @staticmethod
     def _section(title: str) -> QLabel:
@@ -309,43 +380,40 @@ class MainWindow(QMainWindow):
         v.setContentsMargins(6, 0, 6, 6)
         v.setSpacing(4)
 
-        v.addWidget(self._section("Models and cost"))
+        v.addWidget(self._section("AI model and cost"))
         form = QFormLayout()
         form.setFieldGrowthPolicy(QFormLayout.FieldGrowthPolicy.AllNonFixedFieldsGrow)
         self.profile_combo = QComboBox()
         self.profile_combo.currentIndexChanged.connect(lambda _i: self._update_run_enabled())
-        form.addRow("Models:", self.profile_combo)
+        form.addRow("Model:", self.profile_combo)
         self.passes_combo = QComboBox()
-        for n, label in ((1, "1 pass"), (2, "2 passes, vote"), (3, "3 passes, vote")):
+        for n, label in ((1, "Once"), (2, "Twice, keep the majority"), (3, "Three times, keep the majority")):
             self.passes_combo.addItem(label, n)
         self.passes_combo.setToolTip(
-            "Runs the extraction steps after the row plan 2 or 3 times and keeps each value by majority. "
-            "Recommended: 3 passes with Economy (recovers values a single pass drops at random); 1 pass with "
-            "Standard or Balanced. Each extra pass adds the cost of those steps again (the paper is read from "
-            "cache). Disagreements between passes are flagged.")
-        form.addRow("Passes:", self.passes_combo)
+            "Read each paper's values more than once and keep the value most readings agree on. Catches values a "
+            "single reading misses now and then, at the cost of those readings. Recommended: three times with "
+            "Economy, once with Standard or Balanced. Disagreements are listed under Things to check.")
+        form.addRow("Read values:", self.passes_combo)
         self._models_form = form
         v.addLayout(form)
-        self.batch_box = QCheckBox("Batch mode -- half price, slower")
-        self.batch_box.setToolTip("Sends every request through Anthropic's Message Batches API at half the price. "
-                                  "Each step then waits in Anthropic's batch queue: usually a few minutes, at "
-                                  "most 24 hours, so a paper can take much longer. Results are the same. Best for "
-                                  "papers you don't need right away.")
+        self.batch_box = QCheckBox("Half price, slower (batch mode)")
+        self.batch_box.setToolTip("Anthropic answers these requests at half the price, but each step waits in a queue "
+                                  "-- usually a few minutes, at most 24 hours -- so a paper takes much longer. The "
+                                  "results are the same. Best for papers you don't need right away.")
         self._batch_tip = self.batch_box.toolTip()
         v.addWidget(self.batch_box)
 
         v.addWidget(self._section("Paper text"))
-        self.arxiv_box = QCheckBox("Use arXiv text when available")
-        self.arxiv_box.setToolTip("When the PDF names its arXiv ID or DOI and arXiv has the paper's full text, read "
-                                  "that instead of the PDF: about 40% fewer tokens and exact table values. It is "
-                                  "the arXiv preprint (the version read is named in the flags), and figures "
-                                  "can't be digitized from it. Papers typed as an ID always come from arXiv.")
-        self.si_box = QCheckBox("Include supplementary information")
+        self.arxiv_box = QCheckBox("Read the arXiv version when there is one")
+        self.arxiv_box.setToolTip("If the paper is on arXiv, read arXiv's text instead of the PDF: cheaper (less text "
+                                  "to read) and exact table values. It is the preprint, which can differ from the "
+                                  "published paper (noted under Things to check), and its figures can't be "
+                                  "digitized. Papers added by arXiv ID or DOI are always read from arXiv.")
+        self.si_box = QCheckBox("Also read the supplementary information")
         self.si_box.setChecked(True)
-        self.si_box.setToolTip("A PDF next to the paper named like '<paper>_SI.pdf' (or ' SI', '-ESI', "
-                               "'_supplementary', '_supporting information') is read with it: its text and tables "
-                               "are used, its pages shown as S1, S2, ..., and everything is reported under the "
-                               "paper. In a paper list, SI files are folded into their papers.")
+        self.si_box.setToolTip("Put the supplementary PDF in the same folder as the paper, named like the paper plus "
+                               "'_SI' (e.g. smith2020.pdf and smith2020_SI.pdf). It is read with the paper; its pages "
+                               "are cited as S1, S2, ...")
         v.addWidget(self.arxiv_box)
         v.addWidget(self.si_box)
 
@@ -353,25 +421,22 @@ class MainWindow(QMainWindow):
         rv = QVBoxLayout(self.review_widget)
         rv.setContentsMargins(0, 0, 0, 0)
         rv.setSpacing(4)
-        rv.addWidget(self._section("Review"))
-        self.suggest_box = QCheckBox("Suggest new variables")
+        rv.addWidget(self._section("While reading"))
+        self.suggest_box = QCheckBox("Suggest values the data pack has no column for")
         self.suggest_box.setChecked(True)
-        self.suggest_box.setToolTip("Also lists conditions and species the dataset has no column for (e.g. a "
-                                    "reaction time, a stirring rate) and offers them at the end, grouped by "
-                                    "category, to add as new columns. Unticked: no suggestions and a shorter "
-                                    "review (about 1.5% fewer tokens); assumed values are still reviewed, and "
-                                    "what was left out is listed in one flag.")
-        self.auto_figures_box = QCheckBox("Digitize easy figures automatically")
+        self.suggest_box.setToolTip("Also note conditions and compounds the dataset has no column for yet (e.g. a "
+                                    "stirring rate) and offer them at the end, so you can add them as new columns. "
+                                    "Untick for a shorter review at the end.")
+        self.auto_figures_box = QCheckBox("Read simple plots automatically")
         self.auto_figures_box.setToolTip(
-            "Figures you choose to digitize are first parsed from their suggestions: a bar chart or scatter plot whose "
-            "axes calibrate and whose points all sort into the suggested series is saved without opening the "
-            "digitizer (flagged, so you can check it). Anything else opens in the digitizer as usual. Runs of "
-            "several papers without figure review and command-line runs also try every figure.")
+            "For figures you choose to digitize: a simple bar chart or scatter plot is read without opening the "
+            "digitizer (and listed under Things to check, so you can verify it). Other figures open in the digitizer "
+            "as usual.")
         rv.addWidget(self.suggest_box)
         rv.addWidget(self.auto_figures_box)
 
         rv.addWidget(self._section("Saved with the results"))
-        self.images_box = QCheckBox("Table and figure images")
+        self.images_box = QCheckBox("Images of the tables and digitized figures")
         self.images_box.setChecked(True)
         self.images_box.setToolTip("Keep a crop of every table (the Tables tab) and the images of the figures you "
                                    "digitize in the run folder, for checking values and flags against the paper.")
@@ -379,10 +444,10 @@ class MainWindow(QMainWindow):
         self.all_figures_box.setToolTip("Figures are rendered for the figure review; normally only the ones you "
                                         "digitize are kept. Tick to keep every figure's image.")
         self.images_box.toggled.connect(self.all_figures_box.setEnabled)
-        self.equations_box = QCheckBox("Labelled equations as LaTeX")
-        self.equations_box.setToolTip("Equations the authors number or name ('(1)', 'Eq. 2') are always found and "
-                                      "shown in the Equations tab. Ticked, they're also transcribed to LaTeX: "
-                                      "one small API call (about 2 cents for a dozen equations).")
+        self.equations_box = QCheckBox("Numbered equations as text (LaTeX)")
+        self.equations_box.setToolTip("Equations the authors number ('(1)', 'Eq. 2') are always shown in the Equations "
+                                      "tab as images. Ticked, they're also written out as LaTeX (about 2 cents for a "
+                                      "dozen equations).")
         for box in (self.images_box, self.all_figures_box, self.equations_box):
             rv.addWidget(box)
         v.addWidget(self.review_widget)
@@ -393,13 +458,13 @@ class MainWindow(QMainWindow):
         mv.setContentsMargins(0, 0, 0, 0)
         mv.setSpacing(4)
         mv.addWidget(self._section("Several papers"))
-        self.review_figures_box = QCheckBox("Review figures as the papers are read")
-        self.review_figures_box.setToolTip("Each paper is read first; its figures open in the figure review right "
-                                           "away (choose, then digitize) while the extraction carries on.")
-        self.review_variables_box = QCheckBox("Review new variables at the end")
-        self.review_variables_box.setToolTip("When every paper is extracted, each paper's new-variable review opens "
-                                             "in turn (choices carry over). Unticked, new variables stay out of the "
-                                             "CSV (listed in each paper's new_variables.json).")
+        self.review_figures_box = QCheckBox("Choose figures to digitize as each paper is read")
+        self.review_figures_box.setToolTip("Each paper's figures are offered for digitizing as soon as it has been read, "
+                                           "while the others carry on. Unticked, figures are skipped.")
+        self.review_variables_box = QCheckBox("Review suggested new columns at the end")
+        self.review_variables_box.setToolTip("When every paper is done, each paper's suggested new columns are shown in "
+                                             "turn (your choices carry over). Unticked, they stay out of the dataset "
+                                             "(listed in each paper's new_variables.json).")
         mv.addWidget(self.review_figures_box)
         mv.addWidget(self.review_variables_box)
         v.insertWidget(0, self.multi_widget)          # the groups that apply to this run come first
@@ -409,20 +474,20 @@ class MainWindow(QMainWindow):
         fv = QVBoxLayout(self.focused_widget)
         fv.setContentsMargins(0, 0, 0, 0)
         fv.setSpacing(4)
-        fv.addWidget(self._section("Focused search"))
+        fv.addWidget(self._section("Searching for a few values"))
         self.words_edit = QLineEdit(placeholderText="Search words, e.g. EXOFAST (optional)")
-        self.words_edit.setToolTip("A paper is searched only if its text contains one of these words (comma-"
-                                   "separated; case doesn't matter); the passages around them are what the model "
-                                   "reads. Default: words from the parameters' descriptions.")
+        self.words_edit.setToolTip("Only papers containing one of these words are read, and only the passages around "
+                                   "them (separate words with commas). Left empty: words from the chosen values' "
+                                   "descriptions.")
         self.tables_box = QCheckBox("Keep whole tables")
-        self.tables_box.setToolTip("A match in or just above a table sends the whole table. Table rows rarely contain "
-                                   "the search words, so without this most of a table is left out. About 10-45% more "
-                                   "tokens than the matching lines alone.")
-        self.plan_box = QCheckBox("Rows as in a full extraction (plan rows first)")
-        self.plan_box.setToolTip("Runs the research area's row planner on each paper first, then asks for the "
-                                 "parameters on those rows: one row per sample, as a full extraction makes them. "
-                                 "Roughly doubles the cost of a search.")
-        self.whole_box = QCheckBox("Whole paper (finds more, costs more)")
+        self.tables_box.setToolTip("When a search word is in or just above a table, read the whole table -- table rows "
+                                   "rarely contain the search words themselves. Costs a little more.")
+        self.plan_box = QCheckBox("One row per sample, as in a full extraction")
+        self.plan_box.setToolTip("First work out each paper's samples (as a full extraction does), then find the "
+                                 "values for each sample. Roughly doubles the cost of a search.")
+        self.whole_box = QCheckBox("Read the whole paper (finds more, costs more)")
+        self.whole_box.setToolTip("Normally only the passages around the search words are read. Tick to read the whole "
+                                  "paper instead.")
         self.whole_box.toggled.connect(lambda on: self.tables_box.setEnabled(not on))
         for x in (self.words_edit, self.tables_box, self.plan_box, self.whole_box):
             fv.addWidget(x)
@@ -458,7 +523,7 @@ class MainWindow(QMainWindow):
         self._models_form.setRowVisible(self.passes_combo, not focused)   # a focused search: one call per paper
         if focused:
             k = len(self.params.checked_columns())
-            self.mode_label.setText(f"Focused search: {k} parameter{'s' if k != 1 else ''}"
+            self.mode_label.setText(f"Search for {k} value{'s' if k != 1 else ''} only"
                                     + (f" in {n} papers" if n > 1 else ""))
             self.run_btn.setText(f"Search {n} paper{'s' if n != 1 else ''}" if n else "Search")
         else:
@@ -512,6 +577,9 @@ class MainWindow(QMainWindow):
 
     def _build_run_controls(self) -> QVBoxLayout:
         self.run_btn = QPushButton("Extract data", clicked=self._start_run, default=True)
+        self.run_btn.setStyleSheet("QPushButton { font-weight: 600; padding: 4px 18px; }")
+        self.run_btn.setToolTip("Read the papers and extract the data (step 5). Results appear in the tabs below and "
+                                "are saved to the results folder (Settings).")
         self.cancel_btn = QPushButton("Cancel", clicked=self._cancel_run, enabled=False)
         self.skip_figures_btn = QPushButton("Skip figures of the remaining papers", clicked=self._skip_figures)
         self.skip_figures_btn.setHidden(True)
@@ -520,14 +588,28 @@ class MainWindow(QMainWindow):
                                   "busy), with the same parameters.")
         self.retry_btn.setHidden(True)
         self.progress = QProgressBar(minimum=0, maximum=6, value=0, textVisible=False)
-        self.status = QLabel("Add a paper and enter an API key to begin.", wordWrap=True)
+        self.status = QLabel(START_TEXT, wordWrap=True)
         buttons = QHBoxLayout()
+        buttons.addWidget(_step("5", "Run", "Press the button: the papers are read and the values extracted. You "
+                                            "may be asked to check figures and new variables along the way."))
         for b in (self.run_btn, self.cancel_btn, self.skip_figures_btn, self.retry_btn):
             buttons.addWidget(b)
+        buttons.addSpacing(10)
+        buttons.addWidget(self.mode_label)
         buttons.addWidget(self.progress, stretch=1)
+        # what's missing before a run (API key, results folder): right under the Run button, where it's seen
+        self.settings_hint = QLabel(wordWrap=True)
+        self.settings_hint.setStyleSheet("QLabel { color: palette(link); font-weight: 600; }")
+        self.settings_hint.linkActivated.connect(lambda _: self.open_settings())
+        self.status.setTextFormat(Qt.TextFormat.RichText)
+        self.status.linkActivated.connect(lambda link: self.show_getting_started() if link == "help" else None)
+        self.privacy_note = QLabel(PRIVACY_NOTE, wordWrap=True)
+        self.privacy_note.setStyleSheet("color: palette(placeholder-text);")
         col = QVBoxLayout()
         col.addLayout(buttons)
+        col.addWidget(self.settings_hint)
         col.addWidget(self.status)
+        col.addWidget(self.privacy_note)
         return col
 
     def status_message(self, text: str) -> None:
@@ -550,7 +632,9 @@ class MainWindow(QMainWindow):
         rows_layout.addWidget(self.rows_band)
         rows_layout.addWidget(self.rows_table, stretch=1)
         rows_layout.addWidget(self.rows_legend)
-        tabs.addTab(rows_page, "Rows")
+        tabs.addTab(rows_page, "Extracted data")
+        tabs.setTabToolTip(0, "The dataset: one row per sample, one column per value. Hover over a value to see where "
+                              "in the paper it came from.")
 
         self.flags_tree = QTreeWidget()
         self.flags_tree.setHeaderLabels(["Issue", "Quote from the paper", "Where"])
@@ -562,19 +646,24 @@ class MainWindow(QMainWindow):
         flags_split.addWidget(self.flags_tree)
         flags_split.addWidget(self.flag_details)
         flags_split.setSizes([400, 160])
-        tabs.addTab(flags_split, "Flags")
+        tabs.addTab(flags_split, "Things to check")
+        tabs.setTabToolTip(1, "Values worth a second look (uncertain, calculated, assumed, or disagreeing), and notes "
+                              "about the paper -- grouped by kind. Select one for the details and the quote.")
 
         # captured figures and labelled equations, at a glance (rich text: images + captions)
         self.figures_view = QTextBrowser(placeholderText="Figures found in the paper appear here.")
         self.figures_view.setOpenExternalLinks(False)
         tabs.addTab(self.figures_view, "Figures")
+        tabs.setTabToolTip(2, "The paper's figures, and the ones you digitized (values read off the plot).")
         self.tables_view = QTextBrowser(placeholderText="Tables found in the paper appear here.")
         self.tables_view.setOpenExternalLinks(False)
         tabs.addTab(self.tables_view, "Tables")
+        tabs.setTabToolTip(3, "The paper's tables as images, to compare the extracted values with.")
         self.equations_view = QTextBrowser(placeholderText="Equations the authors label, e.g. '(1)' or "
                                                            "'Eq. 2', appear here.")
         self.equations_view.setTextInteractionFlags(Qt.TextInteractionFlag.TextBrowserInteraction)
         tabs.addTab(self.equations_view, "Equations")
+        tabs.setTabToolTip(4, "Equations the authors number or name.")
 
         summary = QWidget()
         s_layout = QVBoxLayout(summary)
@@ -590,6 +679,7 @@ class MainWindow(QMainWindow):
         s_layout.addWidget(self.summary_text)
         s_layout.addLayout(s_buttons)
         tabs.addTab(summary, "Summary")
+        tabs.setTabToolTip(5, "What the run did and cost, and where the files were saved.")
 
         # a focused search's results: one row per paper and object, a column per parameter (focused_results.csv)
         self.search_table = QTableWidget(0, 4)
@@ -619,6 +709,7 @@ class MainWindow(QMainWindow):
         index = self.pack_combo.findData(saved_pack)
         self.pack_combo.setCurrentIndex(index if index >= 0 else self.pack_combo.findData("prebiotic_chemistry"))
         self.params.load(self.pack_combo.currentData(), self.registry_path)           # no change signal if index 0 was kept
+        self._show_pack_description()
         self.equations_box.setChecked(self._settings.value("equations_to_latex", False, type=bool))
         from parameter_extractor import local_models
         local = local_models.load()
@@ -667,9 +758,10 @@ class MainWindow(QMainWindow):
             packs.activate(pack_id)
             self.params.load(pack_id, self.registry_path)
             self._load_plan_box()
+        self._show_pack_description()
 
     def _load_plan_box(self) -> None:
-        """'Rows as in a full extraction', per research area, defaulting to the pack's setting."""
+        """'Rows as in a full extraction', per data pack, defaulting to the pack's setting."""
         from parameter_extractor import packs
         pack_id = self.pack_combo.currentData() or "prebiotic_chemistry"
         pack = packs.available().get(pack_id)
@@ -1089,7 +1181,7 @@ class MainWindow(QMainWindow):
 
     def edit_pack(self, tab: int = 0) -> None:
         from parameter_extractor.gui.pack_windows import choose_pack
-        pack = choose_pack(self, "Edit research area" if not tab else "Check research area")
+        pack = choose_pack(self, "Edit data pack" if not tab else "Check data pack")
         if pack is not None:
             self._open_pack_editor(pack.folder, tab)
 
@@ -1104,7 +1196,7 @@ class MainWindow(QMainWindow):
         editor.exec()
 
     def remove_pack(self) -> None:
-        """Two confirmations (a warning, then typing DELETE); then the Research area list is refreshed."""
+        """Two confirmations (a warning, then typing DELETE); then the Data pack list is refreshed."""
         from parameter_extractor.gui.pack_windows import remove_pack
         if remove_pack(self):
             self.refresh_packs()
@@ -1116,7 +1208,7 @@ class MainWindow(QMainWindow):
         QDesktopServices.openUrl(QUrl.fromLocalFile(str(folder)))
 
     def refresh_packs(self, select: Optional[str] = None) -> None:
-        """The Research area list again (a pack was created or saved), keeping the choice unless `select`."""
+        """The Data pack list again (a pack was created or saved), keeping the choice unless `select`."""
         from parameter_extractor import packs
         keep = select or self.pack_combo.currentData()
         self.pack_combo.blockSignals(True)
@@ -1133,7 +1225,7 @@ class MainWindow(QMainWindow):
         self._on_pack_changed(self.pack_combo.currentIndex())
 
     def open_categories(self) -> None:
-        """Create / edit the categories of new variables, per research area."""
+        """Create / edit the categories of new variables, per data pack."""
         from parameter_extractor.gui.categories_dialog import CategoriesDialog
         CategoriesDialog(self.registry_path, parent=self).exec()
         self._load_category_edits()
@@ -1150,6 +1242,7 @@ class MainWindow(QMainWindow):
     def _set_inputs_enabled(self, enabled: bool) -> None:
         """Locked while anything runs (the pack is active during a run; one run at a time)."""
         for w in (self.registry_action, self.categories_action, self.pack_combo, self.new_pack_action,
+                  self.new_pack_btn, self.edit_pack_btn,
                   self.edit_pack_action, self.copy_pack_action, self.remove_pack_action, self.params,
                   self.profile_combo, self.passes_combo, self.words_edit, self.add_pdfs_action, self.add_list_action,
                   self.output_action, self.lookups_action, *self.option_toggles(), self.review_figures_box,
@@ -1176,7 +1269,7 @@ class MainWindow(QMainWindow):
         self.open_csv_btn.setEnabled(True)
         self.tabs.setEnabled(True)
         n_flags = len(result.paper_flags) + sum(len(f) for f in result.row_flags.values())
-        self.tabs.setTabText(1, f"Flags ({n_flags})")
+        self.tabs.setTabText(1, f"Things to check ({n_flags})")
         self.tabs.setCurrentIndex(1 if n_flags else 0)
 
     def _fill_rows(self, result) -> None:
@@ -1496,18 +1589,20 @@ class MainWindow(QMainWindow):
         self.summary_text.setHtml(f"""
             <h3>{result.paper_id}</h3>
             <p><b>{len(result.rows)}</b> rows extracted &middot;
-               <b>{len(result.paper_flags)}</b> paper-level flag(s) &middot;
-               <b>{len(result.row_flags)}</b> row(s) flagged &middot;
+               <b>{len(result.paper_flags)}</b> thing(s) to check &middot;
+               <b>{len(result.row_flags)}</b> row(s) marked for checking &middot;
                estimated cost <b>{format_usd(result.cost_usd)}</b></p>
             {self._new_variables_html(result)}
             <p>Results folder: <code>{result.run_dir}</code><br>
-               CSV: <code>{result.csv_path.name}</code> (template layout) &middot;
+               Dataset (CSV): <code>{result.csv_path.name}</code> (one row per sample) &middot;
                <code>{result.observations_path.name if result.observations_path else ""}</code>
                (one value per line, with where each came from)</p>
             {self._figures_html(result)}
-            <h4>API usage</h4>
+            <h4>Cost of each step</h4>
+            <p style='color:gray'>Text is measured in tokens (about 3/4 of a word each). "Cached" text was re-read at a
+               tenth of the price.</p>
             <table cellspacing=0 cellpadding=4 border=1>
-              <tr><th>Step</th><th>Model</th><th>Input tokens</th><th>of which cached</th><th>Output tokens</th>
+              <tr><th>Step</th><th>Model</th><th>Text read (tokens)</th><th>of which cached</th><th>Text written (tokens)</th>
                   <th>Est. cost (USD)</th><th>Time</th></tr>
               {usage_rows}
               <tr><td colspan=2><b>Total</b></td><td align=right><b>{result.input_tokens:,}</b></td>
@@ -1529,7 +1624,7 @@ class MainWindow(QMainWindow):
             n_rows = sum(1 for r in result.rows if r.original_data_reference)
             parts.append(f"<p><b>Note:</b> {n_rows} row(s) in {len(cited)} set(s)/figure(s) are data "
                          f"reproduced from other publications (see <code>original_data_reference</code> "
-                         f"and the Flags tab).</p>")
+                         f"and the Things to check tab).</p>")
         if result.accepted_variables:
             items = "".join(f"<li>{html.escape(a['name'])} &rarr; <code>{html.escape(a['column'])}</code> "
                             f"({html.escape(a['how'])})</li>" for a in result.accepted_variables)

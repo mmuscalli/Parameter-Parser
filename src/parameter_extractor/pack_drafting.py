@@ -1,5 +1,5 @@
 """
-Draft a research area from sample papers (Mickey, 2026-11-08): instead of starting a new data pack from the template
+Draft a data pack from sample papers (Mickey, 2026-11-08): instead of starting a new data pack from the template
 or a copy, the user gives a name, a short description and a few typical papers; the app
 
 1. SURVEYS each paper (one cheap request per paper -- Claude Haiku 5.5 by default, the paper's text plus its table
@@ -427,7 +427,7 @@ def write_report(result: DraftResult, by_column: Dict[str, ProposedParameter], a
     lines = [f"# {area}: drafted from sample papers", "",
              f"Drafted {datetime.now():%Y-%m-%d %H:%M} from {sum(1 for p in result.papers if p.survey)} paper(s); "
              f"cost ${result.cost_usd:.3f}. Everything below is a starting point to edit (Data Packs > Edit "
-             f"research area).", "", "## Papers", ""]
+             f"data pack).", "", "## Papers", ""]
     for p in result.papers:
         lines.append(f"- {p.name}: " + (f"{len(p.survey.variables)} variables; one row = {p.survey.row_unit}"
                                          if p.survey else f"not surveyed ({p.error})"))
@@ -470,9 +470,9 @@ def check_new_id(pack_id: str, label: str) -> None:
         raise ValueError(f"'{pack_id}' isn't a usable id: lower-case letters, digits and '_', starting with a letter "
                          f"(2-41 characters).")
     if pack_id in packs.available(include_template=True) or (packs.user_packs_dir() / pack_id).exists():
-        raise ValueError(f"A research area with the id '{pack_id}' already exists.")
+        raise ValueError(f"A data pack with the id '{pack_id}' already exists.")
     if not (label or "").strip():
-        raise ValueError("Give the research area a name.")
+        raise ValueError("Give the data pack a name.")
 
 
 # ---- suggestions for an existing research area -------------------------------------------------------------------
@@ -610,7 +610,7 @@ def suggest_additions(folder: Path, items: Sequence, config: RunConfig,
                       on_progress: Optional[Callable[[int, int, str], None]] = None,
                       cancel_event: Optional[threading.Event] = None, workers: int = 4, passes: int = 1,
                       tidy: bool = True) -> AdditionsResult:
-    """Survey new sample papers and ask what an existing research area lacks; nothing is changed (see
+    """Survey new sample papers and ask what an existing data pack lacks; nothing is changed (see
     apply_additions)."""
     from parameter_extractor.api_client import call_structured
     from parameter_extractor.errors import ApiKeyMissingError
@@ -646,18 +646,18 @@ def suggest_additions(folder: Path, items: Sequence, config: RunConfig,
                                                                               for p in papers))
     if cancel_event is not None and cancel_event.is_set():
         raise RunCancelledError()
-    report(len(items), total, "Comparing the papers with the research area")
+    report(len(items), total, "Comparing the papers with the data pack")
     summary, chemistry = _pack_summary(draft)
     prompt = _prompt("pack_additions", AREA=area, AREA_DESCRIPTION=description, N_PAPERS=len(good),
                      COMPOUND_NOTE=" and its compound vocabulary" if chemistry else "",
                      COMPOUND_INSTRUCTION=("dissolved compounds the papers use or form that the compound vocabulary "
                                            "lacks (the chemistry step records them; don't also add parameters for "
-                                           "them); else []." if chemistry else "[] (this research area has no "
+                                           "them); else []." if chemistry else "[] (this data pack has no "
                                                                                "chemistry step)."))
     ctx = RunContext(config=config, run_dir=work_dir, total_steps=1, cancel_event=cancel_event)
     answer = call_structured(ctx, stage="pack_additions", system_prompt="Suggest additions to a dataset's extraction "
                              "setup from surveys of new sample papers.",
-                             user_content=f"{prompt}\n\nTHE RESEARCH AREA NOW:\n{summary}\n\nSURVEYS:\n"
+                             user_content=f"{prompt}\n\nTHE DATA PACK NOW:\n{summary}\n\nSURVEYS:\n"
                                           f"{_survey_digest(good)}",
                              response_model=PackAdditions, max_tokens=SYNTHESIS_BUDGET)
     cost = round(sum(p.cost_usd for p in papers) + (total_cost(ctx.usage) or 0.0), 4)
@@ -901,9 +901,9 @@ def draft_pack(items: Sequence, pack_id: str, label: str, description: str, conf
                                                                               for p in papers))
     if cancel_event is not None and cancel_event.is_set():
         raise RunCancelledError()
-    report(len(items), total, "Designing the research area from the surveys")
+    report(len(items), total, "Designing the data pack from the surveys")
     proposal, merge_cost = synthesize(good, config, work_dir, area, description, cancel_event)
-    report(len(items) + 1, total, "Writing the research area")
+    report(len(items) + 1, total, "Writing the data pack")
     pack, dropped, by_column = write_pack(proposal, pack_id, label, description, base=base, tidy=tidy)
     tidied = by_column.pop("__tidied__", [])
     result = DraftResult(pack=pack, proposal=proposal, papers=papers, problems=check(PackDraft.load(pack.folder)),

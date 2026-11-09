@@ -1,11 +1,11 @@
 """
 "Remembered variables": view and change what the local variable registry has learned from earlier reviews,
-grouped by research area (Standard = every pack, then each pack; Mickey, 2026-11-03).
+grouped by data pack (Standard = every pack, then each pack; Mickey, 2026-11-03).
 
-  - Added columns: columns accepted as "New column" -- research area, category, data type; rename or remove
+  - Added columns: columns accepted as "New column" -- data pack, category, data type; rename or remove
     (removing also forgets the names that pointed to it, so those variables will be asked about again in the
     next review).
-  - Synonyms: "this name in a paper -> that column" mappings -- research area, column; remove.
+  - Synonyms: "this name in a paper -> that column" mappings -- data pack, column; remove.
   - Compounds: each compound's default name, the synonyms PubChem lists for it, and the ACTIVE name its
     columns are written under (compound_names.py); "Convert a dataset CSV…" rewrites an older CSV's columns to
     the active names and the current column format (merging columns of the same compound).
@@ -37,7 +37,7 @@ CHANGED_BRUSH = QBrush(QColor(176, 110, 0))
 ROLE = Qt.ItemDataRole.UserRole           # on column 0: ("column" | "alias" | "builtin", area, key)
 EDITABLE_ROLE = Qt.ItemDataRole.UserRole + 1   # on column 0: the columns with a choice
 
-BUILTIN_WARNING = ("Built-in columns are what the research area's prompts, checks and calculations were tested "
+BUILTIN_WARNING = ("Built-in columns are what the data pack's prompts, checks and calculations were tested "
                    "with. Changing a column's category moves it in the dataset; changing its data type converts "
                    "(or leaves out) its values. Either can make results differ from the app's tested parsing.")
 
@@ -124,19 +124,19 @@ class RegistryDialog(QDialog):
         layout.addWidget(QLabel(
             "What you've taught the app while reviewing papers -- columns you accepted, the names that map to them, "
             "the names compounds are written under, and your changes to the data packs' own columns. Kept apart "
-            "from the data packs (Data Packs > Edit research area shows what a pack itself defines), so they "
-            "apply on top of any pack and survive app updates. Standard entries apply to every research area. "
+            "from the data packs (Data Packs > Edit data pack shows what a pack itself defines), so they "
+            "apply on top of any pack and survive app updates. Standard entries apply to every data pack. "
             "They're used automatically for future papers; CSVs already written stay as they are. Click a "
-            "Research area, Category, Data type or column cell to change it.", wordWrap=True))
+            "Data pack, Category, Data type or column cell to change it.", wordWrap=True))
         filter_row = QHBoxLayout()
-        filter_row.addWidget(QLabel("Research area:"))
+        filter_row.addWidget(QLabel("Data pack:"))
         self.area_combo = QComboBox()
-        self.area_combo.addItem("All research areas", None)
+        self.area_combo.addItem("All data packs", None)
         for a, label in areas():
             if a != STANDARD:
                 self.area_combo.addItem(label, a)
         self.area_combo.addItem("Standard only (every area)", STANDARD)
-        self.area_combo.setToolTip("Show one research area's entries (with the Standard ones, which apply to it too).")
+        self.area_combo.setToolTip("Show one data pack's entries (with the Standard ones, which apply to it too).")
         if area is not None:
             self.area_combo.setCurrentIndex(max(self.area_combo.findData(area), 0))
         self.area_combo.currentIndexChanged.connect(lambda _i: self._apply_filter())
@@ -237,7 +237,7 @@ class RegistryDialog(QDialog):
     def _build_columns_tab(self) -> QWidget:
         w = QWidget()
         v = QVBoxLayout(w)
-        self.columns_tree = _tree(["Column", "Research area", "Category", "Data type", "Type", "Added",
+        self.columns_tree = _tree(["Column", "Data pack", "Category", "Data type", "Type", "Added",
                                    "Names that map to it"], self.A_NAMES)
         self.columns_tree.setItemDelegate(ChoiceDelegate(self, self.columns_tree))
         v.addWidget(self.columns_tree, 1)
@@ -254,7 +254,7 @@ class RegistryDialog(QDialog):
     def _build_aliases_tab(self) -> QWidget:
         w = QWidget()
         v = QVBoxLayout(w)
-        self.alias_tree = _tree(["Name in the paper", "Research area", "Goes into column", "Type"], self.S_NAME)
+        self.alias_tree = _tree(["Name in the paper", "Data pack", "Goes into column", "Type"], self.S_NAME)
         self.alias_tree.setItemDelegate(ChoiceDelegate(self, self.alias_tree))
         v.addWidget(self.alias_tree, 1)
         row = QHBoxLayout()
@@ -457,7 +457,7 @@ class RegistryDialog(QDialog):
         path, _ = QFileDialog.getOpenFileName(self, "Dataset CSV to convert", "", "CSV files (*.csv)")
         if not path:
             return
-        pack_id, ok = QInputDialog.getItem(self, "Research area", "Compounds of:",
+        pack_id, ok = QInputDialog.getItem(self, "Data pack", "Compounds of:",
                                            list(self.packs), 0, False)
         if not ok:
             return
@@ -650,7 +650,7 @@ class RegistryDialog(QDialog):
         return area in self.packs and self.view(area).is_known_column(column)
 
     def problems(self) -> List[str]:
-        """Synonyms pointing to a column their research area doesn't have."""
+        """Synonyms pointing to a column their data pack doesn't have."""
         reg = self.registry
         return [f"{reg.display_name(k)} -> {c} ({area_label(reg.alias_area(k))})"
                 for k, c in reg.all_aliases.items() if not self.known_in(reg.alias_area(k), c)]
@@ -659,7 +659,7 @@ class RegistryDialog(QDialog):
         bad = self.problems()
         if bad:
             QMessageBox.warning(self, "Check the synonyms", "These point to a column that doesn't exist in their "
-                                "research area: " + "; ".join(bad))
+                                "data pack: " + "; ".join(bad))
             return
         self.registry.save()
         self.accept()

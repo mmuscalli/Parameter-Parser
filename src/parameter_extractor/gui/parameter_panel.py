@@ -5,7 +5,7 @@ area's switchable extraction stages, each with its parameters, as a tree of chec
 What the ticks mean:
 - everything ticked (the default) -- a full extraction;
 - a whole stage unticked -- a full extraction without that stage (the old "Extraction stages" checkboxes; each
-  research area remembers them, QSettings stages/<pack>/<stage>);
+  data pack remembers them, QSettings stages/<pack>/<stage>);
 - single parameters unticked inside a stage -- a FOCUSED SEARCH for the ticked parameters only (focused_search.py:
   one small call per paper, only the passages that matter).
 
@@ -35,15 +35,15 @@ class ParameterPanel(QWidget):
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
         top = QHBoxLayout()
-        self.filter_edit = QLineEdit(placeholderText="Filter parameters…", clearButtonEnabled=True)
+        self.filter_edit = QLineEdit(placeholderText="Find a value…", clearButtonEnabled=True)
         self.filter_edit.textChanged.connect(self._filter)
         top.addWidget(self.filter_edit, 1)
         self.all_btn = QPushButton("Tick all", clicked=self.tick_all)
-        self.all_btn.setToolTip("Back to a full extraction: every stage and parameter ticked.")
+        self.all_btn.setToolTip("Tick everything again: the full dataset.")
         top.addWidget(self.all_btn)
         layout.addLayout(top)
         self.tree = QTreeWidget()
-        self.tree.setHeaderLabels(["Stage / parameter", "What it is"])
+        self.tree.setHeaderLabels(["Step / value", "What it is"])
         self.tree.header().setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
         self.tree.itemChanged.connect(self._item_changed)
         layout.addWidget(self.tree, 1)
@@ -101,9 +101,9 @@ class ParameterPanel(QWidget):
                 item.setToolTip(1, p.description)
                 group.addChild(item)
             self.groups[t.name] = group
-        self.always_label.setText("Always part of a full extraction: planning the rows. Untick single parameters to "
-                                  "search only for those (a focused search); untick compounds or instrument "
-                                  "families to narrow those steps.")
+        self.always_label.setText("Everything ticked: the full dataset. Untick a whole step to skip it. Untick single "
+                                  "values to search only for those (quicker and cheaper). Unticking compounds or "
+                                  "instrument families limits those steps to the ones left ticked.")
         self.tree.resizeColumnToContents(0)
         self.tree.setColumnWidth(0, min(self.tree.columnWidth(0), 300))
         self._filling = False

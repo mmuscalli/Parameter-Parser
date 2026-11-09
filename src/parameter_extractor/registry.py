@@ -51,7 +51,7 @@ def standard_columns(pack=None) -> list:
 
 # research area of columns, synonyms and categories every pack shares (2026-11-03): the rest belong to one pack
 STANDARD = "standard"
-STANDARD_LABEL = "Standard (every research area)"
+STANDARD_LABEL = "Standard (every data pack)"
 
 
 def area_label(area: str) -> str:

@@ -68,7 +68,7 @@ class CompoundSetupDialog(QDialog):
         self.setWindowTitle("Find compounds and tidy column names")
         self.resize(1080, 720)
         v = QVBoxLayout(self)
-        v.addWidget(_hint("Compounds named in this research area's columns, in its sample papers' examples and in its "
+        v.addWidget(_hint("Compounds named in this data pack's columns, in its sample papers' examples and in its "
                           "parameter descriptions -- found by the app itself and identified on PubChem (free; only the "
                           "names are sent). Applying switches the chemistry step on: it records every dissolved "
                           "compound in its own column ('initial_MgCl2_aq_mM', 'sampled_UMP_aq_%yield'), matched to the "
@@ -128,7 +128,7 @@ class CompoundSetupDialog(QDialog):
         self.apply_btn = buttons.addButton("Apply", QDialogButtonBox.ButtonRole.AcceptRole)
         self.apply_btn.setEnabled(not self.plan.empty)
         if self.plan.empty:
-            v.addWidget(_hint("No compounds found in this research area's columns, and its column names already follow "
+            v.addWidget(_hint("No compounds found in this data pack's columns, and its column names already follow "
                               "the app's conventions."))
         buttons.accepted.connect(self.apply)
         buttons.rejected.connect(self.reject)
@@ -169,9 +169,9 @@ class AdditionsDialog(QDialog):
         self.setWindowTitle("Suggest additions from papers")
         self.resize(1100, 760)
         v = QVBoxLayout(self)
-        v.addWidget(_hint("Add a few papers this research area hasn't been tuned on. Each is surveyed cheaply for the "
+        v.addWidget(_hint("Add a few papers this data pack hasn't been tuned on. Each is surveyed cheaply for the "
                           "variables it reports (Claude Haiku, a few cents a paper), then one request (Claude Sonnet) "
-                          "compares them with the research area and suggests what's missing: parameters, stages, "
+                          "compares them with the data pack and suggests what's missing: parameters, stages, "
                           "categories, rules and compounds. Nothing changes until you Apply the ticked suggestions."))
         self.papers = PaperListPanel()
         self.papers.setMaximumHeight(200)

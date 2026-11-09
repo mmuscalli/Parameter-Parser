@@ -1,5 +1,5 @@
 """
-Editing research areas (packs) and checking them (Mickey, 2026-11-05: pack creation inside the app, menu Data Packs).
+Editing data packs (packs) and checking them (Mickey, 2026-11-05: pack creation inside the app, menu Data Packs).
 
 `PackDraft` holds one pack's files as plain data -- the manifest, the column list, the extra columns, every stage
 spec, the rules files -- so a window can change them freely and write them all at once with `save()`. Keys the
@@ -268,7 +268,7 @@ class PackDraft:
     def save(self) -> None:
         """Write every file. The app's own packs can't be saved (copy them first)."""
         if self.builtin:
-            raise PermissionError("The app's own research areas can't be changed: copy one to a new research area.")
+            raise PermissionError("The app's own data packs can't be changed: copy one to a new data pack.")
         f = self.folder
         if self.cids_file.get("species") and not self.manifest.get("species_cids"):
             self.manifest["species_cids"] = "species_cids.json"
@@ -372,7 +372,7 @@ def check(draft: PackDraft) -> List[Problem]:
     except Exception as e:
         add("error", "pack.json", f"not a valid manifest: {_first_error(e)}")
     if not str(m.get("label", "")).strip():
-        add("error", "General", "the research area has no name.")
+        add("error", "General", "the data pack has no name.")
     for stage in m.get("builtin_stages", []):
         if stage not in BUILTIN_STAGES and stage != "methodology":
             add("error", "General", f"unknown built-in step '{stage}'.")
@@ -381,7 +381,7 @@ def check(draft: PackDraft) -> List[Problem]:
             add("error", "Calculations", f"unknown calculation '{calc}'.")
         elif CALCULATIONS[calc][1] and CALCULATIONS[calc][1] not in m.get("builtin_stages", []):
             add("warning", "Calculations", f"'{calc}' works on the results of the '{CALCULATIONS[calc][1]}' step, "
-                                           f"which this research area doesn't use: it will do nothing.")
+                                           f"which this data pack doesn't use: it will do nothing.")
     for key in ("standard_columns", "species_cids"):
         if m.get(key) and not (draft.folder / m[key]).is_file():
             add("error", "pack.json", f"{key} names '{m[key]}', which isn't in the folder.")
@@ -499,7 +499,7 @@ def check(draft: PackDraft) -> List[Problem]:
             add("error", "Categories", f"columns are placed in '{cid}', which isn't a category.")
         for col in entry.get("columns", []):
             if col not in known:
-                add("warning", "Categories", f"'{col}' (in {cid}) isn't a column of this research area.")
+                add("warning", "Categories", f"'{col}' (in {cid}) isn't a column of this data pack.")
         for pattern in entry.get("patterns", []):
             try:
                 re.compile(pattern)
@@ -541,7 +541,7 @@ def _formula_problems(draft: PackDraft) -> List[Problem]:
                                                  "one after it (formulas run in order)."))
         unknown = [c for c in inputs if c not in known and c not in earlier and c not in later]
         if unknown:
-            out.append(Problem("warning", where, f"uses column(s) this research area doesn't have: "
+            out.append(Problem("warning", where, f"uses column(s) this data pack doesn't have: "
                                                  f"{', '.join(unknown)} (rows will have no value for them)."))
         if not f.description.strip():
             out.append(Problem("note", where, "no description: say what the formula calculates."))

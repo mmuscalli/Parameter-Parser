@@ -2505,3 +2505,22 @@ splits 'X/Y', compares names with primes normalised; NOT_A_COMPOUND also covers 
   pipeline flag `not_a_compound` (compound_setup.is_compound_name; never dropped); suggest_additions leaves out the
   user's accepted columns for the area (registry) too; drafting / suggestions / preparse pass the arXiv LookupCache.
   tests/test_audit_consistency.py.
+
+## Readability pass on the main window (2026-11-08, Mickey: usable by domain scientists)
+
+- One user-facing term: **data pack** (was "research area" in the window and "Data Packs" in the menu) -- every
+  string literal in gui/*.py, pack_editing, packs, pack_drafting, compound_setup, cli (tokenize-based replace; code
+  identifiers and the MODEL prompts keep "research area"); registry.STANDARD_LABEL "Standard (every data pack)".
+- The workflow is numbered on screen (`_step`): **1 Data pack** (combo + New… + Edit… buttons -- `new_pack_btn`,
+  `edit_pack_btn` (`_edit_current_pack`), + the pack's description `pack_description`), **2 Papers**, **3 What to
+  extract** (was Parameters), **4 Options** (was Run options), **5 Run** (Extract data; `mode_label` now beside it).
+  Under the Run row: `settings_hint` (missing key / folder, was scrolled out of sight under the panes), the status line
+  (START_TEXT with a "Getting started" link), the privacy note.
+- Help menu: Getting started… (`GETTING_STARTED`, `show_getting_started`).
+- Plainer wording: tabs "Extracted data" (was Rows) and "Things to check" (was Flags) with tab tooltips; options
+  "AI model and cost", "Read values: Once / Twice / Three times, keep the majority" (passes), "Half price, slower (batch
+  mode)", "Read the arXiv version when there is one", "Also read the supplementary information", "While reading",
+  "Suggest values the data pack has no column for", "Read simple plots automatically", "Numbered equations as text";
+  focused search "Searching for a few values" / mode "Search for N values only"; parameter panel "Step / value",
+  "Find a value…" and a plain explanation; Summary tab "Cost of each step" with tokens explained. Attribute names
+  unchanged (tests: mode text "Search for 2 values only in 2 papers", menu "New data pack…").

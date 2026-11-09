@@ -89,7 +89,7 @@ def main() -> int:
                         help="Only screen the paper against prompts/triage.md's inclusion "
                              "criteria; skip extraction")
     parser.add_argument("--pack", default="prebiotic_chemistry",
-                        help="Domain pack (research area) to extract with; see --list-packs")
+                        help="Domain pack (data pack) to extract with; see --list-packs")
     parser.add_argument("--list-packs", action="store_true", help="List the available domain packs and exit")
     parser.add_argument("--no-pubchem", action="store_true",
                         help="No online lookups: PubChem species names, NASA Exoplanet Archive check "
@@ -109,14 +109,14 @@ def main() -> int:
     parser.add_argument("--local-settings", type=Path, default=None,
                         help="local model settings file (default: the app's local_models.json)")
     parser.add_argument("--draft-pack", metavar="ID", default=None,
-                        help="Draft a NEW research area from sample papers (--papers LIST / --pdf / --paper): a cheap "
+                        help="Draft a NEW data pack from sample papers (--papers LIST / --pdf / --paper): a cheap "
                              "survey of each paper's variables, then one request that designs columns, categories, "
-                             "stages and row rules; written to your research areas folder (needs --area-name)")
-    parser.add_argument("--area-name", default="", help="Name of the research area to draft (--draft-pack)")
+                             "stages and row rules; written to your data packs folder (needs --area-name)")
+    parser.add_argument("--area-name", default="", help="Name of the data pack to draft (--draft-pack)")
     parser.add_argument("--find-compounds", nargs="?", const="", default=None, metavar="ID",
-                        help="Find the compounds named in a research area's columns and examples (local + PubChem, no "
+                        help="Find the compounds named in a data pack's columns and examples (local + PubChem, no "
                              "model) and switch its chemistry step on for them. With --draft-pack: right after "
-                             "drafting; else give the id of one of your research areas")
+                             "drafting; else give the id of one of your data packs")
     parser.add_argument("--suggest-additions", metavar="ID", default=None,
                         help="Survey sample papers (--papers / --pdf / --paper) and suggest what one of your research "
                              "areas lacks (parameters, stages, categories, rules, compounds); prints them")
@@ -127,7 +127,7 @@ def main() -> int:
                         help="--draft-pack / --suggest-additions / --find-compounds: keep the model's column names "
                              "instead of the app's conventions (initial_pH, initial_temperature_C, ...)")
     parser.add_argument("--apply-suggestions", action="store_true",
-                        help="With --suggest-additions: write every suggestion into the research area")
+                        help="With --suggest-additions: write every suggestion into the data pack")
     parser.add_argument("--area-description", default="", help="A sentence on the field (--draft-pack)")
     parser.add_argument("--list-local-models", action="store_true",
                         help="List the local server's models and your local profiles, then exit")
@@ -400,7 +400,7 @@ def _draft_pack(args, parser) -> int:
     except (PipelineError, ValueError) as e:
         print(f"Error: {e}", file=sys.stderr)
         return 1
-    print(f"Research area written to {result.pack.folder} (report: drafted_from.md; work files: {result.work_dir})")
+    print(f"Data pack written to {result.pack.folder} (report: drafted_from.md; work files: {result.work_dir})")
     for p in result.problems:
         print(f"  {p}")
     if args.find_compounds is not None:
@@ -412,7 +412,7 @@ def _user_pack(pack_id: str):
     from parameter_extractor import packs
     pack = packs.available().get(pack_id)
     if pack is None or not str(pack.folder).startswith(str(packs.user_packs_dir())):
-        raise SystemExit(f"'{pack_id}' isn't one of your research areas (the app's own can't be changed: copy one "
+        raise SystemExit(f"'{pack_id}' isn't one of your data packs (the app's own can't be changed: copy one "
                          f"first). Yours: {', '.join(p for p, x in packs.available().items() if str(x.folder).startswith(str(packs.user_packs_dir()))) or 'none'}")
     return pack
 

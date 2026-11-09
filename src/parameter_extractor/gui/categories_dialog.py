@@ -1,6 +1,6 @@
 """
 "Variable categories" (Variables menu; Mickey, 2026-11-03): create and edit the categories new variables are
-sorted into, per research area -- Standard (every pack) or one pack's own.
+sorted into, per data pack -- Standard (every pack) or one pack's own.
 
 Each category: id, label, description (what the model is told it holds), value format (value_type), max words,
 table order (where its block sits in the dataset, lower = further left) and whether the model may put
@@ -49,13 +49,13 @@ class CategoriesDialog(QDialog):
         layout = QVBoxLayout(self)
         layout.addWidget(QLabel(
             "Categories sort suggested new variables in the review and place columns in the dataset. Standard "
-            "categories apply to every research area; a research area's own come first in its review.",
+            "categories apply to every data pack; a data pack's own come first in its review.",
             wordWrap=True))
         warning = QLabel("⚠ " + WARNING, wordWrap=True)
         warning.setStyleSheet("color: #8a5a00;")
         layout.addWidget(warning)
         top = QHBoxLayout()
-        top.addWidget(QLabel("Research area:"))
+        top.addWidget(QLabel("Data pack:"))
         self.area_combo = QComboBox()
         for area, label in areas():
             self.area_combo.addItem(label, area)
@@ -166,7 +166,7 @@ class CategoriesDialog(QDialog):
         self.note.setText(
             "Shared categories (Metadata, Experimental Methodology, Other) are under Standard."
             if self.area != STANDARD else
-            "These apply to every research area (a research area can replace one with its own of the same id).")
+            "These apply to every data pack (a data pack can replace one with its own of the same id).")
 
     def _read_row(self, r: int) -> dict:
         t = self.table

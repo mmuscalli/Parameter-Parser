@@ -1,5 +1,5 @@
 """
-Compounds for a research area that was drafted without the chemistry step (Mickey, 2026-11-08): a drafted pack has
+Compounds for a data pack that was drafted without the chemistry step (Mickey, 2026-11-08): a drafted pack has
 columns like 'mgcl2_concentration_mM' or pairs like 'reactant_species' (text) + 'reactant_concentration_mM' --
 substances the chemistry step would handle properly (one column per compound in the '<role>_<name>_<phase>_<measure>'
 format, names matched to PubChem identities, mixing / ratio calculations). `find_compounds(draft)` works this out
@@ -581,7 +581,7 @@ def ensure_chemistry_prompt(folder: Path) -> bool:
 
 
 def set_up_compounds(folder: Path, pubchem=None, plan: Optional[CompoundPlan] = None, tidy: bool = True) -> tuple:
-    """find + apply + save in one go (the New research area dialog's option, the CLI): (plan, lines done, problems)."""
+    """find + apply + save in one go (the New data pack dialog's option, the CLI): (plan, lines done, problems)."""
     from parameter_extractor.pack_editing import PackDraft, check
     draft = PackDraft.load(folder)
     plan = plan or find_compounds(draft, pubchem, tidy=tidy)

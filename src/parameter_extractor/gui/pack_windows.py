@@ -1,17 +1,17 @@
 """
-The Data Packs menu's windows (Mickey, 2026-11-05: research areas made and edited inside the app).
+The Data Packs menu's windows (Mickey, 2026-11-05: data packs made and edited inside the app).
 
   NewPackDialog   name, id, description, what a set and a row are called, and what to start from: the template
-                  (packs/_template: examples to replace) or a copy of an existing research area -- the way to change
+                  (packs/_template: examples to replace) or a copy of an existing data pack -- the way to change
                   one of the app's own. packs.create_pack() makes the folder in the user's packs folder.
-  PackEditor      one research area's files as tabs, edited on a copy (pack_editing.PackDraft) and written on Save:
+  PackEditor      one data pack's files as tabs, edited on a copy (pack_editing.PackDraft) and written on Save:
                     General  -- name, description, set / row words, built-in steps, calculations, categories
                     Columns  -- the dataset's columns in order (and a compound vocabulary for the chemistry step)
                     Stages   -- each extraction stage: what it asks, when it runs, its parameters (columns)
                     Rules    -- the pack's rules for the shared prompts (planning rows, figures, ...)
                     Formulas -- calculations without code (formulas.py), with a panel to try one out
                     Check    -- pack_editing.check(): errors, warnings and notes; run again on Save
-                  The app's own research areas open read-only, with a button to copy one.
+                  The app's own data packs open read-only, with a button to copy one.
 """
 from __future__ import annotations
 import copy
@@ -142,7 +142,7 @@ class _ColumnTree(QTreeWidget):
 
 DRAFT = "__draft__"            # source_combo: drafted from sample papers (pack_drafting.py)
 DRAFT_HELP = ("The app reads a few typical papers of the field -- a cheap survey of what each reports (Claude Haiku, a "
-              "few cents a paper), then one request (Claude Sonnet) that designs the research area: columns with "
+              "few cents a paper), then one request (Claude Sonnet) that designs the data pack: columns with "
               "units, categories, extraction stages and rules for the rows. Nothing is extracted yet. The result opens "
               "in the editor to fine-tune; drafted_from.md in its folder lists each parameter with the papers that "
               "reported it. 3-5 papers that differ from each other work best. Uses the models set in Settings (a "
@@ -155,13 +155,13 @@ class _DraftSignals(QObject):
 
 
 class NewPackDialog(QDialog):
-    """Name a new research area and choose what it starts from; `created` is the new pack after Create.
+    """Name a new data pack and choose what it starts from; `created` is the new pack after Create.
     `config`: a callable giving the run configuration (API key, models) -- needed to draft from sample papers;
     without it that choice isn't offered."""
 
     def __init__(self, parent=None, source: Optional[str] = None, config=None):
         super().__init__(parent)
-        self.setWindowTitle("New research area")
+        self.setWindowTitle("New data pack")
         self.resize(620, 420)
         self.created: Optional[packs.Pack] = None
         self.draft_result = None
@@ -169,9 +169,9 @@ class NewPackDialog(QDialog):
         self._cancel = None
         self._id_edited = False
         layout = QVBoxLayout(self)
-        layout.addWidget(_titled("A new research area", "A research area (a data pack) decides the dataset's columns, how a paper's results "
+        layout.addWidget(_titled("A new data pack", "A data pack decides the dataset's columns, how a paper's results "
                                "become rows, and what is extracted. It starts as a working copy of the template or "
-                               "of an existing area; you then edit it (Data Packs > Edit research area)."))
+                               "of an existing area; you then edit it (Data Packs > Edit data pack)."))
         form = _form()
         self.label_edit = QLineEdit(placeholderText="e.g. Mineral surface catalysis")
         self.id_edit = QLineEdit(placeholderText="filled in from the name")
@@ -376,7 +376,7 @@ class NewPackDialog(QDialog):
 # ---- Edit a research area ----------------------------------------------------------------------
 
 class PackEditor(QDialog):
-    """One research area's files as tabs (see the module docstring). `saved` fires after a save."""
+    """One data pack's files as tabs (see the module docstring). `saved` fires after a save."""
     saved = Signal(str)
 
     def __init__(self, folder: Path, parent=None, registry_path: Optional[Path] = None, config=None):
@@ -387,15 +387,15 @@ class PackEditor(QDialog):
         self.read_only = self.draft.builtin
         self._stage = None                         # the stage file shown in the Stages tab
         self._rules_shown = None
-        self.setWindowTitle(f"Research area: {self.draft.manifest.get('label', '')}"
+        self.setWindowTitle(f"Data pack: {self.draft.manifest.get('label', '')}"
                             + ("  (built in, read-only)" if self.read_only else ""))
         self.resize(1320, 820)
         layout = QVBoxLayout(self)
         if self.read_only:
             banner = QHBoxLayout()
-            banner.addWidget(QLabel("This research area is part of the app and can't be changed. Copy it to make "
+            banner.addWidget(QLabel("This data pack is part of the app and can't be changed. Copy it to make "
                                     "your own version.", wordWrap=True), 1)
-            banner.addWidget(QPushButton("Copy to a new research area…", clicked=self._copy))
+            banner.addWidget(QPushButton("Copy to a new data pack…", clicked=self._copy))
             layout.addLayout(banner)
         self.tabs = QTabWidget()
         self.tabs.addTab(self._general_tab(), "General")
@@ -420,12 +420,12 @@ class PackEditor(QDialog):
             QUrl.fromLocalFile(str(self.draft.folder)))))
         if self.registry_path:
             remembered = QPushButton("Remembered from your reviews…", clicked=self._open_remembered)
-            remembered.setToolTip("What you've taught the app for this research area while reviewing papers (accepted "
+            remembered.setToolTip("What you've taught the app for this data pack while reviewing papers (accepted "
                                   "columns, synonyms, compound names, changes to this pack's columns). Kept apart "
                                   "from the pack, so it applies on top of it.")
             bottom.addWidget(remembered)
         self.compounds_btn = QPushButton("Find compounds / tidy names…", clicked=self._find_compounds)
-        self.compounds_btn.setToolTip("Find the compounds named in this research area's columns and examples, identify "
+        self.compounds_btn.setToolTip("Find the compounds named in this data pack's columns and examples, identify "
                                       "them on PubChem (free, no model) and switch the chemistry step on for them -- "
                                       "you review everything before it's changed. Saves your edits first.")
         self.suggest_btn = QPushButton("Suggest additions from papers…", clicked=self._suggest_additions)
@@ -437,7 +437,7 @@ class PackEditor(QDialog):
             bottom.addWidget(b)
         if self.read_only:
             for b in (self.compounds_btn, self.suggest_btn):
-                b.setToolTip("Copy this research area first: the app's own can't be changed.")
+                b.setToolTip("Copy this data pack first: the app's own can't be changed.")
         if config is None:
             self.suggest_btn.setEnabled(False)
         bottom.addWidget(QPushButton("Close", clicked=self.reject))
@@ -505,7 +505,7 @@ class PackEditor(QDialog):
         v.addWidget(self.optimization_box)
         v.addSpacing(14)                               # room before the steps (Mickey: the area felt crowded)
 
-        steps = QGroupBox("Built-in extraction steps (written in code; most new research areas use none)")
+        steps = QGroupBox("Built-in extraction steps (written in code; most new data packs use none)")
         sv = QVBoxLayout(steps)
         self.builtin_boxes = {}
         for name, about in BUILTIN_STAGES.items():
@@ -530,7 +530,7 @@ class PackEditor(QDialog):
         self.calc_row.setLayout(row)
         row.setContentsMargins(0, 0, 0, 0)
         cv.addWidget(self.calc_row, 1)
-        self.no_calcs_note = _hint("None of the calculations was written for this research area's built-in steps "
+        self.no_calcs_note = _hint("None of the calculations was written for this data pack's built-in steps "
                                    "(most new areas use none). Formulas (their own tab) cover calculations within a "
                                    "row; the app's other calculations are below.")
         cv.addWidget(self.no_calcs_note)
@@ -588,7 +588,7 @@ class PackEditor(QDialog):
         item.setCheckState(Qt.CheckState.Checked if checked else Qt.CheckState.Unchecked)
         table.setItem(r, 0, item)
         for c, text in ((1, about), (2, CALCULATION_NEEDS.get(name, "")),
-                        (3, f"the {step} step" if step else "any research area")):
+                        (3, f"the {step} step" if step else "any data pack")):
             cell = QTableWidgetItem(text)
             cell.setToolTip(text)
             table.setItem(r, c, cell)
@@ -653,7 +653,7 @@ class PackEditor(QDialog):
     def _open_categories(self) -> None:
         from parameter_extractor.gui.categories_dialog import CategoriesDialog
         if self.draft.manifest.get("id") not in packs.available():
-            QMessageBox.information(self, "Save first", "Save the research area first: its categories are edited "
+            QMessageBox.information(self, "Save first", "Save the data pack first: its categories are edited "
                                                         "once the app knows it.")
             return
         dlg = CategoriesDialog(self.registry_path, parent=self)
@@ -829,7 +829,7 @@ class PackEditor(QDialog):
     def _compounds_tab(self) -> QWidget:
         w = QWidget()
         v = QVBoxLayout(w)
-        v.addWidget(_titled("Compound vocabulary", "The compounds this research area knows: the chemistry step "
+        v.addWidget(_titled("Compound vocabulary", "The compounds this data pack knows: the chemistry step "
                             "asks the model to use these names, and their columns (<role>_<name>_<phase>_<measure>) "
                             "are known without a review. A PubChem CID identifies the compound, so the paper's other "
                             "names for it (from PubChem) are matched to it. New compounds found in papers are "
@@ -942,7 +942,7 @@ class PackEditor(QDialog):
         self.analysis_stack = QStackedWidget()
         empty = QWidget()
         ev = QVBoxLayout(empty)
-        ev.addWidget(_hint("This research area has no analysis vocabulary yet."))
+        ev.addWidget(_hint("This data pack has no analysis vocabulary yet."))
         start = QHBoxLayout()
         start.addWidget(QPushButton("Start from the prebiotic chemistry vocabulary",
                                     clicked=lambda: self._start_vocab(True)))
@@ -1555,7 +1555,7 @@ class PackEditor(QDialog):
     def _rules_tab(self) -> QWidget:
         w = QWidget()
         v = QVBoxLayout(w)
-        v.addWidget(_titled("Rules for the shared prompts", "Rules for this research area, added to the app's shared prompts. The most important "
+        v.addWidget(_titled("Rules for the shared prompts", "Rules for this data pack, added to the app's shared prompts. The most important "
                           "are the row-planning rules: what ONE row is, what makes rows one set, and which results "
                           "must not become rows. A few lines are enough."))
         top = QHBoxLayout()
@@ -1624,7 +1624,7 @@ class PackEditor(QDialog):
         self._rules_shown = name
         self.set_rules_items(rules_to_items(self.draft.rules.get(name, "")))
         own = name in self.draft.own_prompts
-        self.rules_note.setText(f"This research area has its own whole {name} prompt (prompts/{name}.md): rules "
+        self.rules_note.setText(f"This data pack has its own whole {name} prompt (prompts/{name}.md): rules "
                                 "here are used only if that prompt has a {{PACK_RULES}} slot." if own else "")
 
     def _show_prompt(self) -> None:
@@ -1636,7 +1636,7 @@ class PackEditor(QDialog):
         dlg.setWindowTitle(f"The {name} prompt")
         dlg.resize(820, 640)
         lay = QVBoxLayout(dlg)
-        lay.addWidget(_hint("Read-only. {{PACK_RULES}} is where this research area's rules go."))
+        lay.addWidget(_hint("Read-only. {{PACK_RULES}} is where this data pack's rules go."))
         text = QPlainTextEdit(path.read_text() if path.is_file() else "(no prompt)")
         text.setReadOnly(True)
         lay.addWidget(text)
@@ -1699,7 +1699,7 @@ class PackEditor(QDialog):
         return w
 
     def _formula_columns(self) -> QWidget:
-        """Every column of the research area; a click types the name into the formula being written."""
+        """Every column of the data pack; a click types the name into the formula being written."""
         box = QGroupBox("Columns (click to insert)")
         box.setMaximumWidth(330)                         # names, not prose: the reference beside it gets the room
         v = QVBoxLayout(box)
@@ -1874,7 +1874,7 @@ class PackEditor(QDialog):
         top = QHBoxLayout()
         self.check_summary = QLabel()
         top.addWidget(self.check_summary)
-        top.addWidget(HelpButton("Errors: the research area won't work as meant. Warnings: probably not what you "
+        top.addWidget(HelpButton("Errors: the data pack won't work as meant. Warnings: probably not what you "
                                  "want. Notes: worth knowing. The check runs again when you save; errors ask before "
                                  "saving."))
         top.addStretch(1)
@@ -1950,7 +1950,7 @@ class PackEditor(QDialog):
         if errors:
             answer = QMessageBox.warning(
                 self, "Save with errors?", f"The check found {len(errors)} error(s), e.g.:\n\n{errors[0]}\n\nSave "
-                "anyway? The research area may not run until they're fixed.",
+                "anyway? The data pack may not run until they're fixed.",
                 QMessageBox.StandardButton.Save | QMessageBox.StandardButton.Cancel, QMessageBox.StandardButton.Cancel)
             if answer != QMessageBox.StandardButton.Save:
                 self.tabs.setCurrentIndex(self.tabs.count() - 1)
@@ -1960,7 +1960,7 @@ class PackEditor(QDialog):
         except (OSError, PermissionError) as e:
             QMessageBox.warning(self, "Not saved", str(e))
             return False
-        self.setWindowTitle(f"Research area: {self.draft.manifest.get('label', '')}")
+        self.setWindowTitle(f"Data pack: {self.draft.manifest.get('label', '')}")
         self.saved.emit(self.draft.manifest.get("id", ""))
         return True
 
@@ -2005,7 +2005,7 @@ class PackEditor(QDialog):
         return self.findChildren(HelpButton)
 
     def _lock(self, widget: QWidget) -> None:
-        """Read-only (the app's own research areas): everything can be looked at, nothing changed."""
+        """Read-only (the app's own data packs): everything can be looked at, nothing changed."""
         for child in widget.findChildren(QWidget):
             if isinstance(child, (QLineEdit, QPlainTextEdit)):
                 child.setReadOnly(True)
@@ -2028,11 +2028,11 @@ DELETE_WORD = "DELETE"
 
 
 class DeleteConfirmDialog(QDialog):
-    """The second confirmation of removing a research area: type DELETE, then Remove (Mickey, 2026-11-05)."""
+    """The second confirmation of removing a data pack: type DELETE, then Remove (Mickey, 2026-11-05)."""
 
     def __init__(self, pack: packs.Pack, parent=None):
         super().__init__(parent)
-        self.setWindowTitle("Remove research area")
+        self.setWindowTitle("Remove data pack")
         layout = QVBoxLayout(self)
         layout.addWidget(QLabel(f"To remove <b>{pack.label}</b> and its folder for good, type "
                                 f"<b>{DELETE_WORD}</b> below.", wordWrap=True))
@@ -2054,13 +2054,13 @@ class DeleteConfirmDialog(QDialog):
 
 
 def remove_pack(parent) -> Optional[str]:
-    """Data Packs > Remove research area: choose one of the user's areas, a warning (Remove / Cancel), then type
+    """Data Packs > Remove data pack: choose one of the user's areas, a warning (Remove / Cancel), then type
     DELETE and confirm. Returns the id removed, or None."""
-    pack = choose_pack(parent, "Remove research area", include_builtin=False)
+    pack = choose_pack(parent, "Remove data pack", include_builtin=False)
     if pack is None:
         return None
-    warning = QMessageBox(QMessageBox.Icon.Warning, "Remove research area",
-                          f"Remove the research area '{pack.label}'?", parent=parent)
+    warning = QMessageBox(QMessageBox.Icon.Warning, "Remove data pack",
+                          f"Remove the data pack '{pack.label}'?", parent=parent)
     warning.setInformativeText(f"Its folder -- columns, stages, rules -- is deleted and can't be restored:\n"
                                f"{pack.folder}\n\nDatasets already written from it are not affected.")
     proceed = warning.addButton("Continue…", QMessageBox.ButtonRole.DestructiveRole)
@@ -2095,14 +2095,14 @@ class FormulaDelegate(RowSeparatorDelegate):
 
 
 def choose_pack(parent, title: str, include_builtin: bool = True) -> Optional[packs.Pack]:
-    """Ask which research area (the app's own marked as such)."""
+    """Ask which data pack (the app's own marked as such)."""
     found = sorted(packs.available().values(), key=lambda p: p.label)
     if not include_builtin:
         found = [p for p in found if not PackDraft.load(p.folder).builtin]
     if not found:
-        QMessageBox.information(parent, title, "There are no research areas of your own yet: use Data Packs > New "
-                                               "research area.")
+        QMessageBox.information(parent, title, "There are no data packs of your own yet: use Data Packs > New "
+                                               "data pack.")
         return None
     labels = [p.label + ("  (built in)" if PackDraft.load(p.folder).builtin else "") for p in found]
-    label, ok = QInputDialog.getItem(parent, title, "Research area:", labels, 0, False)
+    label, ok = QInputDialog.getItem(parent, title, "Data pack:", labels, 0, False)
     return found[labels.index(label)] if ok else None

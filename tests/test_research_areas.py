@@ -143,7 +143,7 @@ def test_remembered_variables_window():
         reg.save()
         dlg = RegistryDialog(path)
         groups = [dlg.columns_tree.topLevelItem(i).text(0) for i in range(dlg.columns_tree.topLevelItemCount())]
-        assert groups == ["Standard (every research area)  (1)", "Prebiotic chemistry  (1)"]
+        assert groups == ["Standard (every data pack)  (1)", "Prebiotic chemistry  (1)"]
         item = dlg.leaves(dlg.columns_tree, PRE)[0]
         options, _ = dlg.options_for(item, dlg.A_CATEGORY)
         assert ("Analysis", "analysis") in options and ("Metadata", "metadata") in options

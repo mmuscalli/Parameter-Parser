@@ -335,10 +335,10 @@ def test_menu():
     # one menu for research areas: what packs define, then what you taught the app in reviews (2026-11-07)
     assert titles[:3] == ["File", "Settings", "Data Packs"] and "Variables" not in titles, titles   # Settings menu: 2026-11-08
     menu = next(a.menu() for a in w.menuBar().actions() if a.text() == "Data Packs")
-    assert [a.text() for a in menu.actions() if a.text()] == ["New research area…", "Edit research area…",
-                                                             "Copy a research area…", "Check research area…",
+    assert [a.text() for a in menu.actions() if a.text()] == ["New data pack…", "Edit data pack…",
+                                                             "Copy a data pack…", "Check data pack…",
                                                              "Remembered from your reviews…", "Variable categories…",
-                                                             "Remove research area…", "Open research areas folder"]
+                                                             "Remove data pack…", "Open data packs folder"]
     w._set_inputs_enabled(False)                                                     # locked during a run
     assert not w.new_pack_action.isEnabled() and not w.edit_pack_action.isEnabled()
     assert not w.remove_pack_action.isEnabled()
