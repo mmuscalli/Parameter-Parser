@@ -80,7 +80,8 @@ def _unit_by_slug(column: str) -> str:
     parts = column.split("_")
     for n in (4, 3, 2, 1):                       # the longest unit slug first ('mol_per_m2_per_s' before 's')
         if len(parts) > n and (unit := _SLUG_UNITS.get("_".join(parts[-n:]))):
-            return unit
+            # '..._molecules_per_J' is a rate per joule, not joules: a slug right after 'per' is half of a unit
+            return "" if parts[-n - 1].lower() == "per" else unit
     return ""
 
 
@@ -91,7 +92,7 @@ def unit_slug_suffix(column: str) -> str:
     parts = column.split("_")
     for n in (4, 3, 2, 1):
         if len(parts) > n and "_".join(parts[-n:]) in _SLUG_UNITS:
-            return "_" + "_".join(parts[-n:])
+            return "" if parts[-n - 1].lower() == "per" else "_" + "_".join(parts[-n:])
     return ""
 
 

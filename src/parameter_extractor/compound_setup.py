@@ -49,12 +49,9 @@ PRODUCT_WORDS = {"product", "products", "result", "formed", "yield", "target"}
 NAMING_WORDS = {"name", "names", "identity", "id", "type", "species", "composition", "used", "main", "list", "target",
                 "or", "and", "solvent", "added", "studied", "starting", "initial", "primary"}
 RESULT_WORDS = {"product", "measured", "yield", "target", "species", "final", "sampled", "formed"}
-CHEMISTRY_POSTPROCESS = ["normalize_species", "mixing", "molar_ratios", "amounts"]
-# amounts ('0.20 mmol') become concentrations only with the reaction volume (calculators/amounts.py): a drafted pack got
-# the chemistry step without it, so muchowska2019's amounts stayed in mmol (organics test set, 2026-11-09)
-VOLUME_PARAMETER = {"column": "solvent_volume_mL", "unit": "mL", "description": (
-    "total volume of the reaction solution (liquid) the compounds were in: as stated, or -- when the paper gives only "
-    "the volumes of the solutions combined -- their sum, with b 'derived' and the parts in `n`.")}
+# the solution-chemistry module (pack_modules.py) -- these names stay for older callers
+from parameter_extractor.pack_modules import (CHEMISTRY_POSTPROCESS, CHEMISTRY_RULE,  # noqa: E402,F401
+                                              add_solution_chemistry, ensure_chemistry_prompt)
 # (id, label, description, pattern, place after the area's own categories)
 COMPOUND_CATEGORIES = [
     ("starting_compounds", "Starting Compounds", "concentrations of the compounds in the starting solution",
@@ -505,10 +502,6 @@ def _slug(text: str) -> str:
 
 # ---- applying it -------------------------------------------------------------------------------------------------------
 
-CHEMISTRY_RULE = ("Dissolved compounds and their concentrations or yields are recorded by the chemistry step -- don't "
-                  "list them here.")
-
-
 def apply(draft, plan: CompoundPlan) -> List[str]:
     """Write the ticked parts of the plan into the draft (then draft.save()); returns what was done, line by line."""
     done = []
@@ -531,8 +524,6 @@ def apply(draft, plan: CompoundPlan) -> List[str]:
         if len(spec["parameters"]) != before:
             done.append(f"stage '{spec.get('name')}': {before - len(spec['parameters'])} parameter(s) replaced by the "
                         f"chemistry step")
-        if chemistry and CHEMISTRY_RULE not in spec.get("rules", []):
-            spec.setdefault("rules", []).append(CHEMISTRY_RULE)
     removed = {c for _, c in gone}
     renamed: Dict[str, str] = {}
     for r in (x for x in plan.renames if x.include):
@@ -588,33 +579,10 @@ def apply(draft, plan: CompoundPlan) -> List[str]:
     # the chemistry step, its calculations and its prompt
     m = draft.manifest
     if chemistry:
-        m["builtin_stages"] = list(dict.fromkeys(list(m.get("builtin_stages", [])) + ["chemistry"]))
-        m["postprocess"] = list(dict.fromkeys(list(m.get("postprocess", [])) + CHEMISTRY_POSTPROCESS))
-        has_volume = any(q.get("column") == VOLUME_PARAMETER["column"] for sp in draft.stages.values()
-                         for q in sp.get("parameters", []))
-        always = [sp for sp in draft.stages.values() if (sp.get("trigger") or {}).get("always")]
-        if not has_volume and always:
-            always[0].setdefault("parameters", []).append(dict(VOLUME_PARAMETER))
-            if VOLUME_PARAMETER["column"] not in draft.columns:
-                draft.columns = draft.columns + [VOLUME_PARAMETER["column"]]
-            done.append(f"stage '{always[0].get('name')}': reaction volume ({VOLUME_PARAMETER['column']}) added -- "
-                        f"amounts in mmol become concentrations with it")
+        done += add_solution_chemistry(draft)
         done.insert(0, f"{len(chosen)} compound(s) added to the vocabulary ({sum(1 for c in chosen if c.cid)} with a "
                        f"PubChem CID); chemistry step and its calculations switched on")
     return done
-
-
-def ensure_chemistry_prompt(folder: Path) -> bool:
-    """The chemistry step's prompt in the pack (copied from the prebiotic pack: the app has no generic one)."""
-    own = Path(folder) / "prompts" / "chemistry.md"
-    if own.is_file():
-        return False
-    from parameter_extractor.config import settings
-    if (settings.PROMPTS_DIR / "chemistry.md").is_file():
-        return False
-    own.parent.mkdir(parents=True, exist_ok=True)
-    shutil.copyfile(packs.BUILTIN_DIR / "prebiotic_chemistry" / "prompts" / "chemistry.md", own)
-    return True
 
 
 def set_up_compounds(folder: Path, pubchem=None, plan: Optional[CompoundPlan] = None, tidy: bool = True) -> tuple:

@@ -63,6 +63,7 @@ def test_column_units_from_names():
                                          "energy_input_J", "product_amount_nmol", "density_g_per_cm3")] == \
         ["GPa", "km/s", "µs", "J", "nmol", "g/cm3"]
     assert unit_for_column("pl_orbper") == "" and unit_for_column("x_status") == ""     # no unit made up
+    assert unit_for_column("production_efficiency_molecules_per_J") == ""               # a rate per joule, not J
     # a suggestion's column is named after its unit, so it reads back in it (numbers stay numbers)
     assert [unit_suffix(canonical_unit(u)) for u in ("km/s", "µs", "kV", "J", "GPa", "h")] == \
         ["_km_per_s", "_us", "_kV", "_J", "_bar", "_hr"]

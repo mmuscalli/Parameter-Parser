@@ -2576,3 +2576,20 @@ tests/test_organics_round.py.
   `eval/organics_heldout_2026-11-09.md`. Trigger hit counts measured; thresholds NOT added (a false trigger ~$0.01, a
   miss loses values). Fixes: `flatten_to_template._with_marker` puts _range/_avg before any unit slug
   (`observations.unit_slug_suffix`) or a stage parameter's own unit (`with_range(column, unit)`); mTorr.
+
+## Shared modules for data packs (2026-11-09, Mickey: step 2 after the held-out test)
+
+`pack_modules.py`: MODULES `analysis` (builtin step + a copy of the prebiotic analysis_vocab.json + `hint_by_stage`
+on open-ended stages + an Analysis category with pattern ^analysis_) and `solution_chemistry` (builtin chemistry +
+CHEMISTRY_POSTPROCESS normalize_species / mixing / molar_ratios / amounts / water_type + solvent_volume_mL and
+solvent_name on the first always-on stage + CHEMISTRY_RULE + the chemistry prompt via ensure_chemistry_prompt).
+`techniques_named(texts)` (source vocabulary names + aliases; short all-caps names case-sensitive; a match inside a
+longer technique's match is dropped) / `analysis_evidence(papers)` on the surveys' method-like variables + notes.
+`draft_pack(..., modules_on=True)` -> `pack_drafting.add_modules` adds `analysis` when the surveys name a technique;
+DraftResult.modules / module_evidence, report section "Shared modules added"; compound_setup.apply calls
+`add_solution_chemistry` (its old names re-exported). CLI `--add-module MODULE ID`, `--no-modules`. Re-draft of the
+organics pack as `organics_modules` (user packs folder): Muchowska 12 -> 45 filled columns, McKay / Takeuchi gain
+their instrument details, nothing lost; ~+$0.02-0.035 per paper for the analysis step. Write-up:
+`eval/pack_modules_2026-11-09.md`. Fix: a unit slug right after 'per' isn't the column's unit ('_molecules_per_J').
+Open (Mickey): drafted pressures follow the app's bar convention (shock pressure 7 GPa -> 70,000 bar).
+tests/test_pack_modules.py.

@@ -117,6 +117,12 @@ def main() -> int:
                         help="Find the compounds named in a data pack's columns and examples (local + PubChem, no "
                              "model) and switch its chemistry step on for them. With --draft-pack: right after "
                              "drafting; else give the id of one of your data packs")
+    parser.add_argument("--add-module", nargs=2, metavar=("MODULE", "ID"), default=None,
+                        help="Add a shared module to one of your data packs: 'analysis' (the analysis step + a copy "
+                             "of the technique vocabulary) or 'solution_chemistry' (the chemistry step + its "
+                             "calculations). --draft-pack adds 'analysis' by itself when the papers name techniques")
+    parser.add_argument("--no-modules", action="store_true",
+                        help="--draft-pack: don't add shared modules (the analysis step) to the drafted pack")
     parser.add_argument("--suggest-additions", metavar="ID", default=None,
                         help="Survey sample papers (--papers / --pdf / --paper) and suggest what one of your research "
                              "areas lacks (parameters, stages, categories, rules, compounds); prints them")
@@ -188,6 +194,16 @@ def main() -> int:
         return _list_local_models(args)
     if args.draft_pack:
         return _draft_pack(args, parser)
+    if args.add_module:
+        from parameter_extractor import pack_modules
+        module, pack_id = args.add_module
+        try:
+            for line in pack_modules.add_module(_user_pack(pack_id).folder, module):
+                print(line)
+        except ValueError as e:
+            print(f"Error: {e}", file=sys.stderr)
+            return 1
+        return 0
     if args.suggest_additions:
         return _suggest_additions(args, parser)
     if args.find_compounds:
@@ -396,11 +412,17 @@ def _draft_pack(args, parser) -> int:
     try:
         result = pack_drafting.draft_pack(items, args.draft_pack, args.area_name, args.area_description, config,
                                           on_progress=lambda d, n, m: print(f"[{d}/{n}] {m}"),
-                                          passes=args.survey_passes, tidy=not args.no_tidy)
+                                          passes=args.survey_passes, tidy=not args.no_tidy,
+                                          modules_on=not args.no_modules)
     except (PipelineError, ValueError) as e:
         print(f"Error: {e}", file=sys.stderr)
         return 1
     print(f"Data pack written to {result.pack.folder} (report: drafted_from.md; work files: {result.work_dir})")
+    for module, lines in result.modules.items():
+        print(f"Module '{module}' added (" + "; ".join(f"{p}: {', '.join(t[:4])}" for p, t in
+                                                     result.module_evidence.get(module, {}).items()) + "):")
+        for line in lines:
+            print(f"  {line}")
     for p in result.problems:
         print(f"  {p}")
     if args.find_compounds is not None:

@@ -142,6 +142,8 @@ class DraftResult:
     dropped: List[str] = field(default_factory=list)      # duplicate columns left out
     compound_lines: List[str] = field(default_factory=list)   # compound_setup, when asked for with the draft
     tidied: List[str] = field(default_factory=list)           # names changed to the conventions (conventions.py)
+    modules: Dict[str, List[str]] = field(default_factory=dict)   # pack_modules added: {module: lines done}
+    module_evidence: Dict[str, Dict[str, List[str]]] = field(default_factory=dict)   # {module: {paper: why}}
 
 
 # ---- column names --------------------------------------------------------------------------------------------------
@@ -446,6 +448,21 @@ def write_pack(proposal: PackProposal, pack_id: str, label: str, description: st
     return packs.Pack(pack.folder), dropped, by_column
 
 
+def add_modules(folder: Path, papers: List[SurveyedPaper]) -> tuple:
+    """The shared modules the sample papers call for, added to the drafted pack: the analysis step when the surveys
+    name analytical techniques (solution chemistry comes with compound setup). ({module: lines}, {module: {paper:
+    techniques}})."""
+    from parameter_extractor import pack_modules
+    from parameter_extractor.pack_editing import PackDraft
+    evidence = pack_modules.analysis_evidence(papers)
+    if not evidence:
+        return {}, {}
+    draft = PackDraft.load(Path(folder))
+    lines = pack_modules.add_analysis(draft)
+    draft.save()
+    return {"analysis": lines}, {"analysis": evidence}
+
+
 def _examples(papers: List[SurveyedPaper]) -> Dict[str, List[tuple]]:
     """survey column base -> [(paper, example)] (matched to the proposal's columns by base name)."""
     out: Dict[str, List[tuple]] = {}
@@ -481,6 +498,11 @@ def write_report(result: DraftResult, by_column: Dict[str, ProposedParameter], a
         lines.append("")
     if result.tidied:
         lines += ["## Names changed to the app's conventions", ""] + [f"- {t}" for t in result.tidied] + [""]
+    if result.modules:
+        lines += ["## Shared modules added", ""]
+        for module, done in result.modules.items():
+            why = "; ".join(f"{p}: {', '.join(t)}" for p, t in result.module_evidence.get(module, {}).items())
+            lines += [f"### {module}" + (f" (the papers name: {why})" if why else "")] + [f"- {d}" for d in done] + [""]
     compounds = {}
     for p in result.papers:
         for c in (p.survey.compounds if p.survey else []):
@@ -893,8 +915,9 @@ def apply_additions(folder: Path, suggestions: Sequence[Suggestion], pubchem=Non
 def draft_pack(items: Sequence, pack_id: str, label: str, description: str, config: RunConfig,
                on_progress: Optional[Callable[[int, int, str], None]] = None,
                cancel_event: Optional[threading.Event] = None, workers: int = 4,
-               base: Optional[Path] = None, passes: int = 1, tidy: bool = True) -> DraftResult:
-    """Survey the papers, merge, write the pack. Raises PipelineError when no paper could be surveyed."""
+               base: Optional[Path] = None, passes: int = 1, tidy: bool = True, modules_on: bool = True) -> DraftResult:
+    """Survey the papers, merge, write the pack (with the shared modules the surveys call for: pack_modules). Raises
+    PipelineError when no paper could be surveyed."""
     from parameter_extractor.errors import ApiKeyMissingError
     from parameter_extractor.pack_editing import check, PackDraft
     if config.needs_api_key and not config.api_key:
@@ -924,9 +947,10 @@ def draft_pack(items: Sequence, pack_id: str, label: str, description: str, conf
     report(len(items) + 1, total, "Writing the data pack")
     pack, dropped, by_column = write_pack(proposal, pack_id, label, description, base=base, tidy=tidy)
     tidied = by_column.pop("__tidied__", [])
+    modules, evidence = add_modules(pack.folder, good) if modules_on else ({}, {})
     result = DraftResult(pack=pack, proposal=proposal, papers=papers, problems=check(PackDraft.load(pack.folder)),
                          work_dir=work_dir, cost_usd=round(sum(p.cost_usd for p in papers) + merge_cost, 4),
-                         dropped=dropped, tidied=tidied)
+                         dropped=dropped, tidied=tidied, modules=modules, module_evidence=evidence)
     text = write_report(result, by_column, area)
     (pack.folder / "drafted_from.md").write_text(text)
     (work_dir / "drafted_from.md").write_text(text)
