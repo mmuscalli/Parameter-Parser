@@ -167,7 +167,8 @@ def vocabulary(pack=None) -> Optional[Vocabulary]:
     """The pack's analysis vocabulary (default: the active pack), or None when it has none."""
     from parameter_extractor import packs
     pack = pack or packs.current()
-    return _load(str(Path(pack.folder) / FILE))
+    path = pack.file(FILE) if hasattr(pack, "file") else Path(pack.folder) / FILE   # the pack's own, else its module's
+    return _load(str(path or Path(pack.folder) / FILE))
 
 
 def is_vocab_column(name: str, pack=None) -> bool:

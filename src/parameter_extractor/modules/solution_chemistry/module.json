@@ -1,0 +1,69 @@
+{
+  "id": "solution_chemistry",
+  "label": "Solution chemistry",
+  "version": 1,
+  "description": "The chemistry step: every compound with its starting concentration or amount and its measured yield or concentration, stock solutions, molar ratios; calculations turn amounts and stocks into concentrations and name the water type.",
+  "builtin_stages": [
+    "chemistry"
+  ],
+  "postprocess": [
+    "normalize_species",
+    "mixing",
+    "molar_ratios",
+    "amounts",
+    "water_type"
+  ],
+  "pack_parameters": [
+    {
+      "column": "solvent_volume_mL",
+      "unit": "mL",
+      "description": "total volume of the reaction solution (liquid) the compounds were in: as stated, or -- when the paper gives only the volumes of the solutions combined -- their sum, with b 'derived' and the parts in `n`."
+    },
+    {
+      "column": "solvent_name",
+      "kind": "text",
+      "description": "the solvent. For water, the type exactly as stated: distilled, deionized (DI), Milli-Q, ultrapure, nanopure, tap -- just 'water' if the paper doesn't say."
+    }
+  ],
+  "stage_rules": [
+    "Dissolved compounds and their concentrations or yields are recorded by the chemistry step -- don't list them here."
+  ],
+  "variable_categories": [
+    {
+      "id": "starting_compounds",
+      "table_order": 60,
+      "label": "Starting Compounds",
+      "value_type": "number",
+      "model_assigns": false,
+      "description": "concentrations of the compounds in the starting solution",
+      "sources": [
+        "species:initial",
+        "species:stock",
+        "species"
+      ]
+    },
+    {
+      "id": "products",
+      "table_order": 70,
+      "label": "Products",
+      "value_type": "number",
+      "model_assigns": false,
+      "description": "amounts and yields of the compounds formed or measured at the end",
+      "sources": [
+        "species:sampled"
+      ]
+    }
+  ],
+  "category_columns": {
+    "starting_compounds": {
+      "patterns": [
+        "^(?:initial|stock)_.+_(?:aq|gas|s)(?:_avg|_range)*_"
+      ]
+    },
+    "products": {
+      "patterns": [
+        "^(?:total_)?sampled_.+_(?:aq|gas|s)(?:_avg|_range)*_"
+      ]
+    }
+  }
+}

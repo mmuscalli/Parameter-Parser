@@ -1,0 +1,36 @@
+{
+  "id": "product_totals",
+  "label": "Peptide and oligomer totals",
+  "version": 1,
+  "description": "Total peptide and oligomer yields and the longest oligomer, calculated from the compound columns (uses the Solution chemistry module).",
+  "needs": [
+    "solution_chemistry"
+  ],
+  "postprocess": [
+    "peptide_totals",
+    "oligomer_totals"
+  ],
+  "standard_columns": [
+    {
+      "column": "total_sampled_peptides_yield",
+      "description": "Total yield (%) of peptides (dimers and longer, linear and cyclic): stated by the paper, else the sum of the row's peptide % yields (calculated)."
+    },
+    {
+      "column": "total_sampled_oligomers_yield",
+      "description": "Total yield (%) of nucleic-acid oligomers (2-mers and longer): stated by the paper, else the sum of the row's oligomer % yields (calculated)."
+    },
+    {
+      "column": "max_oligomer_length_nt",
+      "description": "Longest nucleic-acid oligomer with a value in the row (nt): stated by the paper, else from the row's oligomer columns (calculated)."
+    }
+  ],
+  "category_columns": {
+    "products": {
+      "columns": [
+        "total_sampled_peptides_yield",
+        "total_sampled_oligomers_yield",
+        "max_oligomer_length_nt"
+      ]
+    }
+  }
+}

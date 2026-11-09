@@ -221,10 +221,38 @@ class PackDraft:
                     out.setdefault(p["column"], []).append(spec.get("name", "?"))
         return out
 
+    def linked_modules(self) -> list:
+        """The modules the pack links in (parameter_extractor/modules/), with the ones they bring along."""
+        from parameter_extractor import modules
+        return modules.resolve(list(self.manifest.get("modules", [])))
+
+    def effective_steps(self) -> List[str]:
+        """Built-in steps: the pack's own and its modules'."""
+        out = list(self.manifest.get("builtin_stages", []))
+        return out + [s for m in self.linked_modules() for s in m.manifest.builtin_stages if s not in out]
+
+    def effective_calculations(self) -> List[str]:
+        out = list(self.manifest.get("postprocess", []))
+        return out + [c for m in self.linked_modules() for c in m.manifest.postprocess if c not in out]
+
+    def module_columns(self) -> List[str]:
+        """Columns the linked modules fill: their stages' parameters, standard columns and added parameters."""
+        out = []
+        for m in self.linked_modules():
+            for path in m.stage_files():
+                out += [p["column"] for p in json.loads(path.read_text()).get("parameters", [])]
+            out += [e["column"] for e in m.manifest.standard_columns] + [p["column"] for p in m.manifest.pack_parameters]
+        return list(dict.fromkeys(out))
+
+    def has_analysis_vocab(self) -> bool:
+        return self.analysis_vocab is not None or any(m.file(ANALYSIS_FILE) for m in self.linked_modules())
+
     def all_columns(self) -> List[str]:
-        """Every column the pack can write: its columns, extra columns, stage columns and the shared ones."""
+        """Every column the pack can write: its columns, extra columns, stage columns, its modules' columns and the
+        shared ones."""
         seen = list(self.columns) + [e["column"] for e in self.standard_file.get("columns", [])]
         seen += [c for c in self.stage_columns() if c not in seen]
+        seen += [c for c in self.module_columns() if c not in seen]
         seen += [f.get("column", "") for f in self.manifest.get("formulas", []) if f.get("column", "") not in seen]
         seen += [e["column"] for e in packs.common_columns() if e["column"] not in seen]
         from parameter_extractor.ingestion.flatten_to_template import OPTIONAL_PROVENANCE_COLUMNS, PROVENANCE_COLUMNS
@@ -305,6 +333,7 @@ def _forget_cached(folder: Path) -> None:
     from parameter_extractor import analysis_vocab
     from parameter_extractor.stages import optional
     optional._specs_in.cache_clear()
+    optional._pack_specs.cache_clear()
     analysis_vocab._load.cache_clear()
     if packs._current is not None and Path(packs._current.folder).resolve() == Path(folder).resolve():
         packs._current = None
@@ -373,13 +402,17 @@ def check(draft: PackDraft) -> List[Problem]:
         add("error", "pack.json", f"not a valid manifest: {_first_error(e)}")
     if not str(m.get("label", "")).strip():
         add("error", "General", "the data pack has no name.")
+    from parameter_extractor import modules as module_store
+    for mid in module_store.unknown(list(m.get("modules", []))):
+        add("error", "Modules", f"unknown module '{mid}' (modules: {', '.join(module_store.available())}).")
+    steps = draft.effective_steps()
     for stage in m.get("builtin_stages", []):
         if stage not in BUILTIN_STAGES and stage != "methodology":
             add("error", "General", f"unknown built-in step '{stage}'.")
-    for calc in m.get("postprocess", []):
+    for calc in draft.effective_calculations():
         if calc not in CALCULATIONS:
             add("error", "Calculations", f"unknown calculation '{calc}'.")
-        elif CALCULATIONS[calc][1] and CALCULATIONS[calc][1] not in m.get("builtin_stages", []):
+        elif CALCULATIONS[calc][1] and CALCULATIONS[calc][1] not in steps:
             add("warning", "Calculations", f"'{calc}' works on the results of the '{CALCULATIONS[calc][1]}' step, "
                                            f"which this data pack doesn't use: it will do nothing.")
     for key in ("standard_columns", "species_cids"):
@@ -395,22 +428,25 @@ def check(draft: PackDraft) -> List[Problem]:
     for c in columns:
         if BAD_COLUMN_CHARS.search(c) or c != c.strip() or " " in c:
             add("error", "Columns", f"'{c}': column names can't contain spaces, commas, quotes or tabs.")
-    if "analysis" in m.get("builtin_stages", []) and draft.analysis_vocab is None:
+    if "analysis" in steps and not draft.has_analysis_vocab():
         add("warning", "Analysis methods", "the analysis step has no vocabulary (analysis_vocab.json): every technique "
                                            "and setting it finds will go to the review.")
     if draft.analysis_vocab is not None:
         out += analysis_problems(draft.analysis_vocab)
-        if "analysis" not in m.get("builtin_stages", []):
+        if "analysis" not in steps:
             add("note", "Analysis methods", "the vocabulary is only used by the analysis step, which isn't ticked "
                                             "under Built-in extraction steps.")
+        elif "analysis" in [x.id for x in draft.linked_modules()]:
+            add("note", "Analysis methods", "this data pack has its own analysis_vocab.json: it's used instead of the "
+                                            "Analysis methods module's (improvements to the module won't reach it).")
     names = draft.species
     for n in sorted({n for n in names if names.count(n) > 1}):
         add("error", "Compounds", f"'{n}' is listed twice.")
-    if "chemistry" in m.get("builtin_stages", []) and not draft.species:
+    if "chemistry" in steps and not draft.species:
         add("warning", "Columns", "the chemistry step uses a compound vocabulary, but none is listed.")
 
     # stages
-    if not draft.stages and not m.get("builtin_stages"):
+    if not draft.stages and not steps and not draft.module_columns():
         add("error", "Stages", "nothing extracts values: add a stage.")
     names, schemas, fills = {}, {}, {}
     for file, spec in draft.stages.items():
@@ -494,8 +530,9 @@ def check(draft: PackDraft) -> List[Problem]:
         if not re.fullmatch(r"[a-z][a-z0-9_]*", cid or ""):
             add("error", "Categories", f"category id '{cid}' must be lower-case letters, digits and '_'.")
     known = set(draft.all_columns())
+    from_modules = {c["id"] for x in draft.linked_modules() for c in x.manifest.variable_categories}
     for cid, entry in m.get("category_columns", {}).items():
-        if cid not in own and cid not in shared:
+        if cid not in own and cid not in shared and cid not in from_modules:
             add("error", "Categories", f"columns are placed in '{cid}', which isn't a category.")
         for col in entry.get("columns", []):
             if col not in known:
@@ -563,6 +600,9 @@ def _unit_problems(p: dict) -> List[tuple]:
         return [("warning", f"'{col}' is text but has a unit ({unit}).")] if unit else []
     if named and not unit:
         return [("warning", f"'{col}' is named in {named} but the parameter has no unit: values aren't converted.")]
+    from parameter_extractor.units import unit_slug
+    if unit and col.endswith("_" + unit_slug(unit)):    # named in the parameter's own unit ('_um_per_s' = µm/s), which
+        return []                                       # the shorter suffix reading ('per_s' -> s-1) would miss
     if unit and named and (canonical_unit(unit) or unit) != (canonical_unit(named) or named):
         return [("error", f"'{col}' is named in {named} but the parameter's unit is {unit}.")]
     if unit and not named and canonical_unit(unit):

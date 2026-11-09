@@ -599,18 +599,21 @@ def _pack_summary(draft) -> tuple:
             lines.append(f"    - {p['column']}" + (f" [{p['unit']}]" if p.get("unit") else "")
                          + f": {p.get('description', '')[:110]}")
     from parameter_extractor.pack_editing import BUILTIN_STAGES
-    steps = [f"{n} ({BUILTIN_STAGES.get(n, '')})" for n in m.get("builtin_stages", [])]
+    steps = [f"{n} ({BUILTIN_STAGES.get(n, '')})" for n in draft.effective_steps()]        # incl. linked modules'
+    if draft.linked_modules():
+        lines.append("SHARED MODULES LINKED (their steps, stages and columns are already covered): "
+                     + "; ".join(f"{x.label} ({x.manifest.description})" for x in draft.linked_modules()))
     if steps:
         lines.append("BUILT-IN STEPS (they fill their own columns -- suggest nothing they already record): "
                      + "; ".join(steps))
-    others = [c for c in draft.columns if c not in draft.stage_columns()]
+    others = [c for c in draft.columns + draft.module_columns() if c not in draft.stage_columns()]
     lines.append("OTHER COLUMNS (filled by built-in steps): " + ", ".join(others[:250]))
     rules_file = draft.folder / "prompts" / "structure_planner.md"
     if draft.rules.get("structure_planner"):
         lines.append("ROW RULES:\n" + draft.rules["structure_planner"].strip())
     elif rules_file.is_file():
         lines.append("ROW PLANNING PROMPT (excerpt):\n" + rules_file.read_text()[:3500])
-    chemistry = "chemistry" in m.get("builtin_stages", [])
+    chemistry = "chemistry" in draft.effective_steps()
     if chemistry:
         lines.append("COMPOUND VOCABULARY (the chemistry step records dissolved compounds per compound): "
                      + ", ".join(draft.species[:300]))

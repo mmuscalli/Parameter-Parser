@@ -1,0 +1,36 @@
+{
+  "id": "analysis",
+  "label": "Analysis methods",
+  "version": 1,
+  "description": "The analysis step: every analytical technique the paper used and each instrument setting it states, in analysis_<technique>_<setting> columns named from a vocabulary of techniques (analysis_vocab.json).",
+  "builtin_stages": [
+    "analysis"
+  ],
+  "variable_categories": [
+    {
+      "id": "analysis",
+      "table_order": 40,
+      "label": "Analysis",
+      "value_type": "any",
+      "max_words": 10,
+      "model_assigns": true,
+      "description": "how the products were analysed: technique, instrument and its settings"
+    }
+  ],
+  "category_columns": {
+    "analysis": {
+      "columns": [
+        "analysis_method"
+      ],
+      "patterns": [
+        "^analysis_"
+      ]
+    }
+  },
+  "stage_hints": {
+    "analysis": {
+      "runs": "not analytical techniques or instrument settings (column, mobile phase, wavelength, matrix, laser, voltages, standards, detection limits): a separate step records them",
+      "off": "analysis details beyond the analysis method DO belong here (instrument, column, mobile phase, detection wavelength, standards, detection limit): one entry each"
+    }
+  }
+}

@@ -1,0 +1,23 @@
+{
+  "id": "kinetics",
+  "label": "Kinetics",
+  "version": 1,
+  "description": "Rate constants, half-lives and activation energies the paper reports (a step that runs only for papers that mention them).",
+  "variable_categories": [
+    {
+      "id": "kinetics",
+      "table_order": 74,
+      "label": "Kinetics",
+      "value_type": "number",
+      "description": "rate constants, rates and half-lives of the reactions, activation energies -- one entry per constant, named by the constant and the reaction it describes",
+      "patterns": [
+        "^rate_constant",
+        "^half_life",
+        "^activation_energy",
+        "^kinetic_model",
+        "_rate_mM_hr$",
+        "_rate_avg_mM_hr$"
+      ]
+    }
+  ]
+}

@@ -171,7 +171,8 @@ def test_windows():
 
 
 def test_compound_and_analysis_tabs():
-    """Compounds and Analysis methods tabs (2026-11-07): enabled with their built-in step, edits saved to the pack's
+    """Compounds tab (enabled with the chemistry step) and the analysis vocabulary (2026-11-07; since 2026-11-09 on the
+    Modules tab: the Analysis methods module's, read-only, or a pack's own file, editable): edits saved to the pack's
     species list + species_cids.json and analysis_vocab.json, problems checked."""
     from PySide6.QtWidgets import QApplication, QComboBox
     app = QApplication.instance() or QApplication([])
@@ -182,22 +183,23 @@ def test_compound_and_analysis_tabs():
     assert built_in.compound_table.rowCount() == len(built_in.draft.species) > 100
     assert "with a PubChem CID" in built_in.compound_count.text()
     assert built_in.analysis_stack.currentIndex() == 1 and built_in.tech_table.rowCount() > 40
-    assert built_in.family_list.count() == len(built_in.draft.analysis_vocab["families"])
+    assert built_in.draft.analysis_vocab is None and not built_in._vocab_editable()      # the module's
+    assert built_in.family_list.count() == len(built_in._vocab()["families"])
     built_in.close()
     with tempfile.TemporaryDirectory() as tmp, patch.object(packs, "user_packs_dir", lambda: Path(tmp)):
         pack = packs.create_pack("lab_area", "Lab area", base=Path(tmp))
+        from parameter_extractor import pack_modules
+        # a pack's own vocabulary (e.g. kept by migrate_copies because it was changed): editable, wins over the module's
+        (pack.folder / "analysis_vocab.json").write_bytes(pack_modules._source_vocab_path().read_bytes())
         editor = PackEditor(pack.folder)
-        compounds, analysis = editor.tab_index("Compounds"), editor.tab_index("Analysis methods")
-        assert not editor.tabs.isTabEnabled(compounds) and not editor.tabs.isTabEnabled(analysis)
+        compounds = editor.tab_index("Compounds")
+        assert not editor.tabs.isTabEnabled(compounds)
         editor.builtin_boxes["chemistry"].setChecked(True)
         editor.builtin_boxes["analysis"].setChecked(True)
-        assert editor.tabs.isTabEnabled(compounds) and editor.tabs.isTabEnabled(analysis)
+        assert editor.tabs.isTabEnabled(compounds) and editor._vocab_editable()
         # compounds: a name and its CID
         editor._add_compound_row({"name": "NaCl", "cid": 5234})
         editor._add_compound_row({"name": "Gly-Gly"})
-        # analysis: no vocabulary yet -> start from the prebiotic one, then edit it
-        assert editor.analysis_stack.currentIndex() == 0
-        editor._start_vocab(True)
         assert editor.analysis_stack.currentIndex() == 1
         editor.family_list.setCurrentRow(list(editor.draft.analysis_vocab["families"]).index("maldi"))
         editor._add_setting_row({"name": "detector-voltage", "unit": "kV", "description": "detector voltage"})

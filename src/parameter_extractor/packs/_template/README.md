@@ -99,24 +99,26 @@ Rows decide everything later, so say clearly:
 A few lines are enough. The shared prompt already covers the general rules (tables, text results with
 conditions, figures are digitized separately, quoted data from other papers).
 
-## Analysis methods (built-in step `analysis`, `analysis_vocab.json`)
+## Modules (`modules` in pack.json)
 
-Add `"analysis"` to `builtin_stages` to record how the results were measured: every analytical technique a paper
-used and its instrument settings, in columns named `analysis_<technique>_<setting>[_<unit>]` --
-`analysis_RP-HPLC_flow-rate_mL_min`, `analysis_MALDI-TOF-MS_laser-intensity_%`, `analysis_RP-HPLC_column` (text).
-Technique and setting names use hyphens; underscores only separate the parts. `analysis_vocab.json` lists:
+Shared parts several data packs use live in the app's `modules/` folder (your own in `<app data>/modules/`), each with
+a `module.json`. A pack LINKS the ones it needs -- `"modules": ["analysis", "solution_chemistry"]` -- and nothing is
+copied: when a module is improved, every pack that links it gets the improvement. The data pack editor's Modules tab
+ticks them on and off and shows what each brings. Modules shipped with the app:
 
-- `families`: groups of settings shared by similar instruments (liquid chromatography, mass spectrometry, NMR, ...),
-  each setting with its `unit` (the column's unit; values are converted to it; '' = text), `integer` for counts,
-  a `description` and `aliases` (other wordings papers use -- the app matches them, so the model's prompt only
-  needs the names). The `general` family applies to every technique (instrument, what it measured,
-  calibration, detection limit, sample preparation ...).
-- `techniques`: each with its `families` and `aliases` ('reversed-phase HPLC', 'C18 HPLC' -> `RP-HPLC`).
+- `analysis` -- the analysis step: every technique a paper used and its instrument settings, in columns
+  `analysis_<technique>_<setting>[_<unit>]` (`analysis_RP-HPLC_flow-rate_mL_min`, `analysis_RP-HPLC_column`), named
+  from the module's `analysis_vocab.json` (instrument families with their settings and units; techniques with their
+  families and aliases). A setting of a listed technique is a known column; others go to the review.
+- `solution_chemistry` -- the chemistry step (compounds with starting / measured concentrations, stocks, ratios) and
+  the calculations that turn amounts and stocks into concentrations; adds the reaction volume and solvent to your
+  first always-on stage if you have no such parameters.
+- `kinetics`, `wet_dry` -- stages that run only for papers that need them, with their columns and row rules.
+- `product_totals` -- total peptide / oligomer yields and the longest oligomer (brings `solution_chemistry`).
 
-A setting of a listed technique is a known column; anything else is offered in the review (category Analysis)
-with its column already named. Copy the prebiotic chemistry pack's file as a start -- it covers the techniques
-of a standard instrumental-analysis textbook (chromatography, electrophoresis, MS, UV-Vis, fluorescence, IR,
-Raman, NMR, X-ray, atomic spectroscopy, elemental analysers, electrodes, radiolabels, sequencing, microscopy).
+A pack's own file of the same name wins over a module's (e.g. its own `analysis_vocab.json`), and its own category
+with the same id wins over the module's. A module's content isn't edited from a pack -- make a module of your own (a
+folder with a module.json in `<app data>/modules/`) if you need a different version.
 
 ## Calculations (`postprocess`)
 

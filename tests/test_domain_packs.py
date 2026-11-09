@@ -35,7 +35,9 @@ def test_prebiotic_pack_carries_the_old_defaults():
     # methodology became the configurable experimental_conditions stage (2026-10-22)
     assert not pack.uses("methodology") and pack.uses("chemistry") and pack.uses("peptide_totals")
     assert pack.uses("water_type") and pack.uses("results_check")
-    assert pack.prompt_path("chemistry").parent.name == "prompts" and pack.folder.name in str(pack.prompt_path("chemistry"))
+    # the chemistry prompt comes from the Solution chemistry module the pack links (2026-11-09)
+    assert pack.prompt_path("chemistry").parent.name == "prompts" and \
+        pack.prompt_path("chemistry").parent.parent.name == "solution_chemistry"
     assert pack.prompt_path("metadata").parent.parent.name == "parameter_extractor"   # generic: the app's
     from parameter_extractor.stages.optional import load_specs
     assert list(load_specs()) == ["experimental_conditions", "kinetics", "wet_dry"]

@@ -68,11 +68,11 @@ class FocusParameter:
 def available_parameters(pack=None, optional_stages: Optional[Dict[str, str]] = None) -> List[FocusParameter]:
     """What can be searched for: the parameters of the research area's stages that aren't switched
     off (RunConfig.optional_stages), and the fitting-model columns when that stage is on."""
-    from parameter_extractor.stages.optional import _specs_in
+    from parameter_extractor.stages.optional import load_specs
     pack = pack or packs.current()
     off = {name for name, mode in (optional_stages or {}).items() if mode == "off"}
     out = []
-    for spec in _specs_in(pack.stages_dir).values():
+    for spec in load_specs(pack).values():
         if spec.name in off:
             continue
         out += [FocusParameter(p.column, spec.label, p.description, p.unit, p.kind,

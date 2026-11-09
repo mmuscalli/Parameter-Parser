@@ -22,6 +22,11 @@ A pack is a folder with a pack.json manifest:
   compact_text      collapse long runs of layout spaces in the text sent to the model
   formulas          calculations without code: [{column, expression, description, if_present}], run on every
                     row after the review, in order (formulas.py: the expression language)
+  modules           shared modules the pack uses, by id ("analysis", "solution_chemistry", "kinetics", "wet_dry",
+                    "product_totals"; parameter_extractor/modules/): linked, not copied -- `Pack.manifest` is the
+                    pack's own manifest with the modules' steps, calculations, categories and columns merged in
+                    (`own_manifest` is the file as written); prompts, rules, standard columns, stages and data files
+                    (analysis_vocab.json) come from the pack first, then its modules
   is_template       the TEMPLATE pack (packs/_template/, 2026-11-05): a complete, working pack with every
                     file explained, copied by create_pack() to start a new data pack. Never listed
                     (available() leaves it out) and never run directly.
@@ -76,12 +81,78 @@ class PackManifest(BaseModel):
     is_template: bool = False
     # calculations declared without code: [{column, expression, description, if_present}] (formulas.py)
     formulas: List[dict] = Field(default_factory=list)
+    # shared modules the pack uses (parameter_extractor/modules/), linked in when the pack loads
+    modules: List[str] = Field(default_factory=list)
+
+
+SHARED_CATEGORY_IDS = {"metadata", "methodology", "other"}
+
+
+def _module_columns(mod) -> List[str]:
+    """The columns a module's stages and standard columns fill (read from its files)."""
+    cols = [e["column"] for e in mod.manifest.standard_columns]
+    for path in mod.stage_files():
+        try:
+            cols += [p["column"] for p in json.loads(path.read_text()).get("parameters", [])]
+        except (ValueError, OSError):
+            pass
+    return cols
+
+
+def merged_manifest(own: PackManifest, mods) -> PackManifest:
+    """The pack's manifest with its modules merged in: their steps and calculations added, their categories added
+    unless the pack has one with the same id or the same review sources (the pack's own wins), their category
+    columns added to the categories that exist. The pack's own entries keep their places."""
+    m = own.model_copy(deep=True)
+    for mod in mods:
+        mm = mod.manifest
+        m.builtin_stages += [x for x in mm.builtin_stages if x not in m.builtin_stages]
+        m.postprocess += [x for x in mm.postprocess if x not in m.postprocess]
+        placed = {c for e in m.category_columns.values() for c in e.get("columns", [])}
+        for cat in mm.variable_categories:
+            ids = {c.get("id") for c in m.variable_categories}
+            sources = {s for c in m.variable_categories for s in c.get("sources", []) or []}
+            if cat["id"] in ids or set(cat.get("sources", []) or []) & sources:
+                continue
+            # nothing left for it to hold: the pack places every module column the category would take (prebiotic
+            # puts the wet-dry columns in its conditions block)
+            patterns = [re.compile(p) for p in mm.category_columns.get(cat["id"], {}).get("patterns", [])]
+            mine = [c for c in _module_columns(mod) if any(p.search(c) for p in patterns)]
+            if mine and all(c in placed for c in mine) and not cat.get("sources"):
+                continue
+            m.variable_categories.append(dict(cat, module=mod.id))
+        ids = {c.get("id") for c in m.variable_categories} | SHARED_CATEGORY_IDS
+        for cid, entry in mm.category_columns.items():
+            if cid not in ids:
+                continue
+            target = m.category_columns.setdefault(cid, {})
+            for key in ("columns", "patterns"):
+                if entry.get(key):
+                    have = target.setdefault(key, [])
+                    have += [x for x in entry[key] if x not in have]
+    return m
 
 
 class Pack:
     def __init__(self, folder: Path):
         self.folder = Path(folder)
-        self.manifest = PackManifest.model_validate_json((self.folder / "pack.json").read_text())
+        self.own_manifest = PackManifest.model_validate_json((self.folder / "pack.json").read_text())
+        from parameter_extractor import modules as _modules
+        self.modules = _modules.resolve(self.own_manifest.modules)
+        self.manifest = merged_manifest(self.own_manifest, self.modules) if self.modules else self.own_manifest
+
+    def module_ids(self) -> List[str]:
+        return [m.id for m in self.modules]
+
+    def file(self, name: str) -> Optional[Path]:
+        """A data file the pack or one of its modules provides (analysis_vocab.json): the pack's own wins."""
+        own = self.folder / name
+        if own.is_file():
+            return own
+        for mod in self.modules:
+            if (found := mod.file(name)) is not None:
+                return found
+        return None
 
     @property
     def id(self) -> str:
@@ -121,7 +192,8 @@ class Pack:
             path = self.folder / self.manifest.standard_columns
             own = json.loads(path.read_text())["columns"] if path.is_file() else []
         template, out = set(self.template_columns), []
-        for entry in common_columns() + own:
+        from_modules = [e for mod in self.modules for e in mod.manifest.standard_columns]
+        for entry in common_columns() + own + from_modules:
             if entry["column"] not in template and entry["column"] not in {e["column"] for e in out}:
                 out.append(entry)
         return out
@@ -135,15 +207,24 @@ class Pack:
         return self.folder / "stages"
 
     def prompt_rules(self, name: str) -> str:
-        """The pack's extra rules for a shared prompt (prompts/<name>.rules.md), or ''."""
+        """The pack's extra rules for a shared prompt (prompts/<name>.rules.md), then its modules' row rules (for the
+        row planner), or ''."""
         path = self.folder / "prompts" / f"{name}.rules.md"
-        return path.read_text() if path.is_file() else ""
+        text = path.read_text() if path.is_file() else ""
+        if name == "structure_planner":
+            extra = [r for mod in self.modules for r in mod.manifest.row_rules if r not in text]
+            if extra:
+                text = (text.rstrip() + "\n" if text.strip() else "") + "".join(f"- {r}\n" for r in extra)
+        return text
 
     def prompt_path(self, name: str) -> Path:
-        """The pack's own prompt, else the app's generic one."""
+        """The pack's own prompt, else one of its modules', else the app's generic one."""
         own = self.folder / "prompts" / f"{name}.md"
         if own.is_file():
             return own
+        for mod in self.modules:
+            if (found := mod.file(f"prompts/{name}.md")) is not None:
+                return found
         from parameter_extractor.config import settings
         return settings.PROMPTS_DIR / f"{name}.md"
 
@@ -261,6 +342,7 @@ def delete_pack(pack_id: str) -> Path:
     shutil.rmtree(folder)
     from parameter_extractor.stages import optional
     optional._specs_in.cache_clear()
+    optional._pack_specs.cache_clear()
     return folder
 
 

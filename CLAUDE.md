@@ -2601,3 +2601,32 @@ tests/test_pack_modules.py.
   (`gui/pack_assist.ModulesDialog`). The organics pack was swapped for the module version (same id; backup in
   `<app data>/pack_backups/`). test_pack_drafting's basic draft passes modules_on=False (its canned survey is about
   peptides, which now brings product_totals).
+
+## Modules by reference, not copies (2026-11-09, Mickey)
+
+Mickey: modules should be a clearly defined part of a data pack, LINKED so an improvement reaches every pack (copies
+in each pack would drift). `modules/<id>/` (module.json -- `modules.ModuleManifest`: builtin_stages, postprocess, needs,
+variable_categories, category_columns, standard_columns, pack_parameters, stage_rules, stage_hints, row_rules -- plus
+stages/*.json, prompts/*.md, analysis_vocab.json); `<app data>/modules/` for the user's own (an app module id can't be
+replaced). Files moved from the prebiotic pack (git mv): analysis_vocab.json, prompts/chemistry.md, stages/kinetics.json,
+stages/wet_dry.json. pack.json `"modules": [...]`; `packs.Pack`: `own_manifest` (the file) vs `manifest`
+(`merged_manifest`: module steps / calculations appended; a module category left out when the pack has the same id or
+review sources, or already places every column it would hold; category_columns only into existing categories),
+`module_ids()`, `file(name)` (pack's own first), prompt_path pack -> modules -> app, prompt_rules adds row_rules,
+standard_column_entries adds module columns. `optional.load_specs` -> `_pack_specs(folder, module_ids)`: own specs +
+module stage_rules / stage_hints (pack's own hint wins) / pack_parameters (first always-on stage, if no stage has the
+column), then module stage specs (caches cleared on save / delete). Prebiotic = builtin [], postprocess ambient /
+atmospheric / results_check + all five modules; every reference replay byte-identical.
+- `pack_modules.py`: add_modules / add_module / remove_module write references; used(), describe(id), evidence_for;
+  `migrate_copies(folder)` turns copies into links (identical files -- JSON compared parsed -- removed; differing
+  ones kept and win; module-provided steps / calculations / identical categories / rules / hints / same-named stages
+  out of the pack). Ran on Mickey's organics_in_target and prebio_chem_dupe (backup
+  `<app data>/pack_backups/before-module-links-20261109-155832/`): both clean in the check.
+- PackDraft: linked_modules / effective_steps / effective_calculations / module_columns; check: unknown modules,
+  categories from modules accepted, a column named in its parameter's own unit slug ('_um_per_s' = µm/s) passes.
+- Editor: **Modules tab** (list with ticks + Linked / "brought along by X" on the left; the selected module's
+  description, what it brings, and -- for analysis -- its vocabulary, read-only, on the right). The "Analysis methods"
+  tab and the "Add modules…" dialog are gone; built-in steps and calculations a module brings show ticked, greyed,
+  "(from the X module)", and aren't written into the pack; Compounds tab follows the chemistry step from either
+  source; the Stages tab notes stages linked modules run. A pack's own analysis_vocab.json stays editable there.
+- Suggest-additions summary lists the linked modules and their steps / columns (no suggestions for what they cover).

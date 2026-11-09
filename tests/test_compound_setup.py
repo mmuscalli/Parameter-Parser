@@ -103,8 +103,8 @@ def test_find_and_apply_compounds():
         next(r for r in plan.replacements if r.column == "nacl_concentration_mM").include = False   # the user keeps it
         _, done, problems = compound_setup.set_up_compounds(pack.folder, FakePubChem(), plan=plan)
         d = PackDraft.load(pack.folder)
-        assert "chemistry" in d.manifest["builtin_stages"]
-        assert d.manifest["postprocess"][:3] == ["normalize_species", "mixing", "molar_ratios"]
+        assert "solution_chemistry" in d.manifest["modules"] and "chemistry" in d.effective_steps()   # linked
+        assert d.effective_calculations()[:3] == ["normalize_species", "mixing", "molar_ratios"]
         assert {"MgCl2", "UMP", "Tris"} <= set(d.species)
         ref = compound_setup._reference_cids()["MgCl2"]            # the prebiotic pack's checked identity wins
         assert d.cids_file["species"]["MgCl2"]["cid"] == ref["cid"]
@@ -116,10 +116,12 @@ def test_find_and_apply_compounds():
         assert order.category_of("initial_MgCl2_aq_mM") == "starting_compounds"
         assert order.category_of("sampled_UMP_aq_%yield") == "products"
         assert order.category_of("initial_temperature_C") != "starting_compounds"
-        assert all(compound_setup.CHEMISTRY_RULE in s["rules"] for s in d.stages.values())
-        assert (pack.folder / "prompts" / "chemistry.md").is_file()
+        from parameter_extractor.stages.optional import load_specs      # the module's rule, merged at load
+        assert all(compound_setup.CHEMISTRY_RULE in s.rules for s in load_specs(packs.Pack(pack.folder)).values())
+        assert not (pack.folder / "prompts" / "chemistry.md").exists()     # linked, not copied
+        assert packs.Pack(pack.folder).prompt_path("chemistry").parent.parent.name == "solution_chemistry"
         assert not [p for p in problems if p.level == "error"], problems
-        assert any("chemistry prompt copied" in line for line in done)
+        assert any("linked" in line for line in done), done
 
 
 def test_suggest_and_apply_additions():
@@ -283,10 +285,13 @@ def test_reported_misses_and_conventions():
         _, done, problems = compound_setup.set_up_compounds(pack.folder, fake, plan=plan)
         d = PackDraft.load(pack.folder)
         cols = [p["column"] for s in d.stages.values() for p in s["parameters"]]
-        # the chemistry step came with the amounts calculation and the reaction volume it needs (2026-11-09)
-        assert cols == ["initial_pH", "initial_temperature_C", "solvent_volume_mL", "solvent_name"] \
-            and "initial_MgCl2_aq_mM" in d.columns         # the solution-chemistry module (pack_modules)
-        assert {"amounts", "water_type"} <= set(d.manifest["postprocess"]) and any("solvent_volume_mL added" in line for line in done)
+        # the chemistry step comes with the amounts calculation and the reaction volume it needs (2026-11-09): linked
+        # from the solution-chemistry module, merged into the pack's first stage at load
+        from parameter_extractor.stages.optional import load_specs
+        assert cols == ["initial_pH", "initial_temperature_C"] and "initial_MgCl2_aq_mM" in d.columns
+        merged = [p.column for s in load_specs(packs.Pack(pack.folder)).values() for p in s.parameters]
+        assert merged == ["initial_pH", "initial_temperature_C", "solvent_volume_mL", "solvent_name"], merged
+        assert {"amounts", "water_type"} <= set(d.effective_calculations()) and any("linked" in line for line in done)
         assert "pH" not in d.columns and "initial_pH" in d.columns
         assert not [p for p in problems if p.level == "error"], problems
 

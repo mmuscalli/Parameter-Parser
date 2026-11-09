@@ -41,8 +41,10 @@ def run_checks(pdf: Optional[Path] = None, api_key: Optional[str] = None) -> Lis
         from parameter_extractor import packs
         found = packs.available()
         pack = packs.activate(packs.DEFAULT_PACK)
+        # the pack's own prompts, its modules' (the chemistry step's comes with the Solution chemistry module), the app's
         prompts = sorted({p.stem for p in settings.PROMPTS_DIR.glob("*.md")}
-                         | {p.stem for p in (pack.folder / "prompts").glob("*.md")})
+                         | {p.stem for p in (pack.folder / "prompts").glob("*.md")}
+                         | {p.stem for m in pack.modules for p in (m.folder / "prompts").glob("*.md")})
         # the methodology step became the pack's experimental_conditions stage (2026-10-22): its
         # prompt is the shared optional_stage one
         expected = {"chemistry", "figure_planner", "metadata", "optional_stage", "structure_planner",

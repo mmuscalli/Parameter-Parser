@@ -554,23 +554,7 @@ def apply(draft, plan: CompoundPlan) -> List[str]:
     cc = draft.manifest.setdefault("category_columns", {})
     for entry in cc.values():
         entry["columns"] = list(dict.fromkeys(renamed.get(c, c) for c in entry.get("columns", []) if c not in removed))
-    # compound columns get their own blocks, as in the prebiotic pack: Starting compounds, then Products (by pattern,
-    # so compounds accepted in reviews later land there too)
-    if chosen:
-        cats = draft.manifest.setdefault("variable_categories", [])
-        ids = {c.get("id") for c in cats}
-        top = max([c.get("table_order", 0) for c in cats] + [50])
-        for cid, label, desc, pattern, step, sources in COMPOUND_CATEGORIES:
-            if cid not in ids:
-                cats.append({"id": cid, "table_order": top + step, "label": label, "value_type": "number",
-                             "model_assigns": False, "description": desc, "sources": sources})
-            else:
-                cat = next(c for c in cats if c.get("id") == cid)
-                if not cat.get("sources"):
-                    cat["sources"] = sources
-            entry = cc.setdefault(cid, {"columns": []})
-            if pattern not in entry.setdefault("patterns", []):
-                entry["patterns"].append(pattern)
+    # (their column blocks -- Starting Compounds, Products -- come with the Solution chemistry module)
     for c in chosen:
         for col in c.columns():
             if col not in columns:
@@ -593,8 +577,6 @@ def set_up_compounds(folder: Path, pubchem=None, plan: Optional[CompoundPlan] = 
     done = apply(draft, plan) if not plan.empty else ["no compounds found"]
     if not plan.empty:
         draft.save()
-        if "chemistry" in draft.manifest.get("builtin_stages", []) and ensure_chemistry_prompt(folder):
-            done.append("chemistry prompt copied from the prebiotic chemistry pack (prompts/chemistry.md)")
     if pubchem is not None:
         pubchem.save()
     return plan, done, check(PackDraft.load(folder))

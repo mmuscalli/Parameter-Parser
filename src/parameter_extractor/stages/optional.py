@@ -561,9 +561,45 @@ def _category_listing() -> str:
 
 
 def load_specs(pack=None) -> Dict[str, StageSpec]:
-    """A domain pack's stage specs (its stages/*.json; default the active pack), by name, in file order."""
+    """A domain pack's stage specs (default the active pack), by name: its own stages/*.json in file order, then its
+    modules' stages (parameter_extractor/modules/); a module's added parameters, stage rules and hints are applied to
+    the pack's own stages here (packs.Pack docs)."""
     from parameter_extractor.packs import current
-    return _specs_in((pack or current()).stages_dir)
+    pack = pack or current()
+    return dict(_pack_specs(str(pack.folder), tuple(pack.module_ids())))
+
+
+@lru_cache(maxsize=None)
+def _pack_specs(folder: str, module_ids: tuple) -> tuple:
+    from parameter_extractor import modules
+    mods = modules.resolve(list(module_ids))
+    own = _specs_in(Path(folder) / "stages")
+    out: Dict[str, StageSpec] = {}
+    module_specs = [(m, s) for m in mods for s in _specs_in(m.stages_dir).values()] if mods else []
+    if mods:
+        present = {p.column for s in own.values() for p in s.parameters} | \
+                  {p.column for _, s in module_specs for p in s.parameters}
+        added = [p for m in mods for p in m.manifest.pack_parameters if p["column"] not in present]
+        rules = [r for m in mods for r in m.manifest.stage_rules]
+        hints = {step: h for m in mods for step, h in m.manifest.stage_hints.items()}
+        first_always = next((name for name, s in own.items() if s.trigger.always), None)
+    for name, spec in own.items():
+        if mods:
+            update = {}
+            extra_rules = [r for r in rules if r not in spec.rules]
+            if extra_rules:
+                update["rules"] = list(spec.rules) + extra_rules
+            if spec.open_ended and any(step not in spec.hint_by_stage for step in hints):
+                update["hint_by_stage"] = {**{s: h for s, h in hints.items()}, **spec.hint_by_stage}
+            if name == first_always and added:
+                seen = set()
+                update["parameters"] = list(spec.parameters) + [
+                    StageParameter.model_validate(p) for p in added if not (p["column"] in seen or seen.add(p["column"]))]
+            spec = spec.model_copy(update=update) if update else spec
+        out[name] = spec
+    for _, spec in module_specs:
+        out.setdefault(spec.name, spec)
+    return tuple(out.items())
 
 
 @lru_cache(maxsize=None)
@@ -984,7 +1020,7 @@ def toggleable_stages(pack=None) -> List[StageToggle]:
     from parameter_extractor.packs import current
     pack = pack or current()
     out = []
-    for spec in _specs_in(pack.stages_dir).values():
+    for spec in load_specs(pack).values():
         t = spec.trigger
         when = "" if t.always else " Runs only when the paper " + (
             f"mentions {', '.join(t.keywords[:3])}" if t.keywords else f"has {spec.set_word} experiments") + "."

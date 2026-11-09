@@ -1,8 +1,8 @@
 """
-Shared modules for data packs (pack_modules.py, 2026-11-09): technique detection in paper surveys, the analysis module
-(step + vocabulary copy + hints + category) and the solution-chemistry module (step + calculations + the parameters
-they need), drafting adding the analysis module when the surveys name techniques, and --add-module refusing the
-app's own packs. No API, no network.
+Shared modules for data packs (modules/, pack_modules.py, 2026-11-09): linked by reference, not copied -- technique
+detection in paper surveys, the analysis / solution-chemistry / kinetics / wet-dry / totals modules merged at load,
+the prebiotic pack built from them, migrating packs made with copies, drafting linking modules, the editor's Modules
+tab, and the app's own packs refused. No API, no network.
 """
 import json
 import os
@@ -48,38 +48,50 @@ def _new_pack(tmp: Path):
 
 
 def test_analysis_module():
+    """Linked, not copied: the pack lists the module; the step, its vocabulary, hints and category come from it."""
     from parameter_extractor.pack_editing import PackDraft, check
     with tempfile.TemporaryDirectory() as tmp, patch.object(packs, "user_packs_dir", lambda: Path(tmp) / "packs"):
         pack = _new_pack(Path(tmp))
         draft = PackDraft.load(pack.folder)
         draft.stages[next(iter(draft.stages))]["open_ended"] = True
-        lines = pack_modules.add_analysis(draft)
         draft.save()
-        assert any("analysis step switched on" in l for l in lines) and any("vocabulary copied" in l for l in lines)
+        lines = pack_modules.add_modules(pack.folder, ["analysis"])["analysis"]
+        assert lines and all(l.startswith("linked") for l in lines), lines
+        own = json.loads((pack.folder / "pack.json").read_text())
+        assert own["modules"] == ["analysis"] and "analysis" not in own.get("builtin_stages", [])
+        assert not (pack.folder / "analysis_vocab.json").exists()                  # nothing copied
+        merged = packs.Pack(pack.folder)
+        assert "analysis" in merged.manifest.builtin_stages
+        assert any(c["id"] == "analysis" for c in merged.manifest.variable_categories)
+        assert merged.file("analysis_vocab.json") == pack_modules._source_vocab_path()
+        from parameter_extractor.stages.optional import load_specs
+        assert all("analysis" in s.hint_by_stage for s in load_specs(merged).values() if s.open_ended)
         d = PackDraft.load(pack.folder)
-        assert "analysis" in d.manifest["builtin_stages"] and d.analysis_vocab["techniques"]
-        assert all("analysis" in s.get("hint_by_stage", {}) for s in d.stages.values() if s.get("open_ended"))
-        assert any(c["id"] == "analysis" for c in d.manifest["variable_categories"])
+        assert "analysis" in d.effective_steps()
         assert not [p for p in check(d) if p.level == "error"], check(d)
-        assert pack_modules.add_analysis(d) == []                         # already there: nothing to do
-        # the step's prompt reads the pack's own vocabulary
+        assert pack_modules.add_modules(pack.folder, ["analysis"]) == {"analysis": []}    # already linked
         packs.activate("modules_test")
         from parameter_extractor.stages import analysis
         assert "RP-HPLC" in analysis.prompt_text("P", "PLAN")
         packs.activate("prebiotic_chemistry")
+        assert pack_modules.remove_module(pack.folder, "analysis")
+        assert "analysis" not in packs.Pack(pack.folder).manifest.builtin_stages
 
 
 def test_solution_chemistry_module():
     from parameter_extractor.pack_editing import PackDraft, check
+    from parameter_extractor.stages.optional import load_specs
     with tempfile.TemporaryDirectory() as tmp, patch.object(packs, "user_packs_dir", lambda: Path(tmp) / "packs"):
         pack = _new_pack(Path(tmp))
-        lines = pack_modules.add_module(pack.folder, "solution_chemistry")
+        pack_modules.add_module(pack.folder, "solution_chemistry")
+        merged = packs.Pack(pack.folder)
+        assert "chemistry" in merged.manifest.builtin_stages
+        assert all(c in merged.manifest.postprocess for c in ("amounts", "mixing", "water_type"))
+        cols = [p.column for s in load_specs(merged).values() for p in s.parameters]
+        assert "solvent_volume_mL" in cols and "solvent_name" in cols         # the module's parameters, merged in
+        assert not (pack.folder / "prompts" / "chemistry.md").exists()
+        assert merged.prompt_path("chemistry").parent.parent.name == "solution_chemistry"
         d = PackDraft.load(pack.folder)
-        assert "chemistry" in d.manifest["builtin_stages"]
-        assert all(c in d.manifest["postprocess"] for c in ("amounts", "mixing", "water_type"))
-        cols = [p["column"] for s in d.stages.values() for p in s["parameters"]]
-        assert "solvent_volume_mL" in cols and "solvent_name" in cols
-        assert (pack.folder / "prompts" / "chemistry.md").is_file() and any("prompt copied" in l for l in lines)
         assert not [p for p in check(d) if p.level == "error"], check(d)
         assert pack_modules.add_module(pack.folder, "solution_chemistry") == ["Solution chemistry: already in the pack"]
         try:
@@ -87,6 +99,37 @@ def test_solution_chemistry_module():
             raise AssertionError("an app pack was changed")
         except ValueError:
             pass
+
+
+def test_prebiotic_uses_the_modules():
+    pack = packs.get("prebiotic_chemistry") if hasattr(packs, "get") else packs.Pack(packs.BUILTIN_DIR / "prebiotic_chemistry")
+    assert set(pack.module_ids()) >= {"analysis", "solution_chemistry", "kinetics", "wet_dry", "product_totals"}
+    assert pack.own_manifest.builtin_stages == [] and "chemistry" in pack.manifest.builtin_stages
+    from parameter_extractor.stages.optional import load_specs
+    assert {"experimental_conditions", "kinetics", "wet_dry"} <= set(load_specs(pack))
+
+
+def test_migrate_copies():
+    """A pack made when modules were copied: identical copies become links, the pack's own changes stay."""
+    from parameter_extractor.pack_editing import PackDraft
+    with tempfile.TemporaryDirectory() as tmp, patch.object(packs, "user_packs_dir", lambda: Path(tmp) / "packs"):
+        pack = _new_pack(Path(tmp))
+        m = json.loads((pack.folder / "pack.json").read_text())
+        m["builtin_stages"] = ["analysis", "chemistry"]
+        m["postprocess"] = ["normalize_species", "mixing", "molar_ratios", "amounts", "water_type", "my_own"]
+        (pack.folder / "pack.json").write_text(json.dumps(m))
+        (pack.folder / "analysis_vocab.json").write_bytes(pack_modules._source_vocab_path().read_bytes())
+        (pack.folder / "prompts").mkdir(exist_ok=True)
+        (pack.folder / "prompts" / "chemistry.md").write_text("my own changed prompt")
+        lines = pack_modules.migrate_copies(pack.folder)
+        own = json.loads((pack.folder / "pack.json").read_text())
+        assert set(own["modules"]) >= {"analysis", "solution_chemistry"}, lines
+        assert own["builtin_stages"] == [] and own["postprocess"] == ["my_own"]
+        assert not (pack.folder / "analysis_vocab.json").exists()
+        assert (pack.folder / "prompts" / "chemistry.md").read_text() == "my own changed prompt"   # differs: kept
+        assert packs.Pack(pack.folder).prompt_path("chemistry") == pack.folder / "prompts" / "chemistry.md"
+        assert pack_modules.migrate_copies(pack.folder) == []                 # nothing left to migrate
+        assert PackDraft.load(pack.folder).effective_steps()
 
 
 def test_drafting_adds_the_analysis_module():
@@ -104,11 +147,11 @@ def test_drafting_adds_the_analysis_module():
         cfg = RunConfig(api_key="test", output_dir=Path(tmp) / "out", rasterize_table_pages=False)
         r = pack_drafting.draft_pack([EDER, KIM], "with_modules", "With modules", "", cfg)
         manifest = json.loads((r.pack.folder / "pack.json").read_text())
-        assert "analysis" in manifest["builtin_stages"] and (r.pack.folder / "analysis_vocab.json").is_file()
+        assert "analysis" in manifest["modules"] and not (r.pack.folder / "analysis_vocab.json").exists()
         assert r.module_evidence["analysis"] == {"eder1994": ["RP-HPLC"], "kim2019": ["RP-HPLC"]}
         assert "## Shared modules added" in (r.pack.folder / "drafted_from.md").read_text()
         r2 = pack_drafting.draft_pack([EDER], "without_modules", "Without", "", cfg, modules_on=False)
-        assert "analysis" not in json.loads((r2.pack.folder / "pack.json").read_text()).get("builtin_stages", [])
+        assert "analysis" not in json.loads((r2.pack.folder / "pack.json").read_text()).get("modules", [])
 
 
 def test_kinetics_wet_dry_and_totals_modules():
@@ -118,18 +161,18 @@ def test_kinetics_wet_dry_and_totals_modules():
         pack = _new_pack(Path(tmp))
         done = pack_modules.add_modules(pack.folder, ["kinetics", "wet_dry", "product_totals"])
         assert set(done) >= {"kinetics", "wet_dry", "product_totals"}
+        merged = packs.Pack(pack.folder)
+        assert "solution_chemistry" in merged.module_ids()                       # totals bring it along
+        assert {"kinetics", "wet_dry"} <= {c["id"] for c in merged.manifest.variable_categories}
+        assert "Cycle 1 = 24" in merged.prompt_rules("structure_planner")
+        assert {"peptide_totals", "oligomer_totals", "amounts"} <= set(merged.manifest.postprocess)
+        assert "chemistry" in merged.manifest.builtin_stages
+        assert {"total_sampled_peptides_yield", "max_oligomer_length_nt"} <= {e["column"] for e in merged.standard_column_entries}
+        assert {"kinetics", "wet_dry"} <= set(load_specs(merged))
         d = PackDraft.load(pack.folder)
-        names = {s["name"] for s in d.stages.values()}
-        assert {"kinetics", "wet_dry"} <= names
-        assert {"kinetics", "wet_dry"} <= {c["id"] for c in d.manifest["variable_categories"]}
-        assert "Cycle 1 = 24" in d.rules["structure_planner"]
-        assert {"peptide_totals", "oligomer_totals", "amounts"} <= set(d.manifest["postprocess"])
-        assert "chemistry" in d.manifest["builtin_stages"]                      # totals bring the chemistry step
-        assert {"total_sampled_peptides_yield", "max_oligomer_length_nt"} <= {e["column"] for e in d.standard_file["columns"]}
-        assert {"rate_constant_first_order_per_hr", "cycle_number"} <= set(d.columns)
+        assert {"rate_constant_first_order_per_hr", "cycle_number"} <= set(d.all_columns())
         assert not [p for p in check(d) if p.level == "error"], [str(p) for p in check(d)]
-        specs = load_specs(packs.Pack(pack.folder))
-        assert {"kinetics", "wet_dry"} <= set(specs)
+        assert not list((pack.folder / "stages").glob("kinetics*.json"))           # not copied
         assert pack_modules.add_modules(pack.folder, ["kinetics", "wet_dry", "product_totals"]) == \
             {"kinetics": [], "wet_dry": [], "product_totals": []}                # nothing twice
 
@@ -148,24 +191,41 @@ def test_evidence_for_modules():
     assert all("d" not in found for found in ev.values())
 
 
-def test_modules_window():
+def test_modules_tab():
+    """The editor's Modules tab: tick to link, what a module brings along, steps shown as the module's, saved as a
+    reference; the app's own packs read-only."""
     os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
     from PySide6.QtCore import Qt
     from PySide6.QtWidgets import QApplication
     app = QApplication.instance() or QApplication([])
-    from parameter_extractor.gui.pack_assist import ModulesDialog
-    from parameter_extractor.pack_editing import PackDraft
+    from parameter_extractor.gui.pack_windows import PackEditor
+    e = PackEditor(packs.BUILTIN_DIR / "prebiotic_chemistry")
+    assert "Analysis methods" not in [e.tabs.tabText(i) for i in range(e.tabs.count())]
+    assert not e.builtin_boxes["chemistry"].isEnabled() and "Solution chemistry module" in e.builtin_boxes["chemistry"].text()
+    assert not e.module_table.item(0, 0).flags() & Qt.ItemFlag.ItemIsUserCheckable
     with tempfile.TemporaryDirectory() as tmp, patch.object(packs, "user_packs_dir", lambda: Path(tmp) / "packs"):
         pack = _new_pack(Path(tmp))
-        pack_modules.add_modules(pack.folder, ["analysis"])
-        dlg = ModulesDialog(pack.folder)
-        rows = {dlg.table.item(r, 0).data(Qt.ItemDataRole.UserRole): r for r in range(dlg.table.rowCount())}
-        assert not dlg.table.item(rows["analysis"], 0).flags() & Qt.ItemFlag.ItemIsEnabled     # already there
-        dlg.table.item(rows["kinetics"], 0).setCheckState(Qt.CheckState.Checked)
-        assert dlg.chosen() == ["kinetics"]
-        dlg._apply()
-        assert any(l.startswith("Kinetics:") for l in dlg.applied)
-        assert any(s["name"] == "kinetics" for s in PackDraft.load(pack.folder).stages.values())
+        e = PackEditor(pack.folder)
+        t = e.module_table
+        rows = {t.item(r, 0).data(Qt.ItemDataRole.UserRole): r for r in range(t.rowCount())}
+        compounds = e.tab_index("Compounds")
+        assert not e.tabs.isTabEnabled(compounds)
+        t.item(rows["product_totals"], 0).setCheckState(Qt.CheckState.Checked)
+        assert t.item(rows["solution_chemistry"], 1).text().startswith("brought along by")
+        assert e.tabs.isTabEnabled(compounds) and e.builtin_boxes["chemistry"].isChecked()
+        assert e.module_stages_note.isHidden()                                # those bring no stage
+        t.item(rows["kinetics"], 0).setCheckState(Qt.CheckState.Checked)
+        assert "Kinetics module" in e.module_stages_note.text()
+        t.item(rows["kinetics"], 0).setCheckState(Qt.CheckState.Unchecked)
+        t.setCurrentCell(rows["analysis"], 0)
+        assert e.analysis_stack.currentIndex() == 0                          # not linked: no vocabulary
+        t.item(rows["analysis"], 0).setCheckState(Qt.CheckState.Checked)
+        assert e.analysis_stack.currentIndex() == 1 and e.tech_table.rowCount() > 20
+        assert not e._vocab_editable()                                        # the module's: read-only here
+        assert e.save()
+        own = json.loads((pack.folder / "pack.json").read_text())
+        assert own["modules"] == ["analysis", "product_totals"]
+        assert own.get("builtin_stages", []) == [] and own.get("postprocess", []) == []
 
 
 if __name__ == "__main__":

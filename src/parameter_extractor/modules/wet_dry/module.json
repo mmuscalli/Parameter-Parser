@@ -1,0 +1,29 @@
+{
+  "id": "wet_dry",
+  "label": "Wet-dry cycling",
+  "version": 1,
+  "description": "Cycle number and length, wet and dry phase temperatures, durations and humidity of wet-dry cycling experiments (a step that runs only for wet-dry experiments); rows per cycle with cumulative times.",
+  "variable_categories": [
+    {
+      "id": "wet_dry",
+      "table_order": 35,
+      "label": "Wet-Dry Cycling",
+      "value_type": "number",
+      "model_assigns": false,
+      "description": "the cycles of wet-dry experiments: cycle number and length, wet and dry phase temperatures, durations and humidity"
+    }
+  ],
+  "category_columns": {
+    "wet_dry": {
+      "patterns": [
+        "^cycle_",
+        "^wet_phase",
+        "^dry_phase"
+      ]
+    }
+  },
+  "row_rules": [
+    "Wet-dry cycling experiments: one row per cycle sampled, in a set of type \"Evaporation Cycle\"; name each row by its cycle ('Cycle 3').",
+    "For wet-dry cycles the duration (`hr`) is the TOTAL time up to the end of that cycle: 24 h cycles -> Cycle 1 = 24, Cycle 2 = 48, Cycle 3 = 72 (cycles of different lengths add up)."
+  ]
+}

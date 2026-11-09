@@ -400,15 +400,15 @@ class PackEditor(QDialog):
         self.tabs = QTabWidget()
         self.tabs.addTab(self._general_tab(), "General")
         self.tabs.addTab(self._columns_tab(), "Columns")
+        self.tabs.addTab(self._modules_tab(), "Modules")
         self.tabs.addTab(self._compounds_tab(), "Compounds")
-        self.tabs.addTab(self._analysis_tab(), "Analysis methods")
         self.tabs.addTab(self._stages_tab(), "Stages")
         self.tabs.addTab(self._rules_tab(), "Rules")
         self.tabs.addTab(self._formulas_tab(), "Formulas")
         self.tabs.addTab(self._check_tab(), "Check")
         self.tabs.currentChanged.connect(lambda _i: self._fit_rows())
-        for name, tab in (("chemistry", "Compounds"), ("analysis", "Analysis methods")):
-            self._follow_step(name, tab)
+        self._follow_step("chemistry", "Compounds")
+        self._refresh_module_effects()
         self.tabs.currentChanged.connect(lambda i: self._refresh_formula_columns()
                                          if self.tabs.tabText(i) == "Formulas" else None)
         layout.addWidget(self.tabs, 1)
@@ -432,14 +432,11 @@ class PackEditor(QDialog):
         self.suggest_btn.setToolTip("Survey a few new sample papers (cheap) and get suggestions for what this research "
                                     "area lacks: parameters, stages, categories, rules, compounds. You choose what's "
                                     "added. Saves your edits first.")
-        self.modules_btn = QPushButton("Add modules…", clicked=self._add_modules)
-        self.modules_btn.setToolTip("Add shared parts other data packs use: the analysis step, solution chemistry, "
-                                    "kinetics, wet-dry cycling, peptide / oligomer totals. Saves your edits first.")
-        for b in (self.modules_btn, self.compounds_btn, self.suggest_btn):
+        for b in (self.compounds_btn, self.suggest_btn):
             b.setEnabled(not self.read_only)
             bottom.addWidget(b)
         if self.read_only:
-            for b in (self.modules_btn, self.compounds_btn, self.suggest_btn):
+            for b in (self.compounds_btn, self.suggest_btn):
                 b.setToolTip("Copy this data pack first: the app's own can't be changed.")
         if config is None:
             self.suggest_btn.setEnabled(False)
@@ -511,8 +508,12 @@ class PackEditor(QDialog):
         steps = QGroupBox("Built-in extraction steps (written in code; most new data packs use none)")
         sv = QVBoxLayout(steps)
         self.builtin_boxes = {}
+        self._own_steps = set(m.get("builtin_stages", []))
         for name, about in BUILTIN_STAGES.items():
-            box = QCheckBox(f"{name} -- {about}", checked=name in m.get("builtin_stages", []))
+            box = QCheckBox(f"{name} -- {about}", checked=name in self._own_steps)
+            box.setProperty("about", about)
+            box.toggled.connect(lambda on, n=name, b=box: (self._own_steps.add(n) if on else self._own_steps.discard(n))
+                                if b.isEnabled() else None)
             self.builtin_boxes[name] = box
             sv.addWidget(box)
         v.addWidget(steps)
@@ -583,7 +584,11 @@ class PackEditor(QDialog):
         item = QTableWidgetItem(name)
         item.setData(Qt.ItemDataRole.UserRole, name)
         flags = item.flags() & ~Qt.ItemFlag.ItemIsEditable
-        if not getattr(self, "_calcs_locked", False):
+        from_module = self._module_calcs().get(name)
+        if from_module:                        # the module brings it: shown ticked, not the pack's to untick
+            flags &= ~(Qt.ItemFlag.ItemIsUserCheckable | Qt.ItemFlag.ItemIsEnabled)
+            step = f"the {from_module} module"
+        elif not getattr(self, "_calcs_locked", False):
             flags |= Qt.ItemFlag.ItemIsUserCheckable
         else:
             flags &= ~Qt.ItemFlag.ItemIsUserCheckable
@@ -591,7 +596,7 @@ class PackEditor(QDialog):
         item.setCheckState(Qt.CheckState.Checked if checked else Qt.CheckState.Unchecked)
         table.setItem(r, 0, item)
         for c, text in ((1, about), (2, CALCULATION_NEEDS.get(name, "")),
-                        (3, f"the {step} step" if step else "any data pack")):
+                        (3, step if from_module else f"the {step} step" if step else "any data pack")):
             cell = QTableWidgetItem(text)
             cell.setToolTip(text)
             table.setItem(r, c, cell)
@@ -602,13 +607,17 @@ class PackEditor(QDialog):
                 if not ticked_only or table.item(r, 0).checkState() == Qt.CheckState.Checked]
 
     def _chosen_calculations(self) -> list:
-        """Ticked calculations, in the main table's order (then any ticked below)."""
-        return (self._calc_names(self.calc_table, True) + self._calc_names(self.other_calc_table, True))
+        """Ticked calculations, in the main table's order (then any ticked below) -- the pack's own: the ones its
+        modules bring aren't written into it."""
+        provided = self._module_calcs()
+        return [n for n in self._calc_names(self.calc_table, True) + self._calc_names(self.other_calc_table, True)
+                if n not in provided]
 
     def _fill_calculations(self, chosen: list) -> None:
         """Main table: the ticked ones (in order), then the unticked ones written for the area's built-in steps;
         'Other calculations': everything else."""
         steps = {n for n, box in self.builtin_boxes.items() if box.isChecked()}
+        chosen = list(self._module_calcs()) + [n for n in chosen if n not in self._module_calcs()]
         main = chosen + [n for n in CALCULATIONS if n not in chosen and CALCULATION_STEP.get(n) in steps]
         other = [n for n in CALCULATIONS if n not in main]
         for table, names, ticked in ((self.calc_table, main, set(chosen)), (self.other_calc_table, other, set())):
@@ -815,15 +824,181 @@ class PackEditor(QDialog):
         return next(i for i in range(self.tabs.count()) if self.tabs.tabText(i) == name)
 
     def _follow_step(self, step: str, tab: str) -> None:
-        """A tab only a built-in step uses is enabled when the step is ticked (General tab)."""
+        """A tab only a built-in step uses is enabled when the step is used -- ticked on the General tab, or brought by
+        a module (the chemistry step: the Solution chemistry module)."""
         box = self.builtin_boxes.get(step)
         i = self.tab_index(tab)
-        update = lambda on: (self.tabs.setTabEnabled(i, on),
-                             self.tabs.setTabToolTip(i, "" if on else f"Used by the built-in '{step}' step: tick it "
-                                                                      f"on the General tab."))
-        update(bool(box and box.isChecked()))
+        update = lambda _on=None: (
+            self.tabs.setTabEnabled(i, bool(box and box.isChecked())),
+            self.tabs.setTabToolTip(i, "" if box and box.isChecked() else
+                                    f"Used by the '{step}' step: link the module that brings it (Modules tab) or "
+                                    f"tick it on the General tab."))
+        update()
         if box:
             box.toggled.connect(update)
+
+    # ---- Modules (shared parts the pack links in: parameter_extractor/modules/) ----------------------------
+
+    def _modules_tab(self) -> QWidget:
+        from PySide6.QtWidgets import QSplitter
+        from parameter_extractor import modules as module_store, pack_modules
+        w = QWidget()
+        v = QVBoxLayout(w)
+        v.addWidget(_titled("Modules this data pack uses", "Modules are shared parts -- a step with its prompt and "
+                            "columns, calculations, row rules, a vocabulary -- that several data packs use. They're "
+                            "linked, not copied: an improvement to a module reaches every pack that uses it, and "
+                            "there's only ever one version. A module's content is shown here but not edited here; "
+                            "the pack's own parts are on the other tabs. Tick a module to link it, untick to unlink "
+                            "(saved with Save)."))
+        # the module list on the left, the selected module on the right (its vocabulary needs the room)
+        self.module_table = QTableWidget(0, 2)
+        self.module_table.setHorizontalHeaderLabels(["Module", "Linked"])
+        self.module_table.verticalHeader().setVisible(False)
+        head = self.module_table.horizontalHeader()
+        head.setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
+        head.setSectionResizeMode(1, QHeaderView.ResizeMode.Interactive)
+        self.module_table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
+        self.module_table.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
+        style_rows(self.module_table)
+        own = set(self.draft.manifest.get("modules", []))
+        for mid, mod in module_store.available().items():
+            r = self.module_table.rowCount()
+            self.module_table.insertRow(r)
+            item = QTableWidgetItem(mod.label)
+            item.setData(Qt.ItemDataRole.UserRole, mid)
+            item.setFlags((item.flags() | Qt.ItemFlag.ItemIsUserCheckable) & ~Qt.ItemFlag.ItemIsEditable)
+            item.setCheckState(Qt.CheckState.Checked if mid in own else Qt.CheckState.Unchecked)
+            if self.read_only:
+                item.setFlags(item.flags() & ~Qt.ItemFlag.ItemIsUserCheckable)
+            item.setToolTip(mod.manifest.description)
+            self.module_table.setItem(r, 0, item)
+            linked = QTableWidgetItem("")
+            linked.setFlags(linked.flags() & ~Qt.ItemFlag.ItemIsEditable)
+            self.module_table.setItem(r, 1, linked)
+        self.module_table.setColumnWidth(1, 150)
+        self.module_table.itemChanged.connect(lambda it: self._refresh_module_effects() if it.column() == 0 else None)
+        self.module_table.currentCellChanged.connect(lambda r, *_: self._show_module(r))
+        right = QWidget()
+        rv = QVBoxLayout(right)
+        rv.setContentsMargins(0, 0, 0, 0)
+        self.module_details = QLabel(wordWrap=True)
+        self.module_details.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
+        self.module_details.setAlignment(Qt.AlignmentFlag.AlignTop)
+        rv.addWidget(self.module_details)
+        self.vocab_box = QGroupBox("Techniques and instrument settings (the module's vocabulary)")
+        bv = QVBoxLayout(self.vocab_box)
+        bv.addWidget(self._analysis_tab())
+        rv.addWidget(self.vocab_box, 1)
+        self.module_spacer = QWidget()
+        rv.addWidget(self.module_spacer, 1)
+        split = QSplitter(Qt.Orientation.Horizontal)
+        split.addWidget(self.module_table)
+        split.addWidget(right)
+        split.setStretchFactor(0, 1)
+        split.setStretchFactor(1, 3)
+        split.setSizes([380, 1000])
+        split.setChildrenCollapsible(False)
+        v.addWidget(split, 1)
+        self.vocab_box.setVisible(False)
+        if self.module_table.rowCount():
+            self.module_table.setCurrentCell(0, 0)
+        return w
+
+    def _chosen_modules(self) -> list:
+        """The modules ticked (the pack's own list; the ones they bring along aren't listed)."""
+        t = getattr(self, "module_table", None)
+        if t is None:
+            return list(self.draft.manifest.get("modules", []))
+        out = []
+        for r in range(t.rowCount()):
+            item = t.item(r, 0)
+            if item.checkState() == Qt.CheckState.Checked and item.flags() & Qt.ItemFlag.ItemIsEnabled:
+                out.append(item.data(Qt.ItemDataRole.UserRole))
+        return out
+
+    def _linked_modules(self) -> list:
+        from parameter_extractor import modules as module_store
+        return module_store.resolve(self._chosen_modules())
+
+    def _module_steps(self) -> dict:
+        """{built-in step: module label} for the steps the linked modules bring."""
+        return {s: m.label for m in self._linked_modules() for s in m.manifest.builtin_stages}
+
+    def _module_calcs(self) -> dict:
+        if getattr(self, "module_table", None) is None:
+            return {}
+        return {c: m.label for m in self._linked_modules() for c in m.manifest.postprocess}
+
+    def _refresh_module_effects(self) -> None:
+        """After a module was ticked or unticked: the 'Linked' column (incl. modules brought along), the built-in
+        steps it brings (ticked, greyed), the calculations, the tabs that follow a step."""
+        t = self.module_table
+        linked = {m.id for m in self._linked_modules()}
+        chosen = set(self._chosen_modules())
+        from parameter_extractor import modules as module_store
+        found = module_store.available()
+        t.blockSignals(True)
+        for r in range(t.rowCount()):
+            item = t.item(r, 0)
+            mid = item.data(Qt.ItemDataRole.UserRole)
+            by = [found[o].label for o in chosen if o in found and mid in found[o].manifest.needs]
+            if mid not in chosen and mid in linked and by:
+                item.setCheckState(Qt.CheckState.Checked)
+                item.setFlags(item.flags() & ~Qt.ItemFlag.ItemIsEnabled)
+                t.item(r, 1).setText("brought along by " + ", ".join(by))
+            else:
+                if not self.read_only:
+                    item.setFlags(item.flags() | Qt.ItemFlag.ItemIsEnabled)
+                t.item(r, 1).setText("linked" if mid in chosen else "")
+        t.blockSignals(False)
+        provided = self._module_steps()
+        for name, box in self.builtin_boxes.items():
+            box.blockSignals(True)
+            if name in provided:
+                box.setChecked(True)
+                box.setEnabled(False)
+                box.setText(f"{name} -- {box.property('about')}  (from the {provided[name]} module)")
+            else:
+                box.setEnabled(not self.read_only)
+                box.setChecked(name in self._own_steps)
+                box.setText(f"{name} -- {box.property('about')}")
+            box.blockSignals(False)
+            box.toggled.emit(box.isChecked())          # the tabs that follow a step
+        self._fill_calculations(self._chosen_calculations())
+        self._fill_vocab()
+        self._show_module(t.currentRow())
+        from parameter_extractor.stages.optional import StageSpec
+        brought = []
+        for mod in self._linked_modules():
+            for f in mod.stage_files():
+                try:
+                    brought.append(f"{StageSpec.model_validate_json(f.read_text()).label} ({mod.label} module)")
+                except ValueError:
+                    pass
+        self.module_stages_note.setText("Also run, from linked modules (see the Modules tab): " + "; ".join(brought)
+                                        if brought else "")
+        self.module_stages_note.setVisible(bool(brought))
+
+    def _show_module(self, row: int) -> None:
+        from parameter_extractor import pack_modules
+        item = self.module_table.item(row, 0) if row >= 0 else None
+        if item is None:
+            self.module_details.setText("")
+            self.vocab_box.setVisible(False)
+            self.module_spacer.setVisible(True)
+            return
+        from parameter_extractor import modules as module_store
+        mid = item.data(Qt.ItemDataRole.UserRole)
+        mod = module_store.available().get(mid)
+        lines = pack_modules.describe(mid)
+        status = self.module_table.item(row, 1).text() or "not linked"
+        from html import escape
+        self.module_details.setText(f"<b>{escape(item.text())}</b> &nbsp;<i>({escape(status)})</i><br>"
+                                    + (f"{escape(mod.manifest.description)}<br><br>" if mod else "")
+                                    + "What it brings:<br>" + "<br>".join(f"• {escape(l)}" for l in lines))
+        has_vocab = bool(mod and mod.file("analysis_vocab.json"))
+        self.vocab_box.setVisible(has_vocab)
+        self.module_spacer.setVisible(not has_vocab)
 
     # ---- Compounds (the chemistry step's compound vocabulary) ------------------------------------
 
@@ -832,7 +1007,8 @@ class PackEditor(QDialog):
     def _compounds_tab(self) -> QWidget:
         w = QWidget()
         v = QVBoxLayout(w)
-        v.addWidget(_titled("Compound vocabulary", "The compounds this data pack knows: the chemistry step "
+        v.addWidget(_titled("Compound vocabulary (this data pack's; used by the chemistry step)", "The compounds this data pack knows -- the "
+                            "pack's own list, used by the chemistry step (the Solution chemistry module): the step "
                             "asks the model to use these names, and their columns (<role>_<name>_<phase>_<measure>) "
                             "are known without a review. A PubChem CID identifies the compound, so the paper's other "
                             "names for it (from PubChem) are matched to it. New compounds found in papers are "
@@ -945,13 +1121,8 @@ class PackEditor(QDialog):
         self.analysis_stack = QStackedWidget()
         empty = QWidget()
         ev = QVBoxLayout(empty)
-        ev.addWidget(_hint("This data pack has no analysis vocabulary yet."))
-        start = QHBoxLayout()
-        start.addWidget(QPushButton("Start from the prebiotic chemistry vocabulary",
-                                    clicked=lambda: self._start_vocab(True)))
-        start.addWidget(QPushButton("Start empty", clicked=lambda: self._start_vocab(False)))
-        start.addStretch(1)
-        ev.addLayout(start)
+        ev.addWidget(_hint("No vocabulary: link the Analysis methods module (its techniques and settings are shared by "
+                           "every data pack that uses it)."))
         ev.addStretch(1)
         self.analysis_stack.addWidget(empty)
         self.analysis_stack.addWidget(self._analysis_editor())
@@ -1036,8 +1207,9 @@ class PackEditor(QDialog):
         tech_btns.addWidget(self.vocab_count)
         bv.addLayout(tech_btns)
         split.addWidget(bottom)
-        split.setStretchFactor(0, 3)
-        split.setStretchFactor(1, 2)
+        split.setStretchFactor(0, 1)
+        split.setStretchFactor(1, 1)
+        split.setSizes([500, 500])
         v.addWidget(split, 1)
         self._family_shown = None
         return w
@@ -1048,22 +1220,33 @@ class PackEditor(QDialog):
         from parameter_extractor.analysis_vocab import UNIT_TOKENS
         return [("text", ""), ("whole number", "#")] + [(u, u) for u in UNIT_TOKENS]
 
-    def _start_vocab(self, from_prebiotic: bool) -> None:
-        if from_prebiotic:
-            src = packs.BUILTIN_DIR / "prebiotic_chemistry" / "analysis_vocab.json"
-            self.draft.analysis_vocab = json.loads(src.read_text())
-        else:
-            self.draft.analysis_vocab = {"families": {"general": {"label": "Any technique", "settings": [
-                {"name": "instrument", "unit": "", "description": "make and model of the instrument", "aliases": []},
-                {"name": "measured", "unit": "", "description": "what the technique was used for", "aliases": []}]}},
-                "techniques": []}
-        self._fill_vocab()
+    def _vocab(self) -> Optional[dict]:
+        """The vocabulary shown: the pack's own file (editable; it overrides the module's), else the linked Analysis
+        methods module's (read-only here)."""
+        if self.draft.analysis_vocab is not None:
+            return self.draft.analysis_vocab
+        mod = next((m for m in self._linked_modules() if m.file("analysis_vocab.json")), None) \
+            if getattr(self, "module_table", None) is not None else None
+        if mod is None:
+            return None
+        if getattr(self, "_module_vocab", (None,))[0] != mod.folder:
+            self._module_vocab = (mod.folder, json.loads(mod.file("analysis_vocab.json").read_text()))
+        return self._module_vocab[1]
+
+    def _vocab_editable(self) -> bool:
+        return self.draft.analysis_vocab is not None and not self.read_only
 
     def _fill_vocab(self) -> None:
-        vocab = self.draft.analysis_vocab
+        vocab = self._vocab()
         self.analysis_stack.setCurrentIndex(0 if vocab is None else 1)
         if vocab is None:
             return
+        editable = self._vocab_editable()
+        for table in (self.tech_table, self.setting_table):
+            table.setEditTriggers(QAbstractItemView.EditTrigger.DoubleClicked | QAbstractItemView.EditTrigger.EditKeyPressed
+                                  if editable else QAbstractItemView.EditTrigger.NoEditTriggers)
+        for b in self.analysis_stack.widget(1).findChildren(QPushButton):
+            b.setVisible(editable)                   # a module's vocabulary is only shown here
         self._family_shown = None
         self.family_list.blockSignals(True)
         self.family_list.clear()
@@ -1082,7 +1265,7 @@ class PackEditor(QDialog):
         self._count_vocab()
 
     def _count_vocab(self) -> None:
-        vocab = self.draft.analysis_vocab or {}
+        vocab = self._vocab() or {}
         n = sum(len(f.get("settings", [])) for f in vocab.get("families", {}).values())
         self.vocab_count.setText(f"{self.tech_table.rowCount()} techniques, {len(vocab.get('families', {}))} "
                                  f"families, {n} settings")
@@ -1137,7 +1320,7 @@ class PackEditor(QDialog):
         self.setting_table.setRowCount(0)
         if self._family_shown is None:
             return
-        fam = self.draft.analysis_vocab["families"][self._family_shown]
+        fam = self._vocab()["families"][self._family_shown]
         self.family_title.setText(f"<b>Settings of {self._family_shown}</b>  ({fam.get('label', '')})")
         for st in fam.get("settings", []):
             self._add_setting_row(st)
@@ -1258,6 +1441,8 @@ class PackEditor(QDialog):
         self.stage_list = QListWidget()
         self.stage_list.currentRowChanged.connect(self._on_stage_row)
         left.addWidget(self.stage_list, 1)
+        self.module_stages_note = _hint("")          # stages the linked modules bring (shown, not edited here)
+        left.addWidget(self.module_stages_note)
         buttons = QHBoxLayout()
         for text, slot in (("New…", self._new_stage), ("Duplicate", self._duplicate_stage),
                            ("Remove", self._remove_stage)):
@@ -1931,9 +2116,13 @@ class PackEditor(QDialog):
         m["units"] = units
         m["focused_row_plan"] = self.focused_box.isChecked()
         m["compact_text"] = self.compact_box.isChecked()
-        m["builtin_stages"] = [n for n, box in self.builtin_boxes.items() if box.isChecked()] + \
+        provided = self._module_steps()
+        m["builtin_stages"] = [n for n in self.builtin_boxes if n in self._own_steps and n not in provided] + \
             [n for n in m.get("builtin_stages", []) if n not in self.builtin_boxes]      # e.g. old 'methodology'
         m["postprocess"] = self._chosen_calculations()
+        m["modules"] = self._chosen_modules()
+        if not m["modules"]:
+            m.pop("modules", None)
         m["formulas"] = self._formulas_from_table()
         if not m["formulas"] and "_about_formulas" not in m:
             m.pop("formulas", None)
@@ -1974,14 +2163,6 @@ class PackEditor(QDialog):
         dlg = CompoundSetupDialog(self.draft.folder, self)
         if dlg.exec():
             self._reopen("Compounds set up", dlg.applied, dlg.problems)
-
-    def _add_modules(self) -> None:
-        from parameter_extractor.gui.pack_assist import ModulesDialog
-        if not self.save():
-            return
-        dlg = ModulesDialog(self.draft.folder, self)
-        if dlg.exec() and dlg.applied:
-            self._reopen("Modules added", dlg.applied, dlg.problems)
 
     def _suggest_additions(self) -> None:
         from parameter_extractor.gui.pack_assist import AdditionsDialog
