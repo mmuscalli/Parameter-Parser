@@ -449,18 +449,14 @@ def write_pack(proposal: PackProposal, pack_id: str, label: str, description: st
 
 
 def add_modules(folder: Path, papers: List[SurveyedPaper]) -> tuple:
-    """The shared modules the sample papers call for, added to the drafted pack: the analysis step when the surveys
-    name analytical techniques (solution chemistry comes with compound setup). ({module: lines}, {module: {paper:
-    techniques}})."""
+    """The shared modules the sample papers call for (pack_modules.evidence_for: analytical techniques -> analysis;
+    rate constants / half-lives -> kinetics; wet-dry cycles -> wet_dry; peptides / oligomers -> product_totals, which
+    brings the chemistry step), added to the drafted pack. ({module: lines}, {module: {paper: why}})."""
     from parameter_extractor import pack_modules
-    from parameter_extractor.pack_editing import PackDraft
-    evidence = pack_modules.analysis_evidence(papers)
+    evidence = pack_modules.evidence_for(papers)
     if not evidence:
         return {}, {}
-    draft = PackDraft.load(Path(folder))
-    lines = pack_modules.add_analysis(draft)
-    draft.save()
-    return {"analysis": lines}, {"analysis": evidence}
+    return pack_modules.add_modules(Path(folder), list(evidence)), evidence
 
 
 def _examples(papers: List[SurveyedPaper]) -> Dict[str, List[tuple]]:

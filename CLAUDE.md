@@ -2593,3 +2593,11 @@ their instrument details, nothing lost; ~+$0.02-0.035 per paper for the analysis
 `eval/pack_modules_2026-11-09.md`. Fix: a unit slug right after 'per' isn't the column's unit ('_molecules_per_J').
 Open (Mickey): drafted pressures follow the app's bar convention (shock pressure 7 GPa -> 70,000 bar).
 tests/test_pack_modules.py.
+- **More modules (same day, Mickey; bar stays the default pressure unit):** `kinetics` and `wet_dry` (copies of the
+  prebiotic stage files via `_add_stage`, their categories, wet_dry's two row rules into structure_planner.rules.md),
+  `product_totals` (peptide_totals + oligomer_totals + their standard columns; `needs` solution_chemistry, which it
+  adds). Each Module has `evidence(papers)` (survey words / product compounds); `evidence_for` -> draft_pack adds every
+  module called for; `add_modules(folder, ids)` = one save (+ chemistry prompt). GUI: pack editor "Add modules…"
+  (`gui/pack_assist.ModulesDialog`). The organics pack was swapped for the module version (same id; backup in
+  `<app data>/pack_backups/`). test_pack_drafting's basic draft passes modules_on=False (its canned survey is about
+  peptides, which now brings product_totals).

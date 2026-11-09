@@ -303,3 +303,65 @@ class AdditionsDialog(QDialog):
             self.status.setText("Cancelling after the current request…")
             return
         self.reject()
+
+
+# ---- shared modules -------------------------------------------------------------------------------------------------
+
+class ModulesDialog(QDialog):
+    """Add shared modules (pack_modules.MODULES) to a data pack: each with what it adds, ticked to add; the ones the
+    pack has are shown ticked and greyed. Apply writes them (one save) and lists what was done in `applied`."""
+
+    def __init__(self, folder: Path, parent=None):
+        super().__init__(parent)
+        from parameter_extractor import pack_modules
+        from parameter_extractor.pack_editing import PackDraft
+        self.setWindowTitle("Add modules")
+        self.folder, self.applied, self.problems = Path(folder), [], []
+        draft = PackDraft.load(self.folder)
+        v = QVBoxLayout(self)
+        v.addWidget(_hint("Modules are parts other data packs use and the app keeps refining: a step with its "
+                          "prompts and columns, calculations, row rules. Adding one copies it into this data pack, "
+                          "where you can still edit it. Steps marked 'runs only for ...' cost nothing on papers that "
+                          "don't need them."))
+        self.table = _table(["Module", "What it adds"])
+        for mid, module in pack_modules.MODULES.items():
+            present = bool(module.present(draft))
+            item = _checked_item(module.label, present)
+            item.setData(Qt.ItemDataRole.UserRole, mid)
+            if present:
+                item.setFlags(item.flags() & ~Qt.ItemFlag.ItemIsEnabled)
+                item.setToolTip("Already in this data pack")
+            row = self.table.rowCount()
+            self.table.insertRow(row)
+            self.table.setItem(row, 0, item)
+            self.table.setItem(row, 1, _plain(module.description + (" (already in this pack)" if present else "")))
+        self.table.setColumnWidth(0, 210)
+        v.addWidget(self.table)
+        buttons = QDialogButtonBox()
+        self.apply_btn = buttons.addButton("Add the ticked modules", QDialogButtonBox.ButtonRole.AcceptRole)
+        buttons.addButton(QDialogButtonBox.StandardButton.Cancel)
+        buttons.accepted.connect(self._apply)
+        buttons.rejected.connect(self.reject)
+        v.addWidget(buttons)
+        self.resize(760, 380)
+
+    def chosen(self) -> list:
+        out = []
+        for r in range(self.table.rowCount()):
+            item = self.table.item(r, 0)
+            if item.flags() & Qt.ItemFlag.ItemIsEnabled and item.checkState() == Qt.CheckState.Checked:
+                out.append(item.data(Qt.ItemDataRole.UserRole))
+        return out
+
+    def _apply(self) -> None:
+        from parameter_extractor import pack_modules
+        from parameter_extractor.pack_editing import PackDraft, check
+        chosen = self.chosen()
+        if not chosen:
+            self.reject()
+            return
+        done = pack_modules.add_modules(self.folder, chosen)
+        labels = {m: pack_modules.MODULES[m].label for m in done}
+        self.applied = [f"{labels.get(m, m)}: {line}" for m, lines in done.items() for line in lines]
+        self.problems = check(PackDraft.load(self.folder))
+        self.accept()

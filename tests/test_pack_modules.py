@@ -111,6 +111,63 @@ def test_drafting_adds_the_analysis_module():
         assert "analysis" not in json.loads((r2.pack.folder / "pack.json").read_text()).get("builtin_stages", [])
 
 
+def test_kinetics_wet_dry_and_totals_modules():
+    from parameter_extractor.pack_editing import PackDraft, check
+    from parameter_extractor.stages.optional import load_specs
+    with tempfile.TemporaryDirectory() as tmp, patch.object(packs, "user_packs_dir", lambda: Path(tmp) / "packs"):
+        pack = _new_pack(Path(tmp))
+        done = pack_modules.add_modules(pack.folder, ["kinetics", "wet_dry", "product_totals"])
+        assert set(done) >= {"kinetics", "wet_dry", "product_totals"}
+        d = PackDraft.load(pack.folder)
+        names = {s["name"] for s in d.stages.values()}
+        assert {"kinetics", "wet_dry"} <= names
+        assert {"kinetics", "wet_dry"} <= {c["id"] for c in d.manifest["variable_categories"]}
+        assert "Cycle 1 = 24" in d.rules["structure_planner"]
+        assert {"peptide_totals", "oligomer_totals", "amounts"} <= set(d.manifest["postprocess"])
+        assert "chemistry" in d.manifest["builtin_stages"]                      # totals bring the chemistry step
+        assert {"total_sampled_peptides_yield", "max_oligomer_length_nt"} <= {e["column"] for e in d.standard_file["columns"]}
+        assert {"rate_constant_first_order_per_hr", "cycle_number"} <= set(d.columns)
+        assert not [p for p in check(d) if p.level == "error"], [str(p) for p in check(d)]
+        specs = load_specs(packs.Pack(pack.folder))
+        assert {"kinetics", "wet_dry"} <= set(specs)
+        assert pack_modules.add_modules(pack.folder, ["kinetics", "wet_dry", "product_totals"]) == \
+            {"kinetics": [], "wet_dry": [], "product_totals": []}                # nothing twice
+
+
+def test_evidence_for_modules():
+    def survey(words, compounds=()):
+        from parameter_extractor.pack_drafting import SurveyCompound
+        return PaperSurvey(field="x", row_unit="r", set_unit="s", notes=words, variables=[], compounds=[
+            SurveyCompound(name=c, full_name="", role="product", example="") for c in compounds])
+    papers = [SimpleNamespace(name="a", survey=survey("first-order rate constants and half-lives were fitted")),
+              SimpleNamespace(name="b", survey=survey("ten wet-dry cycles at 80 °C")),
+              SimpleNamespace(name="c", survey=survey("", compounds=["Gly-Gly", "(pA)4"])),
+              SimpleNamespace(name="d", survey=survey("N-body simulation of impacts"))]
+    ev = pack_modules.evidence_for(papers)
+    assert set(ev["kinetics"]) == {"a"} and set(ev["wet_dry"]) == {"b"} and "c" in ev["product_totals"]
+    assert all("d" not in found for found in ev.values())
+
+
+def test_modules_window():
+    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+    from PySide6.QtCore import Qt
+    from PySide6.QtWidgets import QApplication
+    app = QApplication.instance() or QApplication([])
+    from parameter_extractor.gui.pack_assist import ModulesDialog
+    from parameter_extractor.pack_editing import PackDraft
+    with tempfile.TemporaryDirectory() as tmp, patch.object(packs, "user_packs_dir", lambda: Path(tmp) / "packs"):
+        pack = _new_pack(Path(tmp))
+        pack_modules.add_modules(pack.folder, ["analysis"])
+        dlg = ModulesDialog(pack.folder)
+        rows = {dlg.table.item(r, 0).data(Qt.ItemDataRole.UserRole): r for r in range(dlg.table.rowCount())}
+        assert not dlg.table.item(rows["analysis"], 0).flags() & Qt.ItemFlag.ItemIsEnabled     # already there
+        dlg.table.item(rows["kinetics"], 0).setCheckState(Qt.CheckState.Checked)
+        assert dlg.chosen() == ["kinetics"]
+        dlg._apply()
+        assert any(l.startswith("Kinetics:") for l in dlg.applied)
+        assert any(s["name"] == "kinetics" for s in PackDraft.load(pack.folder).stages.values())
+
+
 if __name__ == "__main__":
     for name, fn in list(globals().items()):
         if name.startswith("test_"):

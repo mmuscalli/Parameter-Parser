@@ -432,11 +432,14 @@ class PackEditor(QDialog):
         self.suggest_btn.setToolTip("Survey a few new sample papers (cheap) and get suggestions for what this research "
                                     "area lacks: parameters, stages, categories, rules, compounds. You choose what's "
                                     "added. Saves your edits first.")
-        for b in (self.compounds_btn, self.suggest_btn):
+        self.modules_btn = QPushButton("Add modules…", clicked=self._add_modules)
+        self.modules_btn.setToolTip("Add shared parts other data packs use: the analysis step, solution chemistry, "
+                                    "kinetics, wet-dry cycling, peptide / oligomer totals. Saves your edits first.")
+        for b in (self.modules_btn, self.compounds_btn, self.suggest_btn):
             b.setEnabled(not self.read_only)
             bottom.addWidget(b)
         if self.read_only:
-            for b in (self.compounds_btn, self.suggest_btn):
+            for b in (self.modules_btn, self.compounds_btn, self.suggest_btn):
                 b.setToolTip("Copy this data pack first: the app's own can't be changed.")
         if config is None:
             self.suggest_btn.setEnabled(False)
@@ -1971,6 +1974,14 @@ class PackEditor(QDialog):
         dlg = CompoundSetupDialog(self.draft.folder, self)
         if dlg.exec():
             self._reopen("Compounds set up", dlg.applied, dlg.problems)
+
+    def _add_modules(self) -> None:
+        from parameter_extractor.gui.pack_assist import ModulesDialog
+        if not self.save():
+            return
+        dlg = ModulesDialog(self.draft.folder, self)
+        if dlg.exec() and dlg.applied:
+            self._reopen("Modules added", dlg.applied, dlg.problems)
 
     def _suggest_additions(self) -> None:
         from parameter_extractor.gui.pack_assist import AdditionsDialog

@@ -198,6 +198,179 @@ def ensure_chemistry_prompt(folder: Path) -> bool:
     return True
 
 
+# ---- stages shared as files: kinetics, wet-dry cycling --------------------------------------------------------------
+
+def _source_spec(name: str) -> dict:
+    return json.loads((packs.BUILTIN_DIR / SOURCE_PACK / "stages" / f"{name}.json").read_text())
+
+
+def _has_stage(draft, name: str) -> bool:
+    return any(spec.get("name") == name for spec in draft.stages.values())
+
+
+def _add_category(draft, cid: str, label: str, description: str, patterns: List[str], order: int,
+                  value_type: str = "number", model_assigns: bool = True) -> Optional[str]:
+    cats = draft.manifest.setdefault("variable_categories", [])
+    if any(c.get("id") == cid for c in cats):
+        return None
+    cats.append({"id": cid, "table_order": order, "label": label, "value_type": value_type,
+                 "model_assigns": model_assigns, "description": description})
+    entry = draft.manifest.setdefault("category_columns", {}).setdefault(cid, {"columns": []})
+    entry.setdefault("patterns", []).extend(p for p in patterns if p not in entry.get("patterns", []))
+    return f"category {label} added"
+
+
+def _add_stage(draft, name: str) -> List[str]:
+    """A copy of the source pack's stage file; its columns added to the pack's list."""
+    if _has_stage(draft, name):
+        return []
+    spec = _source_spec(name)
+    file = f"{name}.json"
+    while file in draft.stages:
+        file = "module_" + file
+    draft.stages[file] = spec
+    new_cols = [q["column"] for q in spec.get("parameters", []) if q["column"] not in draft.columns]
+    draft.columns = list(draft.columns) + new_cols
+    trigger = spec.get("trigger") or {}
+    when = ("always" if trigger.get("always") else
+            "for papers mentioning: " + ", ".join(trigger.get("keywords", [])[:5]) + " ..." if trigger.get("keywords")
+            else "for wet-dry cycling experiments" if trigger.get("set_types") or trigger.get("set_patterns") else "")
+    return [f"stage '{spec.get('label', name)}' added ({len(spec.get('parameters', []))} parameters; runs {when})"]
+
+
+def _rules(draft, lines: List[str]) -> List[str]:
+    from parameter_extractor.pack_editing import items_to_rules, rules_to_items
+    items = rules_to_items(draft.rules.get("structure_planner", "") or "")
+    added = [l for l in lines if l not in items]
+    if added:
+        draft.rules["structure_planner"] = items_to_rules(items + added)
+    return [f"row rule added: {l[:70]}..." for l in added]
+
+
+KINETICS_WORDS = ["rate constant", "half-life", "half life", "activation energy", "arrhenius", "first-order",
+                  "second-order", "kinetic", "k_obs", "kobs", "rate coefficient", "decay rate", "degradation rate"]
+
+
+def _texts(survey) -> List[str]:
+    """Every variable's words in a survey (names, columns, descriptions, examples) and its notes."""
+    out = [getattr(survey, "notes", "") or "", getattr(survey, "field", "") or ""]
+    for v in getattr(survey, "variables", []) or []:
+        out += [v.name, v.column, v.description, v.example]
+    return out
+
+
+def _papers_saying(papers, pattern: str) -> Dict[str, List[str]]:
+    rx = re.compile(pattern, re.IGNORECASE)
+    out = {}
+    for p in papers:
+        if getattr(p, "survey", None) is None:
+            continue
+        hits = sorted({m.group(0).lower() for t in _texts(p.survey) for m in rx.finditer(t or "")})
+        if hits:
+            out[p.name] = hits
+    return out
+
+
+def kinetics_evidence(papers) -> Dict[str, List[str]]:
+    return _papers_saying(papers, r"\b(?:" + "|".join(re.escape(w) for w in KINETICS_WORDS) + r")s?\b")
+
+
+def has_kinetics(draft) -> bool:
+    return _has_stage(draft, "kinetics")
+
+
+def add_kinetics(draft) -> List[str]:
+    """The kinetics stage (rate constants, half-lives, activation energies; keyword-triggered) + its category."""
+    done = _add_stage(draft, "kinetics")
+    if done:
+        cat = next(c for c in json.loads((packs.BUILTIN_DIR / SOURCE_PACK / "pack.json").read_text())
+                   ["variable_categories"] if c["id"] == "kinetics")
+        line = _add_category(draft, "kinetics", cat["label"], cat["description"], cat.get("patterns", []), 74)
+        done += [line] if line else []
+    return done
+
+
+WET_DRY_PATTERN = r"\b(?:wet|dry)\s*[-–−/]\s*(?:dry|wet)\b|dehydration[-–− ]rehydration|evaporation cycl|drying cycl|hydration cycl"
+WET_DRY_RULES = [
+    "Wet-dry cycling experiments: one row per cycle sampled, in a set of type \"Evaporation Cycle\"; name each row by "
+    "its cycle ('Cycle 3').",
+    "For wet-dry cycles the duration (`hr`) is the TOTAL time up to the end of that cycle: 24 h cycles -> Cycle 1 = "
+    "24, Cycle 2 = 48, Cycle 3 = 72 (cycles of different lengths add up)."]
+
+
+def wet_dry_evidence(papers) -> Dict[str, List[str]]:
+    return _papers_saying(papers, WET_DRY_PATTERN)
+
+
+def has_wet_dry(draft) -> bool:
+    return _has_stage(draft, "wet_dry")
+
+
+def add_wet_dry(draft) -> List[str]:
+    """The wet-dry cycling stage (cycle number, durations, phase temperatures, humidity), its category and the row
+    rules for cycles."""
+    done = _add_stage(draft, "wet_dry")
+    if done:
+        line = _add_category(draft, "wet_dry", "Wet-Dry Cycling",
+                             "the cycles of wet-dry experiments: cycle number and length, wet and dry phase "
+                             "temperatures, durations and humidity", [r"^cycle_", r"^wet_phase", r"^dry_phase"], 35)
+        done += ([line] if line else []) + _rules(draft, WET_DRY_RULES)
+    return done
+
+
+# ---- product totals: peptides and oligomers -------------------------------------------------------------------------
+
+TOTALS_POSTPROCESS = ["peptide_totals", "oligomer_totals"]
+TOTALS_COLUMNS = [
+    {"column": "total_sampled_peptides_yield", "description": "Total yield (%) of peptides (dimers and longer, linear "
+     "and cyclic): stated by the paper, else the sum of the row's peptide % yields (calculated)."},
+    {"column": "total_sampled_oligomers_yield", "description": "Total yield (%) of nucleic-acid oligomers (2-mers and "
+     "longer): stated by the paper, else the sum of the row's oligomer % yields (calculated)."},
+    {"column": "max_oligomer_length_nt", "description": "Longest nucleic-acid oligomer with a value in the row (nt): "
+     "stated by the paper, else from the row's oligomer columns (calculated)."}]
+TOTALS_PATTERN = (r"\bpeptides?\b|\boligo(?:mer|nucleotide|peptide)s?\b|\b(?:di|tri|tetra|penta)(?:glycine|peptides?|mers?)\b|"
+                  r"\bdiketopiperazines?\b|\b\d+-?mers?\b|\bpoly\([A-Za-z]+\)")
+
+
+def totals_evidence(papers) -> Dict[str, List[str]]:
+    out = _papers_saying(papers, TOTALS_PATTERN)
+    rx = re.compile(TOTALS_PATTERN, re.IGNORECASE)
+    from parameter_extractor.names import oligonucleotide_match, peptide_codes
+    for p in papers:
+        for c in (getattr(p.survey, "compounds", []) if getattr(p, "survey", None) else []):
+            if c.role == "product" and (rx.search(f"{c.name} {c.full_name}") or peptide_codes(c.name)
+                                        or oligonucleotide_match(c.name)):
+                out.setdefault(p.name, []).append(c.name)
+    return out
+
+
+def has_totals(draft) -> bool:
+    return all(c in draft.manifest.get("postprocess", []) for c in TOTALS_POSTPROCESS)
+
+
+def add_totals(draft) -> List[str]:
+    """Peptide and oligomer totals and the longest oligomer, calculated locally from the compound columns (needs the
+    chemistry step -- switched on too)."""
+    if has_totals(draft):
+        return []
+    done = add_solution_chemistry(draft)
+    m = draft.manifest
+    m["postprocess"] = list(dict.fromkeys(list(m.get("postprocess", [])) + TOTALS_POSTPROCESS))
+    done.append("calculations switched on: " + ", ".join(TOTALS_POSTPROCESS))
+    std = draft.standard_file.setdefault("columns", [])
+    have = {e["column"] for e in std} | set(draft.columns)
+    for entry in TOTALS_COLUMNS:
+        if entry["column"] not in have:
+            std.append(dict(entry))
+            done.append(f"column {entry['column']} added")
+    if not m.get("standard_columns"):
+        m["standard_columns"] = "standard_columns.json"
+    cc = m.setdefault("category_columns", {})
+    if "products" in cc and "max_oligomer_length_nt" not in cc["products"].get("columns", []):
+        cc["products"].setdefault("columns", []).append("max_oligomer_length_nt")
+    return done
+
+
 # ---- the list ---------------------------------------------------------------------------------------------------------
 
 @dataclass
@@ -207,29 +380,62 @@ class Module:
     description: str
     present: object                       # draft -> bool
     add: object                           # draft -> lines
+    evidence: object = None               # papers -> {paper: why}; None = not added by drafting on its own
+    needs: tuple = ()                     # modules it switches on too
 
 
 MODULES = {
     "analysis": Module("analysis", "Analysis methods",
                        "the analysis step: every analytical technique and its instrument settings, named from a "
-                       "vocabulary of techniques", has_analysis, add_analysis),
+                       "vocabulary of techniques", has_analysis, add_analysis, analysis_evidence),
     "solution_chemistry": Module("solution_chemistry", "Solution chemistry",
                                  "the chemistry step: compounds with their concentrations and yields, stock solutions, "
                                  "ratios, amounts per volume and the water type", has_solution_chemistry,
                                  add_solution_chemistry),
+    "kinetics": Module("kinetics", "Kinetics",
+                       "rate constants, half-lives and activation energies (runs only for papers that mention them)",
+                       has_kinetics, add_kinetics, kinetics_evidence),
+    "wet_dry": Module("wet_dry", "Wet-dry cycling",
+                      "cycle number and length, wet and dry phase temperatures, durations and humidity; rows per cycle "
+                      "with cumulative times (runs only for wet-dry experiments)", has_wet_dry, add_wet_dry,
+                      wet_dry_evidence),
+    "product_totals": Module("product_totals", "Peptide and oligomer totals",
+                             "total peptide and oligomer yields and the longest oligomer, calculated from the compound "
+                             "columns (switches the chemistry step on)", has_totals, add_totals, totals_evidence,
+                             needs=("solution_chemistry",)),
 }
 
 
-def add_module(folder: Path, module_id: str) -> List[str]:
-    """Add one module to a user's pack on disk (the CLI's --add-module); lines done. Refuses the app's own packs."""
+def evidence_for(papers) -> Dict[str, Dict[str, List[str]]]:
+    """{module: {paper: why}} for the modules whose evidence the sample papers show."""
+    out = {}
+    for mid, module in MODULES.items():
+        if module.evidence is not None:
+            found = module.evidence(papers)
+            if found:
+                out[mid] = found
+    return out
+
+
+def add_modules(folder: Path, module_ids: Iterable[str]) -> Dict[str, List[str]]:
+    """Add modules to a user's pack on disk in one save; {module: lines done}. Refuses the app's own packs."""
     from parameter_extractor.pack_editing import PackDraft
     draft = PackDraft.load(Path(folder))
     if draft.builtin:
         raise ValueError("The app's own data packs can't be changed -- copy it first.")
-    if module_id not in MODULES:
-        raise ValueError(f"Unknown module '{module_id}'. Modules: {', '.join(MODULES)}")
-    done = MODULES[module_id].add(draft)
+    out = {}
+    for mid in module_ids:
+        if mid not in MODULES:
+            raise ValueError(f"Unknown module '{mid}'. Modules: {', '.join(MODULES)}")
+        out[mid] = MODULES[mid].add(draft)
     draft.save()
-    if module_id == "solution_chemistry" and ensure_chemistry_prompt(Path(folder)):
-        done.append("chemistry prompt copied from the prebiotic chemistry pack (prompts/chemistry.md)")
+    if has_solution_chemistry(draft) and ensure_chemistry_prompt(Path(folder)):
+        out.setdefault("solution_chemistry", []).append(
+            "chemistry prompt copied from the prebiotic chemistry pack (prompts/chemistry.md)")
+    return out
+
+
+def add_module(folder: Path, module_id: str) -> List[str]:
+    """One module (the CLI's --add-module); lines done."""
+    done = add_modules(folder, [module_id]).get(module_id, [])
     return done or [f"{MODULES[module_id].label}: already in the pack"]

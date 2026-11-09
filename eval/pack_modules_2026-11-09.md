@@ -36,3 +36,21 @@ delivery-model stage off McKay and Takeuchi this time (about -$0.012 each). Net:
 - A unit right after 'per' in a column name ('..._molecules_per_J') is half of a rate, not the unit itself: the column
   had lost its unit suffix in the re-draft (`observations._unit_by_slug`, `unit_slug_suffix`).
 - Technique detection takes the most specific technique ('RP-HPLC', not also 'HPLC'; 'GC-MS and direct MS' gives both).
+
+## More modules (same day, Mickey: keep bar as the default pressure unit; add modules from the other built-ins)
+
+| Module | What it adds | Drafting adds it when the surveys mention |
+|---|---|---|
+| kinetics | the prebiotic kinetics stage (rate constants, half-lives, activation energies; keyword-triggered) + category Kinetics | rate constants, half-lives, activation energy, Arrhenius, first/second-order, kinetics |
+| wet_dry | the wet-dry stage (cycle number and length, phase temperatures / durations / humidity; runs for wet-dry sets) + category Wet-Dry Cycling + two row rules (one row per cycle; cumulative cycle times) | wet-dry / dry-wet, dehydration-rehydration, evaporation / drying / hydration cycles |
+| product_totals | peptide_totals + oligomer_totals calculations and their columns (total peptide / oligomer yields, longest oligomer); brings solution_chemistry | peptides, oligomers, n-mers, diketopiperazines, poly(X); product compounds named as peptides / oligonucleotides |
+
+Detection on real surveys: the organics drafting set calls only for `analysis` (correct: no kinetics, cycles or
+oligomers). The Sam Papers surveys call for all of them: wet_dry for Caimi, Morasch and Song; kinetics for Calaça Serrão,
+Liu, Matreux and Schwintek; product_totals for the oligomer papers.
+
+Pack editor: "Add modules…" (bottom bar) lists every module with what it adds, the ones in the pack greyed. CLI:
+`--add-module MODULE ID`.
+
+The organics pack was swapped for the module version (same id `organics_in_target`, so its remembered variables
+apply; 3 registry entries made under the temporary id moved). The old version was backed up to `<app data>/pack_backups/`.

@@ -101,7 +101,7 @@ def test_draft_writes_a_working_pack():
             patch.object(api_client, "call_structured", call):
         cfg = RunConfig(api_key="test", output_dir=Path(tmp) / "out", rasterize_table_pages=False)
         progress = []
-        r = pack_drafting.draft_pack([EDER, KIM], "peptide_draft", "Peptide synthesis", "Abiotic peptides.", cfg,
+        r = pack_drafting.draft_pack([EDER, KIM], "peptide_draft", "Peptide synthesis", "Abiotic peptides.", cfg, modules_on=False,
                                      on_progress=lambda d, n, m: progress.append(m))
         assert [c[1] for c in calls] == ["claude-haiku-5-5", "claude-haiku-5-5", "claude-sonnet-5-5"]
         assert [p.name for p in r.papers] == ["eder1994", "kim2019"] and "could not read" in r.papers[1].error
