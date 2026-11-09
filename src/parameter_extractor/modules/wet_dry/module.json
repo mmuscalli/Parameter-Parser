@@ -3,6 +3,7 @@
   "label": "Wet-dry cycling",
   "version": 1,
   "description": "Cycle number and length, wet and dry phase temperatures, durations and humidity of wet-dry cycling experiments (a step that runs only for wet-dry experiments); rows per cycle with cumulative times.",
+  "covers": "wet-dry cycling: cycle number, cycle length, wet and dry phase temperatures, durations and humidity, and the rules for rows per cycle -- so no cycle parameters or cycle row rules.",
   "variable_categories": [
     {
       "id": "wet_dry",

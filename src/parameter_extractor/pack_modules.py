@@ -114,6 +114,27 @@ def _papers_saying(papers, pattern: str) -> Dict[str, List[str]]:
     return out
 
 
+_SOLUTION_WORDS = re.compile(r"\b(?:solutions?|aqueous|dissolved|buffer(?:ed)?|stock|in water|molar|mM|µM|mol/L|mol L-1)\b",
+                             re.IGNORECASE)
+
+
+def solution_evidence(papers) -> Dict[str, List[str]]:
+    """Papers whose surveys name compounds AND report concentrations or amounts of them in solution (a variable with
+    a concentration or amount unit, and solution words in the survey) -> the Solution chemistry module."""
+    from parameter_extractor.units import _UNITS, canonical_unit
+    out = {}
+    for p in papers:
+        s = getattr(p, "survey", None)
+        if s is None or not getattr(s, "compounds", None):
+            continue
+        amounts = [v for v in s.variables
+                   if _UNITS.get(canonical_unit(v.unit or "") or "", ("",))[0] in ("concentration", "amount")]
+        text = " ".join([s.notes or ""] + [f"{v.name} {v.description} {v.unit} {v.example}" for v in s.variables])
+        if amounts and _SOLUTION_WORDS.search(text):
+            out[p.name] = [f"{v.name} ({v.unit})" for v in amounts[:4]]
+    return out
+
+
 def kinetics_evidence(papers) -> Dict[str, List[str]]:
     return _papers_saying(papers, r"\b(?:" + "|".join(re.escape(w) for w in KINETICS_WORDS) + r")s?\b")
 
@@ -154,7 +175,8 @@ class ModuleInfo:
     evidence: object = None               # papers -> {paper: why}; None = drafting doesn't add it on its own
 
 
-EVIDENCE = {"analysis": analysis_evidence, "kinetics": kinetics_evidence, "wet_dry": wet_dry_evidence,
+EVIDENCE = {"analysis": analysis_evidence, "solution_chemistry": solution_evidence, "kinetics": kinetics_evidence,
+            "wet_dry": wet_dry_evidence,
             "product_totals": totals_evidence}
 
 

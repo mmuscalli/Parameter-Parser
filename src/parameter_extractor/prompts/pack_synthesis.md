@@ -6,6 +6,7 @@ the level they vary at and an example), what one row of results is and what grou
 research area that would capture these papers -- and similar papers of the field -- as a dataset with one row per
 result.
 
+{{MODULES}}
 Design:
 - `set_word` / `sample_word`: what a group of rows and one row are called in this field (e.g. 'experiment set' /
   'sample', 'host star' / 'planet', 'reaction condition' / 'time point').

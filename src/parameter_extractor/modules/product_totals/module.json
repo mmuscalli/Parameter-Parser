@@ -3,6 +3,7 @@
   "label": "Peptide and oligomer totals",
   "version": 1,
   "description": "Total peptide and oligomer yields and the longest oligomer, calculated from the compound columns (uses the Solution chemistry module).",
+  "covers": "total peptide yield, total oligomer yield and the longest oligomer of each row, calculated from the compound columns -- so no total-yield or longest-product parameters.",
   "needs": [
     "solution_chemistry"
   ],

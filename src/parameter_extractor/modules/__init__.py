@@ -6,6 +6,7 @@ different copy).
 A module is a folder with a module.json:
 
   id, label, description, version
+  covers             what the module records, in a sentence for drafting a pack (the design leaves those out)
   builtin_stages     code steps it switches on ("analysis", "chemistry")
   postprocess        calculations it switches on ("amounts", "peptide_totals", ...)
   stages/*.json      its own optional stages (kinetics, wet-dry), run like a pack's
@@ -44,6 +45,7 @@ class ModuleManifest(BaseModel):
     id: str
     label: str
     description: str = ""
+    covers: str = ""                # what it records, for drafting a pack (pack_drafting: don't design those again)
     version: int = 1
     builtin_stages: List[str] = Field(default_factory=list)
     postprocess: List[str] = Field(default_factory=list)

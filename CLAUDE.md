@@ -2673,3 +2673,28 @@ from).
 - Docs: template README "Words used here and in the app" + "Module settings"; `modules/README.md` (module folder and
   module.json keys; in package data). tests/test_module_settings.py (settings applied, other packs unaffected, check,
   cleaned, flow, a paper run with half-lives stored in minutes, the tab, the window).
+
+## One Modules tab; overview layout; drafting with modules first (2026-11-09, Mickey)
+
+- Editor: the Modules and Module settings tabs are ONE "Modules" tab: list (tick = link; column "In this data pack":
+  linked / brought along by X / • changed); the right side scrolls through the selected module's page -- title +
+  status + Reset, description, "What it brings", "Settings for this data pack" (`module_settings_tab.ModuleSettingsEditor
+  .build(mod)` when linked; `release()` before a page is replaced -- it held deleted widgets once), and the Analysis
+  methods vocabulary (`vocab_box`, built once, reparented per page). The page follows the pane's width (horizontal
+  scrolling off, Ignored size policy). `self.module_settings_tab` is the editor helper (values(linked ids), reset,
+  changed, values_table).
+- Layout: `pack_overview.PARTS` / `parts_html()` / `STYLE` (tables with padding, line-height) used by the editor's
+  Overview, Help > How data packs work (now a resizable dialog with a QTextBrowser, not a message box) and the Data Packs
+  window; `as_html` = one table per kind (#, Step + grey description, From, Runs for). Document margins 18.
+- Data Packs window: the editor / New / Copy open with the window hidden (`_aside`) -- after switching apps it had come
+  back on top of the modal editor, unusable.
+- **Drafting** (eval/drafting_modules_2026-11-09.md): modules chosen from the surveys BEFORE the design
+  (`pack_modules.evidence_for`, new `solution_evidence`); `pack_drafting.modules_brief` -> prompt slot {{MODULES}} from
+  module.json `covers` (new field); `write_pack(modules=)` links them, drops parameters/steps/categories a module covers
+  (`covered_by_module`: module columns, kinetics/wet-dry/totals/analysis words, substance+amount words for chemistry)
+  -> report "Left to the modules"; a step named like a module step is renamed. `draft_pack(compounds=None|True,
+  pubchem=)`: compound setup runs automatically when the chemistry step is linked (GUI/CLI no longer call it
+  afterwards). Survey compound role `analysis` (skipped), compound numbers stripped (`_without_compound_number`), product
+  measures from the examples (`_example_measure`). `api_client._decoded` takes the leading JSON of a string with stray
+  words after it. Live: no duplicate steps (was 3), check clean; eder1994 with the drafted pack 42 rows, 150/150
+  values equal to the reference (replayed with the measure fix).

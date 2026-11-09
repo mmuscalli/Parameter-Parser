@@ -323,18 +323,17 @@ class NewPackDialog(QDialog):
 
         def work():
             try:
+                from parameter_extractor.pubchem import PubChem
+                from parameter_extractor.registry import default_pubchem_cache_path
+                pubchem = PubChem(config.pubchem_cache_path or default_pubchem_cache_path()) \
+                    if config.use_pubchem else None
+                # compounds are set up whenever the draft links the chemistry step; the box asks for it anyway
                 result = pack_drafting.draft_pack(items, pack_id, label, description, config,
                                                   on_progress=self._signals.progress.emit, cancel_event=self._cancel,
-                                                  passes=passes, tidy=tidy)
-                if compounds:
-                    from parameter_extractor import compound_setup
-                    from parameter_extractor.pubchem import PubChem
-                    from parameter_extractor.registry import default_pubchem_cache_path
-                    self._signals.progress.emit(1, 1, "Finding compounds in the drafted columns (PubChem)")
-                    pubchem = PubChem(config.pubchem_cache_path or default_pubchem_cache_path()) \
-                        if config.use_pubchem else None
-                    _, result.compound_lines, result.problems = compound_setup.set_up_compounds(
-                        result.pack.folder, pubchem, tidy=tidy)
+                                                  passes=passes, tidy=tidy, compounds=True if compounds else None,
+                                                  pubchem=pubchem)
+                if pubchem is not None:
+                    pubchem.save()
             except BaseException as e:           # shown in the dialog
                 result = e
             self._signals.done.emit(result)
@@ -375,32 +374,6 @@ class NewPackDialog(QDialog):
 
 # ---- Edit a research area ----------------------------------------------------------------------
 
-# how a data pack is put together, in the words the windows use (Mickey, 2026-11-09: steps / stages / modules were
-# ambiguous); the Overview tab and the Data Packs window show it
-PACK_PARTS_HTML = """
-<h3>How a data pack is put together</h3>
-<ul>
-<li><b>Step</b> -- one request to the AI model for each paper it runs for. <i>Built-in steps</i> are written in the
-app's code (compounds, analysis methods, fitting models); <i>configurable steps</i> are described in a file you can
-edit (the Steps tab; files in the pack's <code>stages/</code> folder). A step can run for every paper or only for
-papers that call for it (trigger words, kinds of experiments).</li>
-<li><b>Calculation</b> -- done on your computer from the model's answers (unit conversions, totals, formulas). Costs
-nothing.</li>
-<li><b>Data pack</b> -- everything for one field: its columns and categories, rules for planning the rows, its own
-configurable steps, calculations and formulas, the compound vocabulary -- and the <i>modules</i> it links, with its
-own settings for them.</li>
-<li><b>Module</b> -- a shared part several data packs link: it can bring steps (built-in or configurable),
-calculations, columns, rules and a vocabulary. It isn't copied into the pack: an improvement to a module reaches every
-pack that links it. What a pack may change about a module (switch parts off, units, trigger words, extra rules) is in
-its <i>Module settings</i> tab and applies to that pack only.</li>
-<li><b>Remembered from your reviews</b> -- columns, synonyms and compound names you accept while reviewing papers; kept
-for you, on top of the data pack.</li>
-</ul>
-<p>Every paper is also read by two of the app's own requests: planning the rows, and reading the paper's details.
-Reading the values twice or three times (Options) repeats the steps that extract values.</p>
-"""
-
-
 class PackEditor(QDialog):
     """One data pack's files as tabs (see the module docstring). `saved` fires after a save."""
     saved = Signal(str)
@@ -436,9 +409,8 @@ class PackEditor(QDialog):
                 ("Formulas", self._formulas_tab(), "This data pack's calculations written as formulas."),
                 ("Compounds", self._compounds_tab(), "This data pack's compound vocabulary, used by the chemistry step "
                  "(from the Solution chemistry module)."),
-                ("Modules", self._modules_tab(), "Shared modules this data pack links (the same in every pack)."),
-                ("Module settings", self._module_settings_tab(), "This data pack's changes to how its modules work: "
-                 "kept in this pack only; the modules themselves stay shared."),
+                ("Modules", self._modules_tab(), "The shared modules this data pack links, what each brings, and this "
+                 "pack's own settings for them (the modules themselves stay the same in every pack)."),
                 ("Check", self._check_tab(), "Problems the app finds in this data pack."))
         for name, widget, tip in tabs:
             self.tabs.setTabToolTip(self.tabs.addTab(widget, name), tip)
@@ -882,6 +854,7 @@ class PackEditor(QDialog):
         v = QVBoxLayout(w)
         self.overview = QTextBrowser()
         self.overview.setOpenExternalLinks(False)
+        self.overview.document().setDocumentMargin(18)
         v.addWidget(self.overview, 1)
         return w
 
@@ -892,30 +865,30 @@ class PackEditor(QDialog):
             flow = pack_overview.as_html(pack_overview.paper_flow(packs.Pack(self.draft.folder)))
         except Exception as e:                      # a pack the app can't load: the Check tab says why
             flow = f"<p>The data pack can't be loaded as saved ({e}); see the Check tab.</p>"
-        self.overview.setHtml(PACK_PARTS_HTML + "<h3>What happens to each paper (as saved)</h3>" + flow)
-
-    def _module_settings_tab(self) -> QWidget:
-        from parameter_extractor.gui.module_settings_tab import ModuleSettingsTab
-        self.module_settings_tab = ModuleSettingsTab(self.draft.manifest.get("module_settings"),
-                                                     self._linked_modules, read_only=self.read_only)
-        return self.module_settings_tab
+        self.overview.setHtml(pack_overview.parts_html() + "<h2>What happens to each paper</h2>"
+                              "<p class='muted'>As saved -- Save updates this page.</p>" + flow)
 
     # ---- Modules (shared parts the pack links in: parameter_extractor/modules/) ----------------------------
 
     def _modules_tab(self) -> QWidget:
-        from PySide6.QtWidgets import QSplitter
-        from parameter_extractor import modules as module_store, pack_modules
+        """Every module: tick to link; the selected one's description, what it brings, this pack's settings for it
+        (module_settings_tab.ModuleSettingsEditor) and -- Analysis methods -- its vocabulary (2026-11-09: one tab)."""
+        from PySide6.QtWidgets import QScrollArea, QSplitter
+        from parameter_extractor import modules as module_store
+        from parameter_extractor.gui.module_settings_tab import ModuleSettingsEditor
+        self.module_settings_tab = ModuleSettingsEditor(self.draft.manifest.get("module_settings"),
+                                                        read_only=self.read_only, on_change=self._mark_module_changes)
         w = QWidget()
         v = QVBoxLayout(w)
-        v.addWidget(_titled("Modules this data pack uses", "Modules are shared parts -- a step with its prompt and "
-                            "columns, calculations, row rules, a vocabulary -- that several data packs use. They're "
-                            "linked, not copied: an improvement to a module reaches every pack that uses it, and "
-                            "there's only ever one version. A module's content is shown here but not edited here; "
-                            "the pack's own parts are on the other tabs. Tick a module to link it, untick to unlink "
-                            "(saved with Save)."))
-        # the module list on the left, the selected module on the right (its vocabulary needs the room)
+        v.addWidget(_titled("Modules this data pack uses", "Modules are shared parts -- steps, calculations, "
+                            "columns, rules, a vocabulary -- that several data packs link. They're linked, not "
+                            "copied: an improvement to a module reaches every pack that uses it, and there's only ever "
+                            "one version. Tick a module to link it, untick to unlink. For a linked module you can "
+                            "change how it works IN THIS DATA PACK (switch its parts off, store a value in another "
+                            "unit, change trigger words, add rules); only your changes are kept, the rest follows the "
+                            "module. Saved with Save."))
         self.module_table = QTableWidget(0, 2)
-        self.module_table.setHorizontalHeaderLabels(["Module", "Linked"])
+        self.module_table.setHorizontalHeaderLabels(["Module", "In this data pack"])
         self.module_table.verticalHeader().setVisible(False)
         head = self.module_table.horizontalHeader()
         head.setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
@@ -938,34 +911,50 @@ class PackEditor(QDialog):
             linked = QTableWidgetItem("")
             linked.setFlags(linked.flags() & ~Qt.ItemFlag.ItemIsEditable)
             self.module_table.setItem(r, 1, linked)
-        self.module_table.setColumnWidth(1, 150)
+        self.module_table.setColumnWidth(1, 190)
         self.module_table.itemChanged.connect(lambda it: self._refresh_module_effects() if it.column() == 0 else None)
-        self.module_table.currentCellChanged.connect(lambda r, *_: self._show_module(r))
-        right = QWidget()
-        rv = QVBoxLayout(right)
-        rv.setContentsMargins(0, 0, 0, 0)
-        self.module_details = QLabel(wordWrap=True)
-        self.module_details.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
-        self.module_details.setAlignment(Qt.AlignmentFlag.AlignTop)
-        rv.addWidget(self.module_details)
+        self.module_table.currentCellChanged.connect(lambda r, _c, pr, _pc: self._show_module(r) if r != pr else None)
+        # the analysis vocabulary: built once, placed on the Analysis methods module's page
         self.vocab_box = QGroupBox("Techniques and instrument settings (the module's vocabulary)")
         bv = QVBoxLayout(self.vocab_box)
         bv.addWidget(self._analysis_tab())
-        rv.addWidget(self.vocab_box, 1)
-        self.module_spacer = QWidget()
-        rv.addWidget(self.module_spacer, 1)
+        self.vocab_box.setMinimumHeight(560)
+        self.module_scroll = QScrollArea()
+        self.module_scroll.setWidgetResizable(True)
+        # the page follows the pane's width (wrapped text, tables scroll inside) -- no sideways scrolling
+        self.module_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        from PySide6.QtWidgets import QSizePolicy
+        self.vocab_box.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred)
         split = QSplitter(Qt.Orientation.Horizontal)
         split.addWidget(self.module_table)
-        split.addWidget(right)
+        split.addWidget(self.module_scroll)
         split.setStretchFactor(0, 1)
         split.setStretchFactor(1, 3)
-        split.setSizes([380, 1000])
+        split.setSizes([360, 1000])
         split.setChildrenCollapsible(False)
         v.addWidget(split, 1)
-        self.vocab_box.setVisible(False)
         if self.module_table.rowCount():
             self.module_table.setCurrentCell(0, 0)
         return w
+
+    def _module_status(self, mid: str) -> str:
+        from parameter_extractor import modules as module_store
+        found, chosen = module_store.available(), set(self._chosen_modules())
+        if mid in chosen:
+            return "linked" + (" • changed" if self.module_settings_tab.changed(mid) else "")
+        by = [found[o].label for o in chosen if o in found and mid in found[o].manifest.needs]
+        if by and mid in {m.id for m in self._linked_modules()}:
+            return "brought along by " + ", ".join(by) + (" • changed" if self.module_settings_tab.changed(mid) else "")
+        return ""
+
+    def _mark_module_changes(self) -> None:
+        t = getattr(self, "module_table", None)
+        if t is None:
+            return
+        t.blockSignals(True)
+        for r in range(t.rowCount()):
+            t.item(r, 1).setText(self._module_status(t.item(r, 0).data(Qt.ItemDataRole.UserRole)))
+        t.blockSignals(False)
 
     def _chosen_modules(self) -> list:
         """The modules ticked (the pack's own list; the ones they bring along aren't listed)."""
@@ -1008,12 +997,10 @@ class PackEditor(QDialog):
             if mid not in chosen and mid in linked and by:
                 item.setCheckState(Qt.CheckState.Checked)
                 item.setFlags(item.flags() & ~Qt.ItemFlag.ItemIsEnabled)
-                t.item(r, 1).setText("brought along by " + ", ".join(by))
-            else:
-                if not self.read_only:
-                    item.setFlags(item.flags() | Qt.ItemFlag.ItemIsEnabled)
-                t.item(r, 1).setText("linked" if mid in chosen else "")
+            elif not self.read_only:
+                item.setFlags(item.flags() | Qt.ItemFlag.ItemIsEnabled)
         t.blockSignals(False)
+        self._mark_module_changes()
         provided = self._module_steps()
         for name, box in self.builtin_boxes.items():
             box.blockSignals(True)
@@ -1030,8 +1017,6 @@ class PackEditor(QDialog):
         self._fill_calculations(self._chosen_calculations())
         self._fill_vocab()
         self._show_module(t.currentRow())
-        if getattr(self, "module_settings_tab", None) is not None:
-            self.module_settings_tab.refresh()
         from parameter_extractor.stages.optional import StageSpec
         brought = []
         for mod in self._linked_modules():
@@ -1040,30 +1025,67 @@ class PackEditor(QDialog):
                     brought.append(f"{StageSpec.model_validate_json(f.read_text()).label} ({mod.label} module)")
                 except ValueError:
                     pass
-        self.module_stages_note.setText("Also run, from linked modules (adjust them in the Module settings tab): " + "; ".join(brought)
+        self.module_stages_note.setText("Also run, from linked modules (adjust them on the Modules tab): " + "; ".join(brought)
                                         if brought else "")
         self.module_stages_note.setVisible(bool(brought))
 
     def _show_module(self, row: int) -> None:
-        from parameter_extractor import pack_modules
-        item = self.module_table.item(row, 0) if row >= 0 else None
-        if item is None:
-            self.module_details.setText("")
-            self.vocab_box.setVisible(False)
-            self.module_spacer.setVisible(True)
-            return
-        from parameter_extractor import modules as module_store
-        mid = item.data(Qt.ItemDataRole.UserRole)
-        mod = module_store.available().get(mid)
-        lines = pack_modules.describe(mid)
-        status = self.module_table.item(row, 1).text() or "not linked"
+        """The selected module's page: what it is and brings, this pack's settings for it when linked, and the
+        Analysis methods module's vocabulary."""
         from html import escape
-        self.module_details.setText(f"<b>{escape(item.text())}</b> &nbsp;<i>({escape(status)})</i><br>"
-                                    + (f"{escape(mod.manifest.description)}<br><br>" if mod else "")
-                                    + "What it brings:<br>" + "<br>".join(f"• {escape(l)}" for l in lines))
-        has_vocab = bool(mod and mod.file("analysis_vocab.json"))
-        self.vocab_box.setVisible(has_vocab)
-        self.module_spacer.setVisible(not has_vocab)
+        from parameter_extractor import modules as module_store, pack_modules
+        self.module_settings_tab.release()
+        self.vocab_box.setParent(None)                 # kept across pages (built once)
+        item = self.module_table.item(row, 0) if row >= 0 else None
+        mod = module_store.available().get(item.data(Qt.ItemDataRole.UserRole)) if item else None
+        page = QWidget()
+        from PySide6.QtWidgets import QSizePolicy
+        page.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred)
+        pv = QVBoxLayout(page)
+        pv.setContentsMargins(14, 10, 14, 14)
+        pv.setSpacing(12)
+        if mod is None:
+            self.module_scroll.setWidget(page)
+            return
+        linked = mod.id in {m.id for m in self._linked_modules()}
+        head = QHBoxLayout()
+        status = self._module_status(mod.id) or "not linked"
+        title = QLabel(f"<span style='font-size:15pt; font-weight:600'>{escape(mod.label)}</span>"
+                       f"&nbsp;&nbsp;<span style='color:gray'>{escape(status)}</span>")
+        head.addWidget(title, 1)
+        if linked:
+            reset = QPushButton("Reset to the module's defaults", clicked=lambda: self._reset_module(mod.id))
+            reset.setEnabled(not self.read_only)
+            reset.setToolTip("Forget this data pack's changes to the module.")
+            head.addWidget(reset)
+        pv.addLayout(head)
+        about = QLabel(escape(mod.manifest.description), wordWrap=True)
+        pv.addWidget(about)
+        brings = QLabel("<table cellpadding='3' cellspacing='0'>" + "".join(
+            f"<tr><td valign='top'>•</td><td>{escape(l)}</td></tr>" for l in pack_modules.describe(mod.id))
+            + "</table>", wordWrap=True)
+        brings.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
+        box = QGroupBox("What it brings")
+        QVBoxLayout(box).addWidget(brings)
+        pv.addWidget(box)
+        if linked:
+            pv.addWidget(_titled(f"Settings for this data pack", "Changes here apply to this data pack only; the "
+                                 "module stays the same in every other pack. Anything you leave alone follows the "
+                                 "module, including its future improvements."))
+            pv.addWidget(self.module_settings_tab.build(mod))
+        else:
+            pv.addWidget(_hint("Tick the module on the left to link it; its settings for this data pack then appear "
+                               "here."))
+        if mod.file("analysis_vocab.json"):
+            pv.addWidget(self.vocab_box)
+            self._fill_vocab()
+        pv.addStretch(1)
+        self.module_scroll.setWidget(page)
+
+    def _reset_module(self, mid: str) -> None:
+        self.module_settings_tab.reset(mid)
+        self._mark_module_changes()
+        self._show_module(self.module_table.currentRow())
 
     # ---- Compounds (the chemistry step's compound vocabulary) ------------------------------------
 
@@ -2187,7 +2209,7 @@ class PackEditor(QDialog):
         m["modules"] = self._chosen_modules()
         if not m["modules"]:
             m.pop("modules", None)
-        m["module_settings"] = self.module_settings_tab.values()
+        m["module_settings"] = self.module_settings_tab.values([x.id for x in self._linked_modules()])
         if not m["module_settings"]:
             m.pop("module_settings", None)
         m["formulas"] = self._formulas_from_table()

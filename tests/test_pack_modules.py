@@ -149,7 +149,7 @@ def test_drafting_adds_the_analysis_module():
         manifest = json.loads((r.pack.folder / "pack.json").read_text())
         assert "analysis" in manifest["modules"] and not (r.pack.folder / "analysis_vocab.json").exists()
         assert r.module_evidence["analysis"] == {"eder1994": ["RP-HPLC"], "kim2019": ["RP-HPLC"]}
-        assert "## Shared modules added" in (r.pack.folder / "drafted_from.md").read_text()
+        assert "## Shared modules linked" in (r.pack.folder / "drafted_from.md").read_text()
         r2 = pack_drafting.draft_pack([EDER], "without_modules", "Without", "", cfg, modules_on=False)
         assert "analysis" not in json.loads((r2.pack.folder / "pack.json").read_text()).get("modules", [])
 
@@ -219,6 +219,7 @@ def test_modules_tab():
         t.item(rows["kinetics"], 0).setCheckState(Qt.CheckState.Unchecked)
         t.setCurrentCell(rows["analysis"], 0)
         assert e.analysis_stack.currentIndex() == 0                          # not linked: no vocabulary
+        assert e.vocab_box.parent() is not None                              # shown on the module's page
         t.item(rows["analysis"], 0).setCheckState(Qt.CheckState.Checked)
         assert e.analysis_stack.currentIndex() == 1 and e.tech_table.rowCount() > 20
         assert not e._vocab_editable()                                        # the module's: read-only here

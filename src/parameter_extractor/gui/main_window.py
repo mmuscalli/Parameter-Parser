@@ -359,18 +359,29 @@ class MainWindow(QMainWindow):
 
     def show_how_packs_work(self) -> None:
         """Steps, calculations, data packs, modules (the words the windows use) and where model requests come from."""
-        from parameter_extractor.gui.pack_windows import PACK_PARTS_HTML
-        box = QMessageBox(self)
-        box.setWindowTitle("How data packs work")
-        box.setTextFormat(Qt.TextFormat.RichText)
-        box.setText(PACK_PARTS_HTML + "<p>To see every request and calculation of a particular data pack, and where "
-                    "each one comes from, open <i>Data Packs › All data packs and modules…</i> or the pack's "
-                    "<i>Overview</i> tab.</p>")
-        open_btn = box.addButton("All data packs and modules…", QMessageBox.ButtonRole.ActionRole)
-        box.addButton(QMessageBox.StandardButton.Close)
-        box.exec()
-        if box.clickedButton() is open_btn:
-            self.open_packs_window()
+        from PySide6.QtWidgets import QDialog, QTextBrowser
+        from parameter_extractor import pack_overview
+        dlg = QDialog(self)
+        dlg.setWindowTitle("How data packs work")
+        dlg.resize(820, 640)
+        v = QVBoxLayout(dlg)
+        view = QTextBrowser()
+        view.document().setDocumentMargin(18)
+        view.setHtml(pack_overview.parts_html("How data packs work")
+                     + "<p>To see every request and calculation of a particular data pack, and where each one comes "
+                       "from, open <i>Data Packs › All data packs and modules…</i> or the pack's <i>Overview</i> "
+                       "tab.</p>")
+        v.addWidget(view, 1)
+        row = QHBoxLayout()
+        row.addStretch(1)
+        open_btn = QPushButton("All data packs and modules…")
+        open_btn.clicked.connect(lambda: (dlg.accept(), self.open_packs_window()))
+        row.addWidget(open_btn)
+        close = QPushButton("Close", default=True)
+        close.clicked.connect(dlg.accept)
+        row.addWidget(close)
+        v.addLayout(row)
+        dlg.exec()
 
     def show_getting_started(self) -> None:
         """The workflow in a few lines (Help menu; also offered on first launch)."""

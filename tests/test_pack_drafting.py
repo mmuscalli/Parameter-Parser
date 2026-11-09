@@ -211,6 +211,65 @@ def test_stage_discipline():
     assert any("merged into stage conditions" in n for n in notes)
 
 
+
+def test_modules_are_chosen_before_the_design():
+    """2026-11-09: the modules the surveys call for are chosen BEFORE the design request, which is told what they
+    record; what a proposal still asks of them is left to them; a step named like a module's is renamed; compounds
+    are set up when the chemistry step is linked (numbers stripped, product measures from the examples)."""
+    from parameter_extractor.pack_drafting import (SurveyCompound, SurveyVariable, covered_by_module,
+                                                   modules_brief, write_pack)
+    from parameter_extractor.pack_editing import PackDraft
+    from parameter_extractor import pack_modules, compound_setup
+    brief = modules_brief(["kinetics", "product_totals"])
+    assert "SHARED MODULES" in brief and "Kinetics:" in brief and "Solution chemistry:" in brief    # needs
+    assert covered_by_module("rate_constant_per_M_hr", "number", ["kinetics"], []) == "Kinetics"
+    assert covered_by_module("product_yield_pct", "number", ["solution_chemistry"], []) == "Solution chemistry"
+    assert covered_by_module("salt_or_additive", "text", ["solution_chemistry"], []) == "Solution chemistry"
+    assert covered_by_module("detection_wavelength_nm", "number", ["analysis"], []) == "Analysis methods"
+    assert covered_by_module("analysis_method", "text", ["analysis"], []) == ""
+    assert covered_by_module("initial_temperature_C", "number", ["solution_chemistry", "analysis"], []) == ""
+    # survey evidence for the solution-chemistry module: compounds + concentrations in solution
+    var = SurveyVariable(name="glycine concentration", column="glycine_concentration", unit="mM", kind="number",
+                         role="composition", description="glycine in the aqueous solution", level="set",
+                         uncertainty=False, where="table", example="100 mM")
+    survey = PaperSurvey(field="x", row_unit="r", set_unit="s", notes="", variables=[var], compounds=[
+        SurveyCompound(name="Gly", full_name="glycine", role="starting", example="100 mM")])
+    from types import SimpleNamespace
+    assert "a" in pack_modules.solution_evidence([SimpleNamespace(name="a", survey=survey)])
+    # the design request carries the brief
+    seen = {}
+
+    def call(ctx, *, stage, response_model, user_content="", **kw):
+        seen[stage] = user_content
+        return PROPOSAL
+    with tempfile.TemporaryDirectory() as tmp, patch.object(api_client, "call_structured", call):
+        cfg = RunConfig(api_key="test", output_dir=Path(tmp) / "out", rasterize_table_pages=False)
+        pack_drafting.synthesize([], cfg, Path(tmp), "Area", "", modules=["kinetics"])
+        assert "SHARED MODULES" in seen["pack_synthesis"] and "rate constants" in seen["pack_synthesis"]
+    # writing: covered parameters left out, a module-named step renamed, modules linked
+    proposal = PROPOSAL.model_copy(deep=True)
+    proposal.stages[1].name = "kinetics"
+    with tempfile.TemporaryDirectory() as tmp, patch.object(packs, "user_packs_dir", lambda: Path(tmp)):
+        pack, _, by_column = write_pack(proposal, "mods_first", "Mods first", base=Path(tmp),
+                                        modules=["kinetics", "solution_chemistry"])
+        left = by_column["__left_to_modules__"]
+        d = PackDraft.load(pack.folder)
+        own = {s["name"]: [p["column"] for p in s["parameters"]] for s in d.stages.values()}
+        assert d.manifest["modules"] == ["kinetics", "solution_chemistry"]
+        assert any("product_yield" in l and "Solution chemistry" in l for l in left), left
+        assert "kinetics" not in own                                        # the module's step keeps its name
+        assert not any("product_yield" in c for cols in own.values() for c in cols)
+    # compound numbers and product measures (compound_setup)
+    assert compound_setup._without_compound_number({"name": "nicotinamide 6", "full_name": ""})["name"] == "nicotinamide"
+    assert compound_setup._without_compound_number({"name": "4", "full_name": "ribose-1,2-cyclic phosphate 4"})[
+        "name"] == "ribose-1,2-cyclic phosphate"
+    assert compound_setup._without_compound_number({"name": "7", "full_name": ""}) is None
+    assert compound_setup._example_measure("13.96 %") == "%yield"
+    assert compound_setup._example_measure("12 % recovered") == "%recovered"
+    assert compound_setup._example_measure("2.5 mM") == "mM" and compound_setup._example_measure("") is None
+    # a list sent as a JSON string with stray words after it (api_client._decoded)
+    assert api_client._decoded({"rows": '[{"a": 1}]\nthe rows'}) == {"rows": [{"a": 1}]}
+
 if __name__ == "__main__":
     for name, fn in list(globals().items()):
         if name.startswith("test_"):

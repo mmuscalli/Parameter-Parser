@@ -114,22 +114,61 @@ def summary(steps: List[FlowStep]) -> str:
     return text + f"; {local} calculations on your computer (free)."
 
 
-def as_html(steps: List[FlowStep], passes_note: bool = True) -> str:
-    """The flow as a small HTML page for a QTextBrowser / QLabel."""
+# the terms, for the editor's Overview tab and Help > How data packs work (Mickey, 2026-11-09: steps / stages /
+# modules were ambiguous)
+PARTS = [
+    ("Step", "One request to the AI model for each paper it runs for. <i>Built-in steps</i> are written in the app's "
+             "code (compounds, analysis methods, fitting models). <i>Configurable steps</i> are described in a file you "
+             "can edit (the Steps tab). A step runs for every paper, or only for papers that call for it (trigger "
+             "words, kinds of experiments)."),
+    ("Calculation", "Done on your computer from the model's answers: unit conversions, totals, formulas. Costs "
+                    "nothing."),
+    ("Data pack", "Everything for one field: its columns and categories, rules for planning the rows, its own steps, "
+                  "calculations and formulas, its compound vocabulary, and the modules it links with its own settings "
+                  "for them."),
+    ("Module", "A shared part several data packs link: it can bring steps, calculations, columns, rules and a "
+               "vocabulary. It isn't copied into the pack, so an improvement to a module reaches every pack that "
+               "links it. What one pack changes about a module (parts switched off, units, trigger words, extra rules) "
+               "is set on that pack's Modules tab and applies to that pack only."),
+    ("Remembered from your reviews", "Columns, synonyms and compound names you accept while reviewing papers. Kept "
+                                     "for you, on top of the data pack."),
+]
+
+STYLE = ("<style>h2 { margin-top: 18px; margin-bottom: 8px; } h3 { margin-top: 18px; margin-bottom: 6px; } "
+         "p { margin-top: 6px; margin-bottom: 8px; line-height: 140%; } td { line-height: 135%; } "
+         ".muted { color: #8a8a8a; } .term { font-weight: 600; }</style>")
+
+
+def parts_html(heading: str = "How a data pack is put together") -> str:
     from html import escape
-    rows = []
-    sections = (("request", "Requests to the AI model (each one is paid per paper)"),
-                ("optional", "Only when you ask for them"),
-                ("local", "Calculations on your computer (no model requests)"))
-    for kind, title in sections:
+    rows = "".join(f"<tr><td class='term' width='190' valign='top'>{escape(t)}</td><td valign='top'>{d}</td></tr>"
+                   for t, d in PARTS)
+    return (STYLE + f"<h2>{escape(heading)}</h2>"
+            f"<table cellpadding='7' cellspacing='0' width='100%'>{rows}</table>"
+            "<p>Besides its steps, every paper gets two of the app's own requests: planning the rows and reading the "
+            "paper's details. Reading the values twice or three times (Options) repeats the steps that extract "
+            "values.</p>")
+
+
+def as_html(steps: List[FlowStep], passes_note: bool = True) -> str:
+    """The flow as tables for a QTextBrowser: one per kind (model requests, on request, calculations)."""
+    from html import escape
+    out = [STYLE, f"<p><b>{escape(summary(steps))}</b></p>"]
+    sections = (("request", "Requests to the AI model", "each one is paid for, per paper it runs for"),
+                ("optional", "Only when you ask for them", ""),
+                ("local", "Calculations on your computer", "no model requests, free"))
+    for kind, title, note in sections:
         items = [s for s in steps if s.kind == kind]
         if not items:
             continue
-        rows.append(f"<h4 style='margin-bottom:2px'>{escape(title)}</h4><ol style='margin-top:2px'>")
-        for s in items:
-            extra = " &nbsp;<i>(repeated for each extra reading)</i>" if passes_note and s.repeats else ""
-            rows.append(f"<li><b>{escape(s.label)}</b> — from {escape(s.source)}; runs for {escape(s.when)}{extra}"
-                        + (f"<br><span style='color:gray'>{escape(s.what)}</span>" if s.what else "") + "</li>")
-        rows.append("</ol>")
-    return f"<p>{escape(summary(steps))}</p>" + "".join(rows)
-
+        out.append(f"<h3>{escape(title)}" + (f" <span class='muted'>— {escape(note)}</span>" if note else "")
+                   + "</h3>")
+        rows = ["<tr><td class='muted' width='4%'>#</td><td class='muted' width='46%'>Step</td>"
+                "<td class='muted' width='22%'>From</td><td class='muted'>Runs for</td></tr>"]
+        for n, s in enumerate(items, 1):
+            extra = "<br><span class='muted'>repeated for each extra reading</span>" if passes_note and s.repeats else ""
+            what = f"<br><span class='muted'>{escape(s.what)}</span>" if s.what else ""
+            rows.append(f"<tr><td valign='top'>{n}</td><td valign='top'><b>{escape(s.label)}</b>{what}</td>"
+                        f"<td valign='top'>{escape(s.source)}</td><td valign='top'>{escape(s.when)}{extra}</td></tr>")
+        out.append("<table cellpadding='6' cellspacing='0' width='100%'>" + "".join(rows) + "</table>")
+    return "".join(out)

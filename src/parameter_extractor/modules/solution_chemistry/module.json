@@ -3,6 +3,7 @@
   "label": "Solution chemistry",
   "version": 1,
   "description": "The chemistry step: every compound with its starting concentration or amount and its measured yield or concentration, stock solutions, molar ratios; calculations turn amounts and stocks into concentrations and name the water type.",
+  "covers": "every compound's starting concentration or amount, stock solutions and the volumes combined, molar ratios, and every product's or remaining compound's yield, concentration, amount or recovery -- each in its own column per compound; plus the solvent and the reaction volume. So no parameters that name a substance (reactant, product, salt, additive, starting material) or give a substance's concentration, amount or yield, and no stage for compound results; whole-experiment results that aren't one compound's amount stay yours.",
   "builtin_stages": [
     "chemistry"
   ],

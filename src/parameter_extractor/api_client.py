@@ -408,7 +408,8 @@ def _out_of_credits(status: int, kind: str, text: str) -> bool:
 
 def _decoded(data):
     """Tool inputs aren't grammar-constrained (non-strict tools): a list or object sent as a JSON
-    *string* (Haiku, teng2023: "parameters": "[{...}]") is decoded instead of failing the step."""
+    *string* (Haiku, teng2023: "parameters": "[{...}]") is decoded instead of failing the step -- also when stray
+    words follow the complete JSON inside the string (Sonnet, 2026-11-09: '[...]\nthe rows', twice in a row)."""
     if not isinstance(data, dict):
         return data
     out = {}
@@ -417,7 +418,10 @@ def _decoded(data):
             try:
                 value = json.loads(value)
             except ValueError:
-                pass
+                try:
+                    value = json.JSONDecoder().raw_decode(value.lstrip())[0]
+                except ValueError:
+                    pass
         out[key] = value
     return out
 

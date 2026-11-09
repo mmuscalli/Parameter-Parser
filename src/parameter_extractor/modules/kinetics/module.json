@@ -3,6 +3,7 @@
   "label": "Kinetics",
   "version": 1,
   "description": "Rate constants, half-lives and activation energies the paper reports (a step that runs only for papers that mention them).",
+  "covers": "rate constants (first and second order), half-lives, activation energies and the kinetic model -- so no kinetics parameters or kinetics stage.",
   "variable_categories": [
     {
       "id": "kinetics",

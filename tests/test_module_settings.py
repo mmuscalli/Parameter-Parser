@@ -171,8 +171,10 @@ def test_a_paper_runs_with_module_settings():
             packs.activate("prebiotic_chemistry")
 
 
-def test_module_settings_tab():
+def test_modules_tab_settings():
+    """One Modules tab (2026-11-09): tick to link; a linked module's page holds this pack's settings for it."""
     os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+    from PySide6.QtCore import Qt
     from PySide6.QtWidgets import QApplication, QCheckBox, QComboBox
     app = QApplication.instance() or QApplication([])
     from parameter_extractor.gui.pack_windows import PackEditor
@@ -180,10 +182,14 @@ def test_module_settings_tab():
         pack = _pack(Path(tmp), ["kinetics"])
         e = PackEditor(pack.folder)
         names = [e.tabs.tabText(i) for i in range(e.tabs.count())]
-        assert names[0] == "Overview" and "Module settings" in names and names[-1] == "Check"
-        assert "Kinetics (from the Kinetics module)" in e.overview.toPlainText() or "Kinetics" in e.overview.toPlainText()
-        t = e.module_settings_tab
-        table = t.values_table
+        assert names[0] == "Overview" and "Modules" in names and "Module settings" not in names and names[-1] == "Check"
+        assert "Kinetics" in e.overview.toPlainText()
+        t = e.module_table
+        rows = {t.item(r, 0).data(Qt.ItemDataRole.UserRole): r for r in range(t.rowCount())}
+        t.setCurrentCell(rows["wet_dry"], 0)                       # not linked: no settings yet
+        assert e.module_settings_tab._shown != "wet_dry"
+        t.setCurrentCell(rows["kinetics"], 0)
+        table = e.module_settings_tab.values_table
         for r in range(table.rowCount()):
             if table.item(r, 1).text() == "half_life_hr":
                 combo = table.cellWidget(r, 2).findChild(QComboBox)
@@ -191,20 +197,21 @@ def test_module_settings_tab():
                 assert table.item(r, 1).text() == "half_life_min"
             if table.item(r, 1).text() == "kinetic_model":
                 table.cellWidget(r, 0).findChild(QCheckBox).setChecked(False)
-        assert t.module_list.item(0).text().endswith("•")
+        assert t.item(rows["kinetics"], 1).text() == "linked • changed"
+        t.setCurrentCell(rows["analysis"], 0)                      # moving away keeps the edits
+        t.setCurrentCell(rows["kinetics"], 0)
         assert e.save()
         saved = json.loads((pack.folder / "pack.json").read_text())["module_settings"]
         assert saved == {"kinetics": {"parameters": {"half_life_hr": {"unit": "min"}, "kinetic_model": {"off": True}}}}
         assert "half_life_min" in {p.column for p in load_specs(packs.Pack(pack.folder))["kinetics"].parameters}
-        t._reset("kinetics")
+        e._reset_module("kinetics")
+        assert t.item(rows["kinetics"], 1).text() == "linked"
         assert e.save() and "module_settings" not in json.loads((pack.folder / "pack.json").read_text())
         # settings of a module the pack no longer links aren't kept
         e2 = PackEditor(pack.folder)
         e2.module_settings_tab.settings["kinetics"] = ms.ModuleSettings(calculations_off=["x"])
-        from PySide6.QtCore import Qt
         rows = {e2.module_table.item(r, 0).data(Qt.ItemDataRole.UserRole): r for r in range(e2.module_table.rowCount())}
         e2.module_table.item(rows["kinetics"], 0).setCheckState(Qt.CheckState.Unchecked)
-        assert e2.module_settings_tab.module_list.count() == 0
         assert e2.save() and "module_settings" not in json.loads((pack.folder / "pack.json").read_text())
 
 

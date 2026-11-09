@@ -1,5 +1,5 @@
 """
-The data pack editor's "Module settings" tab (Mickey, 2026-11-09): this pack's changes to the modules it links --
+The settings part of the data pack editor's Modules tab (Mickey, 2026-11-09): this pack's changes to the modules it links --
 which of a module's steps, values, calculations and rules it uses, the unit a value is stored in, a step's trigger
 words. The module itself stays shared (modules/<id>/, linked by reference); only the differences are kept, in the
 pack's pack.json "module_settings" (module_settings.py), so anything left alone follows the module and its updates.
@@ -9,13 +9,12 @@ from typing import Dict, List, Optional
 
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (QAbstractItemView, QCheckBox, QComboBox, QGroupBox, QHBoxLayout, QHeaderView, QLabel,
-                               QLineEdit, QListWidget, QListWidgetItem, QPlainTextEdit, QPushButton, QScrollArea,
-                               QSplitter, QTableWidget, QTableWidgetItem, QVBoxLayout, QWidget)
+                               QLineEdit, QListWidget, QListWidgetItem, QPlainTextEdit, QTableWidget, QTableWidgetItem,
+                               QVBoxLayout, QWidget)
 
 from parameter_extractor import module_settings as ms
 from parameter_extractor.gui.widgets import in_cell, style_rows
 
-CHANGED = " •"
 
 
 def _hint(text: str) -> QLabel:
@@ -44,108 +43,60 @@ def _unticked(lst: QListWidget) -> List[str]:
     return [lst.item(i).text() for i in range(lst.count()) if lst.item(i).checkState() != Qt.CheckState.Checked]
 
 
-class ModuleSettingsTab(QWidget):
-    """One linked module at a time: its steps, values, calculations, rules (and instrument families), each with this
-    pack's setting; `values()` -> the pack.json "module_settings"."""
+class ModuleSettingsEditor:
+    """This pack's settings for its linked modules, edited one module at a time: `build(mod)` returns the settings
+    section for the editor's Modules tab (the module's steps, values, calculations, rules, instrument families);
+    `values(linked ids)` -> the pack.json "module_settings" (Mickey, 2026-11-09: one Modules tab, not two)."""
 
-    def __init__(self, raw: Optional[dict], linked, read_only: bool = False, parent=None):
-        super().__init__(parent)
+    def __init__(self, raw: Optional[dict], read_only: bool = False, on_change=None):
         self.read_only = read_only
-        self._linked = linked                     # callable -> the linked modules (the Modules tab's ticks)
+        self._on_change = on_change or (lambda: None)
         self.settings: Dict[str, ms.ModuleSettings] = {mid: ms.settings_for(raw, mid) for mid in (raw or {})}
         self._shown: Optional[str] = None
         self._collect = None                      # reads the shown module's widgets back into self.settings
-        v = QVBoxLayout(self)
-        v.setContentsMargins(0, 0, 0, 0)
-        v.addWidget(_hint("Modules are shared: their content is the same in every data pack that links them. Here you "
-                          "can change how a module works IN THIS DATA PACK only -- switch its steps, values, "
-                          "calculations and rules on or off, store a value in another unit, change a step's trigger "
-                          "words. Only your changes are kept; everything else follows the module, including its "
-                          "future improvements. Modules with changes are marked •."))
-        split = QSplitter(Qt.Orientation.Horizontal)
-        self.module_list = QListWidget()
-        self.module_list.currentRowChanged.connect(self._show_row)
-        split.addWidget(self.module_list)
-        self.scroll = QScrollArea()
-        self.scroll.setWidgetResizable(True)
-        split.addWidget(self.scroll)
-        split.setStretchFactor(0, 1)
-        split.setStretchFactor(1, 4)
-        split.setSizes([260, 1000])
-        v.addWidget(split, 1)
-        self.refresh()
+        self.values_table: Optional[QTableWidget] = None
 
-    # ---- the list -------------------------------------------------------------------------------------------------
-
-    def refresh(self) -> None:
-        """The linked modules (after a tick on the Modules tab)."""
-        self._store()
-        keep = self._shown
-        self.module_list.blockSignals(True)
-        self.module_list.clear()
-        for mod in self._linked():
-            item = QListWidgetItem(mod.label + (CHANGED if self._changed(mod.id) else ""))
-            item.setData(Qt.ItemDataRole.UserRole, mod.id)
-            item.setToolTip(mod.manifest.description)
-            self.module_list.addItem(item)
-        self.module_list.blockSignals(False)
-        ids = [self.module_list.item(i).data(Qt.ItemDataRole.UserRole) for i in range(self.module_list.count())]
-        if not ids:
-            self._shown = None
-            self.scroll.setWidget(_hint("This data pack links no modules (Modules tab)."))
-            return
-        self._shown = None
-        self.module_list.setCurrentRow(ids.index(keep) if keep in ids else 0)
-        self._show_row(self.module_list.currentRow())
-
-    def _changed(self, mid: str) -> bool:
+    def changed(self, mid: str) -> bool:
+        if mid == self._shown:
+            self.store()
         return mid in self.settings and not ms.is_default(self.settings[mid])
 
-    def _mark(self) -> None:
-        for i in range(self.module_list.count()):
-            item = self.module_list.item(i)
-            mid = item.data(Qt.ItemDataRole.UserRole)
-            label = item.text().removesuffix(CHANGED)
-            item.setText(label + (CHANGED if self._changed(mid) else ""))
-
-    def _store(self) -> None:
+    def store(self) -> None:
         if self._collect is not None and self._shown is not None:
             self.settings[self._shown] = self._collect()
-            self._mark()
 
-    def values(self) -> dict:
+    def release(self) -> None:
+        """Keep the shown module's edits and let go of its widgets (its page is about to be replaced)."""
+        self.store()
+        self._collect = None
+        self._shown = None
+
+    def values(self, linked_ids) -> dict:
         """pack.json's "module_settings": the changes for the linked modules only."""
-        self._store()
-        linked = {m.id for m in self._linked()}
-        out = {mid: ms.cleaned(s) for mid, s in self.settings.items() if mid in linked}
+        self.store()
+        out = {mid: ms.cleaned(s) for mid, s in self.settings.items() if mid in set(linked_ids)}
         return {mid: d for mid, d in out.items() if d}
 
-    # ---- one module ---------------------------------------------------------------------------------------------
+    def reset(self, mid: str) -> None:
+        if mid == self._shown:
+            self._collect = None
+        self.settings.pop(mid, None)
 
-    def _show_row(self, row: int) -> None:
-        item = self.module_list.item(row) if row >= 0 else None
-        if item is None:
-            return
-        self._store()
-        self._collect = None                      # nothing to read back while the new page is built
-        mid = item.data(Qt.ItemDataRole.UserRole)
-        mod = next((m for m in self._linked() if m.id == mid), None)
-        if mod is None:
-            return
-        self._shown = mid
-        settings = self.settings.get(mid, ms.ModuleSettings())
+    def build(self, mod) -> QWidget:
+        """The settings section of one linked module (the previous one's edits are kept first)."""
+        self.store()
+        self._collect = None                      # nothing to read back while the new section is built
+        self._shown = mod.id
+        settings = self.settings.get(mod.id, ms.ModuleSettings())
         page = QWidget()
         pv = QVBoxLayout(page)
-        head = QHBoxLayout()
-        title = QLabel(f"<b>{mod.label}</b> &nbsp;<span style='color:gray'>-- settings for this data pack</span>")
-        head.addWidget(title, 1)
-        reset = QPushButton("Reset to the module's defaults", clicked=lambda: self._reset(mid))
-        reset.setEnabled(not self.read_only)
-        head.addWidget(reset)
-        pv.addLayout(head)
+        pv.setContentsMargins(0, 0, 0, 0)
+        pv.setSpacing(14)
         collectors = []
-        on_change = lambda: (self._store())
 
+        def on_change():
+            self.store()
+            self._on_change()
         from parameter_extractor.stages.optional import _specs_in
         specs = list(_specs_in(mod.stages_dir).values()) if mod.stages_dir.is_dir() else []
         for spec in specs:
@@ -194,14 +145,13 @@ class ModuleSettingsTab(QWidget):
                 cb.setToolTip(f"{fid}: {len(fam.get('settings', []))} settings")
                 cb.setEnabled(not self.read_only)
                 cb.toggled.connect(on_change)
-                grid.addWidget(cb, i // 3, i % 3)
+                grid.addWidget(cb, i // 2, i % 2)
                 ticks[fid] = cb
             pv.addWidget(box)
             collectors.append(lambda s, t=ticks: s.families_off.extend(f for f, cb in t.items() if not cb.isChecked()))
         if len(collectors) == 0:
             pv.addWidget(_hint("This module has nothing a data pack can change: it brings a built-in step and its "
                                "columns as they are."))
-        pv.addStretch(1)
 
         def collect() -> ms.ModuleSettings:
             s = ms.ModuleSettings()
@@ -209,16 +159,7 @@ class ModuleSettingsTab(QWidget):
                 c(s)
             return s
         self._collect = collect
-        self.scroll.setWidget(page)
-
-    def _reset(self, mid: str) -> None:
-        self.settings.pop(mid, None)
-        self._collect = None
-        self._shown = None
-        self._mark()
-        row = next(i for i in range(self.module_list.count())
-                   if self.module_list.item(i).data(Qt.ItemDataRole.UserRole) == mid)
-        self._show_row(row)
+        return page
 
     def _step_box(self, pv, spec, settings: ms.ModuleSettings, on_change):
         st = settings.steps.get(spec.name, ms.StepSetting())

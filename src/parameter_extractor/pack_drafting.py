@@ -62,9 +62,11 @@ class SurveyCompound(BaseModel):
     name: str = Field(description="As the paper writes it: formula or abbreviation ('MgCl2', 'ImpA', 'Gly-Gly').")
     full_name: str = Field(description="The full chemical name when the paper gives or implies one ('adenosine "
                                        "5'-phosphorimidazolide'); '' when the name is already the full name.")
-    role: Literal["starting", "product", "reagent", "other"] = Field(
+    role: Literal["starting", "product", "reagent", "analysis", "other"] = Field(
         description="starting: a reactant or other substance in the starting solution; product: formed or measured "
-                    "at the end; reagent: buffer, salt, activating agent, catalyst in solution; other.")
+                    "at the end; reagent: buffer, salt, activating agent, catalyst in the reaction solution; analysis: "
+                    "used only to analyse the samples (mobile phase, eluent, ion-pair reagent, MALDI matrix, "
+                    "calibration standard); other.")
     example: str = Field(description="One amount or concentration as printed ('10 mM'), or ''.")
 
 
@@ -144,6 +146,7 @@ class DraftResult:
     tidied: List[str] = field(default_factory=list)           # names changed to the conventions (conventions.py)
     modules: Dict[str, List[str]] = field(default_factory=dict)   # pack_modules added: {module: lines done}
     module_evidence: Dict[str, Dict[str, List[str]]] = field(default_factory=dict)   # {module: {paper: why}}
+    left_to_modules: List[str] = field(default_factory=list)    # proposed parameters / steps a linked module covers
 
 
 # ---- column names --------------------------------------------------------------------------------------------------
@@ -312,13 +315,26 @@ def _survey_digest(papers: List[SurveyedPaper]) -> str:
     return "\n".join(lines)
 
 
+def modules_brief(module_ids: Sequence[str]) -> str:
+    """The design request's MODULES section: what each linked module already records (module.json `covers`)."""
+    from parameter_extractor import modules as module_store
+    mods = module_store.resolve(list(module_ids))
+    if not mods:
+        return ""
+    return ("SHARED MODULES. This research area links these shared modules; each one already records what is "
+            "listed. Don't propose stages, parameters, categories or row rules for what they record -- design only "
+            "for the rest:\n" + "\n".join(f"- {m.label}: {m.manifest.covers or m.manifest.description}" for m in mods)
+            + "\n")
+
+
 def synthesize(papers: List[SurveyedPaper], config: RunConfig, work_dir: Path, area: str, description: str,
-               cancel_event: Optional[threading.Event] = None) -> tuple:
+               cancel_event: Optional[threading.Event] = None, modules: Sequence[str] = ()) -> tuple:
     from parameter_extractor.api_client import call_structured
     from parameter_extractor.run_context import RunContext, total_cost
     ctx = RunContext(config=config, run_dir=work_dir, total_steps=1, cancel_event=cancel_event)
     _handoff_folder(ctx, f"design_{_slug(area)}")
-    prompt = _prompt("pack_synthesis", AREA=area, AREA_DESCRIPTION=description, N_PAPERS=len(papers))
+    prompt = _prompt("pack_synthesis", AREA=area, AREA_DESCRIPTION=description, N_PAPERS=len(papers),
+                     MODULES=modules_brief(modules))
     proposal = call_structured(ctx, stage="pack_synthesis", system_prompt="Design a dataset's extraction setup from "
                                "surveys of sample papers.", user_content=f"{prompt}\n\nSURVEYS:\n{_survey_digest(papers)}",
                                response_model=PackProposal, max_tokens=SYNTHESIS_BUDGET)
@@ -338,6 +354,44 @@ def tidy_parameter(column: str, unit: str, kind: str, description: str = ""):
 
 
 MAX_ALWAYS_STAGES = 2
+
+# what each module records, read from a proposed column's words (a safety net under the design prompt's MODULES
+# section: a proposal that still asks for those again would cost a second request for the same values)
+_SUBSTANCE = {"product", "products", "starting", "reactant", "reactants", "substrate", "salt", "salts", "additive",
+              "additives", "reagent", "reagents", "species", "compound", "compounds", "solute", "monomer", "monomers"}
+_AMOUNT = {"name", "names", "material", "concentration", "conc", "yield", "amount", "recovered", "identity"}
+_ANALYSIS = {"detector", "detection", "instrument", "wavelength", "eluent", "mobile", "chromatography", "hplc", "nmr",
+             "maldi", "spectrometry", "spectrometer", "column_type", "retention", "ionization", "settings"}
+
+
+def covered_by_module(column: str, kind: str, module_ids: Sequence[str], module_columns: Sequence[str]) -> str:
+    """The linked module that already records this proposed column ('' = none)."""
+    from parameter_extractor import modules as module_store
+    linked = {m.id: m.label for m in module_store.resolve(list(module_ids))}
+    words = set(column.lower().split("_"))
+    if column in module_columns:
+        owner = next((m.label for m in module_store.resolve(list(module_ids))
+                      if column in _module_own_columns(m)), "")
+        return owner or "a linked module"
+    if "kinetics" in linked and ({"rate", "constant"} <= words or {"half", "life"} <= words
+                                 or {"activation", "energy"} <= words or "kinetic" in words):
+        return linked["kinetics"]
+    if "wet_dry" in linked and (column.startswith(("cycle_", "wet_phase", "dry_phase")) or "cycles" in words):
+        return linked["wet_dry"]
+    if "product_totals" in linked and (column.startswith("total_") and "yield" in words
+                                       or column.startswith("max_") and ("length" in words or "oligomer" in words)):
+        return linked["product_totals"]
+    if "analysis" in linked and column != "analysis_method" and (column.startswith("analysis_") or words & _ANALYSIS):
+        return linked["analysis"]
+    if "solution_chemistry" in linked and words & _SUBSTANCE and (words & _AMOUNT or kind == "text"):
+        return linked["solution_chemistry"]
+    return ""
+
+
+def _module_own_columns(mod) -> List[str]:
+    from parameter_extractor.stages.optional import _specs_in
+    cols = [p.column for s in (_specs_in(mod.stages_dir).values() if mod.stages_dir.is_dir() else []) for p in s.parameters]
+    return cols + [e["column"] for e in mod.manifest.standard_columns] + [p["column"] for p in mod.manifest.pack_parameters]
 
 
 def _disciplined_stages(stages: List[ProposedStage], notes: List[str]) -> List[ProposedStage]:
@@ -367,9 +421,11 @@ def _disciplined_stages(stages: List[ProposedStage], notes: List[str]) -> List[P
 
 
 def write_pack(proposal: PackProposal, pack_id: str, label: str, description: str = "",
-               base: Optional[Path] = None, tidy: bool = True) -> tuple:
-    """A new pack from the proposal (packs.create_pack from the template, examples replaced); (pack, dropped
-    duplicate columns, {column: proposed parameter})."""
+               base: Optional[Path] = None, tidy: bool = True, modules: Sequence[str] = ()) -> tuple:
+    """A new pack from the proposal (packs.create_pack from the template, examples replaced), linking `modules`;
+    proposed parameters / steps / categories a linked module already covers are left out. (pack, dropped duplicate
+    columns, {column: proposed parameter}); by_column["__tidied__"] / ["__left_to_modules__"] carry the notes."""
+    from parameter_extractor import modules as module_store
     from parameter_extractor.pack_editing import PackDraft, items_to_rules
     pack = packs.create_pack(pack_id, label, description or proposal.description, base=base,
                              units={"set": proposal.set_word, "sample": proposal.sample_word})
@@ -378,9 +434,22 @@ def write_pack(proposal: PackProposal, pack_id: str, label: str, description: st
         draft.remove_stage(file)
     m = draft.manifest
     m["formulas"] = []
+    left: List[str] = []
+    if modules:
+        m["modules"] = list(dict.fromkeys(modules))
+    mods = module_store.resolve(list(modules))
+    module_cols = draft.module_columns() if mods else []
+    module_steps = {p.stem: x.label for x in mods for p in x.stage_files()}
+    module_steps.update({json.loads(p.read_text()).get("name", p.stem): x.label for x in mods for p in x.stage_files()})
+    module_cats = {c["id"]: x.label for x in mods for c in x.manifest.variable_categories}
+    module_cats.update({c["label"].lower(): x.label for x in mods for c in x.manifest.variable_categories})
     categories, renamed = [], {}
     for i, c in enumerate(proposal.categories):
         cid = _slug(c.id)
+        if cid in module_cats or c.label.strip().lower() in module_cats:
+            left.append(f"category '{c.label}' -- the {module_cats.get(cid) or module_cats[c.label.strip().lower()]} "
+                        f"module brings its own")
+            continue
         if cid in RESERVED_CATEGORIES:
             renamed[c.id] = cid = f"{cid}_area"
         renamed.setdefault(c.id, cid)
@@ -391,7 +460,28 @@ def write_pack(proposal: PackProposal, pack_id: str, label: str, description: st
     first = categories[0]["id"] if categories else "methodology"
     category_columns.setdefault(first, {"columns": []})["columns"].append("duration_hr")
     columns, seen, dropped, by_column, tidied = ["set_type", "duration_hr"], set(), [], {}, []
-    stages = _disciplined_stages(proposal.stages, tidied)
+    proposed = []
+    for st in proposal.stages:                  # what the linked modules record is theirs (before merging stages)
+        st = st.model_copy(deep=True)
+        kept = []
+        for p in st.parameters:
+            column, unit = column_for(p.column, p.unit, p.kind)
+            if tidy:
+                tidied_column = tidy_parameter(column, unit, p.kind, p.description)[0]
+                column = tidied_column or column
+            owner = covered_by_module(column, p.kind, modules, module_cols) if mods else ""
+            if owner:
+                left.append(f"`{column}` (step {st.name}) -- recorded by the {owner} module")
+            else:
+                kept.append(p)
+        if not kept and st.parameters:
+            left.append(f"step '{st.label}' -- everything it asked for is recorded by the linked modules")
+            continue
+        st.parameters = kept
+        if _slug(st.name) in module_steps:              # a step of the same name would replace the module's
+            st.name = f"{_slug(st.name)}_{_slug(pack_id)}"
+        proposed.append(st)
+    stages = _disciplined_stages(proposed, tidied)
     for st in stages:
         name = _slug(st.name)
         try:
@@ -445,6 +535,7 @@ def write_pack(proposal: PackProposal, pack_id: str, label: str, description: st
     draft.rules["structure_planner"] = items_to_rules([r for r in proposal.row_rules if r.strip()])
     draft.save()
     by_column["__tidied__"] = tidied                 # read by draft_pack for the report
+    by_column["__left_to_modules__"] = left
     return packs.Pack(pack.folder), dropped, by_column
 
 
@@ -457,6 +548,14 @@ def add_modules(folder: Path, papers: List[SurveyedPaper]) -> tuple:
     if not evidence:
         return {}, {}
     return pack_modules.add_modules(Path(folder), list(evidence)), evidence
+
+
+def _write_surveys(folder: Path, papers: List[SurveyedPaper]) -> bool:
+    """drafted_surveys.json in the pack folder: the survey examples compound_setup reads."""
+    (Path(folder) / "drafted_surveys.json").write_text(json.dumps(
+        [{"paper": p.name, "item": p.item, "error": p.error, "survey": p.survey.model_dump() if p.survey else None}
+         for p in papers], indent=2, ensure_ascii=False))
+    return True
 
 
 def _examples(papers: List[SurveyedPaper]) -> Dict[str, List[tuple]]:
@@ -477,34 +576,42 @@ def write_report(result: DraftResult, by_column: Dict[str, ProposedParameter], a
     for p in result.papers:
         lines.append(f"- {p.name}: " + (f"{len(p.survey.variables)} variables; one row = {p.survey.row_unit}"
                                          if p.survey else f"not surveyed ({p.error})"))
-    lines += ["", "## Stages and parameters", ""]
-    for st in result.proposal.stages:
-        lines.append(f"### {st.label}" + (f" (runs for papers mentioning: {', '.join(st.keywords)})"
-                                         if st.keywords else ""))
-        for p in st.parameters:
-            column, unit = column_for(p.column, p.unit, p.kind)
-            if result.tidied:
-                column, unit, _, _, _ = tidy_parameter(column, unit, p.kind, p.description)
-                if not column:
-                    continue
-            seen = examples.get(_slug(p.column), [])
+    from parameter_extractor.pack_editing import PackDraft
+    draft = PackDraft.load(result.pack.folder)
+    lines += ["", "## The data pack's own steps (one model request per paper each runs for)", ""]
+    for spec in draft.stages.values():
+        trig = spec.get("trigger") or {}
+        lines.append(f"### {spec.get('label', spec.get('name'))}" + (
+            f" (runs for papers mentioning: {', '.join(trig.get('keywords', []))})" if trig.get("keywords")
+            else " (every paper)"))
+        for entry in spec.get("parameters", []):
+            column, p = entry["column"], by_column.get(entry["column"])
+            seen = examples.get(_slug(p.column), []) if p else []
             ex = "; ".join(f"{e} ({name})" for name, e in seen[:3])
-            lines.append(f"- `{column}`" + (f" [{unit}]" if unit else "") + f" -- {p.description} "
-                         f"(in {p.papers} paper(s)" + (f"; e.g. {ex}" if ex else "") + ")")
+            lines.append(f"- `{column}`" + (f" [{entry['unit']}]" if entry.get("unit") else "")
+                         + f" -- {entry.get('description', '')}"
+                         + (f" (in {p.papers} paper(s)" + (f"; e.g. {ex}" if ex else "") + ")" if p else ""))
         lines.append("")
     if result.tidied:
         lines += ["## Names changed to the app's conventions", ""] + [f"- {t}" for t in result.tidied] + [""]
     if result.modules:
-        lines += ["## Shared modules added", ""]
+        lines += ["## Shared modules linked (chosen from the surveys before the design, which left their parts to "
+                  "them)", ""]
         for module, done in result.modules.items():
             why = "; ".join(f"{p}: {', '.join(t)}" for p, t in result.module_evidence.get(module, {}).items())
-            lines += [f"### {module}" + (f" (the papers name: {why})" if why else "")] + [f"- {d}" for d in done] + [""]
+            lines += [f"### {module}" + (f" (the papers show: {why})" if why else "")] + [f"- {d}" for d in done] + [""]
+    if result.left_to_modules:
+        lines += ["## Left to the modules (proposed, but a linked module records it)", ""] \
+            + [f"- {d}" for d in result.left_to_modules] + [""]
+    if result.compound_lines:
+        lines += ["## Compound vocabulary (for the chemistry step)", ""] + [f"- {d}" for d in result.compound_lines] + [""]
     compounds = {}
     for p in result.papers:
         for c in (p.survey.compounds if p.survey else []):
             compounds.setdefault(c.name, (c.full_name, []))[1].append(p.name)
     if compounds:
-        lines += ["## Compounds the papers name (Data Packs > Edit > Find compounds… sets them up)", ""] + [
+        lines += ["## Compounds the papers name" + ("" if result.compound_lines else
+                                                     " (Data Packs > Edit > Find compounds… sets them up)"), ""] + [
             f"- {n}" + (f" ({full})" if full else "") + f" -- {', '.join(names)}"
             for n, (full, names) in sorted(compounds.items(), key=lambda kv: kv[0].lower())] + [""]
     if result.dropped:
@@ -914,9 +1021,13 @@ def apply_additions(folder: Path, suggestions: Sequence[Suggestion], pubchem=Non
 def draft_pack(items: Sequence, pack_id: str, label: str, description: str, config: RunConfig,
                on_progress: Optional[Callable[[int, int, str], None]] = None,
                cancel_event: Optional[threading.Event] = None, workers: int = 4,
-               base: Optional[Path] = None, passes: int = 1, tidy: bool = True, modules_on: bool = True) -> DraftResult:
-    """Survey the papers, merge, write the pack (with the shared modules the surveys call for: pack_modules). Raises
-    PipelineError when no paper could be surveyed."""
+               base: Optional[Path] = None, passes: int = 1, tidy: bool = True, modules_on: bool = True,
+               compounds: Optional[bool] = None, pubchem=None) -> DraftResult:
+    """Survey the papers; choose the shared modules they call for (pack_modules.evidence_for) BEFORE the design, so
+    it leaves what the modules record to them; design; write the pack linking the modules; when the pack has the
+    chemistry step, set up its compound vocabulary from the surveys (compound_setup; `compounds` False: don't, True:
+    also without the chemistry step). `pubchem`: a PubChem client for the compound identities (None = offline, names
+    only). Raises PipelineError when no paper could be surveyed."""
     from parameter_extractor.errors import ApiKeyMissingError
     from parameter_extractor.pack_editing import check, PackDraft
     if config.needs_api_key and not config.api_key:
@@ -941,25 +1052,36 @@ def draft_pack(items: Sequence, pack_id: str, label: str, description: str, conf
                                                                               for p in papers))
     if cancel_event is not None and cancel_event.is_set():
         raise RunCancelledError()
-    report(len(items), total, "Designing the data pack from the surveys")
-    proposal, merge_cost = synthesize(good, config, work_dir, area, description, cancel_event)
+    from parameter_extractor import pack_modules
+    evidence = pack_modules.evidence_for(good) if modules_on else {}
+    report(len(items), total, "Designing the data pack from the surveys"
+           + (f" (shared modules: {', '.join(evidence)})" if evidence else ""))
+    proposal, merge_cost = synthesize(good, config, work_dir, area, description, cancel_event, modules=list(evidence))
     report(len(items) + 1, total, "Writing the data pack")
-    pack, dropped, by_column = write_pack(proposal, pack_id, label, description, base=base, tidy=tidy)
+    pack, dropped, by_column = write_pack(proposal, pack_id, label, description, base=base, tidy=tidy,
+                                          modules=list(evidence))
     tidied = by_column.pop("__tidied__", [])
-    modules, evidence = add_modules(pack.folder, good) if modules_on else ({}, {})
-    result = DraftResult(pack=pack, proposal=proposal, papers=papers, problems=check(PackDraft.load(pack.folder)),
-                         work_dir=work_dir, cost_usd=round(sum(p.cost_usd for p in papers) + merge_cost, 4),
-                         dropped=dropped, tidied=tidied, modules=modules, module_evidence=evidence)
+    left = by_column.pop("__left_to_modules__", [])
+    linked = PackDraft.load(pack.folder).linked_modules()
+    modules = {x.id: [("linked" if x.id in evidence else "brought along by another module") + ": "
+                      + "; ".join(pack_modules.describe(x.id))] for x in linked}
+    compound_lines: List[str] = []
+    if compounds or (compounds is None and "chemistry" in PackDraft.load(pack.folder).effective_steps()):
+        from parameter_extractor import compound_setup
+        report(len(items) + 1, total, "Setting up the compound vocabulary from the surveys"
+               + (" (PubChem)" if pubchem is not None else ""))
+        _write_surveys(pack.folder, papers)                       # the survey compounds are its main source
+        _, compound_lines, _ = compound_setup.set_up_compounds(pack.folder, pubchem, tidy=tidy)
+    result = DraftResult(pack=packs.Pack(pack.folder), proposal=proposal, papers=papers,
+                         problems=check(PackDraft.load(pack.folder)), work_dir=work_dir,
+                         cost_usd=round(sum(p.cost_usd for p in papers) + merge_cost, 4), dropped=dropped,
+                         tidied=tidied, modules=modules, module_evidence=evidence, left_to_modules=left,
+                         compound_lines=compound_lines)
     text = write_report(result, by_column, area)
     (pack.folder / "drafted_from.md").write_text(text)
     (work_dir / "drafted_from.md").write_text(text)
-    surveys = json.dumps(
-        [{"paper": p.name, "item": p.item, "error": p.error, "survey": p.survey.model_dump() if p.survey else None}
-         for p in papers], indent=2, ensure_ascii=False)
-    (pack.folder / "drafted_surveys.json").write_text(surveys)      # examples for compound_setup
-    (work_dir / "surveys.json").write_text(json.dumps(
-        [{"paper": p.name, "item": p.item, "error": p.error, "survey": p.survey.model_dump() if p.survey else None}
-         for p in papers], indent=2, ensure_ascii=False))
+    _write_surveys(pack.folder, papers)                              # examples for compound_setup
+    (work_dir / "surveys.json").write_text((pack.folder / "drafted_surveys.json").read_text())
     report(total, total, f"Drafted '{label}': {sum(len(s.parameters) for s in proposal.stages)} parameters in "
                          f"{len(proposal.stages)} stage(s); ${result.cost_usd:.3f}")
     return result

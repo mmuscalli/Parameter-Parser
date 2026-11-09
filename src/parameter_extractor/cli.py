@@ -409,11 +409,18 @@ def _draft_pack(args, parser) -> int:
         overrides["output_dir"] = args.out
     overrides.update(_provider_overrides(args, parser))
     config = RunConfig.from_settings(**overrides)
+    from parameter_extractor.pubchem import PubChem
+    from parameter_extractor.registry import default_pubchem_cache_path
+    pubchem = None if args.no_pubchem else PubChem(default_pubchem_cache_path())
     try:
         result = pack_drafting.draft_pack(items, args.draft_pack, args.area_name, args.area_description, config,
                                           on_progress=lambda d, n, m: print(f"[{d}/{n}] {m}"),
                                           passes=args.survey_passes, tidy=not args.no_tidy,
-                                          modules_on=not args.no_modules)
+                                          modules_on=not args.no_modules,
+                                          compounds=True if args.find_compounds is not None else None,
+                                          pubchem=pubchem)
+        if pubchem is not None:
+            pubchem.save()
     except (PipelineError, ValueError) as e:
         print(f"Error: {e}", file=sys.stderr)
         return 1
@@ -423,10 +430,12 @@ def _draft_pack(args, parser) -> int:
                                                      result.module_evidence.get(module, {}).items()) + "):")
         for line in lines:
             print(f"  {line}")
+    for line in result.left_to_modules:
+        print(f"  left to a module: {line}")
+    for line in result.compound_lines:
+        print(f"  compounds: {line}")
     for p in result.problems:
         print(f"  {p}")
-    if args.find_compounds is not None:
-        return _find_compounds(args.draft_pack, args)
     return 0
 
 

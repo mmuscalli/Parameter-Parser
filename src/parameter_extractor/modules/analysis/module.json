@@ -3,6 +3,7 @@
   "label": "Analysis methods",
   "version": 1,
   "description": "The analysis step: every analytical technique the paper used and each instrument setting it states, in analysis_<technique>_<setting> columns named from a vocabulary of techniques (analysis_vocab.json).",
+  "covers": "every analytical technique the paper used and each instrument setting it states (HPLC/GC columns, mobile phases, detection wavelengths, MS/MALDI/NMR settings, standards, detection limits) -- so no parameters or stages for analysis details; one text column naming the analysis method is fine.",
   "builtin_stages": [
     "analysis"
   ],

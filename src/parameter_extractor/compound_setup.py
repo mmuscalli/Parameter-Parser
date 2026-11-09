@@ -165,6 +165,31 @@ NOT_A_COMPOUND = re.compile(r"\b(?:buffers?|polymerase|enzymes?|ligase|kit|dyes?
                             re.IGNORECASE)
 
 
+_COMPOUND_NUMBER = re.compile(r"\s+\(?\d{1,3}[a-z]?\)?$")
+
+
+def _without_compound_number(c: dict) -> Optional[dict]:
+    """A survey compound without the paper's compound number ('nicotinamide 6' -> 'nicotinamide'); a bare number ('4')
+    takes its spelled-out name, else it's left out (kim2017's numbered compounds, 2026-11-09)."""
+    name, full = (c.get("name") or "").strip(), _COMPOUND_NUMBER.sub("", (c.get("full_name") or "").strip())
+    if re.fullmatch(r"\(?\d{1,3}[a-z]?\)?", name):
+        return dict(c, name=full, full_name="") if full else None
+    return dict(c, name=_COMPOUND_NUMBER.sub("", name), full_name=full)
+
+
+def _example_measure(example: str) -> Optional[str]:
+    """The measure a product's printed example shows: % -> '%yield' ('%recovered' when it says recovered / remaining),
+    a concentration or amount -> 'mM'; None when it doesn't say."""
+    text = (example or "").lower()
+    if "%" in text:
+        return "%recovered" if re.search(r"recover|remain|unreacted", text) else "%yield"
+    from parameter_extractor.units import _UNITS, parse_quantity
+    parsed = parse_quantity(example or "")
+    if parsed and _UNITS.get(parsed[1], ("",))[0] in ("concentration", "amount"):
+        return "mM"
+    return None
+
+
 def is_compound_name(name: str) -> bool:
     """A specific compound's name, not a class or material ('phosphate buffer', 'RNA oligomers', 'Taq polymerase')."""
     n = (name or "").strip()
@@ -361,8 +386,13 @@ def find_compounds(draft, pubchem=None, tidy: bool = True) -> CompoundPlan:
     survey_compounds = []
     for s in surveys:
         for c in ((s.get("survey") or {}).get("compounds") or []):
+            c = _without_compound_number(c)
+            if c is None:
+                continue
             # 'Mn2+/Fe3+': two compounds
             for part in (re.split(r"\s*/\s*", c.get("name", "")) if "/" in c.get("name", "") else [c.get("name", "")]):
+                if c.get("role") == "analysis":             # used only to analyse: the analysis step records it
+                    continue
                 if part and c.get("role") != "other" and is_compound_name(part):
                     survey_compounds.append(dict(c, name=part, full_name=c.get("full_name", "") if part == c["name"]
                                                  else ""))
@@ -461,7 +491,9 @@ def find_compounds(draft, pubchem=None, tidy: bool = True) -> CompoundPlan:
                         for m in [_measure(q.get("unit", ""), q["column"])] if m and m != "mM"} or set()
     for c in survey_compounds:
         role = "sampled" if c.get("role") == "product" else "initial"
-        measure = "mM" if role == "initial" else None
+        # a product's measure from how the paper reports it ('13.96 %' -> % yield; '2.5 mM' -> mM), 2026-11-09: the
+        # draft leaves product yields to the chemistry step, so no 'product_yield' column tells it any more
+        measure = "mM" if role == "initial" else _example_measure(c.get("example", ""))
         if add(c["name"], role, measure, "", "the paper surveys", full_name=c.get("full_name", ""), trusted=True):
             for fc in found.values():
                 if "the paper surveys" in fc.sources and role == "sampled" and not fc.measures:
