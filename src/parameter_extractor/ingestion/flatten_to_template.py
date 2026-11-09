@@ -148,19 +148,35 @@ _RECOVERED_HEADER = re.compile(r"\b(recovered|recovery|unreacted|remaining|resid
 _UNIT_SUFFIX = re.compile(r"(_(?:mM_hr|per_M_hr|per_hr|kJ_mol|mM|uM|%yield|%recovered|ratio|pct|mL_min|mL|uL|hr|h|min|sec|d|C|K|bar|MPa|g|mg|nm|rpm|nt|mer))$")
 
 
+def _with_marker(column: str, marker: str, unit: str = "") -> str:
+    """'_avg' / '_range' just before the column's unit: the dataset's own suffixes, else any unit slug the app reads
+    ('crater_diameter_um' -> 'crater_diameter_range_um', 'speed_km_per_s' -> 'speed_range_km_per_s'; organics held-out
+    set, 2026-11-09: the marker had gone after the unit)."""
+    if _UNIT_SUFFIX.search(column):
+        return _UNIT_SUFFIX.sub(marker + r"\1", column)
+    if unit:                       # a stage parameter's own unit, also one the app doesn't convert ('kg/yr')
+        from parameter_extractor.units import unit_slug
+        slug = "_" + unit_slug(unit)
+        if len(slug) > 1 and column.endswith(slug):
+            return column[: -len(slug)] + marker + slug
+    from parameter_extractor.ingestion.observations import unit_slug_suffix
+    suffix = unit_slug_suffix(column)
+    return column[: -len(suffix)] + marker + suffix if suffix else column + marker
+
+
 def with_average(column: str) -> str:
     """The column for an AVERAGE of what `column` holds: '_avg' just before the unit."""
     if not column or re.search(r"(?:^|_)avg(?:_|$)", column):     # already says so ('avg_max_..._n', typed in)
         return column
-    return _UNIT_SUFFIX.sub(r"_avg\1", column) if _UNIT_SUFFIX.search(column) else column + "_avg"
+    return _with_marker(column, "_avg")
 
 
-def with_range(column: str) -> str:
+def with_range(column: str, unit: str = "") -> str:
     """The column for a RANGE of what `column` holds (Mickey, 2026-10-31): '_range' just before the unit
     ('solid_material_mass_g' -> 'solid_material_mass_range_g'); the cell holds 'low:high'."""
     if not column or "_range_" in column or column.endswith("_range"):
         return column
-    return _UNIT_SUFFIX.sub(r"_range\1", column) if _UNIT_SUFFIX.search(column) else column + "_range"
+    return _with_marker(column, "_range", unit)
 
 
 def without_range(column: str) -> str:

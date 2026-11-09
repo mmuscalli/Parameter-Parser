@@ -728,7 +728,7 @@ def stage_values(spec: StageSpec, item) -> Tuple[Dict[str, StageValue], List[str
             return {}, [f"{spec.label}: {param.column} = {item.value:g}-{high:g} {printed} for "
                         f"'{item.set_label}' left out -- {lo_note}."]
         note = "; ".join(n for n in (item.note, f"range printed as {item.value:g}-{high:g} {printed}".strip()) if n)
-        return {with_range(param.column): StageValue(format_range(lo, hi), note=note, **base)}, []
+        return {with_range(param.column, param.unit): StageValue(format_range(lo, hi), note=note, **base)}, []
     if param.integer and not item.value and (getattr(item, "text", "") or "").strip():
         # a count written out ('triplicate experiments; lengths averaged'): read as the number
         from parameter_extractor.value_types import whole_number

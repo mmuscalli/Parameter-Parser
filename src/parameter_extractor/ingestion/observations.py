@@ -84,6 +84,17 @@ def _unit_by_slug(column: str) -> str:
     return ""
 
 
+def unit_slug_suffix(column: str) -> str:
+    """The unit slug a column ends with ('_km_per_s', '_um', '_keV'), or '' -- for placing '_avg' / '_range' before it."""
+    if not _SLUG_UNITS:
+        _unit_by_slug("x")
+    parts = column.split("_")
+    for n in (4, 3, 2, 1):
+        if len(parts) > n and "_".join(parts[-n:]) in _SLUG_UNITS:
+            return "_" + "_".join(parts[-n:])
+    return ""
+
+
 def unit_for_column(column: str) -> str:
     if column.startswith("analysis_"):            # instrument settings: the unit is the column's last slot
         from parameter_extractor.analysis_vocab import unit_for_column as analysis_unit

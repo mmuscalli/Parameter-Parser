@@ -205,6 +205,19 @@ def test_a_figures_only_paper_skips_its_steps_when_no_figures_are_digitized():
         assert any(f["kind"] == "no_results" and "digitize" in f["message"] for f in flags)
 
 
+def test_range_and_average_markers_go_before_any_unit():
+    """Held-out round: '_range' had gone after units the app learned this round ('crater_diameters_um_range')."""
+    from parameter_extractor.ingestion.flatten_to_template import with_average, with_range, without_range
+    assert with_range("crater_diameters_um") == "crater_diameters_range_um"
+    assert with_range("particle_speed_km_per_s") == "particle_speed_range_km_per_s"
+    assert with_range("capture_efficiency_pct") == "capture_efficiency_range_pct"
+    assert with_average("sampled_Gly_aq_mM") == "sampled_Gly_aq_avg_mM" and with_range("x_name") == "x_name_range"
+    c = with_range("carbon_delivery_rate_kg_per_yr", "kg/yr")         # a stage parameter's own unit (not converted)
+    assert c == "carbon_delivery_rate_range_kg_per_yr" and without_range(c) == "carbon_delivery_rate_kg_per_yr"
+    from parameter_extractor.units import parse_range, to_column_unit
+    assert parse_range("30–100 mTorr") == (30.0, 100.0, "mTorr") and abs(to_column_unit(100, "mTorr", "bar").value - 1.33322e-4) < 1e-9
+
+
 if __name__ == "__main__":
     for name, fn in list(globals().items()):
         if name.startswith("test_"):

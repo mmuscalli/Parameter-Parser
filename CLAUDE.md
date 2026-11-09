@@ -2569,3 +2569,10 @@ paper). Fixes:
 - Exoplanet pack: pl_dens / st_dens unit g/cm3 (were '' -- 'g cm-3' is now a known unit and was refused).
 - Not fixed: MDPI 'corrected version' PDFs with two text layers (burchell2020; no z-order in pdfplumber).
 tests/test_organics_round.py.
+- **Held-out test (same day, Mickey):** five other papers of the folder (tingle1991, kazemi2021, deluca2022, chyba1990,
+  dacosta2022), both packs, handoff: drafted pack 40/41 values (70% of cells in its own columns -- higher than on its
+  drafting papers), prebiotic 12/41; $0.93 vs $0.82 (prebiotic $0.59 on three no-row papers). Write-up with the
+  direction (draft per batch; shared modules, starting with the analysis step + solution-chemistry calculations):
+  `eval/organics_heldout_2026-11-09.md`. Trigger hit counts measured; thresholds NOT added (a false trigger ~$0.01, a
+  miss loses values). Fixes: `flatten_to_template._with_marker` puts _range/_avg before any unit slug
+  (`observations.unit_slug_suffix`) or a stage parameter's own unit (`with_range(column, unit)`); mTorr.
