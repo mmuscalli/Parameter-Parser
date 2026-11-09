@@ -48,11 +48,15 @@ class ModuleSettings(BaseModel):
     calculations_off: List[str] = Field(default_factory=list)
     row_rules_off: List[str] = Field(default_factory=list)
     stage_rules_off: List[str] = Field(default_factory=list)
+    prompt_rules_off: List[str] = Field(default_factory=list)      # rules the module adds to a built-in step's prompt
     families_off: List[str] = Field(default_factory=list)
 
 
 def settings_for(module_settings: Optional[dict], module_id: str) -> ModuleSettings:
-    raw = (module_settings or {}).get(module_id) or {}
+    from parameter_extractor.modules import ALIASES
+    stored = module_settings or {}
+    raw = stored.get(module_id) or next((stored[old] for old, new in ALIASES.items()
+                                         if new == module_id and stored.get(old)), {}) or {}
     try:
         return ModuleSettings.model_validate(raw)
     except ValueError:
@@ -74,7 +78,7 @@ def cleaned(settings: ModuleSettings) -> dict:
     params = {c: p for c, p in params.items() if p}
     if params:
         out["parameters"] = params
-    for key in ("calculations_off", "row_rules_off", "stage_rules_off", "families_off"):
+    for key in ("calculations_off", "row_rules_off", "stage_rules_off", "prompt_rules_off", "families_off"):
         if getattr(settings, key):
             out[key] = list(getattr(settings, key))
     return out
@@ -215,9 +219,10 @@ def problems(module_settings: dict, mods) -> List[Tuple[str, str]]:
     calculations / families, units the column can't be named in, a step left without trigger words."""
     from parameter_extractor.stages.optional import _specs_in
     out = []
+    from parameter_extractor.modules import canonical_id
     by_id = {m.id: m for m in mods}
     for mid, raw in (module_settings or {}).items():
-        mod = by_id.get(mid)
+        mod = by_id.get(canonical_id(mid))
         if mod is None:
             out.append(("warning", f"settings for module '{mid}', which this data pack doesn't link (ignored)."))
             continue

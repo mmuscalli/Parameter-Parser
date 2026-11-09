@@ -2698,3 +2698,23 @@ from).
   measures from the examples (`_example_measure`). `api_client._decoded` takes the leading JSON of a string with stray
   words after it. Live: no duplicate steps (was 3), check clean; eder1994 with the drafted pack 42 rows, 150/150
   values equal to the reference (replayed with the measure fix).
+
+## Window chains; Peptides and oligomers module; series fill-in (2026-11-09, Mickey)
+
+- **Input lost after Help > How data packs work > All data packs > Check > close each** (reproduced: the hidden help
+  dialog stayed the active modal widget). Rules now: no window opens the next one from inside its own handlers --
+  it records what comes next and closes, the opener opens it (help: `wanted` flag, packs window after exec returns;
+  PackEditor.next_folder for Copy / a helper's rewrite, `MainWindow._open_pack_editor` loops over it). The Data Packs
+  window is ApplicationModal but shown with show() (no exec): `_aside` hides it while an editor runs, and hiding a
+  window inside its own exec() ends that loop. One instance (`_packs_window`, WA_DeleteOnClose).
+  tests/test_window_chains.py drives the chains with timers (schedule the next step BEFORE an act that blocks in exec)
+  and checks activeModalWidget() is None and the main window takes input.
+- **Module `peptides_oligomers`** ("Peptides and oligomers"; git mv of product_totals; `modules.ALIASES` maps the old id
+  in resolve / unknown / settings_for). New manifest fields: `prompt_rules` {built-in step: [rules]} -> the step prompt's
+  `{{MODULE_RULES}}` slot (prompt_loader; `Pack.module_prompt_rules`, module setting `prompt_rules_off`; the line is
+  removed when empty) -- the chemistry prompt's peptide / cyclic / n-mer / oligomer-table / unsequenced-product rules
+  moved there (a generic "(X)4 for 4+ repeats" line stays); `compound_series` -> compound_setup `_fill_series`: every
+  length between the shortest and longest of a homopolymer series (`names.homopolymer` / `homopolymer_name`, peptides
+  and n-mers, <= MAX_SERIES_LENGTH 60) with the roles / measures ALL members share. Prebiotic links it; Mickey's DUPE
+  pack updated (backup pack_backups/before-module-rename-*). Live/replay: truman through the drafted pack -> (Gly)4..12
+  in the dataset (were held for review), totals = reference.

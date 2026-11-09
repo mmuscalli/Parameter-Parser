@@ -121,9 +121,12 @@ class ModuleSettingsEditor:
             pv.addWidget(box)
             collectors.append(lambda s, t=ticks: s.calculations_off.extend(c for c, cb in t.items()
                                                                            if not cb.isChecked()))
+        prompt_rules = [r for rules in mod.manifest.prompt_rules.values() for r in rules]
         for title_text, rules, attr in (
                 ("Rules the module adds to planning the rows", mod.manifest.row_rules, "row_rules_off"),
-                ("Rules the module adds to this data pack's own steps", mod.manifest.stage_rules, "stage_rules_off")):
+                ("Rules the module adds to this data pack's own steps", mod.manifest.stage_rules, "stage_rules_off"),
+                ("Rules the module adds to the " + " / ".join(mod.manifest.prompt_rules) + " step", prompt_rules,
+                 "prompt_rules_off")):
             if not rules:
                 continue
             box = QGroupBox(title_text + " (untick to leave one out)")

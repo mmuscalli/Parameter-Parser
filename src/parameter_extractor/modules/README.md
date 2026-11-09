@@ -35,6 +35,11 @@ improved here reaches every pack that links it. A pack changes how a module work
 | `stage_hints` | hints for the pack's open-ended steps depending on whether a step runs |
 | `row_rules` | rules added to the pack's row planning |
 | `fixed` | columns the app's calculations read by name: a pack can't change their unit |
+| `prompt_rules` | `{"chemistry": [...]}`: rules added to a built-in step's prompt (its `{{MODULE_RULES}}` slot) |
+| `compound_series` | compound setup fills in every length of an oligomer series between the shortest and longest found |
+| `covers` | what the module records, in a sentence: drafting a pack leaves that to the module |
+
+Renamed ids keep working (`modules.ALIASES`: `product_totals` -> `peptides_oligomers`).
 
 The app's modules are in this folder; your own go in `<app data>/modules/<id>/` (*Data Packs › All data packs and
 modules… › Modules › Open my modules folder*). An id the app already uses can't be replaced.

@@ -71,3 +71,20 @@ Other problems:
 - The design sometimes makes an always-on step for a few loosely related values ("results": equilibrium constant, fit
   RMSE, stereoselectivity). That costs a request per paper. The two-always-on limit holds, but such a step could be
   merged.
+
+## Follow-up: oligomer series (same day)
+
+Mickey asked whether the glycine oligomers were missing from the output or only from the survey. Replaying truman2024's
+recorded answers through the drafted pack answered it. Every value from Gly4 to Gly12 was extracted correctly, but the
+drafted pack had no columns for those lengths, so they waited in the review. In the app the review offers them;
+unattended runs left them out.
+
+Now compound setup fills in every length of a series of one repeated unit, between the shortest and the longest
+found: the Gly2 / Gly3 / Gly13 survey gives (Gly)4 ... (Gly)12. The filled lengths take only the roles and measures
+every member shares (here products in % yield). This applies when the pack links the new *Peptides and oligomers*
+module (formerly *Peptide and oligomer totals*). The same replay then put Gly2 to Gly13 in the dataset with nothing
+held back, and the total peptide yields equal the reference.
+
+The module also took the chemistry step's naming rules for peptides, cyclic peptides, nucleic-acid n-mers, oligomer
+tables and unsequenced products (`prompt_rules`). Packs without oligomers no longer send them, about 1,400 characters
+less per chemistry request.

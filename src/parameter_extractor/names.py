@@ -376,3 +376,29 @@ def preferred_name(name: str, abbreviations: dict) -> str:
     if match_species(full) and not match_species(abbr):
         return match_species(full)[0]
     return abbr
+
+
+# ---- series of one repeated unit (Mickey, 2026-11-09: a survey that saw Gly2, Gly3 and Gly13 should also expect
+# Gly4 ... Gly12) -------------------------------------------------------------------------------------------------
+
+_NMER = re.compile(r"^(\d+)mer_(d?[ACGTU])$")
+MAX_SERIES_LENGTH = 60
+
+
+def homopolymer(name: str) -> Optional[Tuple[str, str, int]]:
+    """('peptide', 'Gly', 13) for '(Gly)13' / 'Gly13' / 'tridecaglycine'; ('nucleotide', 'A', 10) for '10mer_A';
+    None for anything else (heteropolymers, cyclic peptides, single units)."""
+    found = match_species(name)
+    canon = found[0] if found else name
+    m = _NMER.match(canon or "")
+    if m:
+        return ("nucleotide", m.group(2), int(m.group(1))) if int(m.group(1)) >= 2 else None
+    codes = peptide_codes(canon or "")
+    if codes and len(codes) >= 2 and len(set(codes)) == 1:
+        return ("peptide", codes[0], len(codes))
+    return None
+
+
+def homopolymer_name(kind: str, unit: str, n: int) -> str:
+    return peptide_name([unit] * n) if kind == "peptide" else oligonucleotide_name(n, unit)
+

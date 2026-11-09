@@ -1,0 +1,45 @@
+{
+  "id": "peptides_oligomers",
+  "label": "Peptides and oligomers",
+  "version": 1,
+  "description": "Peptides and nucleic-acid oligomers as compounds: how the chemistry step names them (sequences, repeats, cyclic peptides, n-mers, oligomer tables), every length of a series found in the sample papers in the compound vocabulary, and the totals: total peptide and oligomer yields and the longest oligomer of each row (uses the Solution chemistry module).",
+  "covers": "peptides and nucleic-acid oligomers as compounds (each sequence or length its own column, named by the chemistry step's rules) and their totals: total peptide yield, total oligomer yield and the longest oligomer of each row -- so no total-yield, oligomer-length or longest-product parameters.",
+  "needs": [
+    "solution_chemistry"
+  ],
+  "postprocess": [
+    "peptide_totals",
+    "oligomer_totals"
+  ],
+  "standard_columns": [
+    {
+      "column": "total_sampled_peptides_yield",
+      "description": "Total yield (%) of peptides (dimers and longer, linear and cyclic): stated by the paper, else the sum of the row's peptide % yields (calculated)."
+    },
+    {
+      "column": "total_sampled_oligomers_yield",
+      "description": "Total yield (%) of nucleic-acid oligomers (2-mers and longer): stated by the paper, else the sum of the row's oligomer % yields (calculated)."
+    },
+    {
+      "column": "max_oligomer_length_nt",
+      "description": "Longest nucleic-acid oligomer with a value in the row (nt): stated by the paper, else from the row's oligomer columns (calculated)."
+    }
+  ],
+  "category_columns": {
+    "products": {
+      "columns": [
+        "total_sampled_peptides_yield",
+        "total_sampled_oligomers_yield",
+        "max_oligomer_length_nt"
+      ]
+    }
+  },
+  "prompt_rules": {
+    "chemistry": [
+      "Peptides: name a peptide by its sequence in three-letter codes, N- to C-terminus, joined by \"-\": \"Gly-Gly\" (diglycine), \"Gly-Gly-Gly\" (triglycine), \"Gly-Ala-Ala\" -- order matters, so keep it exactly as the paper gives it. A run of 4 or more of one residue is written \"(Gly)4\": \"(Gly)4\" for tetraglycine, \"(Gly)10\", \"Gly-(Ala)4\". A cyclic peptide (including diketopiperazines) is \"cyclo_\" plus its residues the same way: \"cyclo_Gly-Gly\" for the glycine DKP, \"cyclo_Val-Gly\".",
+      "Nucleic-acid oligomers: \"<n>mer_<nucleotide>\" -- n the chain length, the nucleotide by its base letter, RNA \"A\" \"C\" \"G\" \"U\", DNA \"dA\" \"dC\" \"dG\" \"dT\": \"4mer_A\" for an adenylate tetramer / (pA)4, \"43mer_U\", \"12mer_dT\". A mixed oligomer by its letters as the paper gives them (a sequence, or a composition when the order wasn't determined): \"3mer_AAU\", \"3mer_dATG\". A table of oligomer lengths (columns 1, 2, 3, ... under \"% oligomer\") gives one species per length: \"1mer_A\", \"2mer_A\", ... All oligomers together (an oligomerization yield, \"RNA oligomers\") is named \"oligomers\"; the longest oligomer detected is not a species (another step records it). Polymers of unstated length keep their names (poly(A)).",
+      "A product whose composition is known but whose SEQUENCE the paper says it didn't determine (e.g. shown in parentheses, \"(FFA)\") must not be given a sequence: name it by its residues and counts, e.g. \"Phe2Ala (sequence not determined)\"."
+    ]
+  },
+  "compound_series": true
+}

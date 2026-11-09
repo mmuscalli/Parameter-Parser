@@ -132,7 +132,9 @@ ticks them on and off and shows what each brings. Modules shipped with the app:
   the calculations that turn amounts and stocks into concentrations; adds the reaction volume and solvent to your
   first always-on stage if you have no such parameters.
 - `kinetics`, `wet_dry` -- stages that run only for papers that need them, with their columns and row rules.
-- `product_totals` -- total peptide / oligomer yields and the longest oligomer (brings `solution_chemistry`).
+- `peptides_oligomers` (Peptides and oligomers; was `product_totals`, which still works) -- how the chemistry step
+  names peptides and nucleic-acid oligomers, every length of an oligomer series in the compound vocabulary, and the
+  total peptide / oligomer yields and longest oligomer (brings `solution_chemistry`).
 
 A pack's own file of the same name wins over a module's (e.g. its own `analysis_vocab.json`), and its own category
 with the same id wins over the module's.

@@ -177,6 +177,41 @@ def _without_compound_number(c: dict) -> Optional[dict]:
     return dict(c, name=_COMPOUND_NUMBER.sub("", name), full_name=full)
 
 
+def _fill_series(found: dict, add, plan) -> None:
+    """Every length between the shortest and the longest of a series of one repeated unit (Mickey, 2026-11-09: a
+    survey that saw Gly2, Gly3 and Gly13 should expect Gly4 ... Gly12 -- the surveys vary between runs). The lengths
+    filled in get the roles and measures the series has; values only reach a dataset where a paper reports them."""
+    from parameter_extractor.names import MAX_SERIES_LENGTH, homopolymer, homopolymer_name
+    series: Dict[tuple, dict] = {}
+    for fc in list(found.values()):
+        hp = homopolymer(fc.name)
+        if hp:
+            entry = series.setdefault(hp[:2], {"lengths": set(), "roles": [], "measures": []})
+            entry["lengths"].add(hp[2])
+            entry["roles"].append(set(fc.roles))
+            entry["measures"].append(set(fc.measures))
+    for (kind, unit), entry in series.items():
+        lo, hi = min(entry["lengths"]), max(entry["lengths"])
+        if hi - lo < 2 or hi > MAX_SERIES_LENGTH:
+            continue
+        source = f"filled in: the series runs from {homopolymer_name(kind, unit, lo)} to {homopolymer_name(kind, unit, hi)}"
+        # what every member of the series has (Gly-Gly also a starting compound, (Gly)13 only a product: product)
+        roles = set.intersection(*entry["roles"]) or set.union(*entry["roles"])
+        measures = set.intersection(*entry["measures"]) or set.union(*entry["measures"])
+        added = []
+        for n in range(lo + 1, hi):
+            if n in entry["lengths"]:
+                continue
+            name = homopolymer_name(kind, unit, n)
+            for role in sorted(roles):
+                for measure in sorted(measures) or [None]:
+                    add(name, role, measure, "", source, trusted=True)
+            added.append(name)
+        if added:
+            plan.note = (plan.note + " " if plan.note else "") + \
+                f"Filled in {len(added)} length(s) of the {unit} series ({added[0]} ... {added[-1]})."
+
+
 def _example_measure(example: str) -> Optional[str]:
     """The measure a product's printed example shows: % -> '%yield' ('%recovered' when it says recovered / remaining),
     a concentration or amount -> 'mM'; None when it doesn't say."""
@@ -498,6 +533,8 @@ def find_compounds(draft, pubchem=None, tidy: bool = True) -> CompoundPlan:
             for fc in found.values():
                 if "the paper surveys" in fc.sources and role == "sampled" and not fc.measures:
                     fc.measures |= product_measures or {"mM"}
+    if any(m.manifest.compound_series for m in draft.linked_modules()):
+        _fill_series(found, add, plan)
     for fc in found.values():
         if "sampled" in fc.roles and not fc.measures:
             fc.measures.add("mM")

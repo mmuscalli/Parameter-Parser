@@ -23,7 +23,7 @@ A pack is a folder with a pack.json manifest:
   formulas          calculations without code: [{column, expression, description, if_present}], run on every
                     row after the review, in order (formulas.py: the expression language)
   modules           shared modules the pack uses, by id ("analysis", "solution_chemistry", "kinetics", "wet_dry",
-                    "product_totals"; parameter_extractor/modules/): linked, not copied -- `Pack.manifest` is the
+                    "peptides_oligomers"; parameter_extractor/modules/): linked, not copied -- `Pack.manifest` is the
                     pack's own manifest with the modules' steps, calculations, categories and columns merged in
                     (`own_manifest` is the file as written); prompts, rules, standard columns, stages and data files
                     (analysis_vocab.json) come from the pack first, then its modules
@@ -223,6 +223,16 @@ class Pack:
             if extra:
                 text = (text.rstrip() + "\n" if text.strip() else "") + "".join(f"- {r}\n" for r in extra)
         return text
+
+    def module_prompt_rules(self, name: str) -> str:
+        """The rules the pack's modules add to a built-in step's prompt ('- rule' lines for its {{MODULE_RULES}} slot),
+        minus the ones the pack's module settings leave out."""
+        from parameter_extractor import module_settings as ms
+        lines = []
+        for mod in self.modules:
+            off = ms.settings_for(self.own_manifest.module_settings, mod.id).prompt_rules_off
+            lines += [f"- {r}" for r in mod.manifest.prompt_rules.get(name, []) if r not in off]
+        return "\n".join(lines)
 
     def prompt_path(self, name: str) -> Path:
         """The pack's own prompt, else one of its modules', else the app's generic one."""

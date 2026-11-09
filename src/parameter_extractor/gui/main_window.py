@@ -375,13 +375,16 @@ class MainWindow(QMainWindow):
         row = QHBoxLayout()
         row.addStretch(1)
         open_btn = QPushButton("All data packs and modules…")
-        open_btn.clicked.connect(lambda: (dlg.accept(), self.open_packs_window()))
+        wanted = []                               # opened once this window has closed, not from inside it
+        open_btn.clicked.connect(lambda: (wanted.append(True), dlg.accept()))
         row.addWidget(open_btn)
         close = QPushButton("Close", default=True)
         close.clicked.connect(dlg.accept)
         row.addWidget(close)
         v.addLayout(row)
         dlg.exec()
+        if wanted:
+            self.open_packs_window()
 
     def show_getting_started(self) -> None:
         """The workflow in a few lines (Help menu; also offered on first launch)."""
@@ -1226,8 +1229,22 @@ class MainWindow(QMainWindow):
             self._open_pack_editor(pack.folder, tab)
 
     def open_packs_window(self) -> None:
+        """Modal, but shown without a nested event loop: the window steps aside while an editor is open, and hiding a
+        window that runs its own exec() loop would end that loop and unbalance the modal chain (2026-11-09)."""
         from parameter_extractor.gui.packs_window import DataPacksWindow
-        DataPacksWindow(self).exec()
+        old = getattr(self, "_packs_window", None)
+        try:
+            if old is not None and old.isVisible():
+                old.raise_()
+                old.activateWindow()
+                return
+        except RuntimeError:                      # deleted when it closed
+            pass
+        w = DataPacksWindow(self)
+        w.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose)
+        w.setWindowModality(Qt.WindowModality.ApplicationModal)
+        self._packs_window = w
+        w.show()
 
     def check_pack(self) -> None:
         self.edit_pack(tab="Check")
@@ -1235,10 +1252,12 @@ class MainWindow(QMainWindow):
     def _open_pack_editor(self, folder, tab=0, parent=None) -> None:
         """The editor on a pack folder, opened at a tab (its index or name)."""
         from parameter_extractor.gui.pack_windows import PackEditor
-        editor = PackEditor(folder, parent or self, self.registry_path, config=self.current_config)
-        editor.saved.connect(lambda pack_id: self.refresh_packs(select=pack_id))
-        editor.tabs.setCurrentIndex(editor.tab_index(tab) if isinstance(tab, str) else tab)
-        editor.exec()
+        while folder is not None:                # an editor can ask for the next one (its copy, its rewritten files)
+            editor = PackEditor(folder, parent or self, self.registry_path, config=self.current_config)
+            editor.saved.connect(lambda pack_id: self.refresh_packs(select=pack_id))
+            editor.tabs.setCurrentIndex(editor.tab_index(tab) if isinstance(tab, str) else tab)
+            editor.exec()
+            folder, tab = editor.next_folder, 0
 
     def remove_pack(self) -> None:
         """Two confirmations (a warning, then typing DELETE); then the Data pack list is refreshed."""

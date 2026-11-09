@@ -21,7 +21,13 @@ def load_prompt(name: str, **placeholders: str) -> str:
     text = pack.prompt_path(name).read_text()        # the domain pack's own, else the app's
     rules = pack.prompt_rules(name)
     placeholders = {"PACK_RULES": f"\nRules for this research area ({pack.label}):\n{rules.strip()}\n" if rules else "",
-                    "RESEARCH_AREA": pack.label.lower(), **placeholders}
+                    "RESEARCH_AREA": pack.label.lower(),
+                    # rules the pack's modules add to this prompt (the Peptides and oligomers module's naming rules in
+                    # the chemistry step's prompt); the line goes when there are none
+                    "MODULE_RULES": pack.module_prompt_rules(name) if hasattr(pack, "module_prompt_rules") else "",
+                    **placeholders}
+    if not placeholders["MODULE_RULES"]:
+        text = text.replace("{{MODULE_RULES}}\n", "")
     for key, value in placeholders.items():
         text = text.replace("{{" + key + "}}", value)
     return text

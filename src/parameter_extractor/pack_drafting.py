@@ -378,9 +378,9 @@ def covered_by_module(column: str, kind: str, module_ids: Sequence[str], module_
         return linked["kinetics"]
     if "wet_dry" in linked and (column.startswith(("cycle_", "wet_phase", "dry_phase")) or "cycles" in words):
         return linked["wet_dry"]
-    if "product_totals" in linked and (column.startswith("total_") and "yield" in words
+    if "peptides_oligomers" in linked and (column.startswith("total_") and "yield" in words
                                        or column.startswith("max_") and ("length" in words or "oligomer" in words)):
-        return linked["product_totals"]
+        return linked["peptides_oligomers"]
     if "analysis" in linked and column != "analysis_method" and (column.startswith("analysis_") or words & _ANALYSIS):
         return linked["analysis"]
     if "solution_chemistry" in linked and words & _SUBSTANCE and (words & _AMOUNT or kind == "text"):
@@ -541,7 +541,7 @@ def write_pack(proposal: PackProposal, pack_id: str, label: str, description: st
 
 def add_modules(folder: Path, papers: List[SurveyedPaper]) -> tuple:
     """The shared modules the sample papers call for (pack_modules.evidence_for: analytical techniques -> analysis;
-    rate constants / half-lives -> kinetics; wet-dry cycles -> wet_dry; peptides / oligomers -> product_totals, which
+    rate constants / half-lives -> kinetics; wet-dry cycles -> wet_dry; peptides / oligomers -> peptides_oligomers, which
     brings the chemistry step), added to the drafted pack. ({module: lines}, {module: {paper: why}})."""
     from parameter_extractor import pack_modules
     evidence = pack_modules.evidence_for(papers)

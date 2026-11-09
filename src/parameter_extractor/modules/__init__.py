@@ -10,7 +10,7 @@ A module is a folder with a module.json:
   builtin_stages     code steps it switches on ("analysis", "chemistry")
   postprocess        calculations it switches on ("amounts", "peptide_totals", ...)
   stages/*.json      its own optional stages (kinetics, wet-dry), run like a pack's
-  needs              other modules it brings along (product_totals -> solution_chemistry)
+  needs              other modules it brings along (peptides_oligomers -> solution_chemistry)
   variable_categories / category_columns
                      column blocks for its columns (a pack's own category with the same id, or with the same review
                      sources, wins -- the module's is left out)
@@ -20,6 +20,9 @@ A module is a folder with a module.json:
   stage_rules        rules added to each of the pack's own stages
   stage_hints        hint_by_stage entries for the pack's open-ended stages that don't have one for that step
   row_rules          rules for planning rows (added to the pack's structure_planner rules)
+  prompt_rules       {built-in step: [rules]} added to that step's prompt ({{MODULE_RULES}}; the chemistry step's
+                     naming of peptides and oligomers)
+  compound_series    fill in every length of a series of oligomers in the compound vocabulary
   fixed              {column: why} columns the app's calculations read by name (their unit can't be changed in a
                      pack's module settings -- module_settings.py)
 
@@ -59,6 +62,11 @@ class ModuleManifest(BaseModel):
     row_rules: List[str] = Field(default_factory=list)
     # columns the app's own code reads by name: {column: why} -- a pack's module settings can't change their unit
     fixed: Dict[str, str] = Field(default_factory=dict)
+    # rules for a built-in step's prompt ({"chemistry": [...]}): fill its {{MODULE_RULES}} slot (prompt_loader)
+    prompt_rules: Dict[str, List[str]] = Field(default_factory=dict)
+    # the compound vocabulary gets every length of a homologous series between the shortest and the longest found
+    # in the sample papers ((Gly)2 ... (Gly)13; 2mer_A ... 10mer_A): compound_setup
+    compound_series: bool = False
 
 
 class Module:
@@ -122,11 +130,20 @@ def clear_cache() -> None:
     _available.cache_clear()
 
 
+# ids that were renamed: a pack listing the old one gets the module under its new id
+ALIASES = {"product_totals": "peptides_oligomers"}
+
+
+def canonical_id(mid: str) -> str:
+    return ALIASES.get(mid, mid)
+
+
 def resolve(ids: List[str]) -> List[Module]:
     """The modules for a pack's list, with what they need (before them), each once; unknown ids are skipped (the
-    pack's check reports them)."""
+    pack's check reports them); renamed ids (ALIASES) are read as their new ones."""
     found = available()
     out: List[Module] = []
+    ids = [canonical_id(m) for m in ids]
 
     def add(mid: str, seen: tuple = ()) -> None:
         if mid in seen or any(m.id == mid for m in out) or mid not in found:
@@ -141,4 +158,4 @@ def resolve(ids: List[str]) -> List[Module]:
 
 def unknown(ids: List[str]) -> List[str]:
     found = available()
-    return [m for m in ids if m not in found]
+    return [m for m in ids if canonical_id(m) not in found]

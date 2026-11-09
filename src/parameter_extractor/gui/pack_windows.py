@@ -384,6 +384,10 @@ class PackEditor(QDialog):
         self.registry_path = registry_path
         self._config = config                    # callable -> RunConfig (suggestions from papers use the API)
         self.read_only = self.draft.builtin
+        # a pack to open in a new editor once this one has closed (after a helper rewrote the files, or a copy was
+        # made): the opener does it -- a window never runs the next one from inside its own handlers (2026-11-09:
+        # nested modal windows left the main window without input)
+        self.next_folder: Optional[Path] = None
         self._stage = None                         # the stage file shown in the Stages tab
         self._rules_shown = None
         self.setWindowTitle(f"Data pack: {self.draft.manifest.get('label', '')}"
@@ -2268,19 +2272,15 @@ class PackEditor(QDialog):
         QMessageBox.information(self, title, "\n".join(f"• {d}" for d in done[:30]) + (
             f"\n\nThe check found {len(errors_)} error(s) -- see the Check tab." if errors_ else ""))
         self.saved.emit(self.draft.manifest.get("id", ""))
+        self.next_folder = self.draft.folder
         self.accept()
-        editor = PackEditor(self.draft.folder, self.parent(), self.registry_path, self._config)
-        editor.saved.connect(self.saved.emit)
-        editor.exec()
 
     def _copy(self) -> None:
         dlg = NewPackDialog(self, source=self.draft.manifest.get("id"), config=self._config)
         if dlg.exec() and dlg.created is not None:
             self.saved.emit(dlg.created.id)
+            self.next_folder = dlg.created.folder
             self.accept()
-            editor = PackEditor(dlg.created.folder, self.parent(), self.registry_path, self._config)
-            editor.saved.connect(self.saved.emit)
-            editor.exec()
 
     def help_buttons(self) -> list:
         """The '?' buttons holding the editor's explanations."""

@@ -220,7 +220,7 @@ def test_modules_are_chosen_before_the_design():
                                                    modules_brief, write_pack)
     from parameter_extractor.pack_editing import PackDraft
     from parameter_extractor import pack_modules, compound_setup
-    brief = modules_brief(["kinetics", "product_totals"])
+    brief = modules_brief(["kinetics", "peptides_oligomers"])
     assert "SHARED MODULES" in brief and "Kinetics:" in brief and "Solution chemistry:" in brief    # needs
     assert covered_by_module("rate_constant_per_M_hr", "number", ["kinetics"], []) == "Kinetics"
     assert covered_by_module("product_yield_pct", "number", ["solution_chemistry"], []) == "Solution chemistry"

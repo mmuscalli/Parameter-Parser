@@ -9,7 +9,7 @@ Modules (each a folder in parameter_extractor/modules/ with a module.json):
 - solution_chemistry  the chemistry step, its calculations and the solvent parameters they need
 - kinetics            rate constants, half-lives, activation energies (keyword-triggered stage)
 - wet_dry             wet-dry cycling stage, its category and row rules
-- product_totals      peptide / oligomer totals and the longest oligomer (needs solution_chemistry)
+- peptides_oligomers      peptide / oligomer totals and the longest oligomer (needs solution_chemistry)
 
 Evidence (for drafting): the surveys' words -- analytical techniques, kinetics words, wet-dry cycles, peptide and
 oligomer products. `migrate_copies` turns a pack drafted before the reference design (copies of the vocabulary, the
@@ -177,7 +177,7 @@ class ModuleInfo:
 
 EVIDENCE = {"analysis": analysis_evidence, "solution_chemistry": solution_evidence, "kinetics": kinetics_evidence,
             "wet_dry": wet_dry_evidence,
-            "product_totals": totals_evidence}
+            "peptides_oligomers": totals_evidence}
 
 
 def modules_info() -> Dict[str, ModuleInfo]:
@@ -253,6 +253,10 @@ def describe(module_id: str) -> List[str]:
         out.append(f"rules for planning the rows: {len(mm.row_rules)}")
     if mm.stage_rules:
         out.append(f"rules added to the data pack's own steps: {len(mm.stage_rules)}")
+    for step, rules in mm.prompt_rules.items():
+        out.append(f"rules for the {step} step: {len(rules)}")
+    if mm.compound_series:
+        out.append("the compound vocabulary gets every length of an oligomer series found in sample papers")
     vocab = m.file("analysis_vocab.json")
     if vocab:
         out.append(f"vocabulary: {len(json.loads(vocab.read_text()).get('techniques', []))} analytical techniques")
@@ -359,7 +363,7 @@ def migrate_copies(folder: Path) -> List[str]:
         if mid in found and any(json.loads(p.read_text()).get("name") in names for p in found[mid].stage_files()):
             want.append(mid)
     if all(x in m.get("postprocess", []) for x in ("peptide_totals", "oligomer_totals")):
-        want.append("product_totals")
+        want.append("peptides_oligomers")
     want = [w for w in want if w in found]
     if not want:
         return []

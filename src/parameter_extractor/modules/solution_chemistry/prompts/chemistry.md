@@ -52,26 +52,8 @@ For each species:
   does, with ordinary spaces and punctuation (e.g. "cytidine 2'-phosphate",
   "ribose 1,2-cyclic phosphate"), and add the name to `unmapped_species`.
   Never silently drop a species.
-- Peptides: name a peptide by its sequence in three-letter codes, N- to
-  C-terminus, joined by "-": "Gly-Gly" (diglycine), "Gly-Gly-Gly"
-  (triglycine), "Gly-Ala-Ala" -- order matters, so keep it exactly as the
-  paper gives it. A run of 4 or more of one residue is written "(Gly)4":
-  "(Gly)4" for tetraglycine, "(Gly)10", "Gly-(Ala)4". The same holds for any
-  compound whose name repeats one unit 4 or more times with hyphens (other
-  polymers too): "X-X-X-X" is written "(X)4".
-  A cyclic peptide (including diketopiperazines) is "cyclo_" plus its
-  residues the same way: "cyclo_Gly-Gly" for the glycine DKP,
-  "cyclo_Val-Gly".
-- Nucleic-acid oligomers: "<n>mer_<nucleotide>" -- n the chain length, the
-  nucleotide by its base letter, RNA "A" "C" "G" "U", DNA "dA" "dC" "dG"
-  "dT": "4mer_A" for an adenylate tetramer / (pA)4, "43mer_U", "12mer_dT".
-  A mixed oligomer by its letters as the paper gives them (a sequence, or a
-  composition when the order wasn't determined): "3mer_AAU", "3mer_dATG".
-  A table of oligomer lengths (columns 1, 2, 3, ... under "% oligomer")
-  gives one species per length: "1mer_A", "2mer_A", ... All oligomers
-  together (an oligomerization yield, "RNA oligomers") is named "oligomers";
-  the longest oligomer detected is not a species (another step records it).
-  Polymers of unstated length keep their names (poly(A)).
+- A compound whose name repeats one unit 4 or more times with hyphens is written with the count: "X-X-X-X" is "(X)4".
+{{MODULE_RULES}}
 - Give the concentration as printed (`v` + `u`). Add `mM` only when the
   conversion is unambiguous (mol dm-3 -> mM is x1000; mass/volume needs a
   molecular weight -- only for well-known compounds; otherwise leave `mM`
@@ -134,10 +116,6 @@ For each species:
   how you identified it ("structure drawing, Table 2 entry 3", "compound 7 =
   N-cyclohexylisobutyramide", "Table 2 entry 4: phenylacetic acid"), and use
   `c` "medium" unless the paper also names it in words.
-- A product whose composition is known but whose SEQUENCE the paper says it
-  didn't determine (e.g. shown in parentheses, "(FFA)") must not be given a
-  sequence: name it by its residues and counts, e.g. "Phe2Ala (sequence not
-  determined)".
 - A product the paper lists as observed but gives no amount for (a list of
   identified products, "+" in a table): `v` null, `det` "detected". A product
   the paper says was looked for and not found ("no product was detected",

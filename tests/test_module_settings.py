@@ -48,13 +48,13 @@ def test_settings_change_the_pack_not_the_module():
                                             "extra_rules": ["Report half_life_hr for hydrolysis only."]}},
                      "parameters": {"half_life_hr": {"unit": "min"}, "kinetic_model": {"off": True},
                                     "activation_energy_kJ_mol": {"description": "Ea of the hydrolysis"}}},
-        "product_totals": {"calculations_off": ["oligomer_totals"]},
+        "peptides_oligomers": {"calculations_off": ["oligomer_totals"]},
         "solution_chemistry": {"stage_rules_off": [pack_modules.CHEMISTRY_RULE],
                                "parameters": {"solvent_volume_mL": {"unit": "uL"}}},
         "analysis": {"families_off": ["nmr", "maldi"]},
         "wet_dry": {"row_rules_off": [rule], "steps": {"wet_dry": {"off": True}}}}
     with tempfile.TemporaryDirectory() as tmp, patch.object(packs, "user_packs_dir", lambda: Path(tmp)):
-        pack = _pack(Path(tmp), ["kinetics", "product_totals", "analysis", "wet_dry"], settings)
+        pack = _pack(Path(tmp), ["kinetics", "peptides_oligomers", "analysis", "wet_dry"], settings)
         specs = load_specs(pack)
         kin = specs["kinetics"]
         cols = {p.column: p for p in kin.parameters}

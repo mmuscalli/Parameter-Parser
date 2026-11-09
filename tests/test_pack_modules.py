@@ -103,7 +103,7 @@ def test_solution_chemistry_module():
 
 def test_prebiotic_uses_the_modules():
     pack = packs.get("prebiotic_chemistry") if hasattr(packs, "get") else packs.Pack(packs.BUILTIN_DIR / "prebiotic_chemistry")
-    assert set(pack.module_ids()) >= {"analysis", "solution_chemistry", "kinetics", "wet_dry", "product_totals"}
+    assert set(pack.module_ids()) >= {"analysis", "solution_chemistry", "kinetics", "wet_dry", "peptides_oligomers"}
     assert pack.own_manifest.builtin_stages == [] and "chemistry" in pack.manifest.builtin_stages
     from parameter_extractor.stages.optional import load_specs
     assert {"experimental_conditions", "kinetics", "wet_dry"} <= set(load_specs(pack))
@@ -159,8 +159,8 @@ def test_kinetics_wet_dry_and_totals_modules():
     from parameter_extractor.stages.optional import load_specs
     with tempfile.TemporaryDirectory() as tmp, patch.object(packs, "user_packs_dir", lambda: Path(tmp) / "packs"):
         pack = _new_pack(Path(tmp))
-        done = pack_modules.add_modules(pack.folder, ["kinetics", "wet_dry", "product_totals"])
-        assert set(done) >= {"kinetics", "wet_dry", "product_totals"}
+        done = pack_modules.add_modules(pack.folder, ["kinetics", "wet_dry", "peptides_oligomers"])
+        assert set(done) >= {"kinetics", "wet_dry", "peptides_oligomers"}
         merged = packs.Pack(pack.folder)
         assert "solution_chemistry" in merged.module_ids()                       # totals bring it along
         assert {"kinetics", "wet_dry"} <= {c["id"] for c in merged.manifest.variable_categories}
@@ -173,8 +173,8 @@ def test_kinetics_wet_dry_and_totals_modules():
         assert {"rate_constant_first_order_per_hr", "cycle_number"} <= set(d.all_columns())
         assert not [p for p in check(d) if p.level == "error"], [str(p) for p in check(d)]
         assert not list((pack.folder / "stages").glob("kinetics*.json"))           # not copied
-        assert pack_modules.add_modules(pack.folder, ["kinetics", "wet_dry", "product_totals"]) == \
-            {"kinetics": [], "wet_dry": [], "product_totals": []}                # nothing twice
+        assert pack_modules.add_modules(pack.folder, ["kinetics", "wet_dry", "peptides_oligomers"]) == \
+            {"kinetics": [], "wet_dry": [], "peptides_oligomers": []}                # nothing twice
 
 
 def test_evidence_for_modules():
@@ -187,7 +187,7 @@ def test_evidence_for_modules():
               SimpleNamespace(name="c", survey=survey("", compounds=["Gly-Gly", "(pA)4"])),
               SimpleNamespace(name="d", survey=survey("N-body simulation of impacts"))]
     ev = pack_modules.evidence_for(papers)
-    assert set(ev["kinetics"]) == {"a"} and set(ev["wet_dry"]) == {"b"} and "c" in ev["product_totals"]
+    assert set(ev["kinetics"]) == {"a"} and set(ev["wet_dry"]) == {"b"} and "c" in ev["peptides_oligomers"]
     assert all("d" not in found for found in ev.values())
 
 
@@ -210,7 +210,7 @@ def test_modules_tab():
         rows = {t.item(r, 0).data(Qt.ItemDataRole.UserRole): r for r in range(t.rowCount())}
         compounds = e.tab_index("Compounds")
         assert not e.tabs.isTabEnabled(compounds)
-        t.item(rows["product_totals"], 0).setCheckState(Qt.CheckState.Checked)
+        t.item(rows["peptides_oligomers"], 0).setCheckState(Qt.CheckState.Checked)
         assert t.item(rows["solution_chemistry"], 1).text().startswith("brought along by")
         assert e.tabs.isTabEnabled(compounds) and e.builtin_boxes["chemistry"].isChecked()
         assert e.module_stages_note.isHidden()                                # those bring no stage
@@ -225,9 +225,56 @@ def test_modules_tab():
         assert not e._vocab_editable()                                        # the module's: read-only here
         assert e.save()
         own = json.loads((pack.folder / "pack.json").read_text())
-        assert own["modules"] == ["analysis", "product_totals"]
+        assert own["modules"] == ["analysis", "peptides_oligomers"]
         assert own.get("builtin_stages", []) == [] and own.get("postprocess", []) == []
 
+
+
+def test_peptides_and_oligomers_module():
+    """2026-11-09: 'Peptide and oligomer totals' became 'Peptides and oligomers' (the old id still works): the chemistry
+    step's naming rules for peptides / oligomers come from it, and compound setup fills in every length of a series."""
+    import json as _json
+    from parameter_extractor import compound_setup, modules, names
+    from parameter_extractor.stages.prompt_loader import load_prompt
+    assert [m.id for m in modules.resolve(["product_totals"])] == ["solution_chemistry", "peptides_oligomers"]
+    assert modules.unknown(["product_totals"]) == []
+    mod = modules.available()["peptides_oligomers"]
+    assert mod.manifest.compound_series and mod.manifest.prompt_rules["chemistry"]
+    assert names.homopolymer("Gly13") == ("peptide", "Gly", 13) and names.homopolymer("Gly-Ala") is None
+    assert names.homopolymer("10mer_A") == ("nucleotide", "A", 10) and names.homopolymer_name("peptide", "Gly", 5) == "(Gly)5"
+    with tempfile.TemporaryDirectory() as tmp, patch.object(packs, "user_packs_dir", lambda: Path(tmp) / "packs"):
+        pack = _new_pack(Path(tmp))
+        pack_modules.add_modules(pack.folder, ["solution_chemistry"])
+        try:
+            packs.activate("modules_test")
+            assert "Peptides: name a peptide" not in load_prompt("chemistry", PAPER_TEXT="", STRUCTURE_PLAN_JSON="")
+            pack_modules.add_modules(pack.folder, ["peptides_oligomers"])
+            packs.activate("modules_test")
+            text = load_prompt("chemistry", PAPER_TEXT="", STRUCTURE_PLAN_JSON="")
+            assert "Peptides: name a peptide" in text and "{{MODULE_RULES}}" not in text
+            rule = mod.manifest.prompt_rules["chemistry"][1]                    # switched off for this pack
+            m = _json.loads((pack.folder / "pack.json").read_text())
+            m["module_settings"] = {"peptides_oligomers": {"prompt_rules_off": [rule]}}
+            (pack.folder / "pack.json").write_text(_json.dumps(m))
+            packs.activate("prebiotic_chemistry")                               # (written behind the pack's back)
+            packs.activate("modules_test")
+            assert rule not in load_prompt("chemistry", PAPER_TEXT="", STRUCTURE_PLAN_JSON="")
+        finally:
+            packs.activate("prebiotic_chemistry")
+        # the series: Gly2, Gly3 and Gly13 surveyed -> (Gly)4 ... (Gly)12 too, as products in % yield
+        surveys = [{"paper": "p", "item": "p", "error": "", "survey": {"field": "x", "row_unit": "r", "set_unit": "s",
+                    "notes": "", "variables": [], "compounds": [
+                        {"name": "Gly2", "full_name": "glycylglycine", "role": "product", "example": "13.96 %"},
+                        {"name": "Gly3", "full_name": "triglycine", "role": "product", "example": "10.4 %"},
+                        {"name": "Gly13", "full_name": "", "role": "product", "example": "0.11 %"},
+                        {"name": "GG", "full_name": "diglycine", "role": "starting", "example": "3.7 mM"}]}}]
+        (pack.folder / "drafted_surveys.json").write_text(_json.dumps(surveys))
+        from parameter_extractor.pack_editing import PackDraft
+        plan = compound_setup.find_compounds(PackDraft.load(pack.folder), None)
+        by = {c.name: c for c in plan.compounds}
+        assert all(f"(Gly){n}" in by for n in range(4, 13)), sorted(by)
+        assert by["(Gly)7"].roles == {"sampled"} and by["(Gly)7"].measures == {"%yield"}    # what all members share
+        assert "Filled in 9 length(s)" in plan.note
 
 if __name__ == "__main__":
     for name, fn in list(globals().items()):
