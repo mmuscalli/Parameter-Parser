@@ -2481,3 +2481,12 @@ paper buttons. Found too: ImpA -> 'isopropyl methylphosphonate' and RCP -> 'CP-6
 - Risk-free saving kept: `StageSpec.could_trigger(paper_text)` -- a keyword-only-triggered stage (kinetics) whose words
   aren't in the paper isn't in a SINGLE paper's tool list (~3.6K cached tokens); with shared instructions (queues) the
   tool list stays fixed for the cross-paper cache.
+
+## Prebiotic vs a suggestions-extended copy (2026-11-08, Mickey's "Prebio Chem DUPE")
+
+eval/dupe_pack_2026-11-08.md: 18 live runs (Ferris 1993, Hirakawa 2025, Song 2024; 3 runs per pack; suggestions accepted
+into a throwaway registry). DUPE +24% cost ($0.397 vs $0.320; product_structure always runs, bigger prefix, kinetics
+output), consistency 74% vs 84%; a few valid extra columns (exchangeable cation, linkage, sequence composition) and
+steadier compound names, but vocabulary junk caused misnamings (dTMP -> 'TMP', ppA -> p2A) and it missed sampled_pH.
+Fix from it: suggest_additions filters compounds with compound_setup.is_compound_name (also for the model's own list),
+splits 'X/Y', compares names with primes normalised; NOT_A_COMPOUND also covers ssDNA/dsDNA, oligo*, Cy5, FAM, Alexa*.

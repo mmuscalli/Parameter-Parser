@@ -131,7 +131,12 @@ def test_suggest_and_apply_additions():
             return
         from parameter_extractor.pack_drafting import (PackAdditions, PaperSurvey, ProposedCategory, SuggestedCompound,
                                                        SuggestedParameter, SuggestedRule, SuggestedStage)
-        survey = PaperSurvey(field="x", row_unit="r", set_unit="s", notes="", variables=[], compounds=[])
+        from parameter_extractor.pack_drafting import SurveyCompound
+        survey = PaperSurvey(field="x", row_unit="r", set_unit="s", notes="", variables=[], compounds=[
+            SurveyCompound(name="A", full_name="", role="starting", example=""),           # a base letter
+            SurveyCompound(name="SYBR Green I", full_name="", role="reagent", example=""),
+            SurveyCompound(name="KCl/MgCl2", full_name="", role="reagent", example=""),    # two salts
+            SurveyCompound(name="Gly-Gly", full_name="", role="product", example="")])     # known already
         survey.variables = [pack_drafting.SurveyVariable(name="t", column="t", unit="°C", kind="number",
                                                          role="condition", description="d", level="set",
                                                          uncertainty=False, where="table", example="80 °C")]
@@ -149,7 +154,9 @@ def test_suggest_and_apply_additions():
             rules=[SuggestedRule(target="rows", rule="Dark controls are not rows.", reason="r"),
                    SuggestedRule(target="experimental_conditions", rule="Lamp power goes in other.", reason="r")],
             compounds=[SuggestedCompound(name="Tris", role="initial", papers=1, reason="buffer"),
-                       SuggestedCompound(name="NaCl", role="initial", papers=3, reason="already there")],
+                       SuggestedCompound(name="NaCl", role="initial", papers=3, reason="already there"),
+                       SuggestedCompound(name="DNase I", role="initial", papers=1, reason="enzyme"),
+                       SuggestedCompound(name="ab", role="initial", papers=1, reason="panel letters")],
             notes="")
 
         def call(ctx, *, stage, response_model, **kw):
@@ -160,6 +167,8 @@ def test_suggest_and_apply_additions():
         kinds = [(s.kind, s.title) for s in r.suggestions]
         assert ("parameter", "irradiation_wavelength_nm") in kinds and ("compound", "Tris") in kinds
         assert ("stage", "Photochemistry") in kinds and ("category", "Light") in kinds
+        compounds = sorted(t for k, t in kinds if k == "compound")
+        assert compounds == ["Tris"], compounds      # KCl, MgCl2, Gly-Gly are in the vocabulary already; A, SYBR, DNase, ab dropped
         assert not any(t == "initial_temperature_C" for _, t in kinds)                 # already a column
         assert "initial_temperature_C (already a column)" in r.left_out and "NaCl (already a compound)" in r.left_out
         done, problems = pack_drafting.apply_additions(pack.folder, r.suggestions, FakePubChem())

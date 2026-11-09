@@ -157,7 +157,7 @@ NOT_A_COMPOUND = re.compile(r"\b(?:buffers?|polymerase|enzymes?|ligase|kit|dyes?
                             r"templates?|strands?|oligomers?|oligonucleotides?|polymers?|products?|mixtures?|"
                             r"solutions?|media|medium|water|DNA|RNA|protein|peptides|lipids|vesicles|membranes?|"
                             r"aerosols?|droplets?|clays?|minerals?|glass|salts|ions|nucleotides|amino acids|ribozymes?|DNase\w*|"
-                            r"RNase\w*|dNTPs|dimers?|beads)\b|\s(?:and|or)\s",
+                            r"RNase\w*|dNTPs|dimers?|beads|\w*[DR]NA|oligo\w*|Cy\d|FAM|Alexa\w*)\b|\s(?:and|or)\s",
                             re.IGNORECASE)
 
 

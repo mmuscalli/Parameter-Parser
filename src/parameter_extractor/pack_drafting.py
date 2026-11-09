@@ -631,21 +631,28 @@ def suggest_additions(folder: Path, items: Sequence, config: RunConfig,
         target = "rows" if r.target.strip().lower() in ("rows", "row", "row planning") else _slug(r.target)
         out.append(Suggestion("rule", r.rule, "planning the rows" if target == "rows" else f"stage `{target}`",
                               reason=r.reason, payload=(target, r.rule)))
-    known = {s.lower() for s in draft.species}
-    model_names = {c.name.lower() for c in answer.compounds}
+    from parameter_extractor.compound_setup import is_compound_name
+    norm = lambda n: " ".join(n.replace("′", "'").replace("’", "'").split()).lower()   # 2′,3′-cGMP = 2',3'-cGMP
+    known = {norm(s) for s in draft.species}
+    # the same name filter as Find compounds (Mickey's DUPE pack had 'ab', 'b', 'A', 'DNA', 'DNase I', 'SYBR Green I')
+    answer.compounds = [c for c in answer.compounds if is_compound_name(c.name)]
+    model_names = {norm(c.name) for c in answer.compounds}
     if chemistry:                     # every compound the surveys name, not only those the model picked out
         role = {"product": "sampled"}
         for p in good:
             for sc in p.survey.compounds:
-                if sc.name.lower() not in model_names and sc.role != "other":
-                    model_names.add(sc.name.lower())
+                for part in (re.split(r"\s*/\s*", sc.name) if "/" in sc.name else [sc.name]):
+                    if sc.role == "other" or not is_compound_name(part) or norm(part) in model_names:
+                        continue
+                    model_names.add(norm(part))
                     answer.compounds.append(SuggestedCompound(
-                        name=sc.name, role=role.get(sc.role, "initial"), papers=1,
-                        reason=f"named in {p.name}" + (f" ({sc.full_name})" if sc.full_name else "")))
+                        name=part, role=role.get(sc.role, "initial"), papers=1,
+                        reason=f"named in {p.name}" + (f" ({sc.full_name})" if sc.full_name and part == sc.name
+                                                       else "")))
     full_names = {sc.name.lower(): sc.full_name for p in good for sc in p.survey.compounds if sc.full_name}
     for c in answer.compounds if chemistry else []:
         matched = match_species(c.name, vocab=tuple(draft.species) or ("",))
-        if c.name.lower() in known or (matched and matched[0].lower() in known):
+        if norm(c.name) in known or (matched and norm(matched[0]) in known):
             left_out.append(f"{c.name} (already a compound)")
             continue
         full = full_names.get(c.name.lower(), "")
