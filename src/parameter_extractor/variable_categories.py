@@ -193,6 +193,9 @@ _UNIT_SUFFIX = {"nm": "_nm", "rpm": "_rpm", "%": "_pct", "mL/min": "_mL_min", "K
                 "µL": "_uL",      # microlitre volumes keep a µL column (the dataset's added_*_uL style)
                 "µm": "_um", "mm": "_mm", "cm": "_cm",   # lengths: in the unit printed (matreux2024 170 µm)
                 "nt": "_nt",                            # oligomer lengths (caimi2025, song2024)
+                # sub-second times keep their own unit: a 0.7 µs shock in hours is 1.9e-10 (organics, 2026-11-09)
+                "ms": "_ms", "µs": "_us", "ns": "_ns",
+                "nmol": "_nmol", "µmol": "_umol", "mmol": "_mmol",
                 "h-1": "_per_hr", "M-1h-1": "_per_M_hr", "mM/h": "_mM_hr", "kJ/mol": "_kJ_mol"}
 
 
@@ -202,7 +205,13 @@ def unit_suffix(unit: str) -> str:
     if unit in _UNIT_SUFFIX:
         return _UNIT_SUFFIX[unit]
     dimension = _UNITS.get(unit, ("",))[0]
-    return _SUFFIX.get(dimension, "")
+    if dimension in _SUFFIX:
+        return _SUFFIX[dimension]
+    # a unit the app converts but has no dataset convention for (GPa -> bar above; km/s, kV, J): named after itself,
+    # so the column reads back in that unit (observations.unit_for_column) and values stay numbers (2026-11-09)
+    from parameter_extractor.units import unit_slug
+    slug = unit_slug(unit) if dimension and dimension != "fraction" else ""
+    return f"_{slug}" if len(slug) >= 2 or slug in ("J", "W", "V") else ""
 
 
 # a bare lowercase 'm': units.py reads it as molar (as papers use it for concentrations), but in a

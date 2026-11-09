@@ -47,9 +47,16 @@ class Compound:
         return f"https://pubchem.ncbi.nlm.nih.gov/compound/{self.cid}"
 
 
+# PubChem's name search mishandles Greek letters: 'α-aminobutyric acid' -> GABA (gamma!), 'β-alanine' / 'α-ketoglutarate'
+# -> nothing; spelled out, all are found (organics test set, 2026-11-09)
+GREEK = {"α": "alpha", "β": "beta", "γ": "gamma", "δ": "delta", "ε": "epsilon", "ω": "omega", "κ": "kappa",
+         "λ": "lambda", "μ": "mu", "σ": "sigma", "Α": "alpha", "Β": "beta", "Γ": "gamma", "Δ": "delta", "Ω": "omega"}
+
+
 def query_name(name: str) -> str:
     """The form of a name to send: the model sometimes writes names like column
-    names ("ribose_1,2-cyclic_phosphate")."""
+    names ("ribose_1,2-cyclic_phosphate"); Greek letters spelled out."""
+    name = "".join(GREEK.get(ch, ch) for ch in name)
     return " ".join(name.replace("_", " ").split())
 
 

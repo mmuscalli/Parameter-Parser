@@ -76,7 +76,7 @@
   },
   {
    "column": "pl_dens",
-   "unit": "",
+   "unit": "g/cm3",
    "description": "planet density, g cm-3",
    "uncertainties": true
   },

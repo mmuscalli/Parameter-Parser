@@ -283,7 +283,9 @@ def test_reported_misses_and_conventions():
         _, done, problems = compound_setup.set_up_compounds(pack.folder, fake, plan=plan)
         d = PackDraft.load(pack.folder)
         cols = [p["column"] for s in d.stages.values() for p in s["parameters"]]
-        assert cols == ["initial_pH", "initial_temperature_C"] and "initial_MgCl2_aq_mM" in d.columns
+        # the chemistry step came with the amounts calculation and the reaction volume it needs (2026-11-09)
+        assert cols == ["initial_pH", "initial_temperature_C", "solvent_volume_mL"] and "initial_MgCl2_aq_mM" in d.columns
+        assert "amounts" in d.manifest["postprocess"] and any("reaction volume" in line for line in done)
         assert "pH" not in d.columns and "initial_pH" in d.columns
         assert not [p for p in problems if p.level == "error"], problems
 

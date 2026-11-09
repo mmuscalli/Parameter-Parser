@@ -101,6 +101,7 @@ class StageSpec(BaseModel):
     alternatives: bool = False
     # send the rendered table pages along (tables whose text layer is garbled or sideways)
     table_images: bool = False
+    grids: bool = True              # set by for_run: False when the run reads no table grids (RunConfig.table_grids)
     # the prompt rule for `alternatives`, when the default's examples (astronomy) don't fit the field
     alternatives_rule: str = ""
     # also collect conditions/parameters that have no column (`other`: name, value as stated, ...),
@@ -138,7 +139,7 @@ class StageSpec(BaseModel):
                          "`sample`) only if it applies to one set (sample), `q`, `src`, `c`. A value with "
                          "several quantities (a tube's volume, diameter and length) is one entry per quantity. "
                          "Leave `other` empty if there's nothing else.")
-        if self.table_images:
+        if self.table_images and self.grids:
             rules.append("TABLES IN 'TABLE GRIDS' (marked '=== TABLE GRID' in or after the paper text; the app has already "
                          "read their cells "
                          "-- r = row number, [n] = column number): you MUST answer for them with a mapping in "
@@ -480,7 +481,7 @@ def _models(spec_json: str, categories: Tuple[str, ...] = ()) -> Tuple[type, typ
     other_field = {"other": (List[Other], Field(default_factory=list, description=(
         "Other conditions that have no parameter of their own."))) } if spec.open_ended else {}
     grid_field = {}
-    if spec.table_images:
+    if spec.table_images and spec.grids:
         # a table the app read itself (TABLE GRIDS, ingestion/table_grid.py): which grid column holds which
         # parameter and which grid row is which set / sample -- the app reads the cells (fill_grids)
         parts = ["value", "err", "err_plus", "err_minus"] if spec.has_uncertainties else ["value"]
@@ -716,13 +717,13 @@ def stage_values(spec: StageSpec, item) -> Tuple[Dict[str, StageValue], List[str
                             f"-- it must be one of {', '.join(param.choices)}."]
             text = match
         return ({param.column: StageValue(text, note=item.note, **base)} if text else {}), []
-    from parameter_extractor.units import convert_printed
+    from parameter_extractor.units import convert_printed, is_difference
     high = getattr(item, "high", 0.0) or 0.0
     if high and high > item.value:     # a range: '<column>_range<unit>' = 'low:high' (Mickey, 2026-10-31)
         from parameter_extractor.ingestion.flatten_to_template import with_range
         from parameter_extractor.units import format_range
-        lo, lo_note = convert_printed(item.value, printed, param.unit)
-        hi, _ = convert_printed(high, printed, param.unit)
+        lo, lo_note = convert_printed(item.value, printed, param.unit, is_error=is_difference(param.column))
+        hi, _ = convert_printed(high, printed, param.unit, is_error=is_difference(param.column))
         if lo is None or hi is None:
             return {}, [f"{spec.label}: {param.column} = {item.value:g}-{high:g} {printed} for "
                         f"'{item.set_label}' left out -- {lo_note}."]
@@ -737,7 +738,8 @@ def stage_values(spec: StageSpec, item) -> Tuple[Dict[str, StageValue], List[str
                         f"-- it must be a whole number."]
         return {param.column: StageValue(n, note="; ".join(x for x in (item.note, f"read from '{item.text}'") if x),
                                          **base)}, []
-    value, note = convert_printed(item.value, printed, param.unit)
+    # (a temperature difference converts like an uncertainty: no offset)
+    value, note = convert_printed(item.value, printed, param.unit, is_error=is_difference(param.column))
     if value is None:
         return {}, [f"{spec.label}: {param.column} = {item.value:g} {printed} for '{item.set_label}' left out -- {note}."]
     notes = "; ".join(n for n in (item.note, note) if n)
@@ -761,6 +763,15 @@ def stage_values(spec: StageSpec, item) -> Tuple[Dict[str, StageValue], List[str
                     out[col] = StageValue(converted, **base)
         if len(cols) > 2:                       # limit flag: 1 upper limit, -1 lower limit, 0 a measurement
             out[cols[2]] = StageValue({"upper": 1, "lower": -1}.get(getattr(item, "limit", ""), 0), **base)
+            return out, []
+    limit = getattr(item, "limit", "") or ""
+    if limit:
+        # no limit column for this parameter: the bound is kept as the value, said in its provenance and flagged
+        # (mckay1997's '>10,000 K' had become a plain 9726.85 °C, organics test set 2026-11-09)
+        bound = {"upper": "an upper limit ('<' in the paper)", "lower": "a lower limit ('>' in the paper)"}[limit]
+        out[param.column].note = "; ".join(n for n in (notes, bound) if n)
+        return out, [f"{spec.label}: {param.column} = {value:g} for '{item.set_label or 'every set'}' is {bound} -- "
+                     f"written as the value (this parameter has no limit column)."]
     return out, []
 
 
@@ -916,7 +927,7 @@ def optional_results(optional=None, wet_dry=None) -> List[Tuple[StageSpec, objec
 
 def triggered_specs(structure: StructurePlan, paper_text: str,
                     choices: Optional[Dict[str, str]] = None, suggest: bool = True,
-                    running: Optional[set] = None, left_out=()) -> List[StageSpec]:
+                    running: Optional[set] = None, left_out=(), grids: bool = True) -> List[StageSpec]:
     """The stages to run: triggered ones, unless the user turned them off ('off'), plus
     any forced on ('on'). `suggest` False: without their open-ended part (see for_run). `running`: the
     other steps this run makes (for hint_by_stage)."""
@@ -925,13 +936,14 @@ def triggered_specs(structure: StructurePlan, paper_text: str,
     for name, spec in load_specs().items():
         choice = choices.get(name, "auto")
         if choice == "on" or (choice == "auto" and spec.triggered(structure, paper_text)):
-            spec = for_run(spec, suggest, running, left_out)
+            spec = for_run(spec, suggest, running, left_out, grids)
             if spec.parameters:                     # every parameter left out: nothing to ask
                 out.append(spec)
     return out
 
 
-def for_run(spec: StageSpec, suggest: bool = True, running: Optional[set] = None, left_out=()) -> StageSpec:
+def for_run(spec: StageSpec, suggest: bool = True, running: Optional[set] = None, left_out=(),
+            grids: bool = True) -> StageSpec:
     """The spec as a run uses it: with new-variable suggestions off (RunConfig.suggest_new_variables),
     an open-ended stage doesn't ask for `other` conditions; hint_by_stage's wording for the steps that run;
     `left_out` parameters (RunConfig.parameters_off -- a pre-parse found them irrelevant) aren't asked for."""
@@ -940,6 +952,8 @@ def for_run(spec: StageSpec, suggest: bool = True, running: Optional[set] = None
         update["parameters"] = [p for p in spec.parameters if p.column not in left_out]
     if not suggest and spec.open_ended:
         update["open_ended"] = False
+    if not grids and spec.grids:                # the run reads no table grids: no rule, no `grids` answer field
+        update["grids"] = False
     if spec.hint_by_stage:
         extra = [texts.get("runs" if stage in (running or set()) else "off", "")
                  for stage, texts in spec.hint_by_stage.items()]

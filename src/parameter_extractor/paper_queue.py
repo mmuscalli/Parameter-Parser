@@ -67,7 +67,7 @@ _FIRST_LOCK = threading.Lock()
 class PaperQueue:
     def __init__(self, items: Sequence[PaperItem], config: RunConfig,
                  on_change: Optional[Callable[[QueuedPaper], None]] = None,
-                 cancel_event: Optional[threading.Event] = None, parallel: int = 0):
+                 cancel_event: Optional[threading.Event] = None, parallel: int = 0, digitize_by_hand: bool = True):
         stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
         self.out_dir = Path(config.output_dir) / f"queue_{stamp}"
         n = 2
@@ -75,6 +75,7 @@ class PaperQueue:
             self.out_dir, n = Path(config.output_dir) / f"queue_{stamp}_{n}", n + 1
         self.out_dir.mkdir(parents=True)
         self.config = config
+        self.digitize_by_hand = digitize_by_hand    # False (run_queue): a paper with no rows skips its steps
         # a paper's supplementary information is read with it, not queued on its own (supplements.py)
         from parameter_extractor.ingestion.supplements import drop_supplements
         items, self.folded_supplements = drop_supplements(list(dict.fromkeys(items))) \
@@ -144,6 +145,9 @@ class PaperQueue:
                     continue
                 if not paper.figures:
                     paper.figures_reviewed = True
+                # no figure will become rows: a paper with no rows from tables or text skips its extraction steps
+                paper.extraction.no_figure_rows = not paper.figures or (
+                    not self.digitize_by_hand and not self.config.auto_digitize_figures)
                 self._set(paper, "extracting", "Waiting for its turn")
                 self._pool.submit(self._extract, paper)
         finally:
@@ -255,7 +259,8 @@ def run_queue(items: Sequence[PaperItem], config: RunConfig, on_change=None, can
               parallel: int = 0) -> PaperQueue:
     """The whole queue without a person: figures skipped, no new-variable review (new variables stay
     out of the CSV, listed in each paper's new_variables.json). For the command line."""
-    queue = PaperQueue(items, config, on_change=on_change, cancel_event=cancel_event, parallel=parallel)
+    queue = PaperQueue(items, config, on_change=on_change, cancel_event=cancel_event, parallel=parallel,
+                       digitize_by_hand=False)
     queue.start()
     queue.wait()
     for paper in queue.papers:

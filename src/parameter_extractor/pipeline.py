@@ -260,6 +260,10 @@ class Extraction:
     ambient_notes: List[str] = field(default_factory=list)   # ambient conditions filled in (calculators/ambient.py)
     abbreviations: Dict[str, str] = field(default_factory=dict)  # species: full name -> the paper's abbreviation
     skipped_kind: str = ""      # a review / perspective / theory paper / abstract: the extraction steps were skipped
+    # no figures will be digitized in this run (run_pipeline without automatic digitizing): a paper whose row plan is
+    # empty then gets nothing from the extraction steps -- they're skipped (organics test set, 2026-11-09: $0.14 each
+    # for takeuchi2020 / burchell2020, results only in figures)
+    no_figure_rows: bool = False
     auto_figure_notes: List[str] = field(default_factory=list)   # figures not digitized automatically, and why
     terms: List[str] = field(default_factory=list)           # parameters to look for (focus terms)
     always_on: set = field(default_factory=set)              # optional stages that always run
@@ -291,6 +295,15 @@ def extract(
     ex = read_paper(pdf_path, config, on_progress, cancel_event)
     if ex.figures and on_figures:
         on_figures(ex)
+    ex.no_figure_rows = not ex.figures            # nothing to digitize either
+    return extract_steps(ex)
+
+
+def _extract_unattended(pdf_path, config, on_progress=None, cancel_event=None) -> "Extraction":
+    """extract() for a run that digitizes no figures by hand: without automatic digitizing, a paper with no rows
+    skips its extraction steps (Extraction.no_figure_rows)."""
+    ex = read_paper(pdf_path, config, on_progress, cancel_event)
+    ex.no_figure_rows = not ex.figures or not config.auto_digitize_figures
     return extract_steps(ex)
 
 
@@ -499,11 +512,13 @@ def extract_steps(ex: "Extraction") -> "Extraction":
         # a review, perspective, theory paper or abstract with no rows of its own: nothing for the extraction steps
         # (Mickey, 2026-11-03: they cost a full run); a search for the user's own terms still runs
         kind = getattr(ex.structure, "paper_kind", "experimental")
-        skip = kind != "experimental" and not ex.structure.experiment_sets
+        skip = not ex.structure.experiment_sets and (kind != "experimental" or ex.no_figure_rows)
         if skip:
-            ex.skipped_kind = kind
+            ex.skipped_kind = kind if kind != "experimental" else "figures-only paper"
             ctx.total_steps -= pack.uses("methodology") + _chemistry_on(pack, config) + len(always_on)
-            ctx.note("skipped", f"The paper is a {kind}, with no experiments of its own: extraction steps skipped")
+            ctx.note("skipped", f"The paper is a {kind}, with no experiments of its own: extraction steps skipped"
+                     if kind != "experimental" else "No rows from tables or text, and no figures are digitized in "
+                     "this run: extraction steps skipped")
 
         # everything else depends only on the structure: run it all at once
         pack = packs.current()
@@ -529,7 +544,7 @@ def extract_steps(ex: "Extraction") -> "Extraction":
         # optional stages whose trigger matches this paper (decided locally, no API call)
         specs = [] if skip else triggered_specs(ex.structure, parsed.text, config.optional_stages,
                                                 config.suggest_new_variables, set(running),
-                                                set(config.parameters_off))
+                                                set(config.parameters_off), config.table_grids)
         for spec in specs:
             if spec.name not in always_on:
                 ctx.total_steps += 1
@@ -665,14 +680,14 @@ def _step_instructions(pack, config: RunConfig, tools: dict, vocab: dict) -> dic
             out[stage] = planner_stage.prompt_text(PAPER_ABOVE)
         elif stage == "chemistry":
             out[stage] = chemistry_extractor.prompt_text(PAPER_ABOVE, PLAN_MARK, vocab["species_names"],
-                                                         config.scopes.get("chemistry"))
+                                                         config.scopes.get("chemistry"), grids=config.table_grids)
         elif stage == "analysis":
             out[stage] = analysis_stage.prompt_text(PAPER_ABOVE, PLAN_MARK, config.scopes.get("analysis"))
         elif stage == "fit_models":
             out[stage] = fit_stage.prompt_text(PAPER_ABOVE, PLAN_MARK)
         elif stage in specs:
             out[stage] = for_run(specs[stage], config.suggest_new_variables, running,
-                                 set(config.parameters_off)).prompt_text(PAPER_ABOVE, PLAN_MARK)
+                                 set(config.parameters_off), config.table_grids).prompt_text(PAPER_ABOVE, PLAN_MARK)
     return out
 
 
@@ -700,7 +715,7 @@ def _paper_tools(pack, config: RunConfig, terms, has_figures: bool = False, pape
         per_paper = paper_text is not None and not config.shared_instructions
         if choice == "off" or (choice == "auto" and per_paper and not spec.could_trigger(paper_text)):
             continue
-        spec = for_run(spec, config.suggest_new_variables, left_out=left_out)
+        spec = for_run(spec, config.suggest_new_variables, left_out=left_out, grids=config.table_grids)
         if spec.parameters:
             tools[name] = spec.models()[1]
     if has_figures and config.figure_suggestions_on_paper:
@@ -1233,7 +1248,12 @@ def finish(
                                                        lambda s, smp: _rows_for(s, smp, index))
         new_vars += analysis_vars
         paper_flags += [Flag(kind, message) for kind, message in analysis_flags]
-    if ex.skipped_kind:
+    if ex.skipped_kind == "figures-only paper":
+        paper_flags.append(Flag("no_results", "No results in the paper's tables or text (they're only in figures), and "
+                                              "this run digitizes no figures, so the extraction steps were skipped (no "
+                                              "cost beyond planning the rows). Open the paper in the app to digitize "
+                                              "its figures."))
+    elif ex.skipped_kind:
         paper_flags.append(Flag("no_results", f"The paper was planned as a {ex.skipped_kind}, with no experiments of "
                                               f"its own, so the extraction steps were skipped (no cost beyond planning "
                                               f"the rows). If it does report experiments, run it again."))
@@ -1512,7 +1532,7 @@ def run_pipeline(
     """Fully automatic: extract and finish, with no figures digitized (figures
     found are listed as "not digitized" in run_summary.json) -- unless auto_digitize_figures is on: then the easy
     ones are digitized from their suggestions."""
-    ex = extract(pdf_path, config, on_progress, cancel_event)
+    ex = _extract_unattended(pdf_path, config, on_progress, cancel_event)
     if config.auto_digitize_figures and ex.figures:
         digitized, skipped = auto_digitize_figures(ex)
         return finish(ex, digitized, skipped)

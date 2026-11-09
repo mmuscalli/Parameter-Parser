@@ -366,7 +366,8 @@ def _in_column_unit(v: NewVariable, column: str):
         from parameter_extractor.units import range_to_column_unit
         converted = range_to_column_unit(rng[0], rng[1], rng[2], column_unit)
         return (converted if converted else (v.value_text, f"not converted to {column_unit}"))
-    conversion = to_column_unit(raw, v.unit, column_unit)
+    from parameter_extractor.units import is_difference
+    conversion = to_column_unit(raw, v.unit, column_unit, difference=is_difference(column) or is_difference(v.name))
     if conversion is None:
         return raw, f"not converted to {column_unit}"
     return conversion.value, conversion.note

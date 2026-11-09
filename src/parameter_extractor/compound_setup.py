@@ -49,13 +49,20 @@ PRODUCT_WORDS = {"product", "products", "result", "formed", "yield", "target"}
 NAMING_WORDS = {"name", "names", "identity", "id", "type", "species", "composition", "used", "main", "list", "target",
                 "or", "and", "solvent", "added", "studied", "starting", "initial", "primary"}
 RESULT_WORDS = {"product", "measured", "yield", "target", "species", "final", "sampled", "formed"}
-CHEMISTRY_POSTPROCESS = ["normalize_species", "mixing", "molar_ratios"]
+CHEMISTRY_POSTPROCESS = ["normalize_species", "mixing", "molar_ratios", "amounts"]
+# amounts ('0.20 mmol') become concentrations only with the reaction volume (calculators/amounts.py): a drafted pack got
+# the chemistry step without it, so muchowska2019's amounts stayed in mmol (organics test set, 2026-11-09)
+VOLUME_PARAMETER = {"column": "solvent_volume_mL", "unit": "mL", "description": (
+    "total volume of the reaction solution (liquid) the compounds were in: as stated, or -- when the paper gives only "
+    "the volumes of the solutions combined -- their sum, with b 'derived' and the parts in `n`.")}
 # (id, label, description, pattern, place after the area's own categories)
 COMPOUND_CATEGORIES = [
     ("starting_compounds", "Starting Compounds", "concentrations of the compounds in the starting solution",
-     r"^(?:initial|stock)_.+_(?:aq|gas|s)(?:_avg)?_mM", 5),
+     r"^(?:initial|stock)_.+_(?:aq|gas|s)(?:_avg|_range)*_", 5, ["species:initial", "species:stock", "species"]),
     ("products", "Products", "amounts and yields of the compounds formed or measured at the end",
-     r"^(?:total_)?sampled_.+_(?:aq|gas|s)(?:_avg)?_(?:mM|%yield|%recovered|ratio|rate_mM_hr)", 6)]
+     r"^(?:total_)?sampled_.+_(?:aq|gas|s)(?:_avg|_range)*_", 6, ["species:sampled"])]
+# (any measure after the phase: mM, %yield, a % composition, a value kept in its printed unit; `sources`: compounds
+# found in a run are reviewed under these headings -- a drafted pack had them under none, organics 2026-11-09)
 SURVEYS_FILE = "drafted_surveys.json"
 
 
@@ -273,7 +280,9 @@ class _Resolver:
             hit = self._pubchem(full_name) if full_name else None
             # a word from a column name goes to PubChem only as a formula ('primer' found a drug there); a code only
             # when PubChem lists it as one of the compound's names
-            if hit is None and (not from_column or name == formula):
+            # ...but not a code whose full name the paper gave and PubChem didn't find: 'HKG' (hydroxyketoglutarate) is
+            # also listed as a name of an unrelated drug (organics test set, 2026-11-09)
+            if hit is None and (not from_column or name == formula) and not (full_name and is_abbreviation(name)):
                 hit = self._pubchem(name, code=is_abbreviation(name))
             if hit is not None:
                 return (vocab_name,) + hit
@@ -388,6 +397,16 @@ def find_compounds(draft, pubchem=None, tidy: bool = True) -> CompoundPlan:
         partners = [(f2, q) for f2, s2, q in params if partner(f2, q)]
         if not partners:
             continue
+
+        def dependent(f2, q) -> bool:
+            """A per-product value the chemistry step can't hold (an amount in nmol, molecules per joule)."""
+            if f2 != file or q is p or q.get("kind") == "text" or _measure(q.get("unit", ""), q["column"]) \
+                    or names_in_column(q["column"]):
+                return False
+            qwords = set(q["column"].lower().split("_"))
+            return (q["column"].lower().split("_")[0] == prefix or any(w.startswith("product") for w in qwords)
+                    or bool(qwords & (RESULT_WORDS | {"amount", "efficiency"})))
+        dependents = [q["column"] for f2, s2, q in params if dependent(f2, q)]
         measures = {_measure(q.get("unit", ""), q["column"]) for _, q in partners}
         category = _category_of(draft.manifest, partners[0][1]["column"]) or _category_of(draft.manifest, p["column"])
         names = [n for n in names_in_text(p.get("description", "")) + list(p.get("choices", []) or [])
@@ -397,8 +416,12 @@ def find_compounds(draft, pubchem=None, tidy: bool = True) -> CompoundPlan:
             if any(f"examples of '{p['column']}'" == s for s in fc.sources):
                 fc.measures |= {m for m in measures if m}
         what = "product" if role == "sampled" else "starting substance"
-        plan.replacements.append(Replacement(file, p["column"], f"names the {what}: the chemistry step records each "
-                                                                f"one as a compound"))
+        if dependents:      # kept: those values still need to say which substance they are (organics, 2026-11-09)
+            plan.note = (plan.note + " " if plan.note else "") + (
+                f"'{p['column']}' kept: {', '.join(dependents)} still need it to say which {what} they are about.")
+        else:
+            plan.replacements.append(Replacement(file, p["column"], f"names the {what}: the chemistry step records "
+                                                                    f"each one as a compound"))
         for f2, q in partners:
             plan.replacements.append(Replacement(f2, q["column"], f"'{q['column']}' of the substance in "
                                                                   f"'{p['column']}': one column per compound instead"))
@@ -471,7 +494,8 @@ def find_compounds(draft, pubchem=None, tidy: bool = True) -> CompoundPlan:
             plan.renames.append(Rename(file, p["column"], conv.column, conv.unit, conv.kind or p.get("kind", ""),
                                        conv.integer, conv.reason))
     if pubchem is not None and getattr(pubchem, "unavailable_reason", ""):
-        plan.note = pubchem.unavailable_reason + " -- names only matched by the app's own rules."
+        plan.note = pubchem.unavailable_reason + " -- names only matched by the app's own rules." + \
+            (" " + plan.note if plan.note else "")
     return plan
 
 
@@ -545,10 +569,14 @@ def apply(draft, plan: CompoundPlan) -> List[str]:
         cats = draft.manifest.setdefault("variable_categories", [])
         ids = {c.get("id") for c in cats}
         top = max([c.get("table_order", 0) for c in cats] + [50])
-        for cid, label, desc, pattern, step in COMPOUND_CATEGORIES:
+        for cid, label, desc, pattern, step, sources in COMPOUND_CATEGORIES:
             if cid not in ids:
                 cats.append({"id": cid, "table_order": top + step, "label": label, "value_type": "number",
-                             "model_assigns": False, "description": desc})
+                             "model_assigns": False, "description": desc, "sources": sources})
+            else:
+                cat = next(c for c in cats if c.get("id") == cid)
+                if not cat.get("sources"):
+                    cat["sources"] = sources
             entry = cc.setdefault(cid, {"columns": []})
             if pattern not in entry.setdefault("patterns", []):
                 entry["patterns"].append(pattern)
@@ -562,6 +590,15 @@ def apply(draft, plan: CompoundPlan) -> List[str]:
     if chemistry:
         m["builtin_stages"] = list(dict.fromkeys(list(m.get("builtin_stages", [])) + ["chemistry"]))
         m["postprocess"] = list(dict.fromkeys(list(m.get("postprocess", [])) + CHEMISTRY_POSTPROCESS))
+        has_volume = any(q.get("column") == VOLUME_PARAMETER["column"] for sp in draft.stages.values()
+                         for q in sp.get("parameters", []))
+        always = [sp for sp in draft.stages.values() if (sp.get("trigger") or {}).get("always")]
+        if not has_volume and always:
+            always[0].setdefault("parameters", []).append(dict(VOLUME_PARAMETER))
+            if VOLUME_PARAMETER["column"] not in draft.columns:
+                draft.columns = draft.columns + [VOLUME_PARAMETER["column"]]
+            done.append(f"stage '{always[0].get('name')}': reaction volume ({VOLUME_PARAMETER['column']}) added -- "
+                        f"amounts in mmol become concentrations with it")
         done.insert(0, f"{len(chosen)} compound(s) added to the vocabulary ({sum(1 for c in chosen if c.cid)} with a "
                        f"PubChem CID); chemistry step and its calculations switched on")
     return done

@@ -16,7 +16,9 @@ Design:
   parameters that are read the same way (e.g. conditions and materials in one stage, measured results in another).
   `per`: sample (values can belong to single rows -- the usual choice) or set. Every stage is one more request on
   every paper it runs for: make a stage only for at least three parameters, and leave `keywords` EMPTY for at most
-  two core stages every paper needs; every other stage needs 3-8 `keywords` (words found in the papers that need it)
+  two core stages every paper needs; every other stage needs 3-8 `keywords` (words found in the papers that need it -- specific terms that papers
+  WITHOUT the stage's data wouldn't use: 'N-body', 'carbon flux', 'impact rate'; never general words like
+  'simulation', 'model', 'delivery' or 'analysis', which almost every paper contains)
   and then runs only for papers containing one of them.
 - Each parameter: `column` snake_case WITHOUT a unit (the app adds the unit suffix); `unit` the unit to store values
   in (one standard unit per variable: °C for temperatures, h for times, mM for concentrations, bar for pressures, %

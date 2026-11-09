@@ -25,7 +25,7 @@ _MULTIPLES = {"single": 1, "singly": 1, "singlicate": 1, "duplicate": 2, "duplic
               "nonuplicate": 9, "decuplicate": 10}
 _WORDS = {"one": 1, "two": 2, "three": 3, "four": 4, "five": 5, "six": 6, "seven": 7, "eight": 8, "nine": 9,
           "ten": 10, "eleven": 11, "twelve": 12, "once": 1, "twice": 2, "thrice": 3}
-_NUMBER = re.compile(r"[-+−]?\d+(?:[.,]\d+)?(?:[eE][-+]?\d+)?")
+_NUMBER = re.compile(r"[-+−]?(?:\d{1,3}(?:,\d{3})+(?:\.\d+)?(?!\d)|\d+(?:[.,]\d+)?)(?:[eE][-+]?\d+)?")
 _YES = {"yes", "y", "true", "1", "present", "used", "with"}
 _NO = {"no", "n", "false", "0", "absent", "none", "not used", "without"}
 
@@ -45,13 +45,21 @@ def whole_number(text) -> Optional[int]:
         return counts.pop()
     if counts:
         return None
-    numbers = {float(n.replace(",", ".").replace("−", "-")) for n in _NUMBER.findall(low)}
+    numbers = {_as_float(n) for n in _NUMBER.findall(low)}
     named = {_WORDS[w] for w in words if w in _WORDS}
     found = numbers | {float(n) for n in named}
     if len(found) == 1:
         n = found.pop()
         return int(n) if n.is_integer() else None
     return None
+
+
+def _as_float(text: str) -> float:
+    """'1,000' -> 1000 (thousands), '2,5' -> 2.5 (decimal comma), '−3' -> -3."""
+    from parameter_extractor.units import _number
+    text = text.replace("−", "-")
+    m = re.fullmatch(r"(.*?)([eE][-+]?\d+)?", text)
+    return _number(m.group(1)) * (10 ** int(m.group(2)[1:]) if m.group(2) else 1)
 
 
 def coerce(value, value_type: str) -> Tuple[object, str]:
@@ -68,7 +76,7 @@ def coerce(value, value_type: str) -> Tuple[object, str]:
             return value, ""
         text = str(value).strip().replace("−", "-")
         if _NUMBER.fullmatch(text):
-            return float(text.replace(",", ".")), ""
+            return _as_float(text), ""
         return None, f"'{value}' isn't a number"
     if value_type == "text":
         if isinstance(value, float) and value.is_integer():

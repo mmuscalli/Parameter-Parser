@@ -23,7 +23,7 @@ _UNITS: Dict[str, Tuple[str, float]] = {
     "s": ("time", 1 / 3600), "min": ("time", 1 / 60), "h": ("time", 1.0), "d": ("time", 24.0),
     "week": ("time", 168.0),
     "kg": ("mass", 1000.0), "g": ("mass", 1.0), "mg": ("mass", 1e-3), "µg": ("mass", 1e-6),
-    "bar": ("pressure", 1.0), "mbar": ("pressure", 1e-3), "atm": ("pressure", 1.01325),
+    "bar": ("pressure", 1.0), "mbar": ("pressure", 1e-3), "GPa": ("pressure", 1e4), "atm": ("pressure", 1.01325),
     "Pa": ("pressure", 1e-5), "kPa": ("pressure", 1e-2), "MPa": ("pressure", 10.0),
     "psi": ("pressure", 0.0689476), "Torr": ("pressure", 0.00133322),
     "nm": ("length", 1.0), "µm": ("length", 1e3), "mm": ("length", 1e6), "cm": ("length", 1e7),
@@ -48,6 +48,10 @@ _UNITS: Dict[str, Tuple[str, float]] = {
     "ms": ("time", 1 / 3.6e6), "µs": ("time", 1 / 3.6e9), "ns": ("time", 1 / 3.6e12),
     "Hz": ("frequency", 1.0), "kHz": ("frequency", 1e3), "MHz": ("frequency", 1e6), "GHz": ("frequency", 1e9),
     "eV": ("energy", 1.0), "keV": ("energy", 1e3),
+    # shock and impact experiments (organics test set, 2026-11-09): GPa, velocities, energies in J, densities
+    "J": ("energy", 6.241509074e18), "kJ": ("energy", 6.241509074e21), "mJ": ("energy", 6.241509074e15),
+    "m/s": ("velocity", 1.0), "km/s": ("velocity", 1000.0),
+    "g/cm3": ("density", 1.0), "g/mL": ("density", 1.0), "kg/m3": ("density", 1e-3),
     "cm-1": ("wavenumber", 1.0),
     "W": ("power", 1.0), "mW": ("power", 1e-3), "kW": ("power", 1e3),
     "A": ("current", 1.0), "mA": ("current", 1e-3), "µA": ("current", 1e-6),
@@ -82,10 +86,11 @@ _ALIASES = {
     "µm(length)": "µm", "cm": "cm",
     "ml/min": "mL/min", "mlmin-1": "mL/min", "cm3min-1": "mL/min", "cm3/min": "mL/min", "µl/min": "µL/min", "ulmin-1": "µL/min", "µlmin-1": "µL/min",
     "l/min": "L/min", "ml/h": "mL/h", "mlh-1": "mL/h",
-    "rpm": "rpm", "r/min": "rpm",
+    "rpm": "rpm", "r/min": "rpm", "r.p.m.": "rpm", "r.p.m": "rpm",
     "mol": "mol", "mole": "mol", "moles": "mol", "mmol": "mmol", "millimole": "mmol", "millimoles": "mmol",
     "µmol": "µmol", "umol": "µmol", "micromole": "µmol", "micromoles": "µmol", "nmol": "nmol",
-    "%": "%", "percent": "%", "%rh": "%", "rh%": "%",
+    "%": "%", "percent": "%", "%rh": "%", "rh%": "%", "wt%": "%", "wt.%": "%", "mol%": "%", "vol%": "%",
+    "atm%": "%", "at%": "%", "at.%": "%",
     "°c": "°C", "c": "°C", "degc": "°C", "oc": "°C", "celsius": "°C", "k": "K", "kelvin": "K",
     "°f": "°F", "f": "°F",
     "kv": "kV", "v": "V", "mv": "mV", "volt": "V", "volts": "V", "kilovolt": "kV", "kilovolts": "kV",
@@ -97,6 +102,9 @@ _ALIASES = {
     "a": "A", "ma": "mA", "µa": "µA", "ua": "µA",
     "mv/s": "mV/s", "mvs-1": "mV/s", "v/s": "V/s", "vs-1": "V/s",
     "å": "Å", "angstrom": "Å", "angstroms": "Å", "a°": "Å",
+    "gpa": "GPa", "j": "J", "joule": "J", "joules": "J", "kj": "kJ", "mj": "mJ",
+    "m/s": "m/s", "ms-1": "m/s", "m/sec": "m/s", "km/s": "km/s", "kms-1": "km/s", "km/sec": "km/s",
+    "g/cm3": "g/cm3", "gcm-3": "g/cm3", "g/cm^3": "g/cm3", "g/cm**3": "g/cm3", "gcm**-3": "g/cm3", "g/ml": "g/mL", "kg/m3": "kg/m3", "kgm-3": "kg/m3",
 }
 
 # column unit (observations.unit_for_column) -> canonical unit
@@ -133,9 +141,21 @@ def canonical_unit(text: str) -> Optional[str]:
     return _ALIASES.get(low)
 
 
-_NUMBER = r"[-+]?(?:\d+(?:[.,]\d+)?|[.,]\d+)"
+# '1,000 rpm' / '12,000 K' / '4,395,000': thousands separators (read as 1.0 rpm and 12 K before, 2026-11-09);
+# '2,5 mM' (one comma, not three digits after it) stays a decimal comma
+_NUMBER = r"[-+]?(?:\d{1,3}(?:,\d{3})+(?:\.\d+)?(?!\d)|\d+(?:[.,]\d+)?|[.,]\d+)"
+_THOUSANDS = re.compile(r"[-+]?\d{1,3}(?:,\d{3})+(?:\.\d+)?")
+
+
+def _number(text: str) -> float:
+    """A number as matched by _NUMBER: thousands separators dropped, a decimal comma read as a point."""
+    text = text.strip()
+    return float(text.replace(",", "") if _THOUSANDS.fullmatch(text) else text.replace(",", "."))
 _QUANTITY = re.compile(
     rf"^\s*(?P<num>{_NUMBER})\s*(?:(?:[x×*]|·)\s*10\s*(?:\^|e|E)?\s*(?P<exp>[-−–+]?\s*\d+))?\s*(?P<unit>.*?)\s*$")
+
+
+_APPROX = re.compile(r"^(?:~|∼|≈|ca\.?\s|about\s|approximately\s|approx\.?\s|roughly\s|nearly\s)\s*", re.IGNORECASE)
 
 
 def parse_quantity(text: str) -> Optional[Tuple[float, str]]:
@@ -143,7 +163,7 @@ def parse_quantity(text: str) -> Optional[Tuple[float, str]]:
     multiple quantities, or units not in the table."""
     if text is None:
         return None
-    t = str(text).strip()
+    t = _APPROX.sub("", str(text).strip())         # '~7 GPa', 'about 100 ns': the stated (approximate) value
     if re.search(rf"{_NUMBER}\s*(?:-|–|to)\s*{_NUMBER}", t) and not re.search(r"10\s*[-−–]\s*\d", t):
         return None                                      # a range: no single value
     m = _QUANTITY.match(t)
@@ -152,7 +172,7 @@ def parse_quantity(text: str) -> Optional[Tuple[float, str]]:
     unit = canonical_unit(m.group("unit")) if m.group("unit") else None
     if unit is None:
         return None
-    value = float(m.group("num").replace(",", "."))
+    value = _number(m.group("num"))
     if m.group("exp"):
         value *= 10 ** int(re.sub(r"[\s−–]", lambda c: "-" if c.group() in "−–" else "", m.group("exp")))
     return value, unit
@@ -172,7 +192,7 @@ def parse_range(text) -> Optional[Tuple[float, float, str]]:
     m = _RANGE.match(t)
     if not m or re.search(r"[x×*]\s*10", t):
         return None
-    lo, hi = (float(m.group(k).replace(",", ".")) for k in ("lo", "hi"))
+    lo, hi = (_number(m.group(k)) for k in ("lo", "hi"))
     unit, u1 = m.group("unit").strip(), m.group("u1").strip()
     if u1 and unit and normalise_unit_text(u1) != normalise_unit_text(unit):
         return None
@@ -195,13 +215,26 @@ def range_to_column_unit(lo: float, hi: float, unit: str, column_unit: str) -> O
     return format_range(a.value, b.value), (f"range, converted from '{printed}'" if a.note else "range")
 
 
-def convert(value: float, from_unit: str, to_unit: str) -> Optional[float]:
-    """Convert between canonical units of the same dimension; None if incompatible."""
+# a temperature DIFFERENCE (a rise of 5600 K is a rise of 5600 °C -- not 5326.85; organics test set, 2026-11-09)
+TEMPERATURE_DIFFERENCE = re.compile(r"(?:^|[\s_-])(?:increase|rise|change|difference|drop|decrease|delta|gradient|jump|"
+                                    r"span|excursion|deltat|dt)(?:$|[\s_-])|ΔT", re.IGNORECASE)
+
+
+def is_difference(name: str) -> bool:
+    return bool(TEMPERATURE_DIFFERENCE.search(name or ""))
+
+
+def convert(value: float, from_unit: str, to_unit: str, difference: bool = False) -> Optional[float]:
+    """Convert between canonical units of the same dimension; None if incompatible. `difference`: a temperature
+    difference (no offset)."""
     if from_unit == to_unit:
         return value
     a, b = _UNITS.get(from_unit), _UNITS.get(to_unit)
     if a is None or b is None or a[0] != b[0]:
         return None
+    if a[0] == "temperature" and difference:
+        scale = {"°F": 5 / 9}
+        return value * scale.get(from_unit, 1.0) / scale.get(to_unit, 1.0)
     if a[0] == "temperature":
         c = {"°C": value, "K": value - 273.15, "°F": (value - 32) * 5 / 9}[from_unit]
         return {"°C": c, "K": c + 273.15, "°F": c * 9 / 5 + 32}[to_unit]
@@ -214,18 +247,18 @@ class Conversion:
     note: str            # e.g. "converted from '1 cm3'" ('' if no conversion was needed)
 
 
-def to_column_unit(raw, unit: Optional[str], column_unit: str) -> Optional[Conversion]:
+def to_column_unit(raw, unit: Optional[str], column_unit: str, difference: bool = False) -> Optional[Conversion]:
     """Convert a value (number + unit, or text like '45 min') into a column's unit
     (as given by observations.unit_for_column). None if it can't be done safely --
     then the caller keeps the original and flags it."""
-    target = _COLUMN_UNITS.get(column_unit)
+    target = _COLUMN_UNITS.get(column_unit) or (column_unit if column_unit in _UNITS else None)
     if target is None:
         return None
     if isinstance(raw, (int, float)):
         source = canonical_unit(unit) if unit else None
         if source is None:
             return Conversion(float(raw), "") if not unit else None
-        out = convert(float(raw), source, target)
+        out = convert(float(raw), source, target, difference)
         return None if out is None else Conversion(_tidy(out), "" if source == target
                                                    else f"converted from {raw:g} {unit}")
     
@@ -236,7 +269,7 @@ def to_column_unit(raw, unit: Optional[str], column_unit: str) -> Optional[Conve
         except ValueError:
             return None
     value, source = parsed
-    out = convert(value, source, target)
+    out = convert(value, source, target, difference)
     if out is None:
         return None
     return Conversion(_tidy(out), f"read from '{raw}'" if source == target else f"converted from '{raw}'")
@@ -306,6 +339,16 @@ def astro_unit(text: str) -> Optional[str]:
     return _ASTRO_ALIASES.get(re.sub(r"\s+", "", t).lower()) or _ASTRO_ALIASES.get(t.lower())
 
 
+def unit_slug(unit: str) -> str:
+    """A unit in one spelling, for names and comparisons: 'molecules per joule', 'molecules J-1' and 'molecules/J' ->
+    'molecules_per_J'; 'mg/mL' -> 'mg_per_mL'; 'g cm-3' -> 'g_per_cm3' (organics test set, 2026-11-09)."""
+    unit = (unit or "").replace("µ", "u").replace("μ", "u").replace("/", " per ").replace("%", " pct ")
+    unit = re.sub(r"\bjoules?\b", "J", unit, flags=re.I)
+    unit = re.sub(r"\b([A-Za-z]+)\s*[-−–]\s*(\d)\b",
+                  lambda m: f"per {m.group(1)}{'' if m.group(2) == '1' else m.group(2)}", unit)
+    return "_".join(re.findall(r"[A-Za-z0-9]+", unit))
+
+
 def convert_printed(value: float, printed: str, target: str, is_error: bool = False,
                     about: Optional[float] = None) -> Tuple[Optional[float], str]:
     """A value given in the unit as printed, in a stage parameter's unit: (value, note), or
@@ -314,8 +357,8 @@ def convert_printed(value: float, printed: str, target: str, is_error: bool = Fa
     it belongs to, `about`: log10(about + err) - log10(about), the archive's own convention), the astronomy table
     and the chemistry one. Same or empty unit: unchanged."""
     p, t = (printed or "").strip(), (target or "").strip()
-    if not p or p == t or p.lower() == t.lower():
-        return value, ""
+    if not p or p == t or p.lower() == t.lower() or (t and unit_slug(p).lower() == unit_slug(t).lower()):
+        return value, ""                    # (the same unit spelled differently: 'molecules per joule' = 'molecules/J')
     scale, rest = _scaled(p)
     if scale != 1.0 and (astro_unit(rest) or canonical_unit(rest)):     # "10^9 erg s-1 cm-2"
         out, note = convert_printed(value * scale, rest, t, is_error, about * scale if about is not None else None)
@@ -356,6 +399,8 @@ def convert_printed(value: float, printed: str, target: str, is_error: bool = Fa
             scale = {"°F": 5 / 9}
             out = value * scale.get(ca, 1.0) / scale.get(cb, 1.0)
             return float(f"{out:.10g}"), (f"converted from {value:g} {p}" if ca != cb else "")
+        if ca == cb:
+            return value, ""
         out = convert(value, ca, cb)
         if out is not None:
             return float(f"{out:.10g}"), f"converted from {value:g} {p}"

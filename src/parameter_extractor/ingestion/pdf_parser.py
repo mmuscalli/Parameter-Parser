@@ -44,7 +44,11 @@ from parameter_extractor.errors import PdfNotReadableError
 # line (two-column pages) unless a citation ('see Supplementary Table 1. Nucleobases ...'), Roman numerals
 # (older papers), Nature's 'Extended Data Table 1 | Title' (matreux2024)
 TABLE_CAPTION_RE = re.compile(
-    r"(?m)^\s*(?:Table|TABLE)\s+[A-Z]?\d+\b(?!\s*\))"
+    # (not a citation that a line break left at the start of a line: 'See Supplementary\nTable 3 for product yields.'
+    # -- muchowska2019's whole page went to the model as a table image, 2026-11-09; ONE space: a caption standing
+    # alone in its column is followed by the other column's text after a wide gap, 'Table 1      or more)')
+    r"(?m)^\s*(?:Table|TABLE)\s+[A-Z]?\d+\b(?!\s*\))(?! (?:for|in|of|and|or|to|from|with|on|at|as|is|are|was|were|"
+    r"shows?|lists?|gives?|summari[sz]es|reports?|compares?|contains?)\b)"
     r"|(?<!Supplementary )(?<!see )(?<!in )(?<!and )(?<!of )\b(?:Table|TABLE)\s+[A-Z]?\d+\.\s+[A-Z][a-z]"
     r"|^\s*(?:Table|TABLE)\s+[IVX]{1,6}\s*[.:]"
     r"|^\s*Extended\s+Data\s+Table\s+\d+\s*\|")

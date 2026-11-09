@@ -70,7 +70,7 @@
   },
   {
    "column": "st_dens",
-   "unit": "",
+   "unit": "g/cm3",
    "description": "stellar density, g cm-3",
    "uncertainties": true
   },

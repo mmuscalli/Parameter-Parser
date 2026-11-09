@@ -56,10 +56,32 @@ _SUFFIX_UNITS = [
     (r"_uL$", "µL"), (r"_g$", "g"), (r"_nm$", "nm"), (r"_rpm$", "rpm"), (r"_K$", "K"),
     (r"_um$", "µm"), (r"_mm$", "mm"), (r"_cm$", "cm"),        # lengths (chamber thickness, tube diameter)
     (r"_nt$", "nt"),                                          # oligomer lengths in nucleotides
+    (r"_ms$", "ms"), (r"_us$", "µs"), (r"_ns$", "ns"),        # short times (shock / pulse durations, 2026-11-09)
+    (r"_nmol$", "nmol"), (r"_umol$", "µmol"), (r"_mmol$", "mmol"),   # amounts (product amounts in shock experiments)
 ]
 # a pH value column and its derived ones (initial_pH, initial_pH_err_plus, initial_pH_range); not a column that
 # only starts with the word, like pH_buffer (text: its value was refused as "isn't a number", 2026-11-03)
 _UNITLESS = re.compile(r"(^|_)pH($|_(err|range|alt|avg|mode|lim|prior)|_?\d)")
+
+
+_SLUG_UNITS: dict = {}
+
+
+def _unit_by_slug(column: str) -> str:
+    """A column ending in a known unit's slug ('peak_shock_pressure_GPa', 'impact_velocity_km_per_s',
+    'carbon_flux_kg_per_yr' no -- only units the app converts): that unit. Multi-letter slugs only ('_A', '_V'
+    could end any name). For columns drafted packs and review suggestions name after their unit (2026-11-09)."""
+    if not _SLUG_UNITS:
+        from parameter_extractor.units import _UNITS, unit_slug
+        for unit in _UNITS:
+            slug = unit_slug(unit)
+            if (len(slug) >= 2 or slug in ("J", "W", "V")) and slug not in ("pct",):
+                _SLUG_UNITS.setdefault(slug, unit)
+    parts = column.split("_")
+    for n in (4, 3, 2, 1):                       # the longest unit slug first ('mol_per_m2_per_s' before 's')
+        if len(parts) > n and (unit := _SLUG_UNITS.get("_".join(parts[-n:]))):
+            return unit
+    return ""
 
 
 def unit_for_column(column: str) -> str:
@@ -76,7 +98,7 @@ def unit_for_column(column: str) -> str:
     for pattern, unit in _SUFFIX_UNITS:
         if re.search(pattern, column):
             return unit
-    return ""
+    return _unit_by_slug(column)
 
 
 def rows_to_observations(rows: List[ExtractedRow]) -> List[Observation]:

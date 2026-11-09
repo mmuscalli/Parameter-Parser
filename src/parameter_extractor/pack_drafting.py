@@ -32,7 +32,7 @@ from pydantic import BaseModel, Field
 from parameter_extractor import packs
 from parameter_extractor.config import settings
 from parameter_extractor.config.run_config import RunConfig
-from parameter_extractor.errors import PipelineError, RunCancelledError
+from parameter_extractor.errors import AnswersNeededError, PipelineError, RunCancelledError
 
 PROMPTS = Path(__file__).parent / "prompts"
 SURVEY_MODEL = "claude-haiku-5-5"          # cheap: a survey of variable kinds, not an extraction
@@ -196,7 +196,7 @@ def _prompt(name: str, **slots) -> str:
 
 def _config(config: RunConfig) -> RunConfig:
     """The drafting steps' models: Haiku surveys, Sonnet merges (a local server: the profile's models)."""
-    if config.is_local:
+    if config.is_local or config.handoff_dir:
         return config
     models = {**config.models, "pack_survey": config.models.get("pack_survey", SURVEY_MODEL),
               "pack_synthesis": config.models.get("pack_synthesis", SYNTHESIS_MODEL)}
@@ -233,6 +233,7 @@ def survey_paper(item, config: RunConfig, work_dir: Path, area: str, description
     run_dir = work_dir / "papers" / out.name
     run_dir.mkdir(parents=True, exist_ok=True)
     ctx = RunContext(config=config, run_dir=run_dir, total_steps=1, cancel_event=cancel_event)
+    _handoff_folder(ctx, f"survey_{out.name}")
     try:
         ctx.check_cancelled()
         from parameter_extractor.ingestion.arxiv_source import LookupCache
@@ -250,14 +251,45 @@ def survey_paper(item, config: RunConfig, work_dir: Path, area: str, description
                 response_model=PaperSurvey, image_paths=images or None, max_tokens=SURVEY_BUDGET,
                 audit_name="pack_survey" if n == 1 else f"pack_survey.pass{n}"))
         out.survey = merge_surveys(answers)
-    except RunCancelledError:
-        raise
+    except (RunCancelledError, AnswersNeededError):
+        raise                              # handoff: the request is written; collected by the caller
     except PipelineError as e:
         out.error = str(e)
     except Exception as e:                 # one unreadable paper doesn't stop the rest
         out.error = f"{type(e).__name__}: {e}"
     out.cost_usd = total_cost(ctx.usage) or 0.0
     return out
+
+
+def _handoff_folder(ctx, name: str) -> None:
+    """Developer handoff mode (handoff.py): each request of a draft / suggestions run gets its own folder."""
+    if ctx.config.handoff_dir:
+        from parameter_extractor import dev_features
+        if not dev_features.enabled():
+            raise PipelineError("Answering steps in Claude Code (handoff) is a developer-only option.")
+        from parameter_extractor.handoff import paper_dir
+        ctx.handoff_paper_dir = paper_dir(ctx.config.handoff_dir, name)
+
+
+def _survey_all(items, config, work_dir, area, description, cancel_event, passes, workers, report, total):
+    """Every paper's survey; in handoff mode every paper's request is written before the run stops."""
+    papers: List[SurveyedPaper] = []
+    waiting = None
+    with ThreadPoolExecutor(max_workers=max(1, min(workers, len(items))), thread_name_prefix="survey") as pool:
+        futures = [pool.submit(survey_paper, item, config, work_dir, area, description, cancel_event, passes)
+                   for item in items]
+        for f in as_completed(futures):
+            try:
+                p = f.result()
+            except AnswersNeededError as e:
+                waiting = e if waiting is None else waiting.merge(e)
+                continue
+            papers.append(p)
+            report(len(papers), total, f"{p.name}: " + (f"{len(p.survey.variables)} variables" if p.survey
+                                                        else f"not surveyed ({p.error})"))
+    if waiting is not None:
+        raise waiting
+    return papers
 
 
 def _survey_digest(papers: List[SurveyedPaper]) -> str:
@@ -283,6 +315,7 @@ def synthesize(papers: List[SurveyedPaper], config: RunConfig, work_dir: Path, a
     from parameter_extractor.api_client import call_structured
     from parameter_extractor.run_context import RunContext, total_cost
     ctx = RunContext(config=config, run_dir=work_dir, total_steps=1, cancel_event=cancel_event)
+    _handoff_folder(ctx, f"design_{_slug(area)}")
     prompt = _prompt("pack_synthesis", AREA=area, AREA_DESCRIPTION=description, N_PAPERS=len(papers))
     proposal = call_structured(ctx, stage="pack_synthesis", system_prompt="Design a dataset's extraction setup from "
                                "surveys of sample papers.", user_content=f"{prompt}\n\nSURVEYS:\n{_survey_digest(papers)}",
@@ -631,15 +664,7 @@ def suggest_additions(folder: Path, items: Sequence, config: RunConfig,
     area, description = draft.manifest.get("label", pack_id), draft.manifest.get("description", "")
     total = len(items) + 1
     report(0, total, f"Surveying {len(items)} paper(s) for their variables")
-    papers: List[SurveyedPaper] = []
-    with ThreadPoolExecutor(max_workers=max(1, min(workers, len(items))), thread_name_prefix="survey") as pool:
-        futures = [pool.submit(survey_paper, item, config, work_dir, area, description, cancel_event, passes)
-                   for item in items]
-        for f in as_completed(futures):
-            p = f.result()
-            papers.append(p)
-            report(len(papers), total, f"{p.name}: " + (f"{len(p.survey.variables)} variables" if p.survey
-                                                        else f"not surveyed ({p.error})"))
+    papers = _survey_all(items, config, work_dir, area, description, cancel_event, passes, workers, report, total)
     good = [p for p in papers if p.survey and p.survey.variables]
     if not good:
         raise PipelineError("None of the papers could be surveyed: " + "; ".join(f"{p.name}: {p.error or 'no variables'}"
@@ -655,6 +680,7 @@ def suggest_additions(folder: Path, items: Sequence, config: RunConfig,
                                            "them); else []." if chemistry else "[] (this data pack has no "
                                                                                "chemistry step)."))
     ctx = RunContext(config=config, run_dir=work_dir, total_steps=1, cancel_event=cancel_event)
+    _handoff_folder(ctx, f"additions_{pack_id}")
     answer = call_structured(ctx, stage="pack_additions", system_prompt="Suggest additions to a dataset's extraction "
                              "setup from surveys of new sample papers.",
                              user_content=f"{prompt}\n\nTHE DATA PACK NOW:\n{summary}\n\nSURVEYS:\n"
@@ -884,15 +910,7 @@ def draft_pack(items: Sequence, pack_id: str, label: str, description: str, conf
     area = label.strip()
     total = len(items) + 2
     report(0, total, f"Surveying {len(items)} paper(s) for their variables")
-    papers: List[SurveyedPaper] = []
-    with ThreadPoolExecutor(max_workers=max(1, min(workers, len(items))), thread_name_prefix="survey") as pool:
-        futures = {pool.submit(survey_paper, item, config, work_dir, area, description, cancel_event, passes): item
-                   for item in items}
-        for f in as_completed(futures):
-            p = f.result()
-            papers.append(p)
-            report(len(papers), total, f"{p.name}: " + (f"{len(p.survey.variables)} variables" if p.survey
-                                                        else f"not surveyed ({p.error})"))
+    papers = _survey_all(items, config, work_dir, area, description, cancel_event, passes, workers, report, total)
     order = {str(i): n for n, i in enumerate(items)}
     papers.sort(key=lambda p: order.get(p.item, 0))
     good = [p for p in papers if p.survey and p.survey.variables]

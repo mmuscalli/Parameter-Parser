@@ -2535,3 +2535,37 @@ coalesces a burst into one refit, and a hidden table (another tab) refits when s
 Remembered-from-reviews window 0.92 -> 0.56 s: `category_options` cached per area per fill (was recomputed for ~4,800
 rows), `variable_categories.bundled_shared` reads its file once (mtime-checked). scripts/run_tests.py appends every
 failing file's full output to tests/.last_failures.log (a rare flaky failure hasn't been reproducible).
+
+## Organics in target: drafted pack vs prebiotic (2026-11-09, Mickey)
+
+Five papers (`Test Paper List/Organics in target`: mckay1997, takeuchi2020, muchowska2019, burchell2020, mars_delivery2018)
+run in handoff mode with a pack drafted from them (`organics_in_target` in the user packs folder) and with prebiotic
+chemistry; suggestions accepted and remembered. Write-up: `eval/organics_2026-11-09.md` (drafted pack 89/89 values,
+$0.99; prebiotic 37/89, $0.75 -- its row rules exclude shock / delivery text results; it was better on the one aqueous
+paper). Fixes:
+- `units.unit_slug` ('molecules per joule' = 'molecules J-1' = 'molecules/J'; convert_printed treats equal slugs as the
+  same unit); new units GPa, m/s, km/s, J/kJ/mJ, g/cm3, kg/m3; `observations.unit_for_column` falls back to a known
+  unit's slug at the end of a column (`_GPa`, `_km_per_s`, `_J`; single letters only J/W/V) and
+  `variable_categories.unit_suffix` names suggestions that way; '~' / '≈' / 'about' parse; wt% / mol% -> %;
+  thousands separators (`units._number`, value_types `_as_float`: '1,000 rpm' was 1 rpm); temperature DIFFERENCES
+  (`units.is_difference`: increase / rise / ΔT ...) convert without offset (stage values via is_error, review values via
+  to_column_unit(difference=)); a limit for a parameter without a limit column -> note + flag (stage_values).
+- Compound values: `flatten_to_template.printed_measure` -- a value in a unit the app can't put in mM keeps it as the
+  measure (`sampled_HCN_gas_molecules_per_J`, `initial_FeCl2_aq_mmol`; alias '<role> <name> (<unit>)') instead of being
+  dropped; starting compositions in % -> `_pct` (alias '<role> <name> %'; was proposed as _mM).
+- PubChem: `query_name` spells Greek letters out (α-ABA had come back as GABA); compound_setup: a code whose full
+  name PubChem didn't find isn't looked up as a code (HKG -> a drug); the name column is kept while non-chemistry
+  per-product values depend on it (plan.note); COMPOUND_CATEGORIES get `sources` and any-measure patterns; chemistry
+  switched on adds "amounts" + a `solvent_volume_mL` parameter to the first always-on stage.
+- Grid rule / `grids` field only with RunConfig.table_grids (`StageSpec.grids`, for_run(grids=), chemistry
+  prompt_text(grids=) removes the paragraph once -- never touch the paper text inside a prompt: shared instructions
+  match on it).
+- `Extraction.no_figure_rows`: run_pipeline without auto-digitizing, run_queue (`PaperQueue(digitize_by_hand=False)`),
+  or a paper with no figures -> an empty row plan skips the extraction steps ('figures-only paper' no_results flag).
+- TABLE_CAPTION_RE: 'Table N' + ONE space + a continuation word (for, shows, lists ...) is a citation; 14/148 corpus PDFs
+  changed; faisal2005 reference observations regenerated (page 2 -> 3 for Table 1 values).
+- pack_drafting works in handoff (`_handoff_folder`, `_survey_all` collects AnswersNeededError); design prompt asks for
+  specific trigger words; drafted `column_for` gets `_us`/`_ns`/`_ms`/`_nmol`... (µs had become `_hr`).
+- Exoplanet pack: pl_dens / st_dens unit g/cm3 (were '' -- 'g cm-3' is now a known unit and was refused).
+- Not fixed: MDPI 'corrected version' PDFs with two text layers (burchell2020; no z-order in pdfplumber).
+tests/test_organics_round.py.

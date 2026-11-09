@@ -1,4 +1,5 @@
 import json
+import re
 from pathlib import Path
 from typing import List, Optional
 from parameter_extractor.api_client import call_structured
@@ -16,12 +17,19 @@ def chemistry_budget(structure: StructurePlan) -> int:
     return 10000 + 900 * rows
 
 
-def prompt_text(paper_text: str, plan_json: str, controlled_vocab: list, scope: Optional[list] = None) -> str:
+# the prompt's paragraph on TABLE GRIDS (ingestion/table_grid.py): only when the run reads grids (RunConfig.table_grids,
+# off by default) -- ~200 tokens of every run's instructions otherwise (organics test set, 2026-11-09)
+_GRID_PARAGRAPH = re.compile(r'\nTABLES IN "TABLE GRIDS".*?(?=\n\s*\n)', re.S)
+
+
+def prompt_text(paper_text: str, plan_json: str, controlled_vocab: list, scope: Optional[list] = None,
+                grids: bool = True) -> str:
     """The step's prompt (also the static instructions cached for every paper of a run: api_client). `scope`: only
-    these compounds (scopes.py; the vocabulary shown is then just them)."""
+    these compounds (scopes.py; the vocabulary shown is then just them). `grids` False: without the table-grid rule."""
     from parameter_extractor.scopes import compound_rule
-    return load_prompt("chemistry", PAPER_TEXT=paper_text, STRUCTURE_PLAN_JSON=plan_json,
+    text = load_prompt("chemistry", PAPER_TEXT=paper_text, STRUCTURE_PLAN_JSON=plan_json,
                        CONTROLLED_VOCAB_JSON=json.dumps(scope or controlled_vocab), COMPOUND_SCOPE=compound_rule(scope))
+    return text if grids else _GRID_PARAGRAPH.sub("", text, count=1)     # (the paper text inside stays as it is)
 
 
 def run_chemistry_extraction(
@@ -29,7 +37,7 @@ def run_chemistry_extraction(
     controlled_vocab: list[str], table_images: Optional[List[Path]] = None, grids: Optional[list] = None,
 ) -> ChemistryExtraction:
     prompt = prompt_text(paper_text, structure_plan.model_dump_json(indent=2), controlled_vocab,
-                         ctx.config.scopes.get("chemistry"))
+                         ctx.config.scopes.get("chemistry"), grids=ctx.config.table_grids)
     result = call_structured(
         ctx,
         stage="chemistry",

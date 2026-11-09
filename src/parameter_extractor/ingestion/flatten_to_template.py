@@ -199,6 +199,10 @@ def species_alias_name(entry) -> str:
     if entry.role == "sampled" and is_percent(entry):
         return f"sampled {entry.name}{avg} " + {"%yield": "%", "%recovered": "% recovered"}.get(
             percent_suffix(entry), percent_suffix(entry))
+    if is_percent(entry):
+        return f"{_column_role(entry)} {entry.name}{avg} %"
+    if (printed := printed_measure(entry)):
+        return f"{_column_role(entry)} {entry.name}{avg} ({entry.concentration_unit_raw.strip()})"
     return f"{_column_role(entry)} {entry.name}{avg}"
 
 
@@ -244,12 +248,37 @@ def column_for_solute(entry, registry=None) -> Optional[str]:
     return next((c for c in candidates if registry.is_known_column(c)), None)
 
 
+def unit_token(unit: str) -> str:
+    """A printed unit as a column slot (units.unit_slug): 'molecules per joule' -> 'molecules_per_J'."""
+    from parameter_extractor.units import unit_slug
+    return unit_slug(unit)
+
+
+def printed_measure(entry) -> Optional[str]:
+    """A compound value kept in the unit it's printed in -- one the app can't put in mM (molecules per joule, an
+    amount without a reaction volume, mg/mL without a molar mass): 'molecules_per_joule'. Such values were dropped
+    without a trace before (organics test set, 2026-11-09); now they go to the review in their own column."""
+    if entry.concentration_value is None or entry.concentration_mM is not None:
+        return None
+    if is_rate(entry) or is_range(entry) or getattr(entry, "measure", "yield") == "ratio":
+        return None
+    unit = (entry.concentration_unit_raw or "").strip()
+    if not unit or "%" in unit:
+        return None
+    from parameter_extractor.units import _UNITS, canonical_unit
+    if _UNITS.get(canonical_unit(unit) or "", ("",))[0] == "concentration":
+        return None                     # converted to mM by normalize_chemistry
+    return unit_token(unit) or None
+
+
 def _measure_of(entry) -> str:
     if is_rate(entry):
         return "rate_mM_hr"
     if entry.role == "sampled" and is_percent(entry):
         return percent_suffix(entry)
-    return "mM"
+    if is_percent(entry):
+        return "pct"           # a starting composition in % (vol%, mol%, wt%): not a concentration in mM
+    return printed_measure(entry) or "mM"
 
 
 def _species_column_of(entry) -> str:
@@ -315,7 +344,7 @@ def _solute_value(entry):
         return entry.concentration_range
     if is_rate(entry):
         return rate_value(entry)
-    value = entry.concentration_value if is_percent(entry) else entry.concentration_mM
+    value = entry.concentration_value if (is_percent(entry) or printed_measure(entry)) else entry.concentration_mM
     if value is None and entry.role == "sampled" and getattr(entry, "detection", "") == "detected":
         return DETECTED
     return value
@@ -447,6 +476,9 @@ def build_rows(
             elif is_range(s) and (col := column_for_solute(s, registry)):
                 range_cells[col] = s.concentration_range
                 species_prov[col] = _from_solute(s)
+            elif (value := _solute_value(s)) is not None and (col := column_for_solute(s, registry)):
+                range_cells[col] = value          # (a % composition, a value in its printed unit)
+                species_prov[col] = _from_solute(s)
 
         sampled_for_set = [
             s for s in chemistry.solutes
@@ -476,6 +508,9 @@ def build_rows(
                     extra.update(error_cells(s, col))
                 elif is_range(s):
                     extra[col] = s.concentration_range
+                    prov[col] = _from_solute(s)
+                elif (value := _solute_value(s)) is not None:
+                    extra[col] = value
                     prov[col] = _from_solute(s)
             for s in sampled_kept:
                 col, value = column_for_solute(s, registry), _solute_value(s)
