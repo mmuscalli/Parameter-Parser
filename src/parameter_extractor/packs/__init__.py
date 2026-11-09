@@ -83,6 +83,8 @@ class PackManifest(BaseModel):
     formulas: List[dict] = Field(default_factory=list)
     # shared modules the pack uses (parameter_extractor/modules/), linked in when the pack loads
     modules: List[str] = Field(default_factory=list)
+    # the pack's changes to its modules' defaults (module_settings.py): {module id: {steps, parameters, ...}}
+    module_settings: Dict[str, dict] = Field(default_factory=dict)
 
 
 SHARED_CATEGORY_IDS = {"metadata", "methodology", "other"}
@@ -103,11 +105,14 @@ def merged_manifest(own: PackManifest, mods) -> PackManifest:
     """The pack's manifest with its modules merged in: their steps and calculations added, their categories added
     unless the pack has one with the same id or the same review sources (the pack's own wins), their category
     columns added to the categories that exist. The pack's own entries keep their places."""
+    from parameter_extractor import module_settings as ms
     m = own.model_copy(deep=True)
     for mod in mods:
         mm = mod.manifest
+        settings = ms.settings_for(own.module_settings, mod.id)
+        names = ms.renames(mod, settings)
         m.builtin_stages += [x for x in mm.builtin_stages if x not in m.builtin_stages]
-        m.postprocess += [x for x in mm.postprocess if x not in m.postprocess]
+        m.postprocess += [x for x in mm.postprocess if x not in m.postprocess and x not in settings.calculations_off]
         placed = {c for e in m.category_columns.values() for c in e.get("columns", [])}
         for cat in mm.variable_categories:
             ids = {c.get("id") for c in m.variable_categories}
@@ -122,7 +127,7 @@ def merged_manifest(own: PackManifest, mods) -> PackManifest:
                 continue
             m.variable_categories.append(dict(cat, module=mod.id))
         ids = {c.get("id") for c in m.variable_categories} | SHARED_CATEGORY_IDS
-        for cid, entry in mm.category_columns.items():
+        for cid, entry in ms.apply_to_category_columns(mm.category_columns, names).items():
             if cid not in ids:
                 continue
             target = m.category_columns.setdefault(cid, {})
@@ -212,7 +217,9 @@ class Pack:
         path = self.folder / "prompts" / f"{name}.rules.md"
         text = path.read_text() if path.is_file() else ""
         if name == "structure_planner":
-            extra = [r for mod in self.modules for r in mod.manifest.row_rules if r not in text]
+            from parameter_extractor import module_settings as ms
+            extra = [r for mod in self.modules for r in mod.manifest.row_rules if r not in text
+                     and r not in ms.settings_for(self.own_manifest.module_settings, mod.id).row_rules_off]
             if extra:
                 text = (text.rstrip() + "\n" if text.strip() else "") + "".join(f"- {r}\n" for r in extra)
         return text

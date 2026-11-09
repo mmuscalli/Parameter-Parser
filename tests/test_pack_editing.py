@@ -58,7 +58,7 @@ def test_check_finds_problems():
             assert any(e in m for m in messages), (e, messages)
         empty = PackDraft.load(pack.folder)
         empty.columns, empty.stages = [], {}
-        assert {"the dataset has no columns.", "nothing extracts values: add a stage."} <= {p.message for p in check(empty)}
+        assert {"the dataset has no columns.", "nothing extracts values: add a step."} <= {p.message for p in check(empty)}
 
 
 def test_draft_saves_and_is_used():
@@ -136,11 +136,12 @@ def test_windows():
         editor.builtin_boxes["chemistry"].setChecked(False)
         assert editor._chosen_calculations() == ["normalize_species"]
         # optimization options collapsed, row options grouped (2026-11-06)
+        editor.tabs.setCurrentIndex(editor.tab_index("General"))                  # Overview is first (2026-11-09)
         assert not editor.optimization_box.isVisibleTo(editor)
         editor.optimization_btn.setChecked(True)
         assert editor.optimization_box.isVisibleTo(editor) and editor.focused_box.isVisibleTo(editor)
         assert not editor.advanced_box.isVisibleTo(editor) and editor.help_buttons()
-        editor.tabs.setCurrentIndex(editor.tab_index("Stages"))
+        editor.tabs.setCurrentIndex(editor.tab_index("Steps"))
         editor._add_parameter({"column": "depth_cm", "unit": "cm", "description": "sampling depth"})
         editor.s_keywords.setText("soil, depth")
         # rules are rows (the file's '- ' lines): the template's two example rules, then ours instead
@@ -337,7 +338,7 @@ def test_menu():
     # one menu for research areas: what packs define, then what you taught the app in reviews (2026-11-07)
     assert titles[:3] == ["File", "Settings", "Data Packs"] and "Variables" not in titles, titles   # Settings menu: 2026-11-08
     menu = next(a.menu() for a in w.menuBar().actions() if a.text() == "Data Packs")
-    assert [a.text() for a in menu.actions() if a.text()] == ["New data pack…", "Edit data pack…",
+    assert [a.text() for a in menu.actions() if a.text()] == ["All data packs and modules…", "New data pack…", "Edit data pack…",
                                                              "Copy a data pack…", "Check data pack…",
                                                              "Remembered from your reviews…", "Variable categories…",
                                                              "Remove data pack…", "Open data packs folder"]

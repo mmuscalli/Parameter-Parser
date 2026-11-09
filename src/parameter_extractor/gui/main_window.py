@@ -66,7 +66,10 @@ GETTING_STARTED = (
     "</ol>"
     "<p><b>Results</b> appear in the tabs at the bottom and are saved as CSV files in the results folder. "
     "<i>Things to check</i> lists values worth a second look. Hover over a value in <i>Extracted data</i> to see "
-    "where in the paper it came from.</p>")
+    "where in the paper it came from.</p>"
+    "<p><b>Cost</b>: each paper gets a few requests to the AI model -- planning the rows, reading its details, and one "
+    "per extraction step the data pack uses. <i>Data Packs › All data packs and modules…</i> lists them for each pack, "
+    "and <i>Help › How data packs work…</i> explains steps, modules and calculations.</p>")
 START_TEXT = ("Start here: choose a data pack (1), add papers (2), tick what to extract (3), then press Extract data "
               "(5). Results appear below. New to the app? <a href='help'>Getting started</a>")
 
@@ -193,9 +196,14 @@ class MainWindow(QMainWindow):
         # rules, formulas) and what YOU taught the app in reviews (accepted columns, synonyms, compound names,
         # changes to pack columns, categories) -- kept apart so they apply on top of any pack.
         packs_menu = self.menuBar().addMenu("Data Packs")
+        self.packs_window_action = QAction("All data packs and modules…", self, triggered=self.open_packs_window)
+        self.packs_window_action.setToolTip("Every data pack and shared module: what each is made of and what happens "
+                                            "to a paper with it; new, copy, edit, check, remove")
+        packs_menu.addAction(self.packs_window_action)
+        packs_menu.addSeparator()
         self.new_pack_action = QAction("New data pack…", self, triggered=lambda: self.new_pack())
         self.edit_pack_action = QAction("Edit data pack…", self, triggered=lambda: self.edit_pack())
-        self.edit_pack_action.setToolTip("What the pack defines: columns, compounds, analysis methods, stages, "
+        self.edit_pack_action.setToolTip("What the pack defines: columns, compounds, analysis methods, steps, "
                                          "rules, formulas")
         self.copy_pack_action = QAction("Copy a data pack…", self, triggered=lambda: self.copy_pack())
         self.check_pack_action = QAction("Check data pack…", self, triggered=lambda: self.check_pack())
@@ -217,6 +225,8 @@ class MainWindow(QMainWindow):
         help_menu = self.menuBar().addMenu("Help")
         self.getting_started_action = QAction("Getting started…", self, triggered=self.show_getting_started)
         help_menu.addAction(self.getting_started_action)
+        self.how_packs_action = QAction("How data packs work…", self, triggered=self.show_how_packs_work)
+        help_menu.addAction(self.how_packs_action)
 
         from parameter_extractor.gui.multi_runs import FocusedRun, QueueRun
         self.focused_run = FocusedRun(self)
@@ -280,8 +290,12 @@ class MainWindow(QMainWindow):
         self.edit_pack_btn = QPushButton("Edit…", clicked=self._edit_current_pack)
         self.edit_pack_btn.setToolTip("Look at or change this data pack: its columns, compounds, steps and rules. "
                                       "The app's own packs can be viewed and copied.")
+        self.packs_btn = QPushButton("All data packs…", clicked=self.open_packs_window)
+        self.packs_btn.setToolTip("Every data pack and shared module: what each is made of and what happens to a paper "
+                                  "with it (every request to the AI model and where it comes from).")
         head.addWidget(self.new_pack_btn)
         head.addWidget(self.edit_pack_btn)
+        head.addWidget(self.packs_btn)
         head.addSpacing(12)
         self.pack_description = QLabel()
         self.pack_description.setStyleSheet("color: palette(placeholder-text);")
@@ -342,6 +356,21 @@ class MainWindow(QMainWindow):
         v.addWidget(self.top_split, 1)
 
         return page
+
+    def show_how_packs_work(self) -> None:
+        """Steps, calculations, data packs, modules (the words the windows use) and where model requests come from."""
+        from parameter_extractor.gui.pack_windows import PACK_PARTS_HTML
+        box = QMessageBox(self)
+        box.setWindowTitle("How data packs work")
+        box.setTextFormat(Qt.TextFormat.RichText)
+        box.setText(PACK_PARTS_HTML + "<p>To see every request and calculation of a particular data pack, and where "
+                    "each one comes from, open <i>Data Packs › All data packs and modules…</i> or the pack's "
+                    "<i>Overview</i> tab.</p>")
+        open_btn = box.addButton("All data packs and modules…", QMessageBox.ButtonRole.ActionRole)
+        box.addButton(QMessageBox.StandardButton.Close)
+        box.exec()
+        if box.clickedButton() is open_btn:
+            self.open_packs_window()
 
     def show_getting_started(self) -> None:
         """The workflow in a few lines (Help menu; also offered on first launch)."""
@@ -1169,7 +1198,7 @@ class MainWindow(QMainWindow):
                 surveyed = sum(1 for p in r.papers if p.survey)
                 self.status.setText(f"Drafted '{dlg.created.label}' from {surveyed} paper(s) (${r.cost_usd:.3f}): "
                                     f"{sum(len(s.parameters) for s in r.proposal.stages)} parameters in "
-                                    f"{len(r.proposal.stages)} stage(s)"
+                                    f"{len(r.proposal.stages)} step(s)"
                                     + (f"; {r.compound_lines[0]}" if r.compound_lines else "")
                                     + ". Check and edit it in the editor; drafted_from.md in its folder lists where "
                                       "each parameter came from.")
@@ -1179,20 +1208,25 @@ class MainWindow(QMainWindow):
     def copy_pack(self) -> None:
         self.new_pack(source=self.pack_combo.currentData())
 
-    def edit_pack(self, tab: int = 0) -> None:
+    def edit_pack(self, tab=0) -> None:
         from parameter_extractor.gui.pack_windows import choose_pack
         pack = choose_pack(self, "Edit data pack" if not tab else "Check data pack")
         if pack is not None:
             self._open_pack_editor(pack.folder, tab)
 
-    def check_pack(self) -> None:
-        self.edit_pack(tab=5)                  # the Check tab
+    def open_packs_window(self) -> None:
+        from parameter_extractor.gui.packs_window import DataPacksWindow
+        DataPacksWindow(self).exec()
 
-    def _open_pack_editor(self, folder, tab: int = 0) -> None:
+    def check_pack(self) -> None:
+        self.edit_pack(tab="Check")
+
+    def _open_pack_editor(self, folder, tab=0, parent=None) -> None:
+        """The editor on a pack folder, opened at a tab (its index or name)."""
         from parameter_extractor.gui.pack_windows import PackEditor
-        editor = PackEditor(folder, self, self.registry_path, config=self.current_config)
+        editor = PackEditor(folder, parent or self, self.registry_path, config=self.current_config)
         editor.saved.connect(lambda pack_id: self.refresh_packs(select=pack_id))
-        editor.tabs.setCurrentIndex(tab)
+        editor.tabs.setCurrentIndex(editor.tab_index(tab) if isinstance(tab, str) else tab)
         editor.exec()
 
     def remove_pack(self) -> None:
@@ -1242,7 +1276,7 @@ class MainWindow(QMainWindow):
     def _set_inputs_enabled(self, enabled: bool) -> None:
         """Locked while anything runs (the pack is active during a run; one run at a time)."""
         for w in (self.registry_action, self.categories_action, self.pack_combo, self.new_pack_action,
-                  self.new_pack_btn, self.edit_pack_btn,
+                  self.new_pack_btn, self.edit_pack_btn, self.packs_btn, self.packs_window_action,
                   self.edit_pack_action, self.copy_pack_action, self.remove_pack_action, self.params,
                   self.profile_combo, self.passes_combo, self.words_edit, self.add_pdfs_action, self.add_list_action,
                   self.output_action, self.lookups_action, *self.option_toggles(), self.review_figures_box,

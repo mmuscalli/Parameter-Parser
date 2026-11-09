@@ -143,7 +143,7 @@ class _ColumnTree(QTreeWidget):
 DRAFT = "__draft__"            # source_combo: drafted from sample papers (pack_drafting.py)
 DRAFT_HELP = ("The app reads a few typical papers of the field -- a cheap survey of what each reports (Claude Haiku, a "
               "few cents a paper), then one request (Claude Sonnet) that designs the data pack: columns with "
-              "units, categories, extraction stages and rules for the rows. Nothing is extracted yet. The result opens "
+              "units, categories, extraction steps and rules for the rows. Nothing is extracted yet. The result opens "
               "in the editor to fine-tune; drafted_from.md in its folder lists each parameter with the papers that "
               "reported it. 3-5 papers that differ from each other work best. Uses the models set in Settings (a "
               "local model server, if chosen there).")
@@ -183,7 +183,7 @@ class NewPackDialog(QDialog):
         self.set_edit = QLineEdit("experiment set")
         self.sample_edit = QLineEdit("sample")
         self.source_combo = QComboBox()
-        self.source_combo.addItem("The template (example columns, stage and rules to replace)", "")
+        self.source_combo.addItem("The template (example columns, step and rules to replace)", "")
         if config is not None:
             self.source_combo.addItem("A draft made from sample papers (uses the API)", DRAFT)
             self.source_combo.setItemData(1, DRAFT_HELP, Qt.ItemDataRole.ToolTipRole)
@@ -375,6 +375,32 @@ class NewPackDialog(QDialog):
 
 # ---- Edit a research area ----------------------------------------------------------------------
 
+# how a data pack is put together, in the words the windows use (Mickey, 2026-11-09: steps / stages / modules were
+# ambiguous); the Overview tab and the Data Packs window show it
+PACK_PARTS_HTML = """
+<h3>How a data pack is put together</h3>
+<ul>
+<li><b>Step</b> -- one request to the AI model for each paper it runs for. <i>Built-in steps</i> are written in the
+app's code (compounds, analysis methods, fitting models); <i>configurable steps</i> are described in a file you can
+edit (the Steps tab; files in the pack's <code>stages/</code> folder). A step can run for every paper or only for
+papers that call for it (trigger words, kinds of experiments).</li>
+<li><b>Calculation</b> -- done on your computer from the model's answers (unit conversions, totals, formulas). Costs
+nothing.</li>
+<li><b>Data pack</b> -- everything for one field: its columns and categories, rules for planning the rows, its own
+configurable steps, calculations and formulas, the compound vocabulary -- and the <i>modules</i> it links, with its
+own settings for them.</li>
+<li><b>Module</b> -- a shared part several data packs link: it can bring steps (built-in or configurable),
+calculations, columns, rules and a vocabulary. It isn't copied into the pack: an improvement to a module reaches every
+pack that links it. What a pack may change about a module (switch parts off, units, trigger words, extra rules) is in
+its <i>Module settings</i> tab and applies to that pack only.</li>
+<li><b>Remembered from your reviews</b> -- columns, synonyms and compound names you accept while reviewing papers; kept
+for you, on top of the data pack.</li>
+</ul>
+<p>Every paper is also read by two of the app's own requests: planning the rows, and reading the paper's details.
+Reading the values twice or three times (Options) repeats the steps that extract values.</p>
+"""
+
+
 class PackEditor(QDialog):
     """One data pack's files as tabs (see the module docstring). `saved` fires after a save."""
     saved = Signal(str)
@@ -398,17 +424,28 @@ class PackEditor(QDialog):
             banner.addWidget(QPushButton("Copy to a new data pack…", clicked=self._copy))
             layout.addLayout(banner)
         self.tabs = QTabWidget()
-        self.tabs.addTab(self._general_tab(), "General")
-        self.tabs.addTab(self._columns_tab(), "Columns")
-        self.tabs.addTab(self._modules_tab(), "Modules")
-        self.tabs.addTab(self._compounds_tab(), "Compounds")
-        self.tabs.addTab(self._stages_tab(), "Stages")
-        self.tabs.addTab(self._rules_tab(), "Rules")
-        self.tabs.addTab(self._formulas_tab(), "Formulas")
-        self.tabs.addTab(self._check_tab(), "Check")
+        # the order says how a pack is put together (2026-11-09): what happens to a paper; the pack's own parts;
+        # the shared modules it links and this pack's settings for them; the check
+        tabs = (("Overview", self._overview_tab(), "What happens to each paper with this data pack: every request to "
+                 "the AI model (and where it comes from) and every calculation done on your computer."),
+                ("General", self._general_tab(), "This data pack's name, row words, built-in steps and calculations."),
+                ("Columns", self._columns_tab(), "This data pack's columns, by category."),
+                ("Steps", self._stages_tab(), "This data pack's own configurable steps: each is one model request per "
+                 "paper it runs for (files in the pack's stages/ folder)."),
+                ("Rules", self._rules_tab(), "This data pack's rules for the shared prompts (e.g. planning rows)."),
+                ("Formulas", self._formulas_tab(), "This data pack's calculations written as formulas."),
+                ("Compounds", self._compounds_tab(), "This data pack's compound vocabulary, used by the chemistry step "
+                 "(from the Solution chemistry module)."),
+                ("Modules", self._modules_tab(), "Shared modules this data pack links (the same in every pack)."),
+                ("Module settings", self._module_settings_tab(), "This data pack's changes to how its modules work: "
+                 "kept in this pack only; the modules themselves stay shared."),
+                ("Check", self._check_tab(), "Problems the app finds in this data pack."))
+        for name, widget, tip in tabs:
+            self.tabs.setTabToolTip(self.tabs.addTab(widget, name), tip)
         self.tabs.currentChanged.connect(lambda _i: self._fit_rows())
         self._follow_step("chemistry", "Compounds")
         self._refresh_module_effects()
+        self._refresh_overview()
         self.tabs.currentChanged.connect(lambda i: self._refresh_formula_columns()
                                          if self.tabs.tabText(i) == "Formulas" else None)
         layout.addWidget(self.tabs, 1)
@@ -430,7 +467,7 @@ class PackEditor(QDialog):
                                       "you review everything before it's changed. Saves your edits first.")
         self.suggest_btn = QPushButton("Suggest additions from papers…", clicked=self._suggest_additions)
         self.suggest_btn.setToolTip("Survey a few new sample papers (cheap) and get suggestions for what this research "
-                                    "area lacks: parameters, stages, categories, rules, compounds. You choose what's "
+                                    "area lacks: parameters, steps, categories, rules, compounds. You choose what's "
                                     "added. Saves your edits first.")
         for b in (self.compounds_btn, self.suggest_btn):
             b.setEnabled(not self.read_only)
@@ -681,7 +718,7 @@ class PackEditor(QDialog):
                           "category in the order the dataset writes them. Put the unit at the end of a name "
                           "(temperature_C, pressure_bar, mass_g, yield_pct): values are converted into it. The shared "
                           "columns (paper, authors, DOI, ...) and row identifiers are added automatically. Columns a "
-                          "stage fills but that aren't listed here are added after these. Double-click a column to "
+                          "step fills but that aren't listed here are added after these. Double-click a column to "
                           "rename it; drag it to reorder, or onto another category to move it there."))
         row = QHBoxLayout()
         self.column_tree = _ColumnTree()
@@ -759,10 +796,10 @@ class PackEditor(QDialog):
         item = QTreeWidgetItem([column, unit or "", ", ".join(stages) if stages else ""])
         item.setFlags(Qt.ItemFlag.ItemIsEnabled | Qt.ItemFlag.ItemIsSelectable | Qt.ItemFlag.ItemIsEditable
                       | Qt.ItemFlag.ItemIsDragEnabled)
-        item.setToolTip(0, f"Filled by: {', '.join(stages)}" if stages else "No stage fills this column yet.")
+        item.setToolTip(0, f"Filled by: {', '.join(stages)}" if stages else "No step fills this column yet.")
         if not stages:
             item.setForeground(2, QBrush(self.column_tree.palette().color(QPalette.ColorRole.PlaceholderText)))
-            item.setText(2, "not filled by a stage")
+            item.setText(2, "not filled by a step")
         parent.addChild(item)
         return item
 
@@ -775,9 +812,9 @@ class PackEditor(QDialog):
             for j in range(group.childCount()):
                 item = group.child(j)
                 stages = fills.get(item.text(0).strip())
-                item.setText(2, ", ".join(stages) if stages else "not filled by a stage")
+                item.setText(2, ", ".join(stages) if stages else "not filled by a step")
                 item.setForeground(2, QBrush() if stages else muted)
-                item.setToolTip(0, f"Filled by: {', '.join(stages)}" if stages else "No stage fills this column yet.")
+                item.setToolTip(0, f"Filled by: {', '.join(stages)}" if stages else "No step fills this column yet.")
 
     def _tree_columns(self) -> List[str]:
         """The columns as the tree lists them (category by category)."""
@@ -836,6 +873,32 @@ class PackEditor(QDialog):
         update()
         if box:
             box.toggled.connect(update)
+
+    # ---- Overview (what happens to each paper) and module settings (2026-11-09) ------------------------------------
+
+    def _overview_tab(self) -> QWidget:
+        from PySide6.QtWidgets import QTextBrowser
+        w = QWidget()
+        v = QVBoxLayout(w)
+        self.overview = QTextBrowser()
+        self.overview.setOpenExternalLinks(False)
+        v.addWidget(self.overview, 1)
+        return w
+
+    def _refresh_overview(self) -> None:
+        """The paper's way through the pack as SAVED (Save updates it), after the parts it's made of."""
+        from parameter_extractor import pack_overview
+        try:
+            flow = pack_overview.as_html(pack_overview.paper_flow(packs.Pack(self.draft.folder)))
+        except Exception as e:                      # a pack the app can't load: the Check tab says why
+            flow = f"<p>The data pack can't be loaded as saved ({e}); see the Check tab.</p>"
+        self.overview.setHtml(PACK_PARTS_HTML + "<h3>What happens to each paper (as saved)</h3>" + flow)
+
+    def _module_settings_tab(self) -> QWidget:
+        from parameter_extractor.gui.module_settings_tab import ModuleSettingsTab
+        self.module_settings_tab = ModuleSettingsTab(self.draft.manifest.get("module_settings"),
+                                                     self._linked_modules, read_only=self.read_only)
+        return self.module_settings_tab
 
     # ---- Modules (shared parts the pack links in: parameter_extractor/modules/) ----------------------------
 
@@ -967,6 +1030,8 @@ class PackEditor(QDialog):
         self._fill_calculations(self._chosen_calculations())
         self._fill_vocab()
         self._show_module(t.currentRow())
+        if getattr(self, "module_settings_tab", None) is not None:
+            self.module_settings_tab.refresh()
         from parameter_extractor.stages.optional import StageSpec
         brought = []
         for mod in self._linked_modules():
@@ -975,7 +1040,7 @@ class PackEditor(QDialog):
                     brought.append(f"{StageSpec.model_validate_json(f.read_text()).label} ({mod.label} module)")
                 except ValueError:
                     pass
-        self.module_stages_note.setText("Also run, from linked modules (see the Modules tab): " + "; ".join(brought)
+        self.module_stages_note.setText("Also run, from linked modules (adjust them in the Module settings tab): " + "; ".join(brought)
                                         if brought else "")
         self.module_stages_note.setVisible(bool(brought))
 
@@ -1436,8 +1501,7 @@ class PackEditor(QDialog):
         w = QWidget()
         outer = QHBoxLayout(w)
         left = QVBoxLayout()
-        left.addWidget(_titled("Stages", "Each stage is one request to the model, run for every paper (or only papers that "
-                             "need it). Several small stages run in parallel."))
+        left.addWidget(_titled("Configurable steps", "Each configurable step is one request to the AI model for every paper it runs for (every paper, or only papers that call for it -- trigger words, kinds of experiments). Several steps run in parallel. These are this data pack's own; steps from its modules are listed below and adjusted in the Module settings tab."))
         self.stage_list = QListWidget()
         self.stage_list.currentRowChanged.connect(self._on_stage_row)
         left.addWidget(self.stage_list, 1)
@@ -1458,7 +1522,7 @@ class PackEditor(QDialog):
         self.s_name = QLineEdit()
         self.s_name.setToolTip("Lower-case letters, digits and '_'.")
         self.s_label = QLineEdit()
-        self.s_desc = QLineEdit(placeholderText="shown next to the stage's on/off switch")
+        self.s_desc = QLineEdit(placeholderText="shown next to the step's on/off switch")
         self.s_system = QLineEdit()
         self.s_intro = QPlainTextEdit()
         self.s_intro.setFixedHeight(70)
@@ -1518,7 +1582,7 @@ class PackEditor(QDialog):
         params_w = QWidget()
         fv = QVBoxLayout(params_w)
         fv.setContentsMargins(0, 0, 0, 0)
-        fv.addWidget(QLabel("Parameters -- the columns this stage fills:"))
+        fv.addWidget(QLabel("Parameters -- the columns this step fills:"))
         self.p_table = QTableWidget(0, len(P_HEADERS))
         self.p_table.setHorizontalHeaderLabels(P_HEADERS)
         for c, tip in ((P_INTEGER, "A count: written as a whole number ('triplicate' -> 3)."),
@@ -1700,14 +1764,14 @@ class PackEditor(QDialog):
         self.p_table.setCurrentCell(r + step, P_COLUMN)
 
     def _new_stage(self) -> None:
-        label, ok = QInputDialog.getText(self, "New stage", "What the stage extracts (e.g. Sample properties):")
+        label, ok = QInputDialog.getText(self, "New step", "What the step extracts (e.g. Sample properties):")
         if not ok or not label.strip():
             return
         self._store_stage()
         try:
             file = self.draft.new_stage(suggest_id(label) or "stage", label.strip())
         except ValueError as e:
-            QMessageBox.warning(self, "New stage", str(e))
+            QMessageBox.warning(self, "New step", str(e))
             return
         self._fill_stage_list(select=file)
 
@@ -1731,7 +1795,7 @@ class PackEditor(QDialog):
         if self._stage is None:
             return
         name = self.draft.stages[self._stage].get("name", self._stage)
-        if QMessageBox.question(self, "Remove stage", f"Remove the stage '{name}'? (Only on Save.)") \
+        if QMessageBox.question(self, "Remove step", f"Remove the step '{name}'? (Only on Save.)") \
                 != QMessageBox.StandardButton.Yes:
             return
         file, self._stage = self._stage, None
@@ -2123,6 +2187,9 @@ class PackEditor(QDialog):
         m["modules"] = self._chosen_modules()
         if not m["modules"]:
             m.pop("modules", None)
+        m["module_settings"] = self.module_settings_tab.values()
+        if not m["module_settings"]:
+            m.pop("module_settings", None)
         m["formulas"] = self._formulas_from_table()
         if not m["formulas"] and "_about_formulas" not in m:
             m.pop("formulas", None)
@@ -2153,6 +2220,7 @@ class PackEditor(QDialog):
             QMessageBox.warning(self, "Not saved", str(e))
             return False
         self.setWindowTitle(f"Data pack: {self.draft.manifest.get('label', '')}")
+        self._refresh_overview()
         self.saved.emit(self.draft.manifest.get("id", ""))
         return True
 
@@ -2245,15 +2313,15 @@ class DeleteConfirmDialog(QDialog):
         self.remove_btn.setDefault(typed)          # Return confirms only once DELETE is typed
 
 
-def remove_pack(parent) -> Optional[str]:
-    """Data Packs > Remove data pack: choose one of the user's areas, a warning (Remove / Cancel), then type
-    DELETE and confirm. Returns the id removed, or None."""
-    pack = choose_pack(parent, "Remove data pack", include_builtin=False)
+def remove_pack(parent, pack: Optional[packs.Pack] = None) -> Optional[str]:
+    """Data Packs > Remove data pack: choose one of the user's areas (unless given), a warning (Remove / Cancel), then
+    type DELETE and confirm. Returns the id removed, or None."""
+    pack = pack or choose_pack(parent, "Remove data pack", include_builtin=False)
     if pack is None:
         return None
     warning = QMessageBox(QMessageBox.Icon.Warning, "Remove data pack",
                           f"Remove the data pack '{pack.label}'?", parent=parent)
-    warning.setInformativeText(f"Its folder -- columns, stages, rules -- is deleted and can't be restored:\n"
+    warning.setInformativeText(f"Its folder -- columns, steps, rules -- is deleted and can't be restored:\n"
                                f"{pack.folder}\n\nDatasets already written from it are not affected.")
     proceed = warning.addButton("Continue…", QMessageBox.ButtonRole.DestructiveRole)
     warning.addButton(QMessageBox.StandardButton.Cancel)

@@ -168,7 +168,31 @@ def vocabulary(pack=None) -> Optional[Vocabulary]:
     from parameter_extractor import packs
     pack = pack or packs.current()
     path = pack.file(FILE) if hasattr(pack, "file") else Path(pack.folder) / FILE   # the pack's own, else its module's
-    return _load(str(path or Path(pack.folder) / FILE))
+    vocab = _load(str(path or Path(pack.folder) / FILE))
+    off = _families_off(pack)
+    if vocab is None or not off:
+        return vocab
+    return _without_families(vocab, tuple(sorted(off)))
+
+
+def _families_off(pack) -> set:
+    """Instrument families the pack's module settings switch off (module_settings.py; never 'general')."""
+    from parameter_extractor import module_settings as ms
+    own = getattr(pack, "own_manifest", None)
+    raw = getattr(own, "module_settings", None) or {}
+    return {f for mid in raw for f in ms.settings_for(raw, mid).families_off if f != "general"}
+
+
+_FILTERED: dict = {}
+
+
+def _without_families(vocab: "Vocabulary", off: tuple) -> "Vocabulary":
+    key = (id(vocab), off)
+    if key not in _FILTERED:
+        fams = {fid: f for fid, f in vocab.families.items() if fid not in off}
+        techs = [t for t in vocab.techniques if not t.families or any(f not in off for f in t.families)]
+        _FILTERED[key] = Vocabulary(fams, techs)
+    return _FILTERED[key]
 
 
 def is_vocab_column(name: str, pack=None) -> bool:

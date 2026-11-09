@@ -2630,3 +2630,46 @@ atmospheric / results_check + all five modules; every reference replay byte-iden
   "(from the X module)", and aren't written into the pack; Compounds tab follows the chemistry step from either
   source; the Stages tab notes stages linked modules run. A pack's own analysis_vocab.json stays editable there.
 - Suggest-additions summary lists the linked modules and their steps / columns (no suggestions for what they cover).
+
+## Module settings per pack; Data Packs window; steps vs stages vs modules (2026-11-09, Mickey)
+
+Mickey: modules stay single shared versions, but a pack needs its own tweaks (units etc.), tracked per pack; a
+standalone Data Packs place; and clear terms (steps / stages / modules were ambiguous; show where model calls come
+from).
+- **`module_settings.py`** + PackManifest `module_settings` {module id: {steps {name: off / keywords / table_images /
+  rules_off / extra_rules}, parameters {module column: off / unit / description}, calculations_off, row_rules_off,
+  stage_rules_off, families_off}}; only differences stored (`cleaned`). A unit change RENAMES the column
+  (`unit_choices` / `column_in_unit`: same-dimension units whose name unit_for_column reads back -- half_life_hr ->
+  half_life_min, pressure _GPa, temperature _K; seconds/days/L aren't offered: `_s` is the solid phase). module.json
+  `fixed` {column: why} (solution_chemistry: solvent_volume_mL, solvent_name) -> unit unchangeable. Applied at load:
+  packs.merged_manifest (calculations_off, category columns renamed), Pack.prompt_rules (row_rules_off),
+  optional._pack_specs(folder, ids, settings_json) (`apply_to_spec`: step off -> gone, params off/renamed/described,
+  column names also renamed in rules/intro; `pack_parameter`; stage_rules_off), analysis_vocab.vocabulary
+  (families_off; techniques left with no family dropped; cache `_FILTERED`). PackDraft.module_settings /
+  module_specs / module_columns / effective_calculations honour them; check() section "Module settings"
+  (`ms.problems`: unknown module/step/parameter/calculation, unit the column can't be named in = error, fixed unit,
+  a keyword-only step left without words). Default packs unchanged (references byte-identical).
+- **Terms** (user-facing): *step* = one model request per paper (built-in = code; configurable = JSON in stages/ --
+  folder and code names unchanged); *calculation* = local, free; *data pack*; *module* (linked, shared). GUI/CLI/check
+  strings "stage" -> "step" (Stages tab -> "Steps", "Configurable steps"; check areas "Step 'x'" / "Steps").
+  `pack_windows.PACK_PARTS_HTML` explains them (editor Overview tab, Help > How data packs work…).
+- **`pack_overview.py`** `paper_flow(pack)` -> FlowStep(kind request / optional / local, label, source APP / PACK /
+  "the X module", when = trigger text, repeats for passes, always) in run order: row planning, paper details, built-in
+  steps (BUILTIN_LABELS), configurable steps, figure suggestions / equations (optional), calculations, formulas;
+  `summary` ("5 model requests for every paper, up to 2 more ..."), `as_html`.
+- **Editor tabs** (order shows the layers): Overview (parts + paper flow as saved; refreshed on Save), General,
+  Columns, Steps, Rules, Formulas, Compounds, Modules, Module settings (`gui/module_settings_tab.ModuleSettingsTab`:
+  linked modules list (• = changed); per module: its steps (run on/off, trigger words, table images, its rules
+  tickable, extra rules), values table (Use / Column [renamed live] / Stored in combo / Description / From), its
+  calculations, row and stage rules, instrument families; Reset to defaults; settings of unlinked modules dropped on
+  save), Check. Tab tooltips say whose each tab is. Stages tab note lists module steps.
+- **Data Packs window** (`gui/packs_window.DataPacksWindow`; Data Packs > All data packs and modules…, step-1 button
+  "All data packs…"): tab Data packs (list app / yours; details = defined by the pack, modules linked (+ "changed" /
+  "brought along"), paper flow; Use for the next run, New, Copy, Edit, Check, Remove (own only; `remove_pack(parent,
+  pack)`), Open folder); tab Modules (shared): what each brings (describe(), now in step/calculation words), linked
+  by which packs, Open my modules folder. MainWindow._open_pack_editor(folder, tab index or NAME, parent).
+- Main window: "What to extract" step tooltips say "one request to the AI model ... from <source>"
+  (parameter_panel._step_sources); Getting started mentions the cost per step.
+- Docs: template README "Words used here and in the app" + "Module settings"; `modules/README.md` (module folder and
+  module.json keys; in package data). tests/test_module_settings.py (settings applied, other packs unaffected, check,
+  cleaned, flow, a paper run with half-lives stored in minutes, the tab, the window).

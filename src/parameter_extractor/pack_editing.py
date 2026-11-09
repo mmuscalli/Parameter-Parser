@@ -27,7 +27,7 @@ BUILTIN_STAGES = {
                  "chemistry). Needs species names in the columns file.",
     "fit_models": "How astronomical fits were made: data, software, priors, joint fits (exoplanets).",
     "analysis": "Analytical techniques and their instrument settings -> analysis_<technique>_<setting>_<unit> "
-                "columns. Needs analysis_vocab.json (techniques and settings) in the pack's folder.",
+                "columns, named from a vocabulary of techniques (the Analysis methods module's).",
 }
 # calculations a pack can run on its rows (packs.PackManifest.postprocess): description, step it needs ('' = none)
 CALCULATIONS = {
@@ -62,7 +62,7 @@ CALCULATION_NEEDS = {
     "peptide_totals": "Peptide %yield columns (chemistry step).",
     "oligomer_totals": "Oligonucleotide %yield / length columns (chemistry step).",
     "water_type": "A solvent_name column.",
-    "ambient_conditions": "initial_temperature_C / sampled_temperature_C / initial_pressure_bar columns in a stage.",
+    "ambient_conditions": "initial_temperature_C / sampled_temperature_C / initial_pressure_bar columns in a step.",
     "atmospheric_start": "experiment_type, vessel_sealed and initial_pressure_bar columns.",
     "results_check": "Result columns starting 'sampled_' or 'total_sampled_'.",
     "row_labels": "Row labels 'planet [solution]'; pl_name / pl_fitlabel columns.",
@@ -231,17 +231,40 @@ class PackDraft:
         out = list(self.manifest.get("builtin_stages", []))
         return out + [s for m in self.linked_modules() for s in m.manifest.builtin_stages if s not in out]
 
+    def module_settings(self, module_id: str):
+        """This pack's settings for a module (module_settings.py; the module's defaults when it has none)."""
+        from parameter_extractor import module_settings as ms
+        return ms.settings_for(self.manifest.get("module_settings"), module_id)
+
     def effective_calculations(self) -> List[str]:
         out = list(self.manifest.get("postprocess", []))
-        return out + [c for m in self.linked_modules() for c in m.manifest.postprocess if c not in out]
+        return out + [c for m in self.linked_modules() for c in m.manifest.postprocess
+                      if c not in out and c not in self.module_settings(m.id).calculations_off]
 
-    def module_columns(self) -> List[str]:
-        """Columns the linked modules fill: their stages' parameters, standard columns and added parameters."""
+    def module_specs(self) -> list:
+        """[(module, step spec)] the linked modules run, as this pack's module settings have them."""
+        from parameter_extractor import module_settings as ms
+        from parameter_extractor.stages.optional import _specs_in
         out = []
         for m in self.linked_modules():
-            for path in m.stage_files():
-                out += [p["column"] for p in json.loads(path.read_text()).get("parameters", [])]
-            out += [e["column"] for e in m.manifest.standard_columns] + [p["column"] for p in m.manifest.pack_parameters]
+            settings = self.module_settings(m.id)
+            names = ms.renames(m, settings)
+            for spec in (_specs_in(m.stages_dir).values() if m.stages_dir.is_dir() else []):
+                spec = ms.apply_to_spec(spec, settings, names)
+                if spec is not None:
+                    out.append((m, spec))
+        return out
+
+    def module_columns(self) -> List[str]:
+        """Columns the linked modules fill: their steps' parameters, standard columns and added parameters (as this
+        pack's module settings name them)."""
+        from parameter_extractor import module_settings as ms
+        out = [p.column for _, spec in self.module_specs() for p in spec.parameters]
+        for m in self.linked_modules():
+            settings = self.module_settings(m.id)
+            names = ms.renames(m, settings)
+            out += [e["column"] for e in m.manifest.standard_columns]
+            out += [p["column"] for p in (ms.pack_parameter(e, settings, names) for e in m.manifest.pack_parameters) if p]
         return list(dict.fromkeys(out))
 
     def has_analysis_vocab(self) -> bool:
@@ -263,9 +286,9 @@ class PackDraft:
     def new_stage(self, name: str, label: str) -> str:
         """Add a stage (a spec with the essentials filled in); returns its file name."""
         if not STAGE_NAME.fullmatch(name):
-            raise ValueError("A stage name is lower-case letters, digits and '_', starting with a letter.")
+            raise ValueError("A step name is lower-case letters, digits and '_', starting with a letter.")
         if any(s.get("name") == name for s in self.stages.values()):
-            raise ValueError(f"There is already a stage called '{name}'.")
+            raise ValueError(f"There is already a step called '{name}'.")
         file = f"{name}.json"
         n = 2
         while file in self.stages or (self.folder / "stages" / file).exists() and file not in self.removed_stage_files:
@@ -335,6 +358,7 @@ def _forget_cached(folder: Path) -> None:
     optional._specs_in.cache_clear()
     optional._pack_specs.cache_clear()
     analysis_vocab._load.cache_clear()
+    analysis_vocab._FILTERED.clear()
     if packs._current is not None and Path(packs._current.folder).resolve() == Path(folder).resolve():
         packs._current = None
 
@@ -405,6 +429,9 @@ def check(draft: PackDraft) -> List[Problem]:
     from parameter_extractor import modules as module_store
     for mid in module_store.unknown(list(m.get("modules", []))):
         add("error", "Modules", f"unknown module '{mid}' (modules: {', '.join(module_store.available())}).")
+    from parameter_extractor import module_settings as ms
+    for level, message in ms.problems(m.get("module_settings", {}), draft.linked_modules()):
+        add(level, "Module settings", message)
     steps = draft.effective_steps()
     for stage in m.get("builtin_stages", []):
         if stage not in BUILTIN_STAGES and stage != "methodology":
@@ -447,10 +474,10 @@ def check(draft: PackDraft) -> List[Problem]:
 
     # stages
     if not draft.stages and not steps and not draft.module_columns():
-        add("error", "Stages", "nothing extracts values: add a stage.")
+        add("error", "Steps", "nothing extracts values: add a step.")
     names, schemas, fills = {}, {}, {}
     for file, spec in draft.stages.items():
-        where = f"Stage '{spec.get('name') or file}'"
+        where = f"Step '{spec.get('name') or file}'"
         try:
             StageSpec.model_validate(spec)
         except Exception as e:
@@ -465,7 +492,7 @@ def check(draft: PackDraft) -> List[Problem]:
         if schema and not schema.isidentifier():
             add("error", where, f"answer format name '{schema}' must be one word of letters and digits.")
         elif schema and schema in schemas:
-            add("error", where, f"stage '{schemas[schema]}' uses the same answer format name.")
+            add("error", where, f"step '{schemas[schema]}' uses the same answer format name.")
         schemas.setdefault(schema, name)
         trigger = spec.get("trigger", {})
         if not (trigger.get("always") or trigger.get("keywords") or trigger.get("set_types")
@@ -504,10 +531,10 @@ def check(draft: PackDraft) -> List[Problem]:
             add("note", where, f"{len(unnamed_units)} column(s) have a unit that isn't at the end of their name, so "
                                f"values are stored in that unit: {', '.join(unnamed_units)}.")
         if name == TEMPLATE_EXAMPLE_STAGE:
-            add("note", where, "this is the template's example stage: rename it and replace its parameters.")
+            add("note", where, "this is the template's example step: rename it and replace its parameters.")
     for col, stages in fills.items():
         if len(stages) > 1:
-            add("warning", "Stages", f"'{col}' is filled by {len(stages)} stages ({', '.join(stages)}): a second, "
+            add("warning", "Steps", f"'{col}' is filled by {len(stages)} steps ({', '.join(stages)}): a second, "
                                      "different value is reported as a conflict.")
 
     # rules

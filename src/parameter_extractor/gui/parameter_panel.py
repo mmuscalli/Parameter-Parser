@@ -74,6 +74,7 @@ class ParameterPanel(QWidget):
             except Exception:                    # a damaged registry file: the bundled compounds only
                 registry = None
         built = {g.step: g for g in (scopes.groups(pack, registry) if pack else [])}
+        self._sources = _step_sources(pack) if pack else {}
         if "chemistry" in built:                 # the core step first
             self._add_scope_group(built.pop("chemistry"), pack_id)
         for t in (toggleable_stages(pack) if pack else []):
@@ -83,8 +84,8 @@ class ParameterPanel(QWidget):
             label = t.label + (" (when the paper calls for it)" if t.conditional else "")
             group = QTreeWidgetItem([label, t.description])
             group.setData(0, STAGE_ROLE, t.name)
-            group.setToolTip(0, t.description)
-            group.setToolTip(1, t.description)
+            group.setToolTip(0, self._step_tip(t.name, t.description))
+            group.setToolTip(1, self._step_tip(t.name, t.description))
             flags = group.flags() | Qt.ItemFlag.ItemIsUserCheckable
             stage_params = [p for p in params if p.group == t.label]
             if stage_params:
@@ -110,13 +111,18 @@ class ParameterPanel(QWidget):
         self._filter(self.filter_edit.text())
         self.changed.emit()
 
+    def _step_tip(self, step: str, description: str) -> str:
+        """A step's hover text: what it does, that it is one model request per paper, and where it comes from."""
+        source = getattr(self, "_sources", {}).get(step, "this data pack")
+        return f"{description}\n\nOne request to the AI model for each paper it runs for; from {source}."
+
     def _add_scope_group(self, group_def, pack_id: str, label: str = "", conditional: bool = False) -> None:
         """A vocabulary-built step: one child per vocabulary item (scopes.ScopeGroup)."""
         title = (label or group_def.label) + (" (when the paper calls for it)" if conditional else "")
         group = QTreeWidgetItem([title, group_def.description])
         group.setData(0, STAGE_ROLE, group_def.step)
-        group.setToolTip(0, group_def.description)
-        group.setToolTip(1, group_def.description)
+        group.setToolTip(0, self._step_tip(group_def.step, group_def.description))
+        group.setToolTip(1, self._step_tip(group_def.step, group_def.description))
         group.setFlags((group.flags() | Qt.ItemFlag.ItemIsUserCheckable | Qt.ItemFlag.ItemIsAutoTristate)
                        & ~Qt.ItemFlag.ItemIsSelectable)
         on = self._settings.value(f"stages/{pack_id}/{group_def.step}", True, type=bool)
@@ -217,3 +223,12 @@ class ParameterPanel(QWidget):
                 visible += not hide
             g.setHidden(bool(t) and visible == 0 and t not in g.text(0).lower())
             g.setExpanded(bool(t) and visible > 0)
+
+
+def _step_sources(pack) -> Dict[str, str]:
+    """{step name: 'the <label> module' or 'this data pack'} (pack_overview.paper_flow's sources)."""
+    from parameter_extractor import pack_overview
+    try:
+        return {s.name: s.source for s in pack_overview.paper_flow(pack) if s.kind == "request"}
+    except Exception:                            # a pack that doesn't load fully: no sources
+        return {}

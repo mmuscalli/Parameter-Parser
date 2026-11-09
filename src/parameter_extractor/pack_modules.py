@@ -210,16 +210,17 @@ def describe(module_id: str) -> List[str]:
     if mm.needs:
         out.append("uses: " + ", ".join(module_store.available()[n].label for n in mm.needs if n in module_store.available()))
     if mm.builtin_stages:
-        out.append("steps: " + ", ".join(mm.builtin_stages))
+        out.append("built-in step (one model request per paper): " + ", ".join(mm.builtin_stages))
     for path in m.stage_files():
         spec = json.loads(path.read_text())
         trig = spec.get("trigger") or {}
         when = ("every paper" if trig.get("always") else "papers mentioning " + ", ".join(trig.get("keywords", [])[:4]) + " ..."
                 if trig.get("keywords") else "wet-dry experiments" if trig.get("set_types") or trig.get("set_patterns") else "")
-        out.append(f"step '{spec.get('label', spec['name'])}' ({len(spec.get('parameters', []))} values; runs for {when}): "
+        out.append(f"configurable step '{spec.get('label', spec['name'])}' (one model request for {when}; "
+                   f"{len(spec.get('parameters', []))} values): "
                    + ", ".join(p["column"] for p in spec.get("parameters", [])))
     if mm.postprocess:
-        out.append("calculations: " + ", ".join(mm.postprocess))
+        out.append("calculations (on your computer, no model requests): " + ", ".join(mm.postprocess))
     if mm.pack_parameters:
         out.append("adds to the pack's first step (when missing): " + ", ".join(p["column"] for p in mm.pack_parameters))
     if mm.standard_columns:
@@ -227,9 +228,9 @@ def describe(module_id: str) -> List[str]:
     if mm.variable_categories:
         out.append("column blocks: " + ", ".join(c["label"] for c in mm.variable_categories))
     if mm.row_rules:
-        out.append(f"row rules: {len(mm.row_rules)}")
+        out.append(f"rules for planning the rows: {len(mm.row_rules)}")
     if mm.stage_rules:
-        out.append(f"rules for the pack's steps: {len(mm.stage_rules)}")
+        out.append(f"rules added to the data pack's own steps: {len(mm.stage_rules)}")
     vocab = m.file("analysis_vocab.json")
     if vocab:
         out.append(f"vocabulary: {len(json.loads(vocab.read_text()).get('techniques', []))} analytical techniques")

@@ -566,21 +566,35 @@ def load_specs(pack=None) -> Dict[str, StageSpec]:
     the pack's own stages here (packs.Pack docs)."""
     from parameter_extractor.packs import current
     pack = pack or current()
-    return dict(_pack_specs(str(pack.folder), tuple(pack.module_ids())))
+    own_manifest = getattr(pack, "own_manifest", None)
+    settings = json.dumps(getattr(own_manifest, "module_settings", {}) or {}, sort_keys=True)
+    return dict(_pack_specs(str(pack.folder), tuple(pack.module_ids()), settings))
 
 
 @lru_cache(maxsize=None)
-def _pack_specs(folder: str, module_ids: tuple) -> tuple:
+def _pack_specs(folder: str, module_ids: tuple, settings_json: str = "{}") -> tuple:
+    """The pack's steps with its modules' merged in, each module as this pack's module settings have it."""
     from parameter_extractor import modules
+    from parameter_extractor import module_settings as ms
     mods = modules.resolve(list(module_ids))
     own = _specs_in(Path(folder) / "stages")
     out: Dict[str, StageSpec] = {}
-    module_specs = [(m, s) for m in mods for s in _specs_in(m.stages_dir).values()] if mods else []
+    raw_settings = json.loads(settings_json)
+    module_specs = []
+    added_all, rules = [], []
+    for m in mods:
+        settings = ms.settings_for(raw_settings, m.id)
+        names = ms.renames(m, settings)
+        for s in _specs_in(m.stages_dir).values():
+            s = ms.apply_to_spec(s, settings, names)
+            if s is not None:
+                module_specs.append((m, s))
+        added_all += [p for p in (ms.pack_parameter(e, settings, names) for e in m.manifest.pack_parameters) if p]
+        rules += [r for r in m.manifest.stage_rules if r not in settings.stage_rules_off]
     if mods:
         present = {p.column for s in own.values() for p in s.parameters} | \
                   {p.column for _, s in module_specs for p in s.parameters}
-        added = [p for m in mods for p in m.manifest.pack_parameters if p["column"] not in present]
-        rules = [r for m in mods for r in m.manifest.stage_rules]
+        added = [p for p in added_all if p["column"] not in present]
         hints = {step: h for m in mods for step, h in m.manifest.stage_hints.items()}
         first_always = next((name for name, s in own.items() if s.trigger.always), None)
     for name, spec in own.items():

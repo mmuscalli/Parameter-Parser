@@ -65,5 +65,9 @@
         "^(?:total_)?sampled_.+_(?:aq|gas|s)(?:_avg|_range)*_"
       ]
     }
+  },
+  "fixed": {
+    "solvent_volume_mL": "the amounts calculation reads the reaction volume in mL",
+    "solvent_name": "the water-type calculation reads it"
   }
 }

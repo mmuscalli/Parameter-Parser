@@ -125,7 +125,7 @@ def main() -> int:
                         help="--draft-pack: don't add shared modules (the analysis step) to the drafted pack")
     parser.add_argument("--suggest-additions", metavar="ID", default=None,
                         help="Survey sample papers (--papers / --pdf / --paper) and suggest what one of your research "
-                             "areas lacks (parameters, stages, categories, rules, compounds); prints them")
+                             "areas lacks (parameters, steps, categories, rules, compounds); prints them")
     parser.add_argument("--survey-passes", type=int, default=2, choices=[1, 2, 3],
                         help="--draft-pack / --suggest-additions: survey each paper this many times (cheap) and merge "
                              "(default 2)")
@@ -172,7 +172,7 @@ def main() -> int:
         for pack_id, pack in sorted(packs.available().items()):
             print(f"{pack_id:24} {pack.label} -- {pack.manifest.description}")
             for t in toggleable_stages(pack):
-                print(f"    stage {t.name:22} {t.label}" + (" (when the paper calls for it)" if t.conditional else ""))
+                print(f"    step  {t.name:22} {t.label}" + (" (when the paper calls for it)" if t.conditional else ""))
         return 0
     if args.pack not in packs.available():
         parser.error(f"unknown pack '{args.pack}' (see --list-packs)")

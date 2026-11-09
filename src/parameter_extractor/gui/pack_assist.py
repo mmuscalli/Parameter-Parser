@@ -153,7 +153,7 @@ class _Signals(QObject):
     done = Signal(object)
 
 
-KIND_LABELS = {"parameter": "Parameter", "stage": "New stage", "category": "New category", "rule": "Rule",
+KIND_LABELS = {"parameter": "Parameter", "stage": "New step", "category": "New category", "rule": "Rule",
                "compound": "Compound"}
 
 
@@ -171,7 +171,7 @@ class AdditionsDialog(QDialog):
         v = QVBoxLayout(self)
         v.addWidget(_hint("Add a few papers this data pack hasn't been tuned on. Each is surveyed cheaply for the "
                           "variables it reports (Claude Haiku, a few cents a paper), then one request (Claude Sonnet) "
-                          "compares them with the data pack and suggests what's missing: parameters, stages, "
+                          "compares them with the data pack and suggests what's missing: parameters, steps, "
                           "categories, rules and compounds. Nothing changes until you Apply the ticked suggestions."))
         self.papers = PaperListPanel()
         self.papers.setMaximumHeight(200)

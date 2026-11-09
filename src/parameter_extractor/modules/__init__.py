@@ -19,6 +19,8 @@ A module is a folder with a module.json:
   stage_rules        rules added to each of the pack's own stages
   stage_hints        hint_by_stage entries for the pack's open-ended stages that don't have one for that step
   row_rules          rules for planning rows (added to the pack's structure_planner rules)
+  fixed              {column: why} columns the app's calculations read by name (their unit can't be changed in a
+                     pack's module settings -- module_settings.py)
 
 and, next to it, files a pack can't do without when it uses the module: prompts/*.md (the chemistry step's prompt),
 analysis_vocab.json (the analysis step's techniques). A pack's own file of the same name wins.
@@ -53,6 +55,8 @@ class ModuleManifest(BaseModel):
     stage_rules: List[str] = Field(default_factory=list)
     stage_hints: Dict[str, dict] = Field(default_factory=dict)
     row_rules: List[str] = Field(default_factory=list)
+    # columns the app's own code reads by name: {column: why} -- a pack's module settings can't change their unit
+    fixed: Dict[str, str] = Field(default_factory=dict)
 
 
 class Module:

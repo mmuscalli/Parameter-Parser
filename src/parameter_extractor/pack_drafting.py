@@ -361,7 +361,7 @@ def _disciplined_stages(stages: List[ProposedStage], notes: List[str]) -> List[P
     always = sorted([s for s in stages if not any(k.strip() for k in s.keywords)], key=lambda s: -len(s.parameters))
     for st in always[MAX_ALWAYS_STAGES:]:
         st.keywords = _derived_keywords(st, st.parameters)
-        notes.append(f"stage {st.name} runs only for papers mentioning {', '.join(st.keywords)} (edit in the Stages "
+        notes.append(f"stage {st.name} runs only for papers mentioning {', '.join(st.keywords)} (edit in the Steps "
                      f"tab)")
     return stages
 
@@ -762,7 +762,7 @@ def suggest_additions(folder: Path, items: Sequence, config: RunConfig,
             st, [p for w, _, _, p in param_suggestions if w == name])
         st = st.model_copy(update={"keywords": keywords})
         out.append(Suggestion("stage", st.label, f"`{name}`: {st.description} (runs only for papers mentioning "
-                              f"{', '.join(keywords)} -- editable in the Stages tab)", payload=st))
+                              f"{', '.join(keywords)} -- editable in the Steps tab)", payload=st))
     for where, column, unit, p in param_suggestions:
         note = ""
         if where in moved:

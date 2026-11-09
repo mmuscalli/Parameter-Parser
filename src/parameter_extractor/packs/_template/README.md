@@ -12,6 +12,23 @@ with `packs.create_pack("my_area", "My research area")`, which copies this folde
 Keys starting with `_about` in the JSON files explain the key that follows them. The app ignores them; you can
 keep them or delete them.
 
+## Words used here and in the app
+
+- **Step** -- one request to the AI model for each paper it runs for. *Built-in steps* are written in the app's code
+  (`chemistry`, `analysis`, `fit_models`); *configurable steps* are described in a JSON file (`stages/*.json` -- the
+  folder keeps its old name). A step runs for every paper with rows, or only for papers that call for it (trigger
+  words, kinds of experiments).
+- **Calculation** -- done on your computer from the model's answers (`postprocess`, formulas). No model requests.
+- **Data pack** -- this folder: columns, categories, rules for planning rows, its own configurable steps,
+  calculations, formulas, the compound vocabulary, the modules it links and its settings for them.
+- **Module** -- a shared part several data packs link (`modules/<id>/`): steps, calculations, columns, rules, a
+  vocabulary. Linked, never copied, so an improvement to a module reaches every pack; a pack changes how a module
+  works for itself only through `module_settings` (below).
+
+Besides its steps, every paper gets two of the app's own requests: planning the rows and reading the paper's details.
+The editor's *Overview* tab (and *Data Packs › All data packs and modules…*) lists every request and calculation of a
+pack and where each comes from.
+
 ## The files
 
 | File | What it holds | Needed? |
@@ -24,7 +41,8 @@ keep them or delete them.
 | `prompts/<name>.rules.md` | extra rules for any other shared prompt (`figure_planner`, `focused_search`, `metadata`, `term_search`) | no |
 | `prompts/<name>.md` | a whole prompt of your own, replacing the app's (advanced) | no |
 | `formulas` in `pack.json` | calculations without code (below) | no |
-| `analysis_vocab.json` | analytical techniques and their instrument settings, for the built-in `analysis` step (below) | only with that step |
+| `modules` / `module_settings` in `pack.json` | the shared modules the pack links, and its changes to them (below) | no |
+| `analysis_vocab.json` | your own vocabulary for the `analysis` step, replacing the Analysis methods module's (rarely needed) | no |
 
 ## How a paper goes through a pack
 
@@ -117,8 +135,38 @@ ticks them on and off and shows what each brings. Modules shipped with the app:
 - `product_totals` -- total peptide / oligomer yields and the longest oligomer (brings `solution_chemistry`).
 
 A pack's own file of the same name wins over a module's (e.g. its own `analysis_vocab.json`), and its own category
-with the same id wins over the module's. A module's content isn't edited from a pack -- make a module of your own (a
-folder with a module.json in `<app data>/modules/`) if you need a different version.
+with the same id wins over the module's.
+
+### Module settings (`module_settings` in pack.json; the editor's Module settings tab)
+
+A pack can change how a linked module works **for that pack only**, without copying it. Only the changes are stored;
+everything else follows the module and its later improvements:
+
+```json
+"module_settings": {
+  "kinetics": {
+    "steps": {"kinetics": {"keywords": ["half-life", "hydrolysis"], "table_images": false,
+                           "rules_off": ["<a rule's text>"], "extra_rules": ["Report half-lives at 25 °C only."]}},
+    "parameters": {"half_life_hr": {"unit": "min"}, "kinetic_model": {"off": true},
+                   "activation_energy_kJ_mol": {"description": "..."}},
+    "calculations_off": [], "row_rules_off": [], "stage_rules_off": []
+  },
+  "analysis": {"families_off": ["nmr", "maldi"]}
+}
+```
+
+- `steps`: switch a module's configurable step off, replace its trigger words, send or don't send table images,
+  leave out some of its rules, add your own.
+- `parameters` (by the module's column name): leave a value out, change its description, or store it in another
+  unit -- the column is renamed after the unit (`half_life_hr` -> `half_life_min`) and every value is converted into
+  it. Columns the app's own calculations read by name (the module's `fixed` list, e.g. `solvent_volume_mL`) keep
+  their unit.
+- `calculations_off`, `row_rules_off`, `stage_rules_off`: leave out a calculation, or a rule the module adds to the
+  row planning or to your own steps.
+- `families_off`: instrument families the analysis step doesn't look for.
+
+A module's content itself isn't edited from a pack -- make a module of your own (a folder with a module.json in
+`<app data>/modules/`, see `modules/README.md` in the app) if you need a different version for several packs.
 
 ## Calculations (`postprocess`)
 
