@@ -1,0 +1,44 @@
+{
+  "id": "impact_shock",
+  "label": "Impact and shock conditions",
+  "description": "Records the projectile, target and shock state of impact and shock experiments or models. Applies to light-gas-gun, laser, dust-accelerator and numerical impact studies.",
+  "covers": "Impact velocity, shock pressure, shock and post-shock temperature, shock duration, impact angle, and projectile and target material and size.",
+  "version": 1,
+  "evidence": {
+    "words": [
+      "hypervelocity",
+      "light-gas gun",
+      "shock pressure",
+      "impact velocity",
+      "projectile",
+      "impactor",
+      "dust accelerator",
+      "Hugoniot"
+    ]
+  },
+  "variable_categories": [
+    {
+      "id": "impact_shock",
+      "table_order": 34,
+      "label": "Impact and shock",
+      "value_type": "any",
+      "model_assigns": true,
+      "description": "Projectile, target and shock-state values of impact experiments and models."
+    }
+  ],
+  "category_columns": {
+    "impact_shock": {
+      "columns": [
+        "impact_velocity_km_per_s",
+        "peak_shock_pressure_bar",
+        "shock_temperature_C",
+        "post_shock_temperature_C",
+        "shock_duration_us",
+        "impact_angle_degrees",
+        "projectile_material",
+        "projectile_size_um",
+        "target_material"
+      ]
+    }
+  }
+}

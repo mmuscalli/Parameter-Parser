@@ -1,0 +1,61 @@
+{
+  "id": "mineral_surfaces",
+  "label": "Mineral and clay surfaces",
+  "description": "Records the identity, form, amount and preparation of mineral or clay solids used as catalysts or adsorbents. Applies to mineral-catalysed oligomerisation, clay-catalysed condensation and mineral adsorption experiments.",
+  "covers": "Mineral or clay identity and class, formula, exchangeable cation, mass, particle size, pretreatment and structural Fe3+ content.",
+  "version": 1,
+  "evidence": {
+    "words": [
+      "montmorillonite",
+      "clay mineral",
+      "exchangeable cation",
+      "homoionic",
+      "mineral surface",
+      "galena",
+      "pyrite",
+      "hydroxyapatite",
+      "metal sulfide",
+      "iron sulfide",
+      "FeS",
+      "NiS",
+      "coprecipitated"
+    ]
+  },
+  "variable_categories": [
+    {
+      "id": "mineral_surfaces",
+      "table_order": 38,
+      "label": "Mineral surfaces",
+      "value_type": "any",
+      "model_assigns": true,
+      "description": "Mineral or clay identity, form, amount and preparation."
+    }
+  ],
+  "category_columns": {
+    "mineral_surfaces": {
+      "columns": [
+        "mineral_class",
+        "mineral_formula",
+        "clay_exchangeable_cation",
+        "mineral_particle_size_um",
+        "mineral_pretreatment",
+        "clay_structural_fe3_content_pct"
+      ]
+    }
+  },
+  "pack_parameters": [
+    {
+      "column": "solid_material_name",
+      "description": "Mineral or clay sample tested, as named in the paper (e.g. galena, Na-montmorillonite).",
+      "kind": "text"
+    },
+    {
+      "column": "solid_material_mass_g",
+      "description": "Mass of mineral or clay solid added to each reaction.",
+      "unit": "g"
+    }
+  ],
+  "row_rules": [
+    "When a paper compares several minerals or clay cation forms, give each its own row."
+  ]
+}

@@ -204,7 +204,8 @@ def _config(config: RunConfig) -> RunConfig:
     if config.is_local or config.handoff_dir:
         return config
     models = {**config.models, "pack_survey": config.models.get("pack_survey", SURVEY_MODEL),
-              "pack_synthesis": config.models.get("pack_synthesis", SYNTHESIS_MODEL)}
+              "pack_synthesis": config.models.get("pack_synthesis", SYNTHESIS_MODEL),
+              "module_synthesis": config.models.get("module_synthesis", SYNTHESIS_MODEL)}
     return replace(config, models=models, model_profile="standard", batch_mode=False, passes=1)
 
 
@@ -228,8 +229,21 @@ def merge_surveys(surveys: List[PaperSurvey]) -> PaperSurvey:
                        compounds=compounds, notes=first.notes)
 
 
+def _survey_key(item, passes: int, prompt: str, config: RunConfig) -> str:
+    """A survey's cache key: the paper (path + size + modified time, or its identifier), the passes, the survey
+    prompt and the model -- any change asks again."""
+    import hashlib
+    p = Path(str(item))
+    stamp = f"{p.resolve()}|{p.stat().st_size}|{p.stat().st_mtime_ns}" if p.is_file() else str(item)
+    model = config.model_for("pack_survey") if hasattr(config, "model_for") else ""
+    return hashlib.sha1(f"{stamp}|{passes}|{model}|{prompt}".encode()).hexdigest()[:20]
+
+
 def survey_paper(item, config: RunConfig, work_dir: Path, area: str, description: str,
-                 cancel_event: Optional[threading.Event] = None, passes: int = 1) -> SurveyedPaper:
+                 cancel_event: Optional[threading.Event] = None, passes: int = 1,
+                 cache_dir: Optional[Path] = None) -> SurveyedPaper:
+    """One paper's survey (merged over `passes`); with `cache_dir`, a survey made before for the same paper, passes,
+    prompt and model is reused at no cost (module drafting surveys many papers, round after round)."""
     from parameter_extractor.api_client import call_structured
     from parameter_extractor.focused_search import _paper_text
     from parameter_extractor.paper_source import resolve_paper, run_name
@@ -244,9 +258,13 @@ def survey_paper(item, config: RunConfig, work_dir: Path, area: str, description
         from parameter_extractor.ingestion.arxiv_source import LookupCache
         source = resolve_paper(item, run_dir, prefer_arxiv=config.prefer_arxiv, ads_token=config.ads_token,
                                cache=LookupCache(config.arxiv_cache_dir) if config.arxiv_cache_dir else None)
+        prompt = _prompt("pack_survey", AREA=area, AREA_DESCRIPTION=description)
+        cached = Path(cache_dir) / f"{_survey_key(item, passes, prompt, config)}.json" if cache_dir else None
+        if cached is not None and cached.is_file():
+            out.survey = PaperSurvey.model_validate_json(cached.read_text())
+            return out
         text, images = _paper_text(source, run_dir, True, config.rasterize_table_pages, config.table_raster_dpi,
                                    config.include_supplements)
-        prompt = _prompt("pack_survey", AREA=area, AREA_DESCRIPTION=description)
         answers = []
         for n in range(1, max(1, passes) + 1):          # extra passes catch what one cheap pass misses; merged
             ctx.check_cancelled()
@@ -256,6 +274,9 @@ def survey_paper(item, config: RunConfig, work_dir: Path, area: str, description
                 response_model=PaperSurvey, image_paths=images or None, max_tokens=SURVEY_BUDGET,
                 audit_name="pack_survey" if n == 1 else f"pack_survey.pass{n}"))
         out.survey = merge_surveys(answers)
+        if cached is not None:
+            cached.parent.mkdir(parents=True, exist_ok=True)
+            cached.write_text(out.survey.model_dump_json(indent=1))
     except (RunCancelledError, AnswersNeededError):
         raise                              # handoff: the request is written; collected by the caller
     except PipelineError as e:
@@ -276,13 +297,14 @@ def _handoff_folder(ctx, name: str) -> None:
         ctx.handoff_paper_dir = paper_dir(ctx.config.handoff_dir, name)
 
 
-def _survey_all(items, config, work_dir, area, description, cancel_event, passes, workers, report, total):
+def _survey_all(items, config, work_dir, area, description, cancel_event, passes, workers, report, total,
+                cache_dir: Optional[Path] = None):
     """Every paper's survey; in handoff mode every paper's request is written before the run stops."""
     papers: List[SurveyedPaper] = []
     waiting = None
     with ThreadPoolExecutor(max_workers=max(1, min(workers, len(items))), thread_name_prefix="survey") as pool:
-        futures = [pool.submit(survey_paper, item, config, work_dir, area, description, cancel_event, passes)
-                   for item in items]
+        futures = [pool.submit(survey_paper, item, config, work_dir, area, description, cancel_event, passes,
+                               cache_dir) for item in items]
         for f in as_completed(futures):
             try:
                 p = f.result()

@@ -207,7 +207,7 @@ def test_standard_columns_file():
     estimates, then the wet-dry stage's (cycle number and duration included -- not in the main
     vocabulary, 2026-10-22), in spec order."""
     cols = standard_columns()
-    assert cols[-7:] == ["cycle_number", "cycle_duration_hr", "wet_phase_temperature_C", "wet_phase_duration_hr",
+    assert cols[cols.index("cycle_number"):cols.index("cycle_number") + 7] == ["cycle_number", "cycle_duration_hr", "wet_phase_temperature_C", "wet_phase_duration_hr",
                          "wet_phase_relative_humidity_pct", "dry_phase_temperature_C", "dry_phase_duration_hr"]
     # the shared columns every pack gets come first (the metadata ones are in this pack's template)
     assert cols[:6] == ["data_location", "paper_arxiv_id", "total_sampled_oligomers_yield", "max_oligomer_length_nt",

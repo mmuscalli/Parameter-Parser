@@ -1,0 +1,42 @@
+{
+  "id": "heat_flow_chamber",
+  "label": "Thermal gradient and gas-water interface chambers",
+  "description": "Records the geometry, gradient and flow settings of microfluidic chambers with a thermal gradient or gas-water interface, and their accumulation results. Applies to thermophoresis, heat-flow and evaporation-interface studies of prebiotic accumulation.",
+  "covers": "Warm and cold side temperatures, temperature difference, chamber thickness, liquid and gas flow rates, flow velocity, accumulation factor and Soret coefficient.",
+  "version": 1,
+  "evidence": {
+    "words": [
+      "thermophoresis",
+      "Soret coefficient",
+      "gas-water interface",
+      "heat flow chamber",
+      "thermal gradient",
+      "microfluidic chamber"
+    ]
+  },
+  "variable_categories": [
+    {
+      "id": "heat_flow_chamber",
+      "table_order": 37,
+      "label": "Thermal gradient chamber",
+      "value_type": "any",
+      "model_assigns": true,
+      "description": "Gradient, geometry, flow and accumulation values of thermal-gradient and gas-interface chambers."
+    }
+  ],
+  "category_columns": {
+    "heat_flow_chamber": {
+      "columns": [
+        "warm_side_temperature_C",
+        "cold_side_temperature_C",
+        "temperature_difference_C",
+        "chamber_thickness_um",
+        "liquid_flow_rate",
+        "gas_flow_rate_mL_min",
+        "flow_velocity",
+        "accumulation_factor_fold",
+        "soret_coefficient"
+      ]
+    }
+  }
+}

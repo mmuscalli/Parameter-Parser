@@ -72,6 +72,9 @@ class StageTrigger(BaseModel):
     keywords: List[str] = Field(default_factory=list)
     set_patterns: List[str] = Field(default_factory=list)   # regexes on a set's label / what varies
     always: bool = False
+    # keywords must occur this often in the paper (outside its reference list) before the step runs: a paper whose
+    # experiments use clays says 'montmorillonite' many times, one comparing with clay catalysis once (2026-11-09)
+    min_hits: int = 1
 
 
 class StageSpec(BaseModel):
@@ -239,11 +242,20 @@ class StageSpec(BaseModel):
                 or any(getattr(x, f, None) is not None for x in s.samples for f in t.sample_fields)
                 or any(re.search(p, described, re.IGNORECASE) for p in t.set_patterns))
 
+    def keyword_hits(self, paper_text: str) -> int:
+        """How often the trigger words occur in the paper, its reference list left out (min_hits > 1 only)."""
+        t = self.trigger
+        if t.min_hits <= 1:
+            return int(any(re.search(rf"\b{re.escape(k)}\b", paper_text, re.IGNORECASE) for k in t.keywords))
+        body = re.split(r"^\s*(?:References|REFERENCES|Bibliography|Literature Cited|REFERENCES AND NOTES)\s*$",
+                        paper_text, flags=re.MULTILINE)[0]
+        return sum(len(re.findall(rf"\b{re.escape(k)}s?\b", body, re.IGNORECASE)) for k in t.keywords)
+
     def triggered(self, structure: StructurePlan, paper_text: str = "") -> bool:
         t = self.trigger
         if t.always or any(self._set_matches(s) for s in structure.experiment_sets):
             return True
-        return any(re.search(rf"\b{re.escape(k)}\b", paper_text, re.IGNORECASE) for k in t.keywords)
+        return bool(t.keywords) and self.keyword_hits(paper_text) >= max(1, t.min_hits)
 
     def could_trigger(self, paper_text: str) -> bool:
         """Before the rows are planned: False only for a stage triggered by keywords alone whose words aren't in the
@@ -251,7 +263,7 @@ class StageSpec(BaseModel):
         t = self.trigger
         if t.always or t.set_types or t.sample_fields or t.set_patterns or not t.keywords:
             return True
-        return any(re.search(rf"\b{re.escape(k)}\b", paper_text, re.IGNORECASE) for k in t.keywords)
+        return self.keyword_hits(paper_text) >= max(1, t.min_hits)
 
     def target_sets(self, structure: StructurePlan) -> List[str]:
         """The sets a value with set_label '' applies to: those that match the trigger's set

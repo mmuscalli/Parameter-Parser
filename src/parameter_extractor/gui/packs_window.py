@@ -14,8 +14,8 @@ from typing import Optional
 
 from PySide6.QtCore import Qt, QUrl
 from PySide6.QtGui import QDesktopServices
-from PySide6.QtWidgets import (QDialog, QHBoxLayout, QLabel, QListWidget, QListWidgetItem, QPushButton, QSplitter,
-                               QTabWidget, QTextBrowser, QVBoxLayout, QWidget)
+from PySide6.QtWidgets import (QDialog, QHBoxLayout, QLabel, QListWidget, QListWidgetItem, QMessageBox, QPushButton,
+                               QSplitter, QTabWidget, QTextBrowser, QVBoxLayout, QWidget)
 
 from parameter_extractor import packs
 
@@ -240,6 +240,11 @@ class DataPacksWindow(QDialog):
         row = QHBoxLayout()
         row.addWidget(QLabel("Modules are linked into data packs on their Modules tab (Edit…); your own modules go in "
                              "the modules folder.", wordWrap=True), 1)
+        self.suggest_modules_btn = QPushButton("Suggest modules from papers…", clicked=self._suggest_modules)
+        self.suggest_modules_btn.setToolTip("Survey sample papers and propose new modules -- topics that recur across "
+                                            "papers and that no module records yet (uses the API; you choose what's "
+                                            "written).")
+        row.addWidget(self.suggest_modules_btn)
         row.addWidget(QPushButton("Open my modules folder", clicked=self._open_modules_folder))
         v.addLayout(row)
         return w
@@ -270,6 +275,15 @@ class DataPacksWindow(QDialog):
             return
         users = [p for p in packs.available().values() if mod.id in p.module_ids()]
         self.module_view.setHtml(module_html(mod, users))
+
+    def _suggest_modules(self) -> None:
+        from parameter_extractor.gui.pack_assist import ModuleDraftDialog
+        dlg = ModuleDraftDialog(self.main.current_config, self)
+        if dlg.exec() and dlg.written:
+            QMessageBox.information(self, "Modules written", "\n".join(f"• {p}" for p in dlg.written)
+                                    + "\n\nLink them on a data pack's Modules tab; new drafts link them when "
+                                      "their papers use the modules' evidence words.")
+            self._fill_modules()
 
     def _open_modules_folder(self) -> None:
         from parameter_extractor import modules

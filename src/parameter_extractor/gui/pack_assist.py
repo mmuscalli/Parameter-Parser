@@ -18,7 +18,7 @@ from typing import Callable, Optional
 from PySide6.QtCore import QObject, Qt, Signal
 from PySide6.QtCore import QSettings
 from PySide6.QtWidgets import (QAbstractItemView, QApplication, QCheckBox, QComboBox, QDialog, QDialogButtonBox,
-                               QHBoxLayout, QHeaderView, QLabel, QProgressBar, QPushButton, QTableWidget,
+                               QHBoxLayout, QHeaderView, QLabel, QMessageBox, QProgressBar, QPushButton, QTableWidget,
                                QTableWidgetItem, QVBoxLayout, QWidget)
 
 from parameter_extractor.gui.widgets import style_rows
@@ -295,6 +295,158 @@ class AdditionsDialog(QDialog):
                 self.folder, self.result_.suggestions, PubChem(default_pubchem_cache_path()))
         finally:
             QApplication.restoreOverrideCursor()
+        self.accept()
+
+    def _cancel_or_close(self) -> None:
+        if self._cancel is not None:
+            self._cancel.set()
+            self.status.setText("Cancelling after the current request…")
+            return
+        self.reject()
+
+
+# ---- modules from sample papers (2026-11-09) ----------------------------------------------------------------------------
+
+class ModuleDraftDialog(QDialog):
+    """Sample papers -> proposed modules (module_drafting) -> the ticked ones written to the user's modules folder;
+    `written` after Write."""
+
+    def __init__(self, config: Callable, parent=None):
+        super().__init__(parent)
+        from parameter_extractor.gui.paper_list import PaperListPanel
+        self._config, self.written, self.result_, self._cancel = config, [], None, None
+        self.setWindowTitle("Suggest modules from papers")
+        self.resize(1150, 780)
+        v = QVBoxLayout(self)
+        v.addWidget(_hint("Add papers from one or several fields. Each is surveyed for the variables it reports "
+                          "(Claude Haiku, about a cent a paper; surveys made before are reused), then one request "
+                          "(Claude Sonnet: measured $0.31 for 40 papers) proposes modules -- topics that recur across "
+                          "papers and that no existing module records. The app then checks each proposal: values an "
+                          "existing module records are left out, core conditions (temperature, pH, solid material ...) "
+                          "are added to a pack only when it lacks them, evidence words must fit the papers. Nothing is "
+                          "written until you tick proposals and press Write."))
+        self.papers = PaperListPanel()
+        self.papers.setMaximumHeight(210)
+        v.addWidget(self.papers)
+        row = QHBoxLayout()
+        self.run_btn = QPushButton("Propose modules", clicked=self.run)
+        row.addWidget(self.run_btn)
+        self.passes_combo = QComboBox()
+        for n, text in ((1, "1 survey pass"), (2, "2 survey passes, merged"), (3, "3 survey passes, merged")):
+            self.passes_combo.addItem(text, n)
+        self.passes_combo.setCurrentIndex(max(0, self.passes_combo.findData(
+            QSettings().value("draft/survey_passes", 2, type=int))))
+        row.addWidget(self.passes_combo)
+        self.progress = QProgressBar(visible=False, textVisible=False)
+        row.addWidget(self.progress, 1)
+        v.addLayout(row)
+        self.status = _hint("")
+        v.addWidget(self.status)
+        self.table = _table(["Module", "Values", "Evidence words", "Papers", "Checks"])
+        self.table.horizontalHeaderItem(2).setToolTip("The module's step runs for papers that use these words (at "
+                                                      "least three times); drafts link the module from them.")
+        self.table.setColumnWidth(0, 230)
+        self.table.setColumnWidth(1, 330)
+        self.table.setColumnWidth(2, 260)
+        self.table.setColumnWidth(3, 60)
+        v.addWidget(self.table, 1)
+        buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Cancel)
+        self.write_btn = buttons.addButton("Write ticked modules", QDialogButtonBox.ButtonRole.AcceptRole)
+        self.write_btn.setEnabled(False)
+        buttons.accepted.connect(self.write)
+        buttons.rejected.connect(self._cancel_or_close)
+        v.addWidget(buttons)
+
+    def run(self) -> None:
+        from parameter_extractor import module_drafting
+        from parameter_extractor.registry import default_registry_path
+        items = self.papers.items()
+        if not items:
+            self.status.setText("Add some sample papers first.")
+            return
+        config = self._config()
+        if config.needs_api_key and not config.api_key:
+            self.status.setText("This reads the papers with the API: add your Anthropic API key in Settings first.")
+            return
+        self._cancel = threading.Event()
+        self._signals = _Signals()
+        self._signals.progress.connect(self._on_progress)
+        self._signals.done.connect(self._on_done)
+        self.run_btn.setEnabled(False)
+        self.papers.set_locked(True)
+        self.progress.setVisible(True)
+        self.progress.setRange(0, 0)
+        passes = self.passes_combo.currentData()
+        QSettings().setValue("draft/survey_passes", passes)
+        cache = default_registry_path().parent / "survey_cache"
+
+        def work():
+            try:
+                result = module_drafting.draft_modules(items, config, on_progress=self._signals.progress.emit,
+                                                       cancel_event=self._cancel, passes=passes, survey_cache=cache)
+            except BaseException as e:
+                result = e
+            self._signals.done.emit(result)
+        threading.Thread(target=work, daemon=True, name="module-draft").start()
+
+    def _on_progress(self, done: int, total: int, message: str) -> None:
+        self.progress.setRange(0, max(total, 1))
+        self.progress.setValue(done)
+        self.status.setText(message)
+
+    def _on_done(self, result) -> None:
+        self._cancel = None
+        self.run_btn.setEnabled(True)
+        self.papers.set_locked(False)
+        self.progress.setVisible(False)
+        if isinstance(result, BaseException):
+            from parameter_extractor.errors import RunCancelledError
+            self.status.setText("Cancelled." if isinstance(result, RunCancelledError) else str(result))
+            return
+        self.show_result(result)
+
+    def show_result(self, result) -> None:
+        from parameter_extractor import modules as module_store
+        self.result_ = result
+        self.table.setRowCount(0)
+        for c in result.modules:
+            r = self.table.rowCount()
+            self.table.insertRow(r)
+            title = c.proposal.label + (f"  (addition to {module_store.available()[c.extends].label})"
+                                        if c.extends in module_store.available() else "")
+            item = _checked_item(title, c.include)
+            item.setToolTip(c.proposal.description)
+            if c.extends and module_store.available().get(c.extends) is not None and \
+                    module_store.available()[c.extends].builtin:
+                item.setFlags(item.flags() & ~Qt.ItemFlag.ItemIsUserCheckable)
+                item.setCheckState(Qt.CheckState.Unchecked)
+                item.setToolTip("An addition to one of the app's own modules: listed in the report for its "
+                                "developers; it can't be written into the app from here.")
+            self.table.setItem(r, 0, item)
+            self.table.setItem(r, 1, _plain(", ".join(p["column"] for p in c.parameters)
+                                            + (f"; if a pack lacks them: {', '.join(p['column'] for p in c.pack_parameters)}"
+                                               if c.pack_parameters else "")))
+            self.table.setItem(r, 2, _plain(", ".join(c.evidence)))
+            self.table.setItem(r, 3, _plain(str(len(c.papers_with_evidence))))
+            self.table.setItem(r, 4, _plain("; ".join(c.notes)))
+        surveyed = sum(1 for p in result.papers if p.survey)
+        self.status.setText(f"{len(result.modules)} module(s) proposed from {surveyed} paper(s), ${result.cost_usd:.3f}."
+                            + (f" Left out: {'; '.join(result.left_out[:4])}." if result.left_out else "")
+                            + f" Report: {result.work_dir / 'module_draft.md'}")
+        self.write_btn.setEnabled(bool(result.modules))
+
+    def write(self) -> None:
+        from parameter_extractor import module_drafting
+        if self.result_ is None:
+            return
+        for r, c in enumerate(self.result_.modules):
+            c.include = self.table.item(r, 0).checkState() == Qt.CheckState.Checked
+        try:
+            self.written = [p for p in (module_drafting.write_module(c) for c in self.result_.modules if c.include)
+                            if p is not None]
+        except (ValueError, OSError) as e:
+            QMessageBox.warning(self, "Not written", str(e))
+            return
         self.accept()
 
     def _cancel_or_close(self) -> None:

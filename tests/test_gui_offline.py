@@ -600,7 +600,8 @@ def test_stage_toggles():
         assert w.optional_stage_choices()["fit_models"] == "off" and not w.params.focused
         assert "without Fitting models" in w.mode_label.text()                 # still a full extraction
         w.pack_combo.setCurrentIndex(w.pack_combo.findData("prebiotic_chemistry"))
-        assert list(w.params.groups) == ["chemistry", "experimental_conditions", "kinetics", "wet_dry", "analysis"]
+        assert list(w.params.groups) == ["chemistry", "experimental_conditions", "kinetics", "wet_dry", "oligomer_linkage",
+                                     "analysis"]
         assert "when the paper calls for it" in w.params.groups["wet_dry"].text(0)
         w.pack_combo.setCurrentIndex(w.pack_combo.findData("exoplanets"))
         assert not w.params.stage_on("fit_models")                            # remembered for this area

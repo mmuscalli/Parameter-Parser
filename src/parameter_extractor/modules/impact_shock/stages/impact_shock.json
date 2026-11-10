@@ -1,0 +1,81 @@
+{
+  "name": "impact_shock",
+  "label": "Impact and shock conditions",
+  "description": "Extracts projectile, target and shock-state values for each impact or shock experiment.",
+  "origin": "impact and shock conditions",
+  "schema_name": "ImpactShockResult",
+  "system_prompt": "Extract values from a scientific paper. Report only what the paper states.",
+  "trigger": {
+    "keywords": [
+      "hypervelocity",
+      "light-gas gun",
+      "shock pressure",
+      "impact velocity",
+      "projectile",
+      "impactor",
+      "dust accelerator",
+      "Hugoniot"
+    ],
+    "min_hits": 3
+  },
+  "per": "sample",
+  "set_word": "experiment",
+  "error_suffixes": [
+    "_err_plus",
+    "_err_minus"
+  ],
+  "suffix_separator": "_",
+  "table_images": true,
+  "intro": "Extracts projectile, target and shock-state values for each impact or shock experiment. For every set (and sample) in the structure plan below, extract the values the paper reports. A value that holds for every set goes in ONE row with `set` ''; one that differs between sets goes in each set's row; one that differs between the samples of a set goes in each sample's row.",
+  "parameters": [
+    {
+      "column": "impact_velocity_km_per_s",
+      "description": "Speed of the projectile, particle or impactor at impact.",
+      "unit": "km/s"
+    },
+    {
+      "column": "peak_shock_pressure_bar",
+      "description": "Peak pressure reached in the shocked material.",
+      "unit": "bar"
+    },
+    {
+      "column": "shock_temperature_C",
+      "description": "Peak temperature reached in the material during shock compression or heating.",
+      "unit": "°C"
+    },
+    {
+      "column": "post_shock_temperature_C",
+      "description": "Estimated temperature after shock release.",
+      "unit": "°C"
+    },
+    {
+      "column": "shock_duration_us",
+      "description": "Duration of shock compression.",
+      "unit": "µs"
+    },
+    {
+      "column": "impact_angle_degrees",
+      "description": "Angle of incidence of the impactor relative to the surface normal.",
+      "unit": "degrees"
+    },
+    {
+      "column": "projectile_material",
+      "description": "Material or type of the projectile or impactor (e.g. polystyrene, ice, iron meteorite analogue, comet).",
+      "kind": "text"
+    },
+    {
+      "column": "projectile_size_um",
+      "description": "Diameter or radius of the projectile or impactor particle.",
+      "unit": "µm",
+      "uncertainties": true
+    },
+    {
+      "column": "target_material",
+      "description": "Material of the target or collector hit by the projectile (e.g. aluminium foil, gas target).",
+      "kind": "text"
+    }
+  ],
+  "rules": [
+    "The shock or peak temperature is not the reaction temperature: keep it in these columns (as printed; the app converts)."
+  ]
+}

@@ -38,6 +38,11 @@ improved here reaches every pack that links it. A pack changes how a module work
 | `prompt_rules` | `{"chemistry": [...]}`: rules added to a built-in step's prompt (its `{{MODULE_RULES}}` slot) |
 | `compound_series` | compound setup fills in every length of an oligomer series between the shortest and longest found |
 | `covers` | what the module records, in a sentence: drafting a pack leaves that to the module |
+| `evidence` | `{"words": [...]}`: drafting links the module when a paper's survey uses them (the app's first modules have code rules instead) |
+
+A step's trigger can need several mentions (`"min_hits": 3` in its `trigger`): a passing mention of a word isn't enough.
+Modules can be drafted from sample papers: *Data Packs > All data packs and modules > Modules > Suggest modules from
+papers...* (or `--draft-modules`), reviewed, and written to your modules folder.
 
 Renamed ids keep working (`modules.ALIASES`: `product_totals` -> `peptides_oligomers`).
 

@@ -34,7 +34,7 @@ def test_wet_dry_spec():
     assert spec.triggered(truman, "") and len(spec.target_sets(truman)) == 4
     # the wet/dry phase columns are standard columns, in spec order, after any listed ones
     cols = standard_columns()
-    assert cols[-7:] == ["cycle_number", "cycle_duration_hr", "wet_phase_temperature_C", "wet_phase_duration_hr",
+    assert cols[cols.index("cycle_number"):cols.index("cycle_number") + 7] == ["cycle_number", "cycle_duration_hr", "wet_phase_temperature_C", "wet_phase_duration_hr",
                          "wet_phase_relative_humidity_pct", "dry_phase_temperature_C", "dry_phase_duration_hr"]
     # cycle number / duration: the wet-dry stage's own columns, not the main vocabulary (2026-10-22)
     from parameter_extractor import packs

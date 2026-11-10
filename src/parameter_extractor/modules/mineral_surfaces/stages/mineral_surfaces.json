@@ -1,0 +1,70 @@
+{
+  "name": "mineral_surfaces",
+  "label": "Mineral and clay surfaces",
+  "description": "Extracts the identity, preparation and amount of the mineral or clay solid present in each experiment.",
+  "origin": "mineral and clay surfaces",
+  "schema_name": "MineralSurfacesResult",
+  "system_prompt": "Extract values from a scientific paper. Report only what the paper states.",
+  "trigger": {
+    "keywords": [
+      "montmorillonite",
+      "clay mineral",
+      "exchangeable cation",
+      "homoionic",
+      "mineral surface",
+      "galena",
+      "pyrite",
+      "hydroxyapatite",
+      "metal sulfide",
+      "iron sulfide",
+      "FeS",
+      "NiS",
+      "coprecipitated"
+    ],
+    "min_hits": 3
+  },
+  "per": "sample",
+  "set_word": "experiment",
+  "error_suffixes": [
+    "_err_plus",
+    "_err_minus"
+  ],
+  "suffix_separator": "_",
+  "table_images": true,
+  "intro": "Extracts the identity, preparation and amount of the mineral or clay solid present in each experiment. For every set (and sample) in the structure plan below, extract the values the paper reports. A value that holds for every set goes in ONE row with `set` ''; one that differs between sets goes in each set's row; one that differs between the samples of a set goes in each sample's row.",
+  "parameters": [
+    {
+      "column": "mineral_class",
+      "description": "Mineral group or class of the solid (e.g. sulfide, phosphate, carbonate, smectite clay).",
+      "kind": "text"
+    },
+    {
+      "column": "mineral_formula",
+      "description": "General chemical formula of the tested mineral.",
+      "kind": "text"
+    },
+    {
+      "column": "clay_exchangeable_cation",
+      "description": "Exchangeable or interlayer cation of the clay (e.g. Na+, Cu2+, Fe3+, Li+).",
+      "kind": "text"
+    },
+    {
+      "column": "mineral_particle_size_um",
+      "description": "Particle or sieve size of the ground mineral powder.",
+      "unit": "µm"
+    },
+    {
+      "column": "mineral_pretreatment",
+      "description": "Treatment or preparation of the mineral before use (e.g. untreated, Banin process, homoionic exchange).",
+      "kind": "text"
+    },
+    {
+      "column": "clay_structural_fe3_content_pct",
+      "description": "Content of structural Fe3+ in the clay lattice.",
+      "unit": "%"
+    }
+  ],
+  "rules": [
+    "Mineral solids are not compounds; record them only in these mineral columns."
+  ]
+}

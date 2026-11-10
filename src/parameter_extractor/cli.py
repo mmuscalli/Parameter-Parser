@@ -126,6 +126,16 @@ def main() -> int:
     parser.add_argument("--suggest-additions", metavar="ID", default=None,
                         help="Survey sample papers (--papers / --pdf / --paper) and suggest what one of your research "
                              "areas lacks (parameters, steps, categories, rules, compounds); prints them")
+    parser.add_argument("--draft-modules", action="store_true",
+                        help="propose shared modules from sample papers (--papers / --pdf): surveys + one design "
+                             "request; prints them and writes a report; --write-modules writes the ones that pass "
+                             "the checks to your modules folder")
+    parser.add_argument("--write-modules", action="store_true", help="with --draft-modules: write the modules")
+    parser.add_argument("--modules-out", metavar="DIR", default=None,
+                        help="with --write-modules: the folder to write them into (default: your modules folder)")
+    parser.add_argument("--survey-cache", metavar="DIR", default=None,
+                        help="reuse surveys made before (drafting / --draft-modules): the folder they're kept in "
+                             "(default: <app data>/survey_cache)")
     parser.add_argument("--survey-passes", type=int, default=2, choices=[1, 2, 3],
                         help="--draft-pack / --suggest-additions: survey each paper this many times (cheap) and merge "
                              "(default 2)")
@@ -192,6 +202,8 @@ def main() -> int:
         return 0
     if args.list_local_models:
         return _list_local_models(args)
+    if args.draft_modules:
+        return _draft_modules(args, parser)
     if args.draft_pack:
         return _draft_pack(args, parser)
     if args.add_module:
@@ -390,6 +402,37 @@ def _list_local_models(args) -> int:
     for name, roles in local.profiles.items():
         print(f"profile {name}: " + "; ".join(f"{dict(local_models.PROFILE_ROLES)[r]}: {m}"
                                               for r, m in roles.items() if m))
+    return 0
+
+
+def _draft_modules(args, parser) -> int:
+    from parameter_extractor import module_drafting
+    from parameter_extractor.config.run_config import RunConfig
+    from parameter_extractor.focused_search import read_paper_list
+    from parameter_extractor.registry import default_registry_path
+    items = list(read_paper_list(args.papers)) if args.papers else []
+    items += [Path(args.pdf)] if args.pdf else []
+    if not items:
+        parser.error("--draft-modules needs sample papers: --papers LIST or --pdf")
+    overrides = {"prefer_arxiv": args.arxiv, "include_supplements": not args.no_si}
+    if args.out:
+        overrides["output_dir"] = args.out
+    overrides.update(_provider_overrides(args, parser))
+    config = RunConfig.from_settings(**overrides)
+    cache = Path(args.survey_cache) if args.survey_cache else default_registry_path().parent / "survey_cache"
+    try:
+        result = module_drafting.draft_modules(items, config, area=args.area_name or "the papers' research fields",
+                                               on_progress=lambda d, n, m: print(f"[{d}/{n}] {m}"),
+                                               passes=args.survey_passes, survey_cache=cache,
+                                               write=args.write_modules,
+                                               base=Path(args.modules_out) if args.modules_out else None)
+    except (PipelineError, ValueError) as e:
+        print(f"Error: {e}", file=sys.stderr)
+        return 1
+    print(module_drafting.report_text(result))
+    print(f"Report: {result.work_dir / 'module_draft.md'}")
+    for path in result.written:
+        print(f"Module written: {path}")
     return 0
 
 

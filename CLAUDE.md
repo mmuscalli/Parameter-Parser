@@ -2730,3 +2730,25 @@ stays distinct); `linkage_dimer_match` (A2'p5'A -> "2mer_A_2'-5'", pA3'p5'A -> "
 never looked up on PubChem (normalize -> `ambiguous_name` flag), never preferred over a full name, never in a compound
 vocabulary (compound_setup.is_compound_name). oligomer_totals counts 'p-<n>mer_' too. Tests that used 2'-CMP for the
 PubChem identity path now use glycolaldehyde / hydroxyacetaldehyde (nucleotides are rule-matched, not looked up).
+
+## Modules drafted from papers; five new app modules (2026-11-09, Mickey)
+
+`module_drafting.py` (Data Packs window > Modules > "Suggest modules from papers…" = gui/pack_assist.ModuleDraftDialog;
+CLI `--draft-modules --papers LIST [--write-modules] [--modules-out DIR] [--survey-cache DIR]`): surveys (pack_drafting
+.survey_paper, now with `cache_dir`: key = paper path+size+mtime / identifier, passes, prompt, model) -> one Sonnet
+request (prompts/module_synthesis.md, `existing_brief()` = every module's covers + columns; stage "module_synthesis" in
+pack_drafting._config) -> `check_proposals`: column_for / tidy_parameter; columns a module OWNS (`_existing_columns`,
+not its pack_parameters) dropped; `core_columns()` (conventions targets + the app packs' own step and non-compound
+template columns) -> pack_parameters; `clean_description` strips unit talk; evidence words: GENERIC_SHARE 0.85,
+MIN_PRECISION 0.5 against the papers the designer listed (`_listed`); shared columns -> the larger proposal;
+< MIN_PARAMETERS 3 dropped; `extends` (an existing module, aliases resolved) -> written into a USER module, reported for
+an app module. `write_module` -> module.json (`evidence.words`, category, category_columns, pack_parameters, row_rules)
++ stages/<id>.json (trigger keywords = evidence, `min_hits` MIN_TRIGGER_HITS 3). ModuleManifest `evidence`, `covers`;
+pack_modules.evidence_for links any module with evidence words. StageTrigger `min_hits` (default 1 = as before):
+`keyword_hits` counts mentions outside the reference list. focused_search.read_paper_list takes a whole line as a path
+when it is an existing .pdf containing commas.
+New app modules (rounds reviewed by me; eval/modules_from_papers_2026-11-09.md): mineral_surfaces, impact_shock,
+heat_flow_chamber, flow_reactor, fluid_inclusions (each one keyword step, min_hits 3) + peptides_oligomers' step
+`oligomer_linkage` (2'-5'/3'-5' shares; Prebiotic gets it -> its spec list / step counts in tests updated). Not linked by
+the Prebiotic pack (link them per pack). Cost record: rounds $0.605 / $0.359 / $0.313, held-out surveys $0.065, two
+validation extractions $0.46.

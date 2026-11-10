@@ -449,7 +449,18 @@ def read_paper_list(path: Path, only_failed: bool = False) -> List[PaperItem]:
     path = Path(path)
     items: List[PaperItem] = []
     with open(path, newline="", encoding="utf-8-sig") as f:
-        rows = list(csv.reader(f))
+        text = f.read()
+    rows = list(csv.reader(text.splitlines()))
+    # a line that is a whole .pdf path is taken as it is: file names can hold commas ('2',3'-Cyclic ...',
+    # 'Heated gas bubbles enrich, crystallize, dry, ...'), which the CSV reading cuts apart (2026-11-09)
+    whole = {}
+    for n, line in enumerate(text.splitlines()):
+        stripped = line.strip().strip('"')
+        if stripped.lower().endswith(".pdf") and "," in stripped:
+            pdf = Path(stripped).expanduser()
+            pdf = pdf if pdf.is_absolute() else path.parent / pdf
+            if pdf.is_file():
+                whole[n] = pdf
     header = [c.strip().lower() for c in rows[0]] if rows else []
     if "item" in header and "status" in header:          # an earlier focused search's papers.csv
         at = {name: header.index(name) for name in ("item", "status", "reference") if name in header}
@@ -463,7 +474,10 @@ def read_paper_list(path: Path, only_failed: bool = False) -> List[PaperItem]:
             elif identifier_in_cell(cell):
                 items.append(PaperRef(str(identifier_in_cell(cell)), label))
         return list(dict.fromkeys(items))
-    for row in rows:
+    for n, row in enumerate(rows):
+        if n in whole:
+            items.append(whole[n])
+            continue
         for cell in (c.strip() for c in row):
             if cell.lower().endswith(".pdf"):
                 pdf = Path(cell).expanduser()

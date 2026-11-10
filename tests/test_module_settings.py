@@ -119,7 +119,7 @@ def test_paper_flow():
     assert requests["chemistry"].source == "the Solution chemistry module"
     local = {s.name: s.source for s in flow if s.kind == "local"}
     assert local["amounts"] == "the Solution chemistry module" and local["results_check"] == po.PACK
-    assert po.summary(flow).startswith("5 model requests for every paper, up to 2 more")
+    assert po.summary(flow).startswith("5 model requests for every paper, up to 3 more")      # + oligomer linkage
     assert "Requests to the AI model" in po.as_html(flow)
 
 

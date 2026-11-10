@@ -1,0 +1,42 @@
+{
+  "id": "fluid_inclusions",
+  "label": "Fluid inclusions",
+  "description": "Records fluid-inclusion measurements and the mineral hosts of impact-related hydrothermal deposits. Applies to studies of hydrothermal activity in impact craters.",
+  "covers": "Homogenization temperature, final ice melting temperature, salinity, inclusion size, degree of fill, inclusion composition and host mineral.",
+  "version": 1,
+  "evidence": {
+    "words": [
+      "fluid inclusion",
+      "fluid inclusions",
+      "homogenization temperature",
+      "ice melting temperature",
+      "NaCl equivalent",
+      "NaCl eq",
+      "degree of fill",
+      "microthermometry"
+    ]
+  },
+  "variable_categories": [
+    {
+      "id": "fluid_inclusions",
+      "table_order": 78,
+      "label": "Fluid inclusions",
+      "value_type": "any",
+      "model_assigns": true,
+      "description": "Microthermometry, salinity and host-mineral values of fluid inclusions."
+    }
+  ],
+  "category_columns": {
+    "fluid_inclusions": {
+      "columns": [
+        "homogenization_temperature_C",
+        "final_ice_melting_temperature_C",
+        "salinity_wtpct_NaCl_eq",
+        "inclusion_size_um",
+        "degree_of_fill",
+        "inclusion_composition",
+        "host_mineral"
+      ]
+    }
+  }
+}

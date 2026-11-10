@@ -1,0 +1,44 @@
+{
+  "id": "flow_reactor",
+  "label": "Hydrothermal flow reactor",
+  "description": "Records the settings of continuous flow reactors for hydrothermal and supercritical-water experiments. Applies to flow-reactor studies of amino acid and peptide stability.",
+  "covers": "Residence time, flow rate, quench temperature, injection volume and the reactor type.",
+  "version": 1,
+  "evidence": {
+    "words": [
+      "flow reactor",
+      "tubular reactor",
+      "back-pressure regulator",
+      "residence time",
+      "supercritical water",
+      "Inconel"
+    ]
+  },
+  "variable_categories": [
+    {
+      "id": "flow_reactor",
+      "table_order": 36,
+      "label": "Flow reactor",
+      "value_type": "any",
+      "model_assigns": true,
+      "description": "Flow, residence and quench settings of continuous hydrothermal reactors."
+    }
+  ],
+  "category_columns": {
+    "flow_reactor": {
+      "columns": [
+        "residence_time_hr",
+        "quench_temperature_C",
+        "injection_volume_mL",
+        "reactor_description"
+      ]
+    }
+  },
+  "pack_parameters": [
+    {
+      "column": "flow_rate_mL_min",
+      "description": "Volumetric flow rate of the solution or water through the reactor.",
+      "unit": "mL/min"
+    }
+  ]
+}

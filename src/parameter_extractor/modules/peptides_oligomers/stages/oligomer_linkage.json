@@ -1,0 +1,52 @@
+{
+  "name": "oligomer_linkage",
+  "label": "Oligomer linkage",
+  "description": "Extracts the share of 3'-5' and 2'-5' linkages and how they were determined.",
+  "origin": "phosphodiester linkage regiochemistry",
+  "schema_name": "OligomerLinkageResult",
+  "system_prompt": "Extract values from a scientific paper. Report only what the paper states.",
+  "trigger": {
+    "keywords": [
+      "2'-5' linkage",
+      "3'-5' linkage",
+      "2',5'",
+      "3',5'-linked",
+      "linkage ratio",
+      "regioselectivity",
+      "RNase T2",
+      "nuclease P1",
+      "canonical linkage"
+    ]
+  },
+  "per": "sample",
+  "set_word": "experiment",
+  "error_suffixes": [
+    "_err_plus",
+    "_err_minus"
+  ],
+  "suffix_separator": "_",
+  "table_images": true,
+  "intro": "Extracts the share of 3'-5' and 2'-5' linkages and how they were determined. For every set (and sample) in the structure plan below, extract the values the paper reports. A value that holds for every set goes in ONE row with `set` ''; one that differs between sets goes in each set's row; one that differs between the samples of a set goes in each sample's row.",
+  "parameters": [
+    {
+      "column": "linkage_3_5_fraction_pct",
+      "description": "Percentage of internucleotide phosphodiester bonds that are natural 3'-5' linkages in the oligomer or product.",
+      "unit": "%",
+      "uncertainties": true
+    },
+    {
+      "column": "linkage_2_5_fraction_pct",
+      "description": "Percentage of internucleotide phosphodiester bonds that are unnatural 2'-5' linkages in the oligomer or product.",
+      "unit": "%",
+      "uncertainties": true
+    },
+    {
+      "column": "linkage_determination",
+      "description": "Evidence or enzymatic or chemical digestion used to assign linkage type (e.g. RNase T2, nuclease P1, KOH hydrolysis, 31P NMR).",
+      "kind": "text"
+    }
+  ],
+  "rules": [
+    "If the paper gives only the 3'-5' share or only the 2'-5' share, fill that column only; do not calculate the other."
+  ]
+}

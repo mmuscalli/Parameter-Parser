@@ -213,7 +213,7 @@ def test_modules_tab():
         t.item(rows["peptides_oligomers"], 0).setCheckState(Qt.CheckState.Checked)
         assert t.item(rows["solution_chemistry"], 1).text().startswith("brought along by")
         assert e.tabs.isTabEnabled(compounds) and e.builtin_boxes["chemistry"].isChecked()
-        assert e.module_stages_note.isHidden()                                # those bring no stage
+        assert "Peptides and oligomers module" in e.module_stages_note.text()   # its linkage step (2026-11-09)
         t.item(rows["kinetics"], 0).setCheckState(Qt.CheckState.Checked)
         assert "Kinetics module" in e.module_stages_note.text()
         t.item(rows["kinetics"], 0).setCheckState(Qt.CheckState.Unchecked)

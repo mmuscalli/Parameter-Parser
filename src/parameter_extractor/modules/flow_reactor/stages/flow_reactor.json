@@ -1,0 +1,51 @@
+{
+  "name": "flow_reactor",
+  "label": "Hydrothermal flow reactor",
+  "description": "Extracts residence time, flow, quench and injection settings of the flow reactor.",
+  "origin": "hydrothermal flow reactor",
+  "schema_name": "FlowReactorResult",
+  "system_prompt": "Extract values from a scientific paper. Report only what the paper states.",
+  "trigger": {
+    "keywords": [
+      "flow reactor",
+      "tubular reactor",
+      "back-pressure regulator",
+      "residence time",
+      "supercritical water",
+      "Inconel"
+    ],
+    "min_hits": 3
+  },
+  "per": "sample",
+  "set_word": "experiment",
+  "error_suffixes": [
+    "_err_plus",
+    "_err_minus"
+  ],
+  "suffix_separator": "_",
+  "table_images": true,
+  "intro": "Extracts residence time, flow, quench and injection settings of the flow reactor. For every set (and sample) in the structure plan below, extract the values the paper reports. A value that holds for every set goes in ONE row with `set` ''; one that differs between sets goes in each set's row; one that differs between the samples of a set goes in each sample's row.",
+  "parameters": [
+    {
+      "column": "residence_time_hr",
+      "description": "Time the reaction solution spends in the heated reactor.",
+      "unit": "h"
+    },
+    {
+      "column": "quench_temperature_C",
+      "description": "Temperature of the cooling bath that quenches the reactor effluent.",
+      "unit": "°C"
+    },
+    {
+      "column": "injection_volume_mL",
+      "description": "Volume of sample solution injected into the flow of hot water.",
+      "unit": "mL"
+    },
+    {
+      "column": "reactor_description",
+      "description": "Type and material of the flow reactor and how the sample is introduced.",
+      "kind": "text"
+    }
+  ],
+  "rules": []
+}

@@ -67,6 +67,9 @@ class ModuleManifest(BaseModel):
     # the compound vocabulary gets every length of a homologous series between the shortest and the longest found
     # in the sample papers ((Gly)2 ... (Gly)13; 2mer_A ... 10mer_A): compound_setup
     compound_series: bool = False
+    # how drafting recognises papers that need the module: {"words": [...]} found in a paper's survey (modules drafted
+    # from papers: module_drafting.py; the app's own modules have their evidence in pack_modules.EVIDENCE)
+    evidence: Dict[str, List[str]] = Field(default_factory=dict)
 
 
 class Module:

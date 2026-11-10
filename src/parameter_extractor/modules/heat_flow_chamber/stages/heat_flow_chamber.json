@@ -1,0 +1,77 @@
+{
+  "name": "heat_flow_chamber",
+  "label": "Thermal gradient and interface chambers",
+  "description": "Extracts chamber gradient, geometry, flow settings and accumulation results for each chamber experiment.",
+  "origin": "thermal gradient and gas-water interface chambers",
+  "schema_name": "HeatFlowChamberResult",
+  "system_prompt": "Extract values from a scientific paper. Report only what the paper states.",
+  "trigger": {
+    "keywords": [
+      "thermophoresis",
+      "Soret coefficient",
+      "gas-water interface",
+      "heat flow chamber",
+      "thermal gradient",
+      "microfluidic chamber"
+    ],
+    "min_hits": 3
+  },
+  "per": "sample",
+  "set_word": "experiment",
+  "error_suffixes": [
+    "_err_plus",
+    "_err_minus"
+  ],
+  "suffix_separator": "_",
+  "table_images": true,
+  "intro": "Extracts chamber gradient, geometry, flow settings and accumulation results for each chamber experiment. For every set (and sample) in the structure plan below, extract the values the paper reports. A value that holds for every set goes in ONE row with `set` ''; one that differs between sets goes in each set's row; one that differs between the samples of a set goes in each sample's row.",
+  "parameters": [
+    {
+      "column": "warm_side_temperature_C",
+      "description": "Temperature of the heated side of the chamber.",
+      "unit": "°C"
+    },
+    {
+      "column": "cold_side_temperature_C",
+      "description": "Temperature of the cooled side of the chamber.",
+      "unit": "°C"
+    },
+    {
+      "column": "temperature_difference_C",
+      "description": "Temperature difference between the warm and cold sides of the chamber.",
+      "unit": "°C"
+    },
+    {
+      "column": "chamber_thickness_um",
+      "description": "Thickness or gap height of the microfluidic chamber or fracture.",
+      "unit": "µm"
+    },
+    {
+      "column": "liquid_flow_rate",
+      "description": "Liquid inflow rate into the chamber.",
+      "unit": "nl/s"
+    },
+    {
+      "column": "gas_flow_rate_mL_min",
+      "description": "Gas flow rate across the gas-water interface.",
+      "unit": "mL/min"
+    },
+    {
+      "column": "flow_velocity",
+      "description": "Measured velocity of water flow or tracer beads in the chamber.",
+      "unit": "µm/s"
+    },
+    {
+      "column": "accumulation_factor_fold",
+      "description": "Local concentration at the interface, meniscus or chamber section relative to the bulk or initial concentration.",
+      "uncertainties": true
+    },
+    {
+      "column": "soret_coefficient",
+      "description": "Thermophoretic Soret coefficient of a solute.",
+      "unit": "10^-3 1/K",
+      "uncertainties": true
+    }
+  ],
+  "rules": []
+}

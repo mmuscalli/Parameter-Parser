@@ -216,11 +216,21 @@ def used(draft_or_manifest) -> List[str]:
 
 
 def evidence_for(papers) -> Dict[str, Dict[str, List[str]]]:
-    """{module: {paper: why}} for the modules whose evidence the sample papers show."""
+    """{module: {paper: why}} for the modules whose evidence the sample papers show: the app's own by their rules
+    (EVIDENCE), any other module by the evidence words in its module.json (module_drafting)."""
     out = {}
     for mid, fn in EVIDENCE.items():
         found = fn(papers)
         if found and mid in module_store.available():
+            out[mid] = found
+    for mid, mod in module_store.available().items():
+        words = (mod.manifest.evidence or {}).get("words") or []
+        if mid in EVIDENCE or not words:
+            continue
+        pattern = r"(?<![a-z0-9])(?:" + "|".join(re.escape(w.lower()).replace(r"\ ", r"[\s_-]+") for w in words) \
+            + r")s?(?![a-z0-9])"
+        found = _papers_saying(papers, pattern)
+        if found:
             out[mid] = found
     return out
 

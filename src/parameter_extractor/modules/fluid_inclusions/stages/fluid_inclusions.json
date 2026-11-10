@@ -1,0 +1,67 @@
+{
+  "name": "fluid_inclusions",
+  "label": "Fluid inclusions",
+  "description": "Extracts microthermometric and host-mineral data of fluid inclusions for each sample or assemblage.",
+  "origin": "fluid inclusions and hydrothermal deposits",
+  "schema_name": "FluidInclusionsResult",
+  "system_prompt": "Extract values from a scientific paper. Report only what the paper states.",
+  "trigger": {
+    "keywords": [
+      "fluid inclusion",
+      "fluid inclusions",
+      "homogenization temperature",
+      "ice melting temperature",
+      "NaCl equivalent",
+      "NaCl eq",
+      "degree of fill",
+      "microthermometry"
+    ],
+    "min_hits": 3
+  },
+  "per": "sample",
+  "set_word": "experiment",
+  "error_suffixes": [
+    "_err_plus",
+    "_err_minus"
+  ],
+  "suffix_separator": "_",
+  "table_images": true,
+  "intro": "Extracts microthermometric and host-mineral data of fluid inclusions for each sample or assemblage. For every set (and sample) in the structure plan below, extract the values the paper reports. A value that holds for every set goes in ONE row with `set` ''; one that differs between sets goes in each set's row; one that differs between the samples of a set goes in each sample's row.",
+  "parameters": [
+    {
+      "column": "homogenization_temperature_C",
+      "description": "Homogenization temperature (Th) of fluid inclusions.",
+      "unit": "°C"
+    },
+    {
+      "column": "final_ice_melting_temperature_C",
+      "description": "Final ice melting temperature (Tm) of fluid inclusions.",
+      "unit": "°C"
+    },
+    {
+      "column": "salinity_wtpct_NaCl_eq",
+      "description": "Salinity of the fluid inclusions as weight percent NaCl equivalent.",
+      "unit": "wt% NaCl eq."
+    },
+    {
+      "column": "inclusion_size_um",
+      "description": "Size or diameter of the fluid inclusions.",
+      "unit": "µm"
+    },
+    {
+      "column": "degree_of_fill",
+      "description": "Liquid volume fraction of the inclusion at room temperature (0-1 or %, as printed)."
+    },
+    {
+      "column": "inclusion_composition",
+      "description": "Fluid phases in the inclusions (e.g. H2O, CO2, CH4, hydrocarbon).",
+      "kind": "text"
+    },
+    {
+      "column": "host_mineral",
+      "description": "Mineral hosting the fluid inclusions (e.g. calcite, shocked quartz).",
+      "kind": "text"
+    }
+  ],
+  "rules": []
+}
