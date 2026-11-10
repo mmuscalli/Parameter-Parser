@@ -7,6 +7,7 @@ with the NASA Exoplanet Archive -- using Mickey's archive export of 11 Com b
 
 Run with: python tests/test_exoplanets.py
 """
+import _isolation  # noqa: F401,E402 -- first: the user's own data never reaches a test (tests/_isolation.py)
 import csv
 import sys
 import tempfile
@@ -15,6 +16,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
+import pack_facts as pf  # noqa: E402
 from parameter_extractor import packs
 from parameter_extractor.calculators import exoplanets as exo
 from parameter_extractor.ingestion.flatten_to_template import row_to_template_dict, set_row_value
@@ -42,14 +44,16 @@ def test_pack_and_template():
         assert not pack.uses("chemistry") and pack.uses("archive_validation") and pack.manifest.compact_text
         from parameter_extractor.stages.optional import load_specs
         specs = load_specs()
-        assert list(specs) == ["planet_parameters", "stellar_parameters", "system_and_discovery"]
+        assert pf.without_module_steps(list(specs), "exoplanets") == ["planet_parameters", "stellar_parameters",
+                                                                       "system_and_discovery"]
         planet = specs["planet_parameters"]
         assert planet.per == "sample" and "pl_orbpererr1" in planet.output_columns()
         import re
         is_mode = lambda c: re.search(r"(modal_flag|mode\d(err[12]|desc)?|alt\d(err[12]|lim|method)?)$", c)
-        assert all(c in pack.template_columns for s in specs.values() for c in s.output_columns() if not is_mode(c))
+        own = [s for n, s in specs.items() if n not in pf.module_step_names("exoplanets")]   # modules bring their own
+        assert all(c in pack.template_columns for s in own for c in s.output_columns() if not is_mode(c))
         from parameter_extractor.registry import standard_columns
-        modes = [c for s in specs.values() for c in s.output_columns() if is_mode(c)]
+        modes = [c for s in own for c in s.output_columns() if is_mode(c)]
         assert "pl_orbinclmode2err1" in modes and "pl_orbinclmodal_flag" in modes and set(modes) <= set(standard_columns())
         Item, _ = planet.models()
         assert {"err_plus", "err_minus", "limit", "text", "unit", "sample_label"} <= set(Item.model_fields)

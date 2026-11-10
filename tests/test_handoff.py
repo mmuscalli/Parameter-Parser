@@ -6,6 +6,7 @@ off unless the developer switch is set; a bad answer is reported, not used. No A
 
 Run with: python tests/test_handoff.py
 """
+import _isolation  # noqa: F401,E402 -- first: the user's own data never reaches a test (tests/_isolation.py)
 import os
 import shutil
 import sys
@@ -16,6 +17,7 @@ from unittest.mock import patch
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
+import pack_facts as pf  # noqa: E402
 from parameter_extractor import dev_features, packs
 from parameter_extractor.config.run_config import RunConfig
 from parameter_extractor.errors import AnswersNeededError, PipelineError
@@ -77,10 +79,14 @@ def test_rounds_of_requests_reproduce_the_reference_run():
         else:
             raise AssertionError("never finished")
         packs.activate("prebiotic_chemistry")
-        assert rounds == [["metadata", "structure_planner"],
-                          ["analysis", "chemistry", "experimental_conditions", "kinetics"]], rounds
+        # the row planning first, then the steps at once: every step the reference recorded, plus any the pack
+        # has gained since (linked modules), never a step the pack doesn't have
+        assert len(rounds) == 2 and rounds[0] == ["metadata", "structure_planner"], rounds
+        recorded = {f.name.split(".")[0] for f in REF.glob("*.output.json")} - set(rounds[0])
+        steps = set(pf.request_steps("prebiotic_chemistry"))
+        assert recorded & steps <= set(rounds[1]) <= steps, rounds
         assert any((folder / "images").iterdir())                         # table pages, for reading tables
-        assert result.csv_path.read_text() == (REF / "expected_extracted.csv").read_text()
+        assert result.csv_path.read_text() == (REF / "expected_extracted.csv").read_text(), pf.why_replay_differs()
         assert result.cost_usd in (None, 0)                               # nothing billed
 
 

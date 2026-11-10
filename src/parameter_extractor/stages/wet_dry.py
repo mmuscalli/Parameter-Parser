@@ -6,7 +6,8 @@ from parameter_extractor.stages.optional import load_specs, run_optional_stage
 
 
 def has_cycling(structure) -> bool:
-    return load_specs()["wet_dry"].triggered(structure)
+    spec = load_specs().get("wet_dry")             # None when the active pack doesn't link the Wet-dry module
+    return bool(spec and spec.triggered(structure))
 
 
 def run_wet_dry(ctx, paper_text, structure):

@@ -5,6 +5,7 @@ built-in columns protected, and the effect on the next run. No API calls.
 
 Run with: python tests/test_registry.py
 """
+import _isolation  # noqa: F401,E402 -- first: the user's own data never reaches a test (tests/_isolation.py)
 import json
 import os
 import sys

@@ -4,6 +4,7 @@ app's unit suffixes, the template's examples are replaced, categories / stages /
 the pack loads and passes its check, the report is written, a paper that fails doesn't stop the rest, the id is
 checked before anything is paid for; the New research area dialog runs it end to end. No API, no network.
 """
+import _isolation  # noqa: F401,E402 -- first: the user's own data never reaches a test (tests/_isolation.py)
 import json
 import os
 import sys

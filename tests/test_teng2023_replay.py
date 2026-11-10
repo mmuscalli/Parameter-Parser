@@ -15,6 +15,7 @@ planets. No API calls, no network. ~1 min (42 heavy pages).
 
 Run with: python tests/test_teng2023_replay.py
 """
+import _isolation  # noqa: F401,E402 -- first: the user's own data never reaches a test (tests/_isolation.py)
 import csv
 import json
 import sys

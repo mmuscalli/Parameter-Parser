@@ -6,6 +6,7 @@ pipeline helpers (column order, data types, prompt listing) and both windows. No
 
 Run with: python tests/test_research_areas.py
 """
+import _isolation  # noqa: F401,E402 -- first: the user's own data never reaches a test (tests/_isolation.py)
 import json
 import os
 import sys
@@ -229,7 +230,8 @@ def test_categories_window():
             vc.use_local({})
             assert vc.by_id("light_source") is None
             vc.use_local(VariableRegistry(path).local_categories)
-            assert [c.id for c in vc.categories(pack)].index("light_source") == 9
+            ids = [c.id for c in vc.categories(pack)]        # after the pack's (and its modules') own, before the shared
+            assert ids.index("light_source") == ids.index("metadata") - 1 and ids.index("analysis") < ids.index("light_source")
 
             dlg = CategoriesDialog(path)                     # reset an app category; back to the bundled one
             dlg.builtin_confirmed = True

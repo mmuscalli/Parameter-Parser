@@ -4,6 +4,7 @@ the ids (structure_plan.step_plan_json / plan_ids / expand_ids, applied in api_c
 profile's row planning caches nothing its Haiku steps can't read, and one warm-up request caches the paper for them;
 one chemistry species without a value doesn't fail the step. No API calls.
 """
+import _isolation  # noqa: F401,E402 -- first: the user's own data never reaches a test (tests/_isolation.py)
 import os
 import sys
 from pathlib import Path

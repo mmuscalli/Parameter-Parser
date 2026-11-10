@@ -6,6 +6,7 @@ No API calls; the GUI part runs offscreen.
 
 Run with: python tests/test_value_types.py
 """
+import _isolation  # noqa: F401,E402 -- first: the user's own data never reaches a test (tests/_isolation.py)
 import os
 import sys
 import tempfile
@@ -15,6 +16,7 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
+import pack_facts as pf  # noqa: E402
 from parameter_extractor import packs
 from parameter_extractor.value_types import coerce, column_type, whole_number
 
@@ -30,7 +32,7 @@ def test_whole_numbers_and_coercion():
 
 
 def test_column_types():
-    packs.activate("prebiotic_chemistry")
+    packs.activate(pf.linked("prebiotic_chemistry", "wet_dry").id)    # cycle_number: the Wet-dry module's
     from parameter_extractor.registry import VariableRegistry
     reg = VariableRegistry(None)
     assert [column_type(c, reg) for c in ("replicates", "cycle_number", "pH_buffer", "initial_temperature_C",

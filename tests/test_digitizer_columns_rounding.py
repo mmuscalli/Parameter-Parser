@@ -4,6 +4,7 @@ chosen precision (Mickey, 2026-10-31, from Riggi2023 Fig. 2). No API calls; the 
 
 Run with: python tests/test_digitizer_columns_rounding.py
 """
+import _isolation  # noqa: F401,E402 -- first: the user's own data never reaches a test (tests/_isolation.py)
 import os
 import sys
 import tempfile

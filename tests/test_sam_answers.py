@@ -6,6 +6,7 @@ No API calls, no network.
 
 Run with: python tests/test_sam_answers.py
 """
+import _isolation  # noqa: F401,E402 -- first: the user's own data never reaches a test (tests/_isolation.py)
 import csv
 import sys
 import tempfile
@@ -14,6 +15,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
+import pack_facts as pf  # noqa: E402
 from parameter_extractor import packs
 
 
@@ -89,7 +91,7 @@ def test_kinetics_stage():
     from parameter_extractor import variable_categories as vc
     from parameter_extractor.schemas.structure_plan import PlannedSample, PlannedSet, StructurePlan
     from parameter_extractor.stages.optional import load_specs
-    spec = load_specs()["kinetics"]
+    spec = pf.module_step("kinetics")                        # the Kinetics module's step
     plan = StructurePlan(experiment_sets=[PlannedSet(set_label="A", set_type="Time Series",
                                                      varying_condition_summary="time", source_table_or_section="T1",
                                                      samples=[PlannedSample(sample_label="1 h", source="T1")])],

@@ -5,6 +5,7 @@ provenance. No API calls.
 
 Run with: python tests/test_column_order.py
 """
+import _isolation  # noqa: F401,E402 -- first: the user's own data never reaches a test (tests/_isolation.py)
 import json
 import sys
 import tempfile
@@ -13,6 +14,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
+import pack_facts as pf  # noqa: E402
 from parameter_extractor import packs
 from parameter_extractor.column_order import ColumnOrder
 
@@ -29,9 +31,12 @@ def test_prebiotic_blocks_and_derived_columns():
     assert cols[:4] == ["entry_number", "full_id", "set_id", "sample_id"]
     assert cols[-2:] == ["source_notes", "extraction_confidence"]
     labels = [label for label, _ in order.groups(cols)]
-    assert labels == ["Row", "Metadata", "Experimental Methodology", "Reaction Conditions", "Flow reactor",
-                      "Mineral surfaces", "Analysis",
-                      "Solution Preparation", "Starting Species", "Products", "Kinetics", "Other", "Provenance"]
+    # the core blocks in this order; blocks of linked modules sit between them by their table order
+    assert labels[:2] == ["Row", "Metadata"] and labels[-2:] == ["Other", "Provenance"]
+    assert pf.in_order(labels, ["Experimental Methodology", "Reaction Conditions", "Analysis", "Solution Preparation",
+                                "Starting Species", "Products"])
+    assert pf.present_in_order(labels, ["Products", "Kinetics", "Other"])
+    assert len(labels) == len(set(labels))                               # each block named once
     block = {c: label for label, cs in order.groups(cols) for c in cs}
     assert block["light_conditions"] == block["positive_control"] == "Experimental Methodology"   # chosen
     assert block["mixing_rate_rpm"] == block["solid_material_mass_range_g"] == "Reaction Conditions"

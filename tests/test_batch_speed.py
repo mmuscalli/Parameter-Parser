@@ -7,6 +7,7 @@ Stand-ins for the network and the API; no API calls.
 
 Run with: python tests/test_batch_speed.py
 """
+import _isolation  # noqa: F401,E402 -- first: the user's own data never reaches a test (tests/_isolation.py)
 import json
 import sys
 import tempfile

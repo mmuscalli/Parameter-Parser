@@ -7,6 +7,7 @@ replaced) and produces its own CSV. No API calls.
 
 Run with: python tests/test_domain_packs.py
 """
+import _isolation  # noqa: F401,E402 -- first: the user's own data never reaches a test (tests/_isolation.py)
 import csv
 import json
 import sys
@@ -19,6 +20,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "tests"))
 sys.path.insert(0, str(ROOT / "src"))
 
+import pack_facts as pf  # noqa: E402
 from parameter_extractor import api_client, packs
 from parameter_extractor.config.run_config import RunConfig
 from parameter_extractor.pipeline import run_pipeline
@@ -33,15 +35,20 @@ def test_prebiotic_pack_carries_the_old_defaults():
     assert "author_list" in pack.template_columns and "author1" not in pack.template_columns
     assert not {"cycle_number", "cycle_duration_hr", "initial_Na+_aq_mM", "isModeled"} & set(pack.template_columns)
     # methodology became the configurable experimental_conditions stage (2026-10-22)
-    assert not pack.uses("methodology") and pack.uses("chemistry") and pack.uses("peptide_totals")
-    assert pack.uses("water_type") and pack.uses("results_check")
-    # the chemistry prompt comes from the Solution chemistry module the pack links (2026-11-09)
-    assert pack.prompt_path("chemistry").parent.name == "prompts" and \
-        pack.prompt_path("chemistry").parent.parent.name == "solution_chemistry"
+    assert not pack.uses("methodology") and pack.uses("results_check")
+    mods = pf.module_ids("prebiotic_chemistry")
+    # what the linked modules bring follows the links (2026-11-09), so this holds whichever are linked
+    assert pack.uses("peptide_totals") == ("peptides_oligomers" in mods)
+    assert pack.uses("chemistry") == pack.uses("water_type") == ("solution_chemistry" in mods)
+    if "solution_chemistry" in mods:      # the chemistry prompt comes from the Solution chemistry module
+        assert pack.prompt_path("chemistry").parent.name == "prompts" and \
+            pack.prompt_path("chemistry").parent.parent.name == "solution_chemistry"
     assert pack.prompt_path("metadata").parent.parent.name == "parameter_extractor"   # generic: the app's
     from parameter_extractor.stages.optional import load_specs
-    assert list(load_specs()) == ["experimental_conditions", "kinetics", "wet_dry", "oligomer_linkage",
-                                 "mineral_surfaces", "flow_reactor"]
+    steps = list(load_specs())
+    from_modules = pf.module_step_names("prebiotic_chemistry")
+    assert steps[0] == "experimental_conditions"                          # the pack's own step first
+    assert steps[len(steps) - len(from_modules):] == from_modules         # then the modules' steps
 
 
 def _write_pack(base: Path) -> Path:

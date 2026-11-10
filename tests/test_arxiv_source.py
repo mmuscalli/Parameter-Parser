@@ -6,6 +6,7 @@ from its arXiv ID, replaying the model's recorded answers. A stand-in for the ne
 
 Run with: python tests/test_arxiv_source.py
 """
+import _isolation  # noqa: F401,E402 -- first: the user's own data never reaches a test (tests/_isolation.py)
 import gzip
 import json
 import sys

@@ -5,6 +5,7 @@ check, the registry, a run through a pack made from the template, and the editor
 
 Run with: python tests/test_formulas.py
 """
+import _isolation  # noqa: F401,E402 -- first: the user's own data never reaches a test (tests/_isolation.py)
 import os
 import sys
 import tempfile

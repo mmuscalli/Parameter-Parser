@@ -5,6 +5,7 @@ dataset folder; each test skips if its paper isn't there. No API calls.
 
 Run with: python tests/test_equations.py
 """
+import _isolation  # noqa: F401,E402 -- first: the user's own data never reaches a test (tests/_isolation.py)
 import sys
 import tempfile
 from pathlib import Path

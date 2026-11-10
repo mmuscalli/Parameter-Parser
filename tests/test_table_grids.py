@@ -6,6 +6,7 @@ on this computer.
 
 Run with: python tests/test_table_grids.py
 """
+import _isolation  # noqa: F401,E402 -- first: the user's own data never reaches a test (tests/_isolation.py)
 import sys
 import tempfile
 from pathlib import Path

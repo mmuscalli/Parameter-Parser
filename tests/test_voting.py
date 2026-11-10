@@ -5,6 +5,7 @@ No API calls.
 
 Run with: python tests/test_voting.py
 """
+import _isolation  # noqa: F401,E402 -- first: the user's own data never reaches a test (tests/_isolation.py)
 import csv
 import json
 import sys
@@ -16,6 +17,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "tests"))
 sys.path.insert(0, str(ROOT / "src"))
 
+import pack_facts as pf  # noqa: E402
 from parameter_extractor import api_client, packs
 from parameter_extractor.config.run_config import RunConfig
 from parameter_extractor.ingestion.data_location import location
@@ -110,9 +112,13 @@ def test_three_passes_through_the_pipeline():
     with tempfile.TemporaryDirectory() as tmp, patch.object(api_client, "_send", send):
         result = run_pipeline(PDF, RunConfig.from_settings(api_key="x", output_dir=Path(tmp), registry_path=None,
                                                            passes=3))
-        assert result.csv_path.read_text() == (REF / "expected_extracted.csv").read_text()
-        # chemistry, conditions + kinetics (eder1994 mentions rate constants; recorded before that step: empty)
-        assert sorted(s for s in seen if s) == sorted([".pass1", ".pass2", ".pass3"] * 3)
+        assert result.csv_path.read_text() == (REF / "expected_extracted.csv").read_text(), pf.why_replay_differs()
+        # every voted step (chemistry, conditions, and the module steps eder1994 triggers -- kinetics: rate
+        # constants, recorded before that step existed, so empty) asked once per pass
+        from collections import Counter
+        passes = Counter(s for s in seen if s)
+        assert set(passes) == {".pass1", ".pass2", ".pass3"} and len(set(passes.values())) == 1
+        assert passes[".pass1"] >= 2
         for stage in ("chemistry", "experimental_conditions"):
             assert all((result.run_dir / f"{stage}.pass{i}.output.json").is_file() for i in (1, 2, 3))
             assert json.loads((result.run_dir / f"{stage}.audit.json").read_text())["voted_from"] == 3

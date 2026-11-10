@@ -12,6 +12,7 @@ skips the end-to-end tests otherwise.
 
 Run with: python -m pytest tests/ -v   (or just: python tests/test_pipeline_offline.py)
 """
+import _isolation  # noqa: F401,E402 -- first: the user's own data never reaches a test (tests/_isolation.py)
 import json
 import re
 import sys
@@ -24,6 +25,7 @@ from unittest.mock import patch
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
+import pack_facts as pf  # noqa: E402
 from parameter_extractor import api_client
 from parameter_extractor import errors
 from parameter_extractor.config.run_config import RunConfig
@@ -97,23 +99,27 @@ def test_replay_reproduces_committed_csv():
         result = run_pipeline(PDF, _config(Path(tmp)), on_progress=events.append)
 
         committed = (REPLAY_DIR / "eder1994_auto_extracted.csv").read_text()
-        assert result.csv_path.read_text() == committed, "replayed CSV differs from committed run"
+        assert result.csv_path.read_text() == committed, pf.why_replay_differs()
         assert len(result.rows) == 42
 
         # metadata runs alongside the structure step, then conditions and chemistry together;
         # each is reported as it finishes, so their order varies -- the step count doesn't
         steps = [e for e in events if e.stage != "parallel"]
-        # (+ the kinetics step since 2026-11-03: eder1994 reports rate constants; recorded before it existed, so
-        # replayed as finding nothing)
-        # (the count grows to 7 once the structure plan shows the keyword-triggered step will run)
-        # (+ the analysis step since 2026-11-07, also replayed as finding nothing: 8)
-        assert [e.step for e in steps] == [1, 2, 3, 4, 5, 6, 7, 8] and [e.total_steps for e in steps] == [6, 6] + [8] * 6
+        # how many steps depends on what the pack runs for eder1994 (the kinetics step since 2026-11-03, the analysis
+        # step since 2026-11-07 -- recorded before they existed, so replayed as finding nothing; any step a module
+        # linked later brings): counted from the run, then checked for its rules
+        n = len(steps)
+        assert [e.step for e in steps] == list(range(1, n + 1))
+        assert all(e.total_steps == n for e in steps[2:])                   # known once the rows are planned
+        assert steps[0].total_steps == steps[1].total_steps <= n
         assert [e.stage for e in steps][:2] == ["parse", "structure_planner"] and steps[-1].stage == "assemble"
-        assert sorted(e.stage for e in steps[2:7]) == ["analysis", "chemistry", "experimental_conditions", "kinetics",
-                                                       "metadata"]
+        middle = {e.stage for e in steps[2:-1]}
+        paper_steps = set(pf.request_steps("prebiotic_chemistry"))
+        assert {"metadata", "chemistry", "experimental_conditions", "kinetics"} & (paper_steps | {"metadata"}) <= middle
+        assert middle <= paper_steps | {"metadata"}
         assert any(e.stage == "parallel" and "experimental conditions" in e.message for e in events)
-        assert [u.stage for u in result.usage] == ["structure_planner", "metadata", "experimental_conditions",
-                                               "kinetics", "analysis", "chemistry"]
+        used = [u.stage for u in result.usage]
+        assert used[:2] == ["structure_planner", "metadata"] and set(used[2:]) == middle - {"metadata"}
 
         audits = [json.loads((REPLAY_DIR / f"{s}.audit.json").read_text())
                   for s in STAGE_FOR_MODEL.values() if (REPLAY_DIR / f"{s}.audit.json").exists()]

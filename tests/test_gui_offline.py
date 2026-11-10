@@ -10,6 +10,7 @@ Set GUI_SCREENSHOT_DIR to also save PNGs of each tab for a visual check.
 
 Run with: python tests/test_gui_offline.py   (needs: pip install -e ".[gui]")
 """
+import _isolation  # noqa: F401,E402 -- first: the user's own data never reaches a test (tests/_isolation.py)
 import os
 import sys
 import tempfile
@@ -29,6 +30,7 @@ except ImportError:
     print("SKIP: PySide6 not installed (pip install -e \".[gui]\")")
     raise SystemExit(0)
 
+import pack_facts as pf  # noqa: E402
 from parameter_extractor import api_client
 from parameter_extractor.gui import key_store, main_window
 from parameter_extractor.gui import error_log
@@ -581,6 +583,16 @@ def test_archive_adopted_rows():
         assert main_window.MainWindow._archive_marks(Path(tmp) / "none") == ({}, {})
 
 
+def _panel_steps(pack_id) -> list:
+    """What the Parameters panel lists for a data pack: its chemistry step (when it has one) first, then every
+    switchable step in run order -- taken from the pack, so linking or unlinking a module changes the expectation."""
+    from parameter_extractor import packs
+    from parameter_extractor.stages.optional import toggleable_stages
+    pack = packs.available()[pack_id]
+    names = [t.name for t in toggleable_stages(pack)]
+    return (["chemistry"] if pack.uses("chemistry") and "chemistry" not in names else []) + names
+
+
 def test_stage_toggles():
     """Research area -> its switchable stages, as groups in the Parameters panel (2026-11-08); a stage unticked is
     skipped (checked with a cycling paper, truman2024, whose wet-dry stage would otherwise run); choices are kept per
@@ -589,28 +601,28 @@ def test_stage_toggles():
     root = Path(__file__).resolve().parents[1]
     truman = root.parent / "Paper Files" / "Paper Lists" / "Initial Easy Papers" / "Truman2024" / "truman2024.pdf"
     keys = FakeKeyStore()
+    pre = pf.linked("prebiotic_chemistry", "wet_dry").id       # a pack with the Wet-dry module's step (Prebiotic itself)
     with tempfile.TemporaryDirectory() as tmp, patch.object(main_window, "key_store", keys):
         w = _window(keys, Path(tmp))
         w.pack_combo.setCurrentIndex(w.pack_combo.findData("exoplanets"))
-        assert list(w.params.groups) == ["planet_parameters", "stellar_parameters", "system_and_discovery",
-                                         "fit_models"]
+        assert list(w.params.groups) == _panel_steps("exoplanets") and "fit_models" in w.params.groups
         assert all(w.params.stage_on(n) for n in w.params.groups)
         assert "EXOFAST" in w.params.groups["fit_models"].toolTip(0)
         w.params.set_stage("fit_models", False)
         assert w.optional_stage_choices()["fit_models"] == "off" and not w.params.focused
         assert "without Fitting models" in w.mode_label.text()                 # still a full extraction
-        w.pack_combo.setCurrentIndex(w.pack_combo.findData("prebiotic_chemistry"))
-        assert list(w.params.groups) == ["chemistry", "experimental_conditions", "kinetics", "wet_dry", "oligomer_linkage",
-                                     "mineral_surfaces", "flow_reactor", "analysis"]
+        w.pack_combo.setCurrentIndex(w.pack_combo.findData(pre))
+        groups = list(w.params.groups)                  # the core step first, then the area's switchable steps
+        assert groups == _panel_steps(pre) and groups[0] == "chemistry" and "wet_dry" in groups
         assert "when the paper calls for it" in w.params.groups["wet_dry"].text(0)
         w.pack_combo.setCurrentIndex(w.pack_combo.findData("exoplanets"))
         assert not w.params.stage_on("fit_models")                            # remembered for this area
-        w.pack_combo.setCurrentIndex(w.pack_combo.findData("prebiotic_chemistry"))
+        w.pack_combo.setCurrentIndex(w.pack_combo.findData(pre))
         w.close()
         w2 = main_window.MainWindow()                                       # and across restarts
         w2.pack_combo.setCurrentIndex(w2.pack_combo.findData("exoplanets"))
         assert not w2.params.stage_on("fit_models")
-        w2.pack_combo.setCurrentIndex(w2.pack_combo.findData("prebiotic_chemistry"))
+        w2.pack_combo.setCurrentIndex(w2.pack_combo.findData(pre))
         w2.close()
         if not truman.is_file():
             print(f"SKIP (run part): needs {truman}"); return
@@ -627,7 +639,7 @@ def test_stage_toggles():
                 patch.object(main_window, "VariableReviewDialog", NoClickReview):
             w = _window(keys, Path(tmp))
             w.registry_path = None                                           # template + standard columns only
-            w.pack_combo.setCurrentIndex(w.pack_combo.findData("prebiotic_chemistry"))
+            w.pack_combo.setCurrentIndex(w.pack_combo.findData(pre))
             w.params.set_stage("wet_dry", ticked)
             w.pdf_edit.setText(str(truman)); w.key_edit.setText("replay-not-a-real-key")
             w.run_btn.click()

@@ -12,6 +12,7 @@ import json
 import os
 import subprocess
 import sys
+import tempfile
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
@@ -23,8 +24,10 @@ TIMES = ROOT / "tests" / ".last_times.json"     # last run's time per file: the 
 
 def run(path: Path) -> dict:
     start = time.time()
-    env = dict(os.environ, QT_QPA_PLATFORM="offscreen", PARAMETER_EXTRACTOR_NO_KEYCHAIN="1")   # never the real keychain
-    proc = subprocess.run([sys.executable, str(path)], cwd=ROOT, env=env, capture_output=True, text=True)
+    with tempfile.TemporaryDirectory(prefix="pe-test-data-") as data:      # an empty app-data folder per file: never
+        env = dict(os.environ, QT_QPA_PLATFORM="offscreen", PARAMETER_EXTRACTOR_NO_KEYCHAIN="1",  # the user's packs,
+                   PARAMETER_EXTRACTOR_DATA_DIR=data)                     # modules, registry, caches or keychain
+        proc = subprocess.run([sys.executable, str(path)], cwd=ROOT, env=env, capture_output=True, text=True)
     out = proc.stdout + proc.stderr
     return {"file": path.name, "seconds": round(time.time() - start, 1), "code": proc.returncode,
             "skipped": "SKIP" in out, "tail": "\n".join(out.strip().splitlines()[-8:]), "out": out}

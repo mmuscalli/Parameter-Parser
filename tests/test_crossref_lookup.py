@@ -12,6 +12,7 @@ logic even though it can't be a live integration test yet.
 
 Run with: python -m pytest tests/ -v   (or just: python tests/test_crossref_lookup.py)
 """
+import _isolation  # noqa: F401,E402 -- first: the user's own data never reaches a test (tests/_isolation.py)
 import sys
 from pathlib import Path
 from unittest.mock import patch, MagicMock

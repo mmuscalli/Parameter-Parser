@@ -6,6 +6,7 @@ grouping for the review, and what's reviewed with suggestions off. No API calls.
 
 Run with: python tests/test_variable_categories.py
 """
+import _isolation  # noqa: F401,E402 -- first: the user's own data never reaches a test (tests/_isolation.py)
 import json
 import sys
 import tempfile
@@ -24,6 +25,7 @@ from parameter_extractor.schemas.chemistry import ChemistryExtraction, SoluteEnt
 from parameter_extractor.schemas.methodology import OtherParameter, empty_methodology
 from parameter_extractor.schemas.variables import TermFinding, TermSearch
 from parameter_extractor.stages.optional import for_run, load_specs
+import pack_facts as pf
 from test_new_variables import _add_extras
 from test_pipeline_offline import PDF, _replay_send
 
@@ -35,21 +37,31 @@ def _other(name, value, category=""):
 def test_categories_per_pack():
     packs.activate("prebiotic_chemistry")
     ids = [c.id for c in vc.categories()]
+    shared = ["metadata", "methodology", "other", "figure", "assumed"]
+    # the pack's own categories in its order, then those its modules bring, then the shared ones
+    # (taken from the pack: linking a module adds its categories without breaking this)
+    own = [c["id"] for c in pf.pack("prebiotic_chemistry").own_manifest.variable_categories]
+    assert ids == own + pf.module_category_ids("prebiotic_chemistry") + shared
     # kinetics before products: its columns ('..._rate_mM_hr') are claimed before the products' 'sampled_' pattern
-    assert ids == ["starting_species", "kinetics", "products", "solution_prep", "conditions", "product_properties",
-                   "analysis", "mineral_surfaces", "flow_reactor", "metadata", "methodology", "other", "figure", "assumed"]
-    assert [c.id for c in vc.assignable()] == ["kinetics", "solution_prep", "conditions", "product_properties",
-                                               "analysis", "mineral_surfaces", "flow_reactor", "metadata", "methodology", "other"]
+    assert pf.in_order(ids, ["starting_species", "kinetics", "products"])
+    assignable = [c.id for c in vc.assignable()]
+    assert assignable == [i for i in ids if i in assignable]                       # same order
+    assert not {"starting_species", "products", "figure", "assumed"} & set(assignable)     # filled by the app
+    assert {"kinetics", "solution_prep", "conditions", "product_properties", "analysis"} <= set(assignable)
+    assert assignable[-3:] == ["metadata", "methodology", "other"]
+    assert {c["id"] for c in pf.pack("prebiotic_chemistry").manifest.variable_categories
+            if c.get("module") and c.get("model_assigns", True)} <= set(assignable)
     assert vc.for_source("species", "sampled") == "products" and vc.for_source("species", "initial") == "starting_species"
     assert vc.for_source("species") == "starting_species" and vc.for_source("added_solution") == "solution_prep"
     try:
         packs.activate("exoplanets")
         # its column-only groups (column order) first, then the suggestion categories; only those are the model's
-        assert [c.id for c in vc.categories()] == ["fitting", "discovery", "planet", "star", "system", "observations",
-                                                   "stellar_activity", "data_reduction", "metadata", "methodology",
-                                                   "other", "figure", "assumed"]
-        assert [c.id for c in vc.assignable()] == ["observations", "stellar_activity", "data_reduction", "metadata",
-                                                   "methodology", "other"]
+        exo = [c.id for c in vc.categories()]
+        assert pf.without_module_categories(exo, "exoplanets") == [
+            "fitting", "discovery", "planet", "star", "system", "observations", "stellar_activity", "data_reduction",
+            "metadata", "methodology", "other", "figure", "assumed"]
+        assert pf.without_module_categories([c.id for c in vc.assignable()], "exoplanets") == [
+            "observations", "stellar_activity", "data_reduction", "metadata", "methodology", "other"]
         assert vc.guess("45 min") == "methodology"       # no number category there
         spec = load_specs()["system_and_discovery"]      # the step that collects them
         rule = next(r for r in spec._field_rules() if "`cat` its category" in r)
@@ -78,9 +90,9 @@ def test_open_ended_items_carry_a_category_unless_suggestions_are_off():
     spec = load_specs()["experimental_conditions"]
     _, result = spec.models()
     other = next(d for name, d in result.model_json_schema()["$defs"].items() if name.endswith("Other"))
-    assert other["properties"]["cat"]["enum"] == ["kinetics", "solution_prep", "conditions", "product_properties", "analysis", "mineral_surfaces", "flow_reactor",
-                                                  "metadata", "methodology",
-                                                  "other"]
+    # the model may choose exactly the categories it may assign, in order (the pack's and its modules')
+    assert other["properties"]["cat"]["enum"] == [c.id for c in vc.assignable()]
+    assert {"conditions", "solution_prep", "metadata", "methodology", "other"} <= set(other["properties"]["cat"]["enum"])
     assert "cat" in other["required"] and "default" not in other["properties"]["cat"]
     rule = next(r for r in spec._field_rules() if "`cat` its category" in r)
     assert "`conditions` (" in rule and "one number with its unit" in rule

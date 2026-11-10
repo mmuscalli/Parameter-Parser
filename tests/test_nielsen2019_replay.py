@@ -9,6 +9,7 @@ against the saved archive rows. No API calls, no network. A few seconds.
 
 Run with: python tests/test_nielsen2019_replay.py
 """
+import _isolation  # noqa: F401,E402 -- first: the user's own data never reaches a test (tests/_isolation.py)
 import csv
 import json
 import sys

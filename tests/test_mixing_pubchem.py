@@ -5,6 +5,7 @@ network), and the cost estimates (pricing.py). No API calls.
 
 Run with: python tests/test_mixing_pubchem.py
 """
+import _isolation  # noqa: F401,E402 -- first: the user's own data never reaches a test (tests/_isolation.py)
 import json
 import sys
 import tempfile

@@ -5,6 +5,7 @@ saved digitizations, the registry). No API calls, no network.
 
 Run with: python tests/test_compound_columns.py
 """
+import _isolation  # noqa: F401,E402 -- first: the user's own data never reaches a test (tests/_isolation.py)
 import json
 import sys
 import tempfile
@@ -160,13 +161,13 @@ def test_new_peptides_are_reviewed():
     from parameter_extractor.schemas.methodology import empty_methodology
     reg = VariableRegistry(None)
     assert reg.is_known_column("sampled_Gly-Gly_aq_%yield")                  # in the pack's vocabulary
-    assert not reg.is_known_column("sampled_(Gly)14_aq_%yield") and not reg.is_known_column("sampled_Gly-Ala_aq_mM")
+    assert not reg.is_known_column("sampled_(Gly)90_aq_%yield") and not reg.is_known_column("sampled_Trp-Met-Cys_aq_mM")
     e = lambda name: SoluteEntry(name=name, role="sampled", phase="aq", set_label="A", concentration_value=2.0,
                                  concentration_unit_raw="%", quote="q", source="T1", confidence="high")
-    assert column_for_solute(e("Gly-Ala")) is None
-    found = collect_new_variables(empty_methodology("p"), ChemistryExtraction(solutes=[e("Gly-Ala"), e("Gly-Gly")]),
+    assert column_for_solute(e("Trp-Met-Cys")) is None          # a made-up peptide no vocabulary lists
+    found = collect_new_variables(empty_methodology("p"), ChemistryExtraction(solutes=[e("Trp-Met-Cys"), e("Gly-Gly")]),
                                   reg, None)
-    assert [(v.name, v.proposed_column) for v in found] == [("Gly-Ala", "sampled_Gly-Ala_aq_%yield")]
+    assert [(v.name, v.proposed_column) for v in found] == [("Trp-Met-Cys", "sampled_Trp-Met-Cys_aq_%yield")]
 
 
 def test_new_oligonucleotides_are_reviewed():
@@ -174,7 +175,7 @@ def test_new_oligonucleotides_are_reviewed():
     packs.activate("prebiotic_chemistry")
     from parameter_extractor.registry import VariableRegistry, is_oligonucleotide_column
     reg = VariableRegistry(None)
-    assert is_oligonucleotide_column("sampled_4mer_A_aq_%yield") and not reg.is_known_column("sampled_4mer_A_aq_%yield")
+    assert is_oligonucleotide_column("sampled_37mer_CGU_aq_%yield") and not reg.is_known_column("sampled_37mer_CGU_aq_%yield")
 
 
 def test_new_peptide_on_a_figure_axis():

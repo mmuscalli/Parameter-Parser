@@ -4,6 +4,7 @@ normal run's review suggestions, PubChem's answer for a code corroborated before
 that aren't compounds flagged in a normal run, the user's accepted columns not suggested again as additions.
 No API, no network.
 """
+import _isolation  # noqa: F401,E402 -- first: the user's own data never reaches a test (tests/_isolation.py)
 import os
 import sys
 import tempfile

@@ -5,6 +5,7 @@ windows (gui/pack_windows.py: New research area, the editor's tabs, read-only bu
 
 Run with: python tests/test_pack_editing.py
 """
+import _isolation  # noqa: F401,E402 -- first: the user's own data never reaches a test (tests/_isolation.py)
 import json
 import os
 import sys
@@ -17,6 +18,7 @@ sys.path.insert(0, str(ROOT / "src"))
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 os.environ.setdefault("PARAMETER_EXTRACTOR_NO_KEYCHAIN", "1")      # never the real keychain (macOS asks)
 
+import pack_facts as pf  # noqa: E402
 from parameter_extractor import packs
 from parameter_extractor.pack_editing import PackDraft, check
 
@@ -125,7 +127,10 @@ def test_windows():
         app.processEvents()
         assert editor._calc_names(editor.calc_table) == ["normalize_species"]
         editor.builtin_boxes["chemistry"].setChecked(True)                        # its calculations come up
-        assert editor.calc_table.rowCount() == 10 and editor.other_calc_table.rowCount() == 4
+        from parameter_extractor.pack_editing import CALCULATION_STEP
+        for_chemistry = sum(1 for c in editor_calcs() if CALCULATION_STEP.get(c) == "chemistry")
+        assert for_chemistry > 3 and editor.calc_table.rowCount() == for_chemistry
+        assert editor.other_calc_table.rowCount() == len(editor_calcs()) - for_chemistry
         editor.calc_table.item(3, 0).setCheckState(Qt.CheckState.Checked)        # molar_ratios? -> move it up
         ticked = editor._chosen_calculations()
         assert len(ticked) == 2
@@ -179,7 +184,8 @@ def test_compound_and_analysis_tabs():
     app = QApplication.instance() or QApplication([])
     from parameter_extractor.gui.pack_windows import PackEditor
     from parameter_extractor.pack_editing import analysis_problems
-    built_in = PackEditor(packs.available()["prebiotic_chemistry"].folder)
+    # a pack that links the Solution chemistry and Analysis modules (Prebiotic, or a copy linking them)
+    built_in = PackEditor(pf.linked("prebiotic_chemistry", "solution_chemistry", "analysis").folder)
     assert built_in.tabs.isTabEnabled(built_in.tab_index("Compounds"))
     assert built_in.compound_table.rowCount() == len(built_in.draft.species) > 100
     assert "with a PubChem CID" in built_in.compound_count.text()

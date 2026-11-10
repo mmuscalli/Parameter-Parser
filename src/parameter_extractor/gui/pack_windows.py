@@ -834,7 +834,9 @@ class PackEditor(QDialog):
         return self.tabs.widget(self.tab_index(name))
 
     def tab_index(self, name: str) -> int:
-        return next(i for i in range(self.tabs.count()) if self.tabs.tabText(i) == name)
+        """The tab titled `name`, also when its title carries a count ('Check (1/2)' when the pack has problems)."""
+        return next(i for i in range(self.tabs.count())
+                    if self.tabs.tabText(i) == name or self.tabs.tabText(i).startswith(name + " ("))
 
     def _follow_step(self, step: str, tab: str) -> None:
         """A tab only a built-in step uses is enabled when the step is used -- ticked on the General tab, or brought by

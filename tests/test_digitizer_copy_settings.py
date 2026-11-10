@@ -1,5 +1,6 @@
 """'Use in every coordinate system' in the digitizer (2026-11-08): one coordinate system's rounding / columns / log
 scales copied to all the others, points re-snapped, one undo step. No API calls."""
+import _isolation  # noqa: F401,E402 -- first: the user's own data never reaches a test (tests/_isolation.py)
 import os
 import sys
 from pathlib import Path

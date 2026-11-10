@@ -4,6 +4,7 @@ detection in paper surveys, the analysis / solution-chemistry / kinetics / wet-d
 the prebiotic pack built from them, migrating packs made with copies, drafting linking modules, the editor's Modules
 tab, and the app's own packs refused. No API, no network.
 """
+import _isolation  # noqa: F401,E402 -- first: the user's own data never reaches a test (tests/_isolation.py)
 import json
 import os
 import sys
@@ -17,6 +18,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 sys.path.insert(0, str(ROOT / "tests"))
 
+import pack_facts as pf  # noqa: E402
 from parameter_extractor import pack_modules, packs
 from parameter_extractor.pack_drafting import PaperSurvey, SurveyVariable
 
@@ -103,10 +105,18 @@ def test_solution_chemistry_module():
 
 def test_prebiotic_uses_the_modules():
     pack = packs.get("prebiotic_chemistry") if hasattr(packs, "get") else packs.Pack(packs.BUILTIN_DIR / "prebiotic_chemistry")
-    assert set(pack.module_ids()) >= {"analysis", "solution_chemistry", "kinetics", "wet_dry", "peptides_oligomers"}
-    assert pack.own_manifest.builtin_stages == [] and "chemistry" in pack.manifest.builtin_stages
+    # its steps and calculations come from the modules it links (whichever those are): none written in the pack
+    assert pack.own_manifest.builtin_stages == []
+    mods = pack.module_ids()
+    assert mods and set(mods) == set(pf.module_ids("prebiotic_chemistry"))
+    assert ("chemistry" in pack.manifest.builtin_stages) == ("solution_chemistry" in mods)
     from parameter_extractor.stages.optional import load_specs
-    assert {"experimental_conditions", "kinetics", "wet_dry"} <= set(load_specs(pack))
+    specs = set(load_specs(pack))
+    assert "experimental_conditions" in specs                            # the pack's own step
+    from parameter_extractor import module_settings as ms
+    for mod in pack.modules:                     # every linked module's steps, unless the pack switches one off
+        st = ms.settings_for(pack.own_manifest.module_settings, mod.id).steps
+        assert {f.stem for f in mod.stage_files() if not (f.stem in st and st[f.stem].off)} <= specs, mod.id
 
 
 def test_migrate_copies():

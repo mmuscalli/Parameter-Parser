@@ -2,6 +2,7 @@
 Constructed-parameter groups (scopes.py, 2026-11-08): compounds and instrument families in the Parameters panel narrow
 the chemistry / analysis steps; all unticked switches the step off. No API calls.
 """
+import _isolation  # noqa: F401,E402 -- first: the user's own data never reaches a test (tests/_isolation.py)
 import csv
 import os
 import sys
@@ -15,12 +16,13 @@ sys.path.insert(0, str(ROOT / "src"))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
+import pack_facts as pf  # noqa: E402
 from parameter_extractor import api_client, packs, scopes
 from parameter_extractor.schemas.analysis import AnalysisMethod, AnalysisResult
 
 
 def _pack():
-    return packs.available()["prebiotic_chemistry"]
+    return pf.linked("prebiotic_chemistry", "solution_chemistry", "analysis")      # tests of those two modules
 
 
 def test_groups_list_compounds_and_families():
@@ -31,7 +33,8 @@ def test_groups_list_compounds_and_families():
     assert "Gly" in keys and "NaCl" in keys and len(keys) == len(set(keys))
     families = [i.key for i in gs["analysis"].items]
     assert "nmr" in families and "general" not in families
-    assert not scopes.groups(packs.available()["exoplanets"])        # no chemistry, no analysis vocabulary
+    exo = packs.available()["exoplanets"]                            # only the steps it links
+    assert {g.step for g in scopes.groups(exo)} == {s for s in ("chemistry", "analysis") if exo.uses(s)}
 
 
 def test_prompt_rules_and_filters():
@@ -55,7 +58,7 @@ def test_prompt_rules_and_filters():
 
 def test_chemistry_prompt_narrowed():
     from parameter_extractor.stages import chemistry_extractor
-    packs.activate("prebiotic_chemistry")
+    packs.activate(_pack().id)
     vocab = {"species_names": ["Gly", "NaCl", "KCl"]}
     narrowed = chemistry_extractor.prompt_text("PAPER", "{}", vocab, scope=["Gly"])
     assert "SCOPE OF THIS RUN" in narrowed and '"KCl"' not in narrowed
@@ -100,7 +103,7 @@ def test_panel_scope_groups():
     QSettings().clear()
     from parameter_extractor.gui.parameter_panel import ParameterPanel, STAGE_ROLE
     panel = ParameterPanel()
-    panel.load("prebiotic_chemistry")
+    panel.load(_pack().id)
     assert list(panel.groups)[0] == "chemistry" and "analysis" in panel.scope_groups
     assert panel.scopes() == {} and panel.scope_summary() == ""
     fam = panel.groups["analysis"]

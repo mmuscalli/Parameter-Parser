@@ -6,6 +6,7 @@ standard columns all follow from it. No API calls.
 
 Run with: python tests/test_optional_stages.py
 """
+import _isolation  # noqa: F401,E402 -- first: the user's own data never reaches a test (tests/_isolation.py)
 import json
 import sys
 from pathlib import Path
@@ -14,6 +15,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "tests"))
 sys.path.insert(0, str(ROOT / "src"))
 
+import pack_facts as pf  # noqa: E402
 from parameter_extractor.registry import standard_columns
 from parameter_extractor.schemas.structure_plan import StructurePlan
 from parameter_extractor.stages.optional import StageSpec, load_specs, optional_values, triggered_specs
@@ -23,7 +25,7 @@ STRUCTURE = StructurePlan.model_validate_json((REPLAY_DIR / "structure_planner.o
 
 
 def test_wet_dry_spec():
-    spec = load_specs()["wet_dry"]
+    spec = pf.module_step("wet_dry")                         # the Wet-dry module's step
     Item, Result = spec.models()
     assert Result.__name__ == "WetDryConditions"                     # what replays look up
     assert list(Item.model_fields) == ["set_label", "sample_label", "parameter", "value", "unit", "high", "basis", "quote",
@@ -33,7 +35,7 @@ def test_wet_dry_spec():
         (ROOT / "runs" / "truman2024_auto" / "structure_planner.output.json").read_text())
     assert spec.triggered(truman, "") and len(spec.target_sets(truman)) == 4
     # the wet/dry phase columns are standard columns, in spec order, after any listed ones
-    cols = standard_columns()
+    cols = standard_columns(pf.linked("prebiotic_chemistry", "wet_dry"))
     assert cols[cols.index("cycle_number"):cols.index("cycle_number") + 7] == ["cycle_number", "cycle_duration_hr", "wet_phase_temperature_C", "wet_phase_duration_hr",
                          "wet_phase_relative_humidity_pct", "dry_phase_temperature_C", "dry_phase_duration_hr"]
     # cycle number / duration: the wet-dry stage's own columns, not the main vocabulary (2026-10-22)
@@ -81,9 +83,13 @@ def test_user_choices():
     truman = StructurePlan.model_validate_json(
         (ROOT / "runs" / "truman2024_auto" / "structure_planner.output.json").read_text())
     names = lambda s, c=None: [x.name for x in triggered_specs(s, "", c)]
-    assert names(truman) == ["experimental_conditions", "wet_dry"] and names(STRUCTURE) == ["experimental_conditions"]
-    assert names(truman, {"wet_dry": "off"}) == ["experimental_conditions"]
-    assert names(STRUCTURE, {"wet_dry": "on"}) == ["experimental_conditions", "wet_dry"]
+    specs = load_specs()
+    # the steps that run for every paper (the pack's and any always-on module step), plus these, in run order
+    runs = lambda *extra: [n for n, sp in specs.items() if sp.trigger.always or n in extra]
+    assert "experimental_conditions" in runs()
+    assert names(truman) == runs("wet_dry") and names(STRUCTURE) == runs()
+    assert names(truman, {"wet_dry": "off"}) == runs()
+    assert names(STRUCTURE, {"wet_dry": "on"}) == runs("wet_dry")
 
 
 

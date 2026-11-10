@@ -5,6 +5,7 @@ and with the requests in the server's format (schema constraint, context length,
 Also: profiles -> models, settings file, refusing a paper that won't fit, an unreachable server, one request at a time.
 No network beyond 127.0.0.1, no API.
 """
+import _isolation  # noqa: F401,E402 -- first: the user's own data never reaches a test (tests/_isolation.py)
 import json
 import os
 import sys
@@ -23,6 +24,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
+import pack_facts as pf  # noqa: E402
 from parameter_extractor import errors, local_models, packs
 from parameter_extractor.config.run_config import RunConfig
 
@@ -116,7 +118,7 @@ def test_ollama_run_reproduces_the_reference():
     try:
         with tempfile.TemporaryDirectory() as tmp:
             result = _run(server, "fake:12b", vision=True, out=Path(tmp))
-            assert result.csv_path.read_text() == (REF / "expected_extracted.csv").read_text()
+            assert result.csv_path.read_text() == (REF / "expected_extracted.csv").read_text(), pf.why_replay_differs()
             assert any(f.kind == "local_model" and "fake:12b" in f.message for f in result.paper_flags)
             summary = json.loads((result.run_dir / "run_summary.json").read_text())
             assert summary["provider"] == "local" and summary["estimated_cost_usd"] == 0
@@ -142,7 +144,7 @@ def test_openai_compatible_run_without_vision():
     try:
         with tempfile.TemporaryDirectory() as tmp:
             result = _run(server, "fake-model", vision=False, out=Path(tmp))
-            assert result.csv_path.read_text() == (REF / "expected_extracted.csv").read_text()
+            assert result.csv_path.read_text() == (REF / "expected_extracted.csv").read_text(), pf.why_replay_differs()
             chem = next(r for _, s, r in server.requests if s == "chemistry")
             assert chem["response_format"]["type"] == "json_schema"
             assert all(part["type"] == "text" for part in chem["messages"][1]["content"])   # images left out

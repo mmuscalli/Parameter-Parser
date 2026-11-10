@@ -6,6 +6,7 @@ an arXiv paper and a local PDF. Stand-ins for the network and the model; no API 
 
 Run with: python tests/test_focused_search.py
 """
+import _isolation  # noqa: F401,E402 -- first: the user's own data never reaches a test (tests/_isolation.py)
 import json
 import sys
 import tempfile
@@ -17,6 +18,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "tests"))
 sys.path.insert(0, str(ROOT / "src"))
 
+import pack_facts as pf  # noqa: E402
 from parameter_extractor import api_client, packs
 from parameter_extractor import focused_search as fs
 from parameter_extractor.config.run_config import RunConfig
@@ -33,7 +35,8 @@ def test_parameters_to_choose_from():
         assert cols["pl_fitsoftware"].kind == "text" and "pl_fitexofastver" in cols
         off = {p.column for p in fs.available_parameters(pack, {"fit_models": "off", "planet_parameters": "off"})}
         assert "pl_fitsoftware" not in off and "pl_orbper" not in off and "st_teff" in off
-        prebiotic = {p.column for p in fs.available_parameters(packs.activate("prebiotic_chemistry"))}
+        prebiotic = {p.column for p in fs.available_parameters(packs.activate(
+            pf.linked("prebiotic_chemistry", "wet_dry").id))}                      # + a module's step
         assert {"initial_temperature_C", "cycle_number"} <= prebiotic
     finally:
         packs.activate("prebiotic_chemistry")

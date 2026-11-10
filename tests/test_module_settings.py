@@ -4,6 +4,7 @@ values, calculations, rules and instrument families on/off, a value stored in an
 trigger words, table images, extra rules -- applied when the pack loads, while the module stays shared; the check's
 findings; the paper flow (pack_overview.py); one paper run end to end with a renamed column. No API calls.
 """
+import _isolation  # noqa: F401,E402 -- first: the user's own data never reaches a test (tests/_isolation.py)
 import csv
 import json
 import os
@@ -18,12 +19,13 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 sys.path.insert(0, str(ROOT / "tests"))
 
+import pack_facts as pf  # noqa: E402
 from parameter_extractor import analysis_vocab, api_client, module_settings as ms, pack_modules, packs
 from parameter_extractor.stages.optional import load_specs
 
 
-def _pack(tmp: Path, modules, settings=None):
-    pack = packs.create_pack("settings_test", "Settings test", base=tmp)
+def _pack(tmp: Path, modules, settings=None, pack_id="settings_test"):
+    pack = packs.create_pack(pack_id, "Settings test", base=tmp)
     pack_modules.add_modules(pack.folder, modules)
     if settings is not None:
         m = json.loads((pack.folder / "pack.json").read_text())
@@ -72,9 +74,9 @@ def test_settings_change_the_pack_not_the_module():
         vocab = analysis_vocab.vocabulary(pack)
         assert "nmr" not in vocab.families and "liquid_chromatography" in vocab.families
         # the module itself (and another pack linking it) is unchanged
-        prebiotic = packs.Pack(packs.BUILTIN_DIR / "prebiotic_chemistry")
-        assert "half_life_hr" in {p.column for p in load_specs(prebiotic)["kinetics"].parameters}
-        assert "nmr" in analysis_vocab.vocabulary(prebiotic).families
+        other = _pack(Path(tmp), ["kinetics", "analysis"], pack_id="plain_test")   # the same modules, no settings
+        assert "half_life_hr" in {p.column for p in load_specs(other)["kinetics"].parameters}
+        assert "nmr" in analysis_vocab.vocabulary(other).families
         # the check: the fixed unit is reported, nothing is an error
         from parameter_extractor.pack_editing import PackDraft, check
         d = PackDraft.load(pack.folder)
@@ -112,14 +114,21 @@ def test_paper_flow():
     from parameter_extractor import pack_overview as po
     flow = po.paper_flow(packs.available()["prebiotic_chemistry"])
     requests = {s.name: s for s in flow if s.kind == "request"}
-    assert {"structure_planner", "metadata", "chemistry", "analysis", "experimental_conditions", "kinetics",
-            "wet_dry"} <= set(requests)
-    assert requests["kinetics"].source == "the Kinetics module" and not requests["kinetics"].always
+    mods = pf.module_ids("prebiotic_chemistry")
+    # one request per step the pack and its linked modules have (taken from the pack: links can change)
+    expected = {"structure_planner", "metadata", "experimental_conditions"} | set(pf.module_step_names("prebiotic_chemistry"))
+    expected |= {s for s, m in (("chemistry", "solution_chemistry"), ("analysis", "analysis")) if m in mods}
+    assert expected <= set(requests)
     assert requests["experimental_conditions"].source == po.PACK and requests["experimental_conditions"].always
-    assert requests["chemistry"].source == "the Solution chemistry module"
+    if "kinetics" in mods:
+        assert requests["kinetics"].source == "the Kinetics module" and not requests["kinetics"].always
     local = {s.name: s.source for s in flow if s.kind == "local"}
-    assert local["amounts"] == "the Solution chemistry module" and local["results_check"] == po.PACK
-    assert po.summary(flow).startswith("5 model requests for every paper, up to 5 more")      # + linkage, minerals, flow
+    assert local["results_check"] == po.PACK
+    if "solution_chemistry" in mods:
+        assert requests["chemistry"].source == "the Solution chemistry module"
+        assert local["amounts"] == "the Solution chemistry module"
+    always = sum(1 for r in requests.values() if r.always)
+    assert po.summary(flow).startswith(f"{always} model requests for every paper, up to {len(requests) - always} more")
     assert "Requests to the AI model" in po.as_html(flow)
 
 
@@ -239,8 +248,9 @@ def test_data_packs_window():
         assert w.pack_combo.currentData() == "exoplanets"
         win.tabs.setCurrentIndex(1)
         mods = [win.module_list.item(i).text() for i in range(win.module_list.count())]
-        assert "Kinetics" in mods
-        win.module_list.setCurrentRow(mods.index("Kinetics"))
+        linked = pack_modules.module_store.available()[pf.module_ids("prebiotic_chemistry")[0]].label
+        assert linked in mods                                   # a module Prebiotic links (whichever comes first)
+        win.module_list.setCurrentRow(mods.index(linked))
         assert "Prebiotic chemistry" in win.module_view.toPlainText()             # linked by
         w.close()
 

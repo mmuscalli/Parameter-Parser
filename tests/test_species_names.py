@@ -5,6 +5,7 @@ Riggi2023: ImpA under three names and three identical values). No API calls.
 
 Run with: python tests/test_species_names.py
 """
+import _isolation  # noqa: F401,E402 -- first: the user's own data never reaches a test (tests/_isolation.py)
 import sys
 from pathlib import Path
 

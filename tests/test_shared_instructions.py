@@ -6,6 +6,7 @@ plan). Replays two reference papers and records the requests; no API calls.
 
 Run with: python tests/test_shared_instructions.py
 """
+import _isolation  # noqa: F401,E402 -- first: the user's own data never reaches a test (tests/_isolation.py)
 import sys
 import tempfile
 from pathlib import Path
@@ -15,6 +16,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "tests"))
 sys.path.insert(0, str(ROOT / "src"))
 
+import pack_facts as pf  # noqa: E402
 from parameter_extractor import api_client
 from parameter_extractor.config.run_config import RunConfig
 from parameter_extractor.pipeline import run_pipeline
@@ -49,7 +51,10 @@ def test_steps_send_only_their_paper_specific_part():
         print("SKIP: eder1994.pdf"); return
     sent, csv = _requests("eder1994", pdf, shared_instructions=True)
     shared = [r for r in sent if r["tools"]]
-    assert {r["stage"] for r in shared} >= {"structure_planner", "chemistry", "experimental_conditions", "analysis"}
+    # every paper-reading step of the pack eder1994 runs goes through the shared instructions
+    expected = {"structure_planner", "experimental_conditions"} | ({"chemistry", "analysis"} &
+                                                                   set(pf.request_steps("prebiotic_chemistry")))
+    assert {r["stage"] for r in shared} >= expected
     for r in shared:
         text = _last_text(r["content"])
         assert f"Follow the instructions for step `{r['stage']}`" in text, r["stage"]

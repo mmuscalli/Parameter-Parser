@@ -6,6 +6,7 @@ naming the step. No API calls.
 
 Run with: python tests/test_dropped_connection.py
 """
+import _isolation  # noqa: F401,E402 -- first: the user's own data never reaches a test (tests/_isolation.py)
 import sys
 import threading
 from pathlib import Path

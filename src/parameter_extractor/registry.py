@@ -26,6 +26,7 @@ from pathlib import Path
 from typing import Dict, Optional, Set
 
 APP_NAME = "Parameter Extractor"
+DATA_DIR_ENV = "PARAMETER_EXTRACTOR_DATA_DIR"
 
 
 def standard_columns(pack=None) -> list:
@@ -75,7 +76,11 @@ def common_column_names() -> list:
 
 def default_registry_path() -> Path:
     """Per-user location: ~/Library/Application Support/Parameter Extractor/ on macOS,
-    %APPDATA%\\Parameter Extractor\\ on Windows, ~/.local/share/parameter-extractor/ elsewhere."""
+    %APPDATA%\\Parameter Extractor\\ on Windows, ~/.local/share/parameter-extractor/ elsewhere. The environment
+    variable PARAMETER_EXTRACTOR_DATA_DIR replaces the folder (the test suite gives every test file an empty one, so
+    the user's own data packs, modules, remembered variables and caches never reach a test)."""
+    if os.environ.get(DATA_DIR_ENV):
+        return Path(os.environ[DATA_DIR_ENV]) / "variable_registry.json"
     if sys.platform == "darwin":
         base = Path.home() / "Library" / "Application Support" / APP_NAME
     elif sys.platform == "win32":

@@ -5,6 +5,7 @@ run keeps (RunConfig.save_images / save_all_figure_images). No API calls.
 
 Run with: python tests/test_ranges_tables_images.py
 """
+import _isolation  # noqa: F401,E402 -- first: the user's own data never reaches a test (tests/_isolation.py)
 import sys
 import tempfile
 from pathlib import Path
@@ -14,6 +15,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "tests"))
 sys.path.insert(0, str(ROOT / "src"))
 
+import pack_facts as pf  # noqa: E402
 from parameter_extractor import packs
 from parameter_extractor.units import format_range, parse_range, range_to_column_unit
 
@@ -127,7 +129,7 @@ def test_images_kept_by_the_options():
             assert len(crops) == figures_kept, (options, crops)
             assert len(list((result.run_dir / "tables").glob("*.png"))) == tables_kept, options
             assert len(result.tables) == tables_kept and result.csv_path.read_text() == \
-                (EDER_REF / "expected_extracted.csv").read_text()
+                (EDER_REF / "expected_extracted.csv").read_text(), pf.why_replay_differs()
 
 
 def test_appendix_figures_and_overprinted_text():

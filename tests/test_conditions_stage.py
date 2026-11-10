@@ -6,6 +6,7 @@ tables/figures and the "no results" flag. Replays eder1994's recorded responses
 
 Run with: python tests/test_conditions_stage.py
 """
+import _isolation  # noqa: F401,E402 -- first: the user's own data never reaches a test (tests/_isolation.py)
 import json
 import sys
 import tempfile
@@ -16,6 +17,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "tests"))
 sys.path.insert(0, str(ROOT / "src"))
 
+import pack_facts as pf  # noqa: E402
 from parameter_extractor import api_client, pipeline
 from parameter_extractor.calculators.water import water_type
 from parameter_extractor.config.run_config import RunConfig
@@ -62,7 +64,7 @@ def test_conditions_spec():
     assert abs(values[(first, "", "initial_temperature_C")].value - 81.0) < 1e-6     # K -> °C
     assert values[(first, "", "initial_temperature_C_err_plus")].value == 1
     assert values[(first, "", "initial_pH")].value == 7.2
-    wet_dry = load_specs()["wet_dry"]
+    wet_dry = pf.module_step("wet_dry")                  # the Wet-dry module's step
     _, WetDry = wet_dry.models()
     cycles = WetDry.model_validate({"rows": [{"set": first, "sample": "s1", "values": [
         {"col": "cycle_number", "v": 3, "u": "", "q": "Cycle 3", "src": "Table 1", "c": "high"}]}]})

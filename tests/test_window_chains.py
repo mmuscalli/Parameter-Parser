@@ -3,6 +3,7 @@ Input passes back along chains of windows (Mickey, 2026-11-09: Help > How data p
 Check, then closing each in turn, left the main window without input). Each chain is driven by timers through the real
 windows; at the end no modal window may remain and the main window must take input. No API calls.
 """
+import _isolation  # noqa: F401,E402 -- first: the user's own data never reaches a test (tests/_isolation.py)
 import os
 import sys
 from pathlib import Path

@@ -9,6 +9,7 @@ has to be readable (eder1994, small); no API calls, no network.
 
 Run with: python tests/test_exoplanet_fits.py
 """
+import _isolation  # noqa: F401,E402 -- first: the user's own data never reaches a test (tests/_isolation.py)
 import csv
 import json
 import sys
@@ -128,8 +129,9 @@ def _send(ctx, *, model, system_prompt, content, response_model, **kw):
             "PlanetParametersResult": _items("planet_parameters"),
             "StellarParametersResult": _stellar(),
             "SystemAndDiscoveryResult": _items("system_and_discovery"),
-            "FitModels": FIT_MODELS}[name]
-    out = response_model.model_validate(data)
+            "FitModels": FIT_MODELS}.get(name)
+    # a step this test has no answer for (a module linked to the pack since): it found nothing
+    out = response_model.model_validate(data) if data is not None else response_model()
     return SimpleNamespace(id="fake", stop_reason="end_turn", parsed_output=out,
                            content=[SimpleNamespace(type="text", text=out.model_dump_json())],
                            usage=SimpleNamespace(input_tokens=10, output_tokens=5))

@@ -2,6 +2,7 @@
 
 Run with: python tests/test_diagnostics.py
 """
+import _isolation  # noqa: F401,E402 -- first: the user's own data never reaches a test (tests/_isolation.py)
 import sys
 from pathlib import Path
 

@@ -5,6 +5,7 @@ unchanged. No API calls.
 
 Run with: python tests/test_observations.py
 """
+import _isolation  # noqa: F401,E402 -- first: the user's own data never reaches a test (tests/_isolation.py)
 import csv
 import sys
 import tempfile
@@ -14,6 +15,7 @@ from unittest.mock import patch
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
+import pack_facts as pf  # noqa: E402
 from parameter_extractor import api_client
 from parameter_extractor.config.run_config import RunConfig
 from parameter_extractor.ingestion.figure_rows import build_figure_rows
@@ -40,7 +42,7 @@ def test_every_value_has_provenance_and_csv_round_trips():
         print(f"SKIP: needs {PDF}"); return
     with tempfile.TemporaryDirectory() as tmp, patch.object(api_client, "_send", _replay_send):
         result = run_pipeline(PDF, RunConfig.from_settings(api_key="x", output_dir=Path(tmp)))
-        assert result.csv_path.read_text() == (REPLAY_DIR / "eder1994_auto_extracted.csv").read_text()
+        assert result.csv_path.read_text() == (REPLAY_DIR / "eder1994_auto_extracted.csv").read_text(), pf.why_replay_differs()
         obs = list(csv.DictReader(open(result.observations_path)))
         # + a calculated total per row; - one per row since the 2 authors became one author_list (2026-10-22);
         # + data_location on every row (2026-10-29)

@@ -3,6 +3,7 @@ Compounds for a drafted research area (compound_setup.py) and suggested addition
 (pack_drafting.suggest_additions / apply_additions), 2026-11-08. A fake PubChem, canned model answers; the review
 windows and the editor's buttons. No API, no network.
 """
+import _isolation  # noqa: F401,E402 -- first: the user's own data never reaches a test (tests/_isolation.py)
 import json
 import os
 import sys

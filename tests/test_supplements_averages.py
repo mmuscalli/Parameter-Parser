@@ -4,6 +4,7 @@ results (set type "Average", '<name>_avg_<unit>' columns). No API calls; the PDF
 
 Run with: python tests/test_supplements_averages.py
 """
+import _isolation  # noqa: F401,E402 -- first: the user's own data never reaches a test (tests/_isolation.py)
 import sys
 import tempfile
 from pathlib import Path

@@ -7,6 +7,7 @@ lengths in nt / µm, unprinted years. No API calls.
 
 Run with: python tests/test_sam_papers.py
 """
+import _isolation  # noqa: F401,E402 -- first: the user's own data never reaches a test (tests/_isolation.py)
 import json
 import sys
 from pathlib import Path
@@ -15,6 +16,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 SAM = ROOT.parent / "Paper Files" / "Test Paper List" / "Sam Papers"
 
+import pack_facts as pf  # noqa: E402
 from parameter_extractor import packs
 
 
@@ -76,7 +78,7 @@ def test_wet_dry_sets_by_description():
     packs.activate("prebiotic_chemistry")
     from parameter_extractor.schemas.structure_plan import PlannedSample, PlannedSet, StructurePlan
     from parameter_extractor.stages.optional import load_specs
-    spec = load_specs()["wet_dry"]
+    spec = pf.module_step("wet_dry")                         # the Wet-dry module's step
     s = lambda label, varies, kind="Independent": PlannedSet(
         set_label=label, set_type=kind, varying_condition_summary=varies, source_table_or_section="Table 1",
         samples=[PlannedSample(sample_label="G", source="Table 1")])

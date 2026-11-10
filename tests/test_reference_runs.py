@@ -7,6 +7,7 @@ check it, then re-record if the change is right.
 
 Run with: python tests/test_reference_runs.py
 """
+import _isolation  # noqa: F401,E402 -- first: the user's own data never reaches a test (tests/_isolation.py)
 import json
 import shutil
 import sys
@@ -18,6 +19,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "tests"))
 sys.path.insert(0, str(ROOT / "src"))
 
+import pack_facts as pf  # noqa: E402
 from parameter_extractor import api_client, packs
 from parameter_extractor.config.run_config import RunConfig
 from parameter_extractor.errors import PaperSourceError
@@ -64,8 +66,10 @@ def test_every_reference_run_reproduces_its_outputs():
             if result is None:
                 print(f"SKIP: {ref.name} -- its PDF isn't on this computer")
                 continue
-            assert result.csv_path.read_text() == (ref / "expected_extracted.csv").read_text(), ref.name
-            assert result.observations_path.read_text() == (ref / "expected_observations.csv").read_text(), ref.name
+            assert result.csv_path.read_text() == (ref / "expected_extracted.csv").read_text(), \
+                (ref.name, pf.why_replay_differs(json.loads((ref / "reference.json").read_text())["pack"]))
+            assert result.observations_path.read_text() == (ref / "expected_observations.csv").read_text(), \
+                (ref.name, pf.why_replay_differs(json.loads((ref / "reference.json").read_text())["pack"]))
             if (ref / "archive_validation.json").is_file():
                 got = json.loads((result.run_dir / "archive_validation.json").read_text())
                 assert got == json.loads((ref / "archive_validation.json").read_text()), ref.name

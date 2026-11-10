@@ -4,6 +4,7 @@ modules' columns left out, core conditions -> pack_parameters, unit talk out of 
 papers, overlap between proposals, too-small modules dropped, additions to existing modules), writing a module and
 drafting linking it, step triggers needing several keyword mentions, the app's new modules. No API calls.
 """
+import _isolation  # noqa: F401,E402 -- first: the user's own data never reaches a test (tests/_isolation.py)
 import json
 import os
 import sys

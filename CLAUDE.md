@@ -2025,7 +2025,7 @@ on EVERY compound (also amino acids, peptides, oligonucleotides, which had none)
 `python scripts/run_tests.py` runs every tests/test_*.py in its own process, one per CPU core (`-j N` to change;
 words after it pick files by name), slowest first (last run's times in tests/.last_times.json, gitignored), and
 lists FAILED and SKIPPED files with their output tails (exit 1 on either). The files are independent: temp folders
-only, registry_path None / tmp registries, and test_gui_offline keeps QSettings under "ParameterExtractorTests".
+only, registry_path None / tmp registries, an empty app-data folder per file (tests/_isolation.py, 2026-11-09).
 Measured on Mickey's 8-core Mac: ~95-110 s vs ~6-7 min one at a time; the floor is the slowest file
 (test_teng2023_replay ~1 min). A new test file must keep that independence (no shared output paths, no user prefs).
 
@@ -2773,3 +2773,32 @@ Hirakawa/Ferris/Islam; Standard / Balanced / Economy). Built:
   schema (`_required`): one incomplete species no longer fails the step.
 Results: Standard reference cost $0.247 -> $0.229 (-7%, 8 papers -9%), accuracy 94.6% -> 96.6-98.1%; Balanced $0.103 ->
 $0.084 (-18%), 92-94%; Economy $0.016, 88%. tests/test_cost_pass.py.
+
+## Tests that survive data pack changes (2026-11-09, Mickey: linking a module kept breaking tests)
+
+Two causes, both fixed:
+- **The user's own data reached tests.** Everything per user (data packs + modules made in the app, registry, caches,
+  local model settings) lives under `registry.default_registry_path().parent`; env `PARAMETER_EXTRACTOR_DATA_DIR`
+  (`registry.DATA_DIR_ENV`) now replaces that folder. `scripts/run_tests.py` gives every test file an empty temp one;
+  every tests/test_*.py starts with `import _isolation` (tests/_isolation.py: the same for direct runs, keychain off,
+  QSettings as an ini file in that folder under org "ParameterExtractorTests"). New test files: keep that line first.
+- **Tests pinned the app packs' exact contents** (Prebiotic's steps, categories, column blocks, the `cat` enum, request
+  counts, category positions, "unknown" example columns a module could define). Rewritten to check the RULE with
+  expectations from the pack: `tests/pack_facts.py` -- `module_ids`, `module_step_names`, `module_category_ids`,
+  `without_module_steps/categories`, `request_steps`, `in_order` / `present_in_order`, `linked(pack, *modules)` (the
+  pack itself, or a copy in the test's data folder that links them -- for tests of what a module DOES), `module_step(
+  name)` (a module's step via a pack linking it). Made-up names for unknown columns/compounds (`zz_test_...`,
+  Trp-Met-Cys, (Gly)90, 37mer_CGU). Fakes of `_send` answer an unknown step with an empty answer.
+- **Replays of reference runs stay sensitive to UNLINKING** a module they were recorded with
+  (`pack_facts.RECORDED_WITH`: Prebiotic analysis, solution_chemistry, kinetics, wet_dry, peptides_oligomers) -- the
+  pack really extracts something else then; the assertion message says which module and how to fix it
+  (`why_replay_differs`: re-record or relink). Linking more never changes a replay (unrecorded steps replay empty).
+  The check of the app's own packs (test_pack_editing) also fails on purpose when Prebiotic's category lists name a
+  column whose module was unlinked.
+- `scripts/check_test_robustness.py [link unlink new analysis]`: the suite under each change to the app packs (every
+  module linked; two unlinked; a new always-on module with a step/column/category linked to both packs; Analysis
+  unlinked), restored with git afterwards (refuses while those pack.json files have uncommitted changes); ~6 min, all
+  pass. Run it after changing tests that touch packs.
+- App fixes found by it: the pack editor's `tab_index` found no "Check" tab once its title carried a count ("Check
+  (1/2)") -- Data Packs > Check on a pack with problems crashed; `schemas/wet_dry.py` / `stages/wet_dry.py` read the
+  Wet-dry module's step itself (they failed on import / KeyError when the active pack didn't link it).

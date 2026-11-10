@@ -6,6 +6,7 @@ No API calls.
 
 Run with: python tests/test_wet_dry_and_cited.py
 """
+import _isolation  # noqa: F401,E402 -- first: the user's own data never reaches a test (tests/_isolation.py)
 import csv
 import json
 import sys
@@ -16,6 +17,7 @@ from unittest.mock import patch
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
+import pack_facts as pf  # noqa: E402
 from parameter_extractor import api_client, pipeline
 from parameter_extractor.config.run_config import RunConfig
 from parameter_extractor.ingestion.figure_rows import build_figure_rows
@@ -62,7 +64,8 @@ def _run(tmp: Path, structure: StructurePlan, wet_dry_calls: list):
             resp.parsed_output = structure
         return resp
     with patch.object(api_client, "_send", send), patch.object(pipeline, "run_optional_stage", fake_wet_dry):
-        return pipeline.run_pipeline(PDF, RunConfig.from_settings(api_key="x", output_dir=tmp))
+        return pipeline.run_pipeline(PDF, RunConfig.from_settings(api_key="x", output_dir=tmp,     # the Wet-dry
+                                                                  pack=pf.linked("prebiotic_chemistry", "wet_dry").id))
 
 
 def test_cycling_fields_and_cited_data():
@@ -104,7 +107,7 @@ def test_no_cycling_no_extra_step_and_unchanged_csv():
     with tempfile.TemporaryDirectory() as tmp:
         result = _run(Path(tmp), structure, calls)
         assert calls == [] and [u.stage for u in result.usage].count("wet_dry") == 0
-        assert result.csv_path.read_text() == (REPLAY_DIR / "eder1994_auto_extracted.csv").read_text()
+        assert result.csv_path.read_text() == (REPLAY_DIR / "eder1994_auto_extracted.csv").read_text(), pf.why_replay_differs()
 
 
 def test_cited_figure():

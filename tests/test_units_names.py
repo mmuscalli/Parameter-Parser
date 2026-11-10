@@ -5,6 +5,7 @@ window's "Stored as" preview. No API calls.
 
 Run with: python tests/test_units_names.py
 """
+import _isolation  # noqa: F401,E402 -- first: the user's own data never reaches a test (tests/_isolation.py)
 import os
 import sys
 from pathlib import Path
@@ -12,6 +13,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
+import pack_facts as pf  # noqa: E402
 from parameter_extractor.ingestion.normalize import normalize_chemistry
 from parameter_extractor.names import closest_names, match_species
 from parameter_extractor.schemas.chemistry import ChemistryExtraction, SoluteEntry
@@ -100,7 +102,7 @@ def test_review_preview_shows_stored_value():
     assert dlg.values_table.item(0, 2).text() == "(not added)"
     dlg.set_action(0, "existing_column", "solvent_volume_mL")
     assert dlg.values_table.item(0, 2).text().startswith("1  (read from '1 cm3')")
-    dlg.set_action(0, "existing_column", "wet_phase_duration_hr")          # wrong dimension
+    dlg.set_action(0, "existing_column", "duration_hr")                    # wrong dimension (a time)
     assert "not converted" in dlg.values_table.item(0, 2).text()
     assert any("can't be converted" in i for i in dlg.problems())          # blocks "Build dataset"
     g.values[0].value_text = "24 h"

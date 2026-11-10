@@ -10,6 +10,7 @@ no API calls.
 
 Run with: python tests/test_cost_options.py
 """
+import _isolation  # noqa: F401,E402 -- first: the user's own data never reaches a test (tests/_isolation.py)
 import json
 import sys
 import tempfile
@@ -21,6 +22,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "tests"))
 sys.path.insert(0, str(ROOT / "src"))
 
+import pack_facts as pf  # noqa: E402
 from parameter_extractor import api_client, packs
 from parameter_extractor.config.run_config import RunConfig
 from parameter_extractor.pipeline import run_pipeline
@@ -77,8 +79,9 @@ def test_the_paper_is_one_cached_prefix():
             assert len(set(prefixes)) == 1                                       # byte-identical prefix
             assert len(tool_lists) == 1                                          # ... and tool list
             names = [t["name"] for t in json.loads(tool_lists.pop())]
-            assert names == ["structure_planner", "fit_models", "planet_parameters", "stellar_parameters",
-                             "system_and_discovery"]
+            # the row planning first, then the built-in step, then the pack's steps (and any its modules add)
+            assert names[:2] == ["structure_planner", "fit_models"] and pf.without_module_steps(names[2:], "exoplanets") \
+                == ["planet_parameters", "stellar_parameters", "system_and_discovery"]
             assert sent["PaperMetadata"][3] is None                              # not a paper-reading step
             assert any(b["type"] == "image" for b in json.loads(prefixes[0]))   # table pages included
             assert isinstance(sent["PaperMetadata"][2], str)                    # page 1 only: not shared

@@ -10,6 +10,7 @@ almost all outside the template. No API calls, no PubChem.
 
 Run with: python tests/test_kim2019_replay.py
 """
+import _isolation  # noqa: F401,E402 -- first: the user's own data never reaches a test (tests/_isolation.py)
 import csv
 import json
 import sys
@@ -21,6 +22,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "tests"))
 sys.path.insert(0, str(ROOT / "src"))
 
+import pack_facts as pf  # noqa: E402
 from parameter_extractor import api_client
 from parameter_extractor.config.run_config import RunConfig
 from parameter_extractor.pipeline import run_pipeline
@@ -35,8 +37,8 @@ def test_kim2019_replay_reproduces_reference():
         print(f"SKIP: needs {PDF}"); return
     with tempfile.TemporaryDirectory() as tmp, patch.object(api_client, "_send", make_replay(REF)):
         result = run_pipeline(PDF, RunConfig.from_settings(api_key="replay", output_dir=Path(tmp)))
-        assert result.csv_path.read_text() == (REF / "kim2019_extracted.csv").read_text()
-        assert result.observations_path.read_text() == (REF / "kim2019_observations.csv").read_text()
+        assert result.csv_path.read_text() == (REF / "kim2019_extracted.csv").read_text(), pf.why_replay_differs()
+        assert result.observations_path.read_text() == (REF / "kim2019_observations.csv").read_text(), pf.why_replay_differs()
 
         rows = list(csv.DictReader(open(result.csv_path)))
         assert len(rows) == 15

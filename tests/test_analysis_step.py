@@ -5,12 +5,14 @@ Uses Riggi2023's Table 2 (MALDI-TOF MS settings) and kim2017's HPLC as answers; 
 
 Run with: python tests/test_analysis_step.py
 """
+import _isolation  # noqa: F401,E402 -- first: the user's own data never reaches a test (tests/_isolation.py)
 import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
+import pack_facts as pf  # noqa: E402
 from parameter_extractor import analysis_vocab as av, packs
 from parameter_extractor.calculators.analysis_columns import apply_analysis, convert
 from parameter_extractor.ingestion.observations import unit_for_column
@@ -18,7 +20,7 @@ from parameter_extractor.registry import VariableRegistry
 from parameter_extractor.schemas.analysis import AnalysisResult
 from parameter_extractor.schemas.row_schema import ExtractedRow
 
-packs.activate("prebiotic_chemistry")
+packs.activate(pf.linked("prebiotic_chemistry", "analysis", "solution_chemistry").id)   # tests of the analysis module
 
 
 def _rows(n=3, set_id="001001"):
@@ -174,10 +176,10 @@ def test_conditions_hint_depends_on_the_analysis_step():
 def test_stage_toggle_and_pack_check():
     from parameter_extractor.pack_editing import PackDraft, check
     from parameter_extractor.stages.optional import toggleable_stages
-    pack = packs.available()["prebiotic_chemistry"]
+    pack = pf.linked("prebiotic_chemistry", "analysis", "solution_chemistry")
     assert "analysis" in [t.name for t in toggleable_stages(pack)]
     exo = packs.available()["exoplanets"]
-    assert "analysis" not in [t.name for t in toggleable_stages(exo)]
+    assert ("analysis" in [t.name for t in toggleable_stages(exo)]) == exo.uses("analysis")   # follows the link
     problems = [p for p in check(PackDraft.load(pack.folder)) if "analysis_vocab" in p.where]
     assert not problems, problems
 
