@@ -20,7 +20,7 @@ from parameter_extractor.schemas.common import CONFIDENCE_ORDER
 from parameter_extractor.schemas.row_schema import CellSource, ExtractedRow
 
 CHECK_TOLERANCE = 0.05          # percentage points
-_LENGTH = re.compile(r"sampled_(\d+)mer_")
+_LENGTH = re.compile(r"sampled_(?:p-)?(\d+)mer_")      # 'p-2mer_A_3'-5'': a 5'-phosphorylated dimer counts too
 
 
 def _decimals(value: float) -> int:

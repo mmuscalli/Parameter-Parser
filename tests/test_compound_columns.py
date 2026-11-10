@@ -85,7 +85,7 @@ def test_vocabulary_is_consistent():
                             for c in compound)
     assert not any(re.search(r"\d+peptide_|DKP_", c) for c in pack.template_columns + list(names))
     assert {"Gly-Gly", "(Gly)10", "cyclo_Gly-Gly", "cyclo_Ala-Ala"} <= names
-    assert is_peptide_column("sampled_Gly-Gly_aq_%yield") and is_peptide_column("sampled_cyclo_Val-Gly_aq_mM")
+    assert is_peptide_column("sampled_Gly-Gly_aq_%yield") and is_peptide_column("sampled_cyclo_Gly-Val_aq_mM")
     assert not is_peptide_column("sampled_Gly-Gly-Gly-Gly_aq_mM")       # not the convention's form: '(Gly)4'
     assert not is_peptide_column("sampled_Gly_aq_mM") and not is_peptide_column("sampled_2peptide_Gly_%yield")
     reg = VariableRegistry(None)

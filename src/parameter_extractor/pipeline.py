@@ -1142,6 +1142,8 @@ def finish(
     paper_flags += _not_a_compound_flags(ex.chemistry)
     paper_flags += [Flag("unit_conversion", n.message, quote=n.quote or None, source=n.source or None)
                     for n in normalization if n.kind == "unit_corrected"]
+    paper_flags += [Flag("ambiguous_name", n.message, quote=n.quote or None, source=n.source or None)
+                    for n in normalization if n.kind == "ambiguous_name"]
     if pubchem and pubchem.unavailable_reason:
         paper_flags.append(Flag("lookup_unavailable", f"{pubchem.unavailable_reason}: species names were "
                                 f"matched by the built-in rules only, so synonyms may show up as new variables."))

@@ -65,6 +65,13 @@ def _identify(chemistry: ChemistryExtraction, pubchem, registry, notes: List[Nor
         cleaned = query_name(s.name)
         if cleaned != s.name:
             s.name = cleaned                      # cosmetic: no note needed
+        from parameter_extractor.names import AMBIGUOUS
+        if s.name in AMBIGUOUS:                   # 'TMP': trimetaphosphate or thymidine monophosphate -- never guessed
+            notes.append(NormalizationNote("ambiguous_name", f"'{s.name}' names different compounds in different "
+                                           f"papers (e.g. TMP: trimetaphosphate or thymidine monophosphate); kept as "
+                                           f"written, not looked up -- check which one this paper means",
+                                           quote=s.quote or "", source=s.source or ""))
+            continue
         known = names.default_for(s.name)
         if known:
             if known != s.name:

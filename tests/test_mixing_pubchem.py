@@ -163,8 +163,8 @@ def test_unknown_species_stock_goes_to_review_with_its_own_column():
     assert VariableRegistry(None).display_name("species:stock cytosine") == "cytosine (stock solution, before mixing)"
 
 
-FAKE = {"2'-cmp": Compound(101544, "2'-Cytidylic acid", "C9H14N3O8P"),
-        "cytidine 2'-monophosphate": Compound(101544, "2'-Cytidylic acid", "C9H14N3O8P"),
+FAKE = {"glycolaldehyde": Compound(756, "Glycolaldehyde", "C2H4O2"),
+        "hydroxyacetaldehyde": Compound(756, "Glycolaldehyde", "C2H4O2"),
         "calcium dichloride": Compound(5284359, "Calcium Chloride", "CaCl2"),
         "cytosine": Compound(597, "Cytosine", "C4H5N3O")}
 
@@ -181,23 +181,28 @@ def test_pubchem_identity_matching():
     with tempfile.TemporaryDirectory() as tmp:
         cache, calls = Path(tmp) / "pc.json", []
         chem = ChemistryExtraction(paper_id="p", solutes=[
-            _entry("2'-CMP", 1, role="sampled"), _entry("cytidine_2'-monophosphate", 2, role="sampled"),
+            _entry("glycolaldehyde", 1, role="sampled"), _entry("hydroxyacetaldehyde", 2, role="sampled"),
             _entry("calcium dichloride", 15), _entry("ribose_1,2-cyclic_phosphate", 15),
             _entry("Gly14", 1)])
         pc = _fake_pubchem(cache, calls)
         notes = normalize_chemistry(chem, pubchem=pc)
-        assert [s.name for s in chem.solutes] == ["2'-CMP", "2'-CMP", "CaCl2", "ribose 1,2-cyclic phosphate",
-                                                  "(Gly)14"]
-        assert chem.solutes[1].pubchem_cid == 101544 and "CID 101544" in chem.solutes[1].conversion_note
+        assert [s.name for s in chem.solutes] == ["glycolaldehyde", "glycolaldehyde", "CaCl2",
+                                                  "ribose 1,2-cyclic phosphate", "(Gly)14"]
+        assert chem.solutes[1].pubchem_cid == 756 and "CID 756" in chem.solutes[1].conversion_note
         assert chem.solutes[3].pubchem_cid == 0                       # PubChem doesn't know it: left alone
         assert "(Gly)14" not in calls                           # the rules' names aren't looked up
         assert sum(n.kind == "name_matched" for n in notes) == 3
+        # nucleotides are the rules' own now (2026-11-09): no lookup needed
+        nt = ChemistryExtraction(paper_id="p", solutes=[_entry("2'-CMP", 1, role="sampled"),
+                                                        _entry("cytidine_2'-monophosphate", 2, role="sampled")])
+        normalize_chemistry(nt, pubchem=pc)
+        assert [s.name for s in nt.solutes] == ["2'-CMP", "2'-CMP"]
         pc.save()
         saved = json.loads(cache.read_text())["names"]
-        assert saved["2'-cmp"]["cid"] == 101544 and saved["ribose 1,2-cyclic phosphate"] is None
+        assert saved["glycolaldehyde"]["cid"] == 756 and saved["ribose 1,2-cyclic phosphate"] is None
         calls.clear()
         again = _fake_pubchem(cache, calls)                           # second run: all from the cache
-        assert again.lookup("2'-CMP").cid == 101544 and again.lookup("ribose_1,2-cyclic_phosphate") is None
+        assert again.lookup("glycolaldehyde").cid == 756 and again.lookup("ribose_1,2-cyclic_phosphate") is None
         assert calls == []
 
 
@@ -205,20 +210,20 @@ def test_pubchem_names_accepted_earlier_are_recognised():
     with tempfile.TemporaryDirectory() as tmp:
         path = Path(tmp) / "r.json"
         reg = VariableRegistry(path)
-        chem = ChemistryExtraction(paper_id="p", solutes=[_entry("cytidine 2'-monophosphate", 2, role="sampled")])
+        chem = ChemistryExtraction(paper_id="p", solutes=[_entry("hydroxyacetaldehyde", 2, role="sampled")])
         normalize_chemistry(chem, pubchem=_fake_pubchem(), registry=reg)
         groups = group_new_variables(collect_new_variables(_no_methods(), chem, reg))
         apply_decisions([], groups, [VariableDecision(groups[0].alias_name, "species", "new_column",
-                                                      "sampled_cytidine_2'-monophosphate_aq_mM")], reg)
+                                                      "sampled_hydroxyacetaldehyde_aq_mM")], reg)
         reg.save()
         reg = VariableRegistry(path)
-        assert reg.species_for_cid(101544) == "cytidine 2'-monophosphate"
-        chem = ChemistryExtraction(paper_id="q", solutes=[_entry("2'-CMP", 3, role="sampled")])
+        assert reg.species_for_cid(756) == "hydroxyacetaldehyde"
+        chem = ChemistryExtraction(paper_id="q", solutes=[_entry("glycolaldehyde", 3, role="sampled")])
         normalize_chemistry(chem, pubchem=_fake_pubchem(), registry=reg)    # a later paper, another name
-        assert chem.solutes[0].name == "cytidine 2'-monophosphate"
+        assert chem.solutes[0].name == "hydroxyacetaldehyde"
         assert collect_new_variables(_no_methods(), chem, reg) == []   # goes straight in
-        reg.remove_column("sampled_cytidine_2'-monophosphate_aq_mM")
-        assert reg.species_for_cid(101544) is None                    # forgotten with its column
+        reg.remove_column("sampled_hydroxyacetaldehyde_aq_mM")
+        assert reg.species_for_cid(756) is None                    # forgotten with its column
 
 
 def test_pubchem_unreachable_fails_soft():

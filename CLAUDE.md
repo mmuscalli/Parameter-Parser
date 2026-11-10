@@ -2718,3 +2718,15 @@ from).
   and n-mers, <= MAX_SERIES_LENGTH 60) with the roles / measures ALL members share. Prebiotic links it; Mickey's DUPE
   pack updated (backup pack_backups/before-module-rename-*). Live/replay: truman through the drafted pack -> (Gly)4..12
   in the dataset (were held for review), totals = reference.
+
+## Peptides and oligomers module: rings, linkage isomers, nucleotides, polymers (2026-11-09, Mickey)
+
+names.py (app-wide rules; the module's chemistry `prompt_rules` tell the model the same names): `cyclic_name` writes a
+ring from its alphabetically first rotation (cyclo(Val-Gly) = cyclo(Gly-Val) -> 'cyclo_Gly-Val'; the reverse direction
+stays distinct); `linkage_dimer_match` (A2'p5'A -> "2mer_A_2'-5'", pA3'p5'A -> "p-2mer_A_3'-5'", ApA -> '2mer_A', ApU ->
+'2mer_AU'); `nucleotide_match` (pA/ppA/pppA -> AMP/ADP/ATP, 5'-AMP -> AMP, dTMP, "3'-AMP", cAMP -> "3',5'-cAMP",
+"2',3'-cGMP", full names like "adenosine 5'-diphosphate", underscores read as spaces); `polymer_match` (polyA / poly(rA)
+-> poly(A), poly(dT), polyglycine -> poly(Gly); not polyphosphates); `AMBIGUOUS` {TMP, TDP, TTP, p2A, p3A}: never matched,
+never looked up on PubChem (normalize -> `ambiguous_name` flag), never preferred over a full name, never in a compound
+vocabulary (compound_setup.is_compound_name). oligomer_totals counts 'p-<n>mer_' too. Tests that used 2'-CMP for the
+PubChem identity path now use glycolaldehyde / hydroxyacetaldehyde (nucleotides are rule-matched, not looked up).

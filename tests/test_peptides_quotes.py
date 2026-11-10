@@ -31,7 +31,7 @@ def test_peptide_names():
              "glycylglycylglycine": "Gly-Gly-Gly", "Gly-Gly": "Gly-Gly", "L-alanyl-L-alanine": "Ala-Ala",
              "Gly14": "(Gly)14", "dialanine": "Ala-Ala", "(Gly)14": "(Gly)14",
              # cyclic, homo- or heteromeric: cyclo_<AA1>-<AA2>-..., the template's DKP_<AA> included
-             "DKP_Gly": "cyclo_Gly-Gly", "cyclo(Val-Gly)": "cyclo_Val-Gly", "c(L-Ala-L-Gly)": "cyclo_Ala-Gly",
+             "DKP_Gly": "cyclo_Gly-Gly", "cyclo(Val-Gly)": "cyclo_Gly-Val", "c(L-Ala-L-Gly)": "cyclo_Ala-Gly",
              "glycine anhydride": "cyclo_Gly-Gly", "alanine diketopiperazine": "cyclo_Ala-Ala",
              "2,5-piperazinedione": "cyclo_Gly-Gly", "cyclo_Gly-Gly": "cyclo_Gly-Gly"}
     for name, expected in cases.items():
@@ -48,7 +48,7 @@ def test_peptide_columns_are_constructed_not_listed():
                 "stock_Gly-Gly_aq_mM"):
         assert reg.is_known_column(col), col
     for col in ("sampled_(Gly)14_aq_%yield", "sampled_Gly-Ala-Ala_aq_%yield", "initial_Ala-Gly_aq_mM",
-                "sampled_cyclo_Val-Gly_aq_mM", "stock_Gly-Ala_aq_mM"):
+                "sampled_cyclo_Gly-Val_aq_mM", "stock_Gly-Ala_aq_mM"):
         assert is_peptide_column(col.replace("stock_", "initial_")) and not reg.is_known_column(col), col
     # not the convention: one residue, an unknown residue, a run of 4 not written '(Gly)4', the old format
     for col in ("sampled_Gly_aq_mM", "sampled_Gly-Foo_aq_mM", "sampled_Gly-Gly-Gly-Gly_aq_mM",
@@ -231,6 +231,27 @@ def test_table_results_expand_to_species_entries():
         assert _cell_number(unclear) is None, unclear
     unread = by[("Gly", "a")]                         # '10−4': not guessed, but kept (no value) to be flagged
     assert unread.concentration_value is None and "isn't a single number" in unread.conversion_note
+
+
+def test_nucleotides_linkage_polymers_rings():
+    """Peptides and oligomers module (2026-11-09): rings from one starting residue, dinucleotide linkage isomers,
+    nucleotide abbreviations, polymers of unstated length; ambiguous abbreviations never matched."""
+    from parameter_extractor.calculators.oligomer_totals import _LENGTH
+    from parameter_extractor.compound_setup import is_compound_name
+    from parameter_extractor.names import AMBIGUOUS, preferred_name
+    cases = {"cyclo(Val-Gly)": "cyclo_Gly-Val", "cyclo(Gly-Val)": "cyclo_Gly-Val", "c(Pro-Ala-Gly)": "cyclo_Ala-Gly-Pro",
+             "A2'p5'A": "2mer_A_2'-5'", "pA3'p5'A": "p-2mer_A_3'-5'", "2'-5' ApA": "2mer_A_2'-5'", "ApA": "2mer_A",
+             "pApA": "p-2mer_A", "ApU": "2mer_AU", "polyA": "poly(A)", "poly(rA)": "poly(A)", "poly-dT": "poly(dT)",
+             "polyglycine": "poly(Gly)", "pA": "AMP", "ppA": "ADP", "pppA": "ATP", "5'-AMP": "AMP", "dTMP": "dTMP",
+             "cAMP": "3',5'-cAMP", "guanosine 2',3'-cyclic monophosphate": "2',3'-cGMP",
+             "thymidine monophosphate": "dTMP", "adenosine 5'-diphosphate": "ADP", "3'-AMP": "3'-AMP"}
+    for name, expected in cases.items():
+        assert (match_species(name) or [None])[0] == expected, (name, match_species(name))
+    for name in ("TMP", "p2A", "sodium polyphosphate"):
+        assert match_species(name) is None, name
+    assert "TMP" in AMBIGUOUS and not is_compound_name("TMP") and is_compound_name("dTMP")
+    assert preferred_name("trimetaphosphate", {"trimetaphosphate": "TMP"}) == "trimetaphosphate"
+    assert _LENGTH.match("sampled_p-2mer_A_3'-5'_aq_mM") and _LENGTH.match("sampled_4mer_A_aq_mM")
 
 if __name__ == "__main__":
     for name, fn in list(globals().items()):

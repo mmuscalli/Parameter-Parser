@@ -226,8 +226,12 @@ def _example_measure(example: str) -> Optional[str]:
 
 
 def is_compound_name(name: str) -> bool:
-    """A specific compound's name, not a class or material ('phosphate buffer', 'RNA oligomers', 'Taq polymerase')."""
+    """A specific compound's name, not a class or material ('phosphate buffer', 'RNA oligomers', 'Taq polymerase'),
+    and not an abbreviation that names different compounds in different papers ('TMP': names.AMBIGUOUS)."""
+    from parameter_extractor.names import AMBIGUOUS
     n = (name or "").strip()
+    if n in AMBIGUOUS:
+        return False
     if re.fullmatch(r"[a-z]{1,2}|[A-Z]|[a-z][->][A-Z]", n) and formula_case(n) != n:
         return False                       # figure-panel letters and the like ('b', 'ab', 'a-P')
     return bool(n) and len(n) <= 60 and not NOT_A_COMPOUND.search(n) and len(n.split()) <= 5

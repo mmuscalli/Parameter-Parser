@@ -99,9 +99,12 @@ def peptide_length(name: str) -> Optional[int]:
 
 
 def cyclic_name(codes: List[str]) -> str:
-    """Cyclic peptides, homo- or heteromeric (Mickey, 2026-10-15): 'cyclo_' + the sequence,
-    residues as given ('cyclo_Gly-Gly' = the glycine diketopiperazine, 'cyclo_Val-Gly')."""
-    return "cyclo_" + peptide_name(codes)
+    """Cyclic peptides, homo- or heteromeric (Mickey, 2026-10-15): 'cyclo_' + the sequence. A ring has no first
+    residue, so every rotation is the same compound (2026-11-09): the sequence starts where it reads first
+    alphabetically -- cyclo(Val-Gly) and cyclo(Gly-Val) are both 'cyclo_Gly-Val'. The reverse direction is a different
+    molecule and stays apart."""
+    rotations = [codes[i:] + codes[:i] for i in range(len(codes))] or [codes]
+    return "cyclo_" + peptide_name(min(rotations))
 
 
 def _aa_code(text: str) -> Optional[str]:
@@ -251,6 +254,13 @@ def match_species(name: str, vocab: Optional[Tuple[str, ...]] = None) -> Optiona
     oligo = oligonucleotide_match(raw)            # nucleic-acid oligomers: '(pA)4' -> '4mer_A'
     if oligo:
         return oligo, "exact" if oligo == raw else "oligonucleotide"
+    if raw in AMBIGUOUS:                          # 'TMP': which compound depends on the paper -- never guessed
+        return None
+    for rule, how in ((linkage_dimer_match, "dinucleotide"), (nucleotide_match, "nucleotide"),
+                      (polymer_match, "polymer")):
+        found = rule(raw)
+        if found:
+            return found, "exact" if found == raw else how
     m = re.fullmatch(r"(\d+)peptide_([A-Z][a-z]{2})", raw)   # the old convention ('3peptide_Gly', before 2026-11-04)
     if m and int(m.group(1)) >= 2 and m.group(2) in AMINO_ACIDS:
         return _oligomer(int(m.group(1)), m.group(2)), "peptide name (old naming)"
@@ -371,7 +381,7 @@ def preferred_name(name: str, abbreviations: dict) -> str:
     m = _DEFINED.match(name or "")
     full = (m.group("full") if m and _is_abbreviation(m.group("abbr"), m.group("full")) else name or "").strip()
     abbr = abbreviations.get(full.lower())
-    if not abbr:
+    if not abbr or abbr in AMBIGUOUS:            # 'trimetaphosphate (TMP)': the full name, never the ambiguous one
         return name
     if match_species(full) and not match_species(abbr):
         return match_species(full)[0]
@@ -401,4 +411,86 @@ def homopolymer(name: str) -> Optional[Tuple[str, str, int]]:
 
 def homopolymer_name(kind: str, unit: str, n: int) -> str:
     return peptide_name([unit] * n) if kind == "peptide" else oligonucleotide_name(n, unit)
+
+
+# ---- nucleotides, linkage isomers, polymers of unstated length (Peptides and oligomers module, 2026-11-09) ----------
+
+# abbreviations that name different compounds in different papers: never matched, never looked up (Mickey's DUPE pack:
+# 'TMP' = trimetaphosphate in one paper, thymidine monophosphate in another)
+AMBIGUOUS = {"TMP", "TDP", "TTP", "p2A", "p3A"}
+_PHOS = {"M": 1, "D": 2, "T": 3}
+_PHOS_WORDS = {"mono": "M", "di": "D", "tri": "T"}
+_NUCLEOSIDES = {"adenosine": "A", "guanosine": "G", "cytidine": "C", "uridine": "U", "thymidine": "dT",
+                "deoxyadenosine": "dA", "deoxyguanosine": "dG", "deoxycytidine": "dC", "deoxythymidine": "dT",
+                "2'-deoxyadenosine": "dA", "2'-deoxyguanosine": "dG", "2'-deoxycytidine": "dC",
+                "2'-deoxythymidine": "dT"}
+
+
+def _nucleotide(base: str, n_phos: int, position: str = "") -> str:
+    """'AMP', 'ADP', 'dATP', "3'-AMP" (a 5'-phosphate needs no position: it's the usual one)."""
+    return (f"{position}-" if position and position != "5'" else "") + f"{base}{'MDT'[n_phos - 1]}P"
+
+
+def nucleotide_match(name: str) -> Optional[str]:
+    """The canonical name of a mononucleotide: 'AMP' for AMP / 5'-AMP / pA / adenosine 5'-monophosphate, 'ADP' for
+    ppA, 'dTMP' for dTMP / thymidine monophosphate, "2',3'-cAMP" for adenosine 2',3'-cyclic phosphate, "3',5'-cAMP"
+    for cAMP; None otherwise (and for the ambiguous ones in AMBIGUOUS)."""
+    t = re.sub(r"[\s_]+", " ", (name or "").strip().replace("′", "'").replace("’", "'"))
+    if t in AMBIGUOUS:
+        return None
+    m = re.fullmatch(r"(?:(5'|3'|2')\s*-\s*)?(d?)([ACGTU])([MDT])P", t)
+    if m:
+        pos, d, base, ph = m.groups()
+        if base == "T" and not d:
+            return None                         # 'TMP' / 'TTP': see AMBIGUOUS (dTMP is unambiguous)
+        return _nucleotide(d + base, _PHOS[ph], pos or "")
+    m = re.fullmatch(r"(p{1,3})(d?[ACGU]|dT)", t)                        # pA, ppA, pppA, pdA
+    if m:
+        return _nucleotide(m.group(2), len(m.group(1)))
+    m = re.fullmatch(r"(?:(2',\s*3'|3',\s*5')\s*-\s*)?c(d?[ACGTU])MP", t)  # cAMP, 2',3'-cGMP
+    if m:
+        return f"{(m.group(1) or chr(51) + chr(39) + ',5' + chr(39)).replace(' ', '')}-c{m.group(2)}MP"
+    low = t.lower()
+    m = re.fullmatch(r"(2'-deoxy\w+|deoxy\w+|\w+)\s+(?:(5'|3'|2')-?)?(mono|di|tri)phosphate", low)
+    if m and m.group(1) in _NUCLEOSIDES:
+        return _nucleotide(_NUCLEOSIDES[m.group(1)], _PHOS[_PHOS_WORDS[m.group(3)]], m.group(2) or "")
+    m = re.fullmatch(r"(2'-deoxy\w+|deoxy\w+|\w+)\s+(2',\s*3'|3',\s*5')-?cyclic\s+(?:mono)?phosphate", low)
+    if m and m.group(1) in _NUCLEOSIDES:
+        return f"{m.group(2).replace(' ', '')}-c{_NUCLEOSIDES[m.group(1)]}MP"
+    return None
+
+
+def linkage_dimer_match(name: str) -> Optional[str]:
+    """Dinucleotides with their linkage: "A2'p5'A" -> "2mer_A_2'-5'", "pA3'p5'A" -> "p-2mer_A_3'-5'",
+    "2'-5' ApA" -> "2mer_A_2'-5'", 'ApA' -> '2mer_A', 'ApU' -> '2mer_AU', 'pApA' -> 'p-2mer_A'."""
+    t = re.sub(r"\s+", " ", (name or "").strip().replace("′", "'").replace("’", "'"))
+    link = ""
+    m = re.fullmatch(r"([23])'\s*,?\s*-?\s*5'\s*-?\s*(?:linked\s+)?(.+)", t)
+    if m:
+        link, t = f"{m.group(1)}'-5'", m.group(2).strip()
+    m = re.fullmatch(rf"(p?)({_BASE})(?:([23])'p(?:5')?|p)({_BASE})", t)
+    if not m:
+        return None
+    lead, a, pos, b = m.groups()
+    if pos:
+        link = f"{pos}'-5'"
+    letters = a if a == b else a + b.removeprefix("d") if a.startswith("d") == b.startswith("d") else None
+    if letters is None:
+        return None
+    return ("p-" if lead else "") + oligonucleotide_name(2, letters) + (f"_{link}" if link else "")
+
+
+def polymer_match(name: str) -> Optional[str]:
+    """Polymers of no stated length: 'polyA' / 'poly-A' / 'poly(rA)' -> 'poly(A)', 'poly(dT)', 'polyglycine' /
+    'poly-L-lysine' -> 'poly(Gly)' / 'poly(Lys)'. Not polyphosphates or other materials."""
+    t = (name or "").strip()
+    m = re.fullmatch(r"poly\s*-?\s*\(?\s*r?(d?[ACGTU])\s*\)?", t)
+    if m:
+        return f"poly({m.group(1)})"
+    m = re.fullmatch(r"poly\s*-?\s*\(?\s*(?:(?:L|D|DL)-)?([A-Za-z]+)\s*\)?", t)
+    if m:
+        code = _aa_code(m.group(1))
+        if code:
+            return f"poly({code})"
+    return None
 
