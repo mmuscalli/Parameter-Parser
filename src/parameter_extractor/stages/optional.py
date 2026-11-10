@@ -779,7 +779,10 @@ def stage_values(spec: StageSpec, item) -> Tuple[Dict[str, StageValue], List[str
                 return {}, [f"{spec.label}: {param.column} '{text}' for '{item.set_label or 'every set'}' left out "
                             f"-- it must be one of {', '.join(param.choices)}."]
             text = match
-        return ({param.column: StageValue(text, note=item.note, **base)} if text else {}), []
+        if not text:            # the answer named the parameter but gave no text (a local model sent v = 0 instead)
+            return {}, [f"{spec.label}: {param.column} for '{item.set_label or 'every set'}' left out -- the answer "
+                        f"gave no text for it" + (f" (its note: '{item.note}')" if item.note else "") + "."]
+        return {param.column: StageValue(text, note=item.note, **base)}, []
     from parameter_extractor.units import convert_printed, is_difference
     high = getattr(item, "high", 0.0) or 0.0
     if high and high > item.value:     # a range: '<column>_range<unit>' = 'low:high' (Mickey, 2026-10-31)

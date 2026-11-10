@@ -258,6 +258,48 @@ def test_settings_window_sets_up_a_local_run():
         QSettings().clear()
 
 
+def test_text_values_a_local_model_must_give():
+    """qwen3.8:27b on eder1994 (2026-11-10) named experiment_type / solution_type but left their text out (v = 0):
+    local requests now require `txt`; an empty text value is reported, never skipped; the flag shows no '= 0'."""
+    from parameter_extractor.stages.optional import load_specs, stage_values
+    spec = pf.pack("prebiotic_chemistry")
+    conditions = load_specs(spec)["experimental_conditions"]
+    Item, Result = conditions.models()
+    schema = local_models.answer_schema(Result)
+    found = []
+
+    def walk(node):
+        if isinstance(node, dict):
+            if "txt" in (node.get("properties") or {}):
+                found.append("txt" in (node.get("required") or []))
+            for v in node.values():
+                walk(v)
+        elif isinstance(node, list):
+            for v in node:
+                walk(v)
+    walk(schema)
+    assert found and all(found)                                  # required wherever the field exists
+    from anthropic.lib._parse._transform import transform_schema
+    from parameter_extractor.api_client import model_facing_schema
+    assert "txt" not in json.dumps(model_facing_schema(transform_schema(Result)).get("required", []))  # Claude: as before
+    item = Item.model_validate({"col": "experiment_type", "v": 0, "u": "", "q": "heated in a glass flask",
+                                "src": "Experimental", "c": "medium", "n": "heated in place = Batch"})
+    values, problems = stage_values(conditions, item)
+    assert values == {} and problems and "gave no text" in problems[0] and "= Batch" in problems[0]
+    ok = Item.model_validate({"col": "experiment_type", "v": 0, "u": "", "txt": "batch", "q": "q", "src": "s",
+                              "c": "high"})
+    assert stage_values(conditions, ok)[0]["experiment_type"].value == "Batch"
+    # the confidence flag says the text is missing instead of '= 0'
+    from parameter_extractor.schemas.chemistry import ChemistryExtraction
+    from parameter_extractor.schemas.methodology import empty_methodology
+    from parameter_extractor.validation.plausibility_checks import check_extraction
+    result = Result.model_validate({"rows": [{"set": "", "sample": "", "values": [
+        {"col": "experiment_type", "v": 0, "u": "", "q": "q", "src": "s", "c": "medium"}]}], "notes": "", "other": []})
+    flags = check_extraction(empty_methodology("p"), ChemistryExtraction(), optional=[(conditions, result)])
+    shown = [f.message for f in flags if "experiment_type" in f.message]
+    assert shown and "(no text given)" in shown[0] and "= 0 " not in shown[0], shown
+
+
 if __name__ == "__main__":
     for name, fn in list(globals().items()):
         if name.startswith("test_"):

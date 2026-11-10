@@ -152,6 +152,10 @@ def check_extraction(
                 f"(applies to every row){_drop_suffix(f.confidence, drop_below)}.",
                 quote=f.quote or None, source=f.source or None))
 
+    def _is_text(spec, column: str) -> bool:
+        """A text parameter of the step: its value is the text, never the placeholder number."""
+        return any(p.column == column and p.kind == "text" for p in spec.parameters)
+
     def _as_printed(value, unit):
         return f"{value:g} {unit}".strip() if isinstance(value, (int, float)) and unit else value
 
@@ -162,7 +166,8 @@ def check_extraction(
     from parameter_extractor.stages.optional import optional_results
     # numbers with the unit they were printed in ('20 MPa', faisal2005): the flag shows the paper's
     # value, which the CSV holds converted ('200' bar) -- a bare '20' read as wrong
-    per_set += [(c.parameter, getattr(c, "text", "") or _as_printed(c.value, getattr(c, "unit", "")),
+    per_set += [(c.parameter, getattr(c, "text", "") or ("(no text given)" if _is_text(spec, c.parameter)
+                                                         else _as_printed(c.value, getattr(c, "unit", ""))),
                  f"'{c.sample_label}'" if getattr(c, "sample_label", "") else
                  f"set '{c.set_label}'" if c.set_label else f"every {spec.set_word} set",
                  c.confidence, c.basis, c.quote, c.source, c.note)

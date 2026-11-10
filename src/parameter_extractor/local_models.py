@@ -217,11 +217,33 @@ def _system_text(system_prompt) -> str:
     return "\n\n".join(b.get("text", "") for b in system_prompt or [])
 
 
+# fields optional in the compact answer formats (left out to save Claude tokens) that a local model must still give:
+# qwen3.8:27b left a text parameter's `txt` out and sent v = 0 (eder1994, 2026-11-10) -- 84 values lost. Local runs
+# are free, so the grammar makes them required; Claude's requests are unchanged.
+LOCAL_REQUIRED = ("txt",)
+
+
+def _require_local_fields(node):
+    if isinstance(node, dict):
+        props = node.get("properties")
+        if isinstance(props, dict):
+            wanted = [k for k in LOCAL_REQUIRED if k in props]
+            if wanted:
+                node["required"] = list(dict.fromkeys(list(node.get("required") or []) + wanted))
+        for v in node.values():
+            _require_local_fields(v)
+    elif isinstance(node, list):
+        for v in node:
+            _require_local_fields(v)
+    return node
+
+
 def answer_schema(response_model) -> dict:
-    """The schema the model must follow -- the same transformation the API's structured outputs use, minus titles."""
+    """The schema the model must follow -- the same transformation the API's structured outputs use, minus titles,
+    with LOCAL_REQUIRED fields required."""
     from anthropic.lib._parse._transform import transform_schema
     from parameter_extractor.api_client import model_facing_schema
-    return model_facing_schema(transform_schema(response_model))
+    return _require_local_fields(model_facing_schema(transform_schema(response_model)))
 
 
 def estimate_tokens(text: str, images: int = 0) -> int:

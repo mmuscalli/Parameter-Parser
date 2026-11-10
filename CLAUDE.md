@@ -2802,3 +2802,22 @@ Two causes, both fixed:
 - App fixes found by it: the pack editor's `tab_index` found no "Check" tab once its title carried a count ("Check
   (1/2)") -- Data Packs > Check on a pack with problems crashed; `schemas/wet_dry.py` / `stages/wet_dry.py` read the
   Wet-dry module's step itself (they failed on import / KeyError when the active pack didn't link it).
+
+## Local model server on Mickey's Windows PC; first real test (2026-11-10)
+
+- `docs/local_model_server_brief.md` (for a Claude agent on another machine: what the app sends, sizes, tests, what to
+  report) -> `docs/local_model_server_report.md` (Mickey's PC: RTX 3090 24 GB, Ollama 0.40.16 at
+  `http://192.168.1.129:11434` on the LAN, q8_0 KV cache + flash attention, `LLAMA_ARG_FIT_TARGET=512`). Settings to
+  enter: `qwen3.8:27b` context 131072 (vision), `gemma4:31b` context 81920 (vision), requests at once 1, profile =
+  qwen for all roles. `/api/show` reports 262144 for both -- the models' limit, NOT what fits in VRAM (layers spill to
+  the CPU: ~30 -> 6.5 tok/s). Both are thinking models (~1K tokens of reasoning per request before the JSON).
+- Live eder1994 (prebiotic, no PubChem, no registry, qwen everywhere): 5.3 min, $0, 42/42 rows (13 sets), 87.2% of the
+  reference -- ALL 84 misses experiment_type / solution_type: the model reasoned 'Batch' / 'Wet' in its note but left
+  the optional `txt` out and sent v = 0 (Sonnet/Haiku always fill it). Every other value = reference. Steps: plan 66 s,
+  metadata 12 s, kinetics 60 s, analysis 94 s, conditions 166 s, chemistry 251 s; 21K output tokens. No `other`
+  suggestions. Kept locally: `runs/local_models/eder1994_qwen3.8-27b_20261110/` (+ run_eder1994_local.py).
+- Fixes: `local_models.LOCAL_REQUIRED` ("txt") required in the schema sent to local servers (`_require_local_fields`;
+  Claude requests unchanged); `optional.stage_values` reports a text parameter answered without text as a problem
+  (-> unit_conversion flag naming the model's note) instead of skipping it silently; the low-confidence flag shows
+  '(no text given)' for such values, not '= 0'. tests/test_local_models.py::test_text_values_a_local_model_must_give.
+  NOT yet re-run live (server down) -- next: eder1994 again, then a long exoplanet paper for the 128K context.
