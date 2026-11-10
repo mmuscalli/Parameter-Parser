@@ -37,9 +37,9 @@ def test_categories_per_pack():
     ids = [c.id for c in vc.categories()]
     # kinetics before products: its columns ('..._rate_mM_hr') are claimed before the products' 'sampled_' pattern
     assert ids == ["starting_species", "kinetics", "products", "solution_prep", "conditions", "product_properties",
-                   "analysis", "metadata", "methodology", "other", "figure", "assumed"]
+                   "analysis", "mineral_surfaces", "flow_reactor", "metadata", "methodology", "other", "figure", "assumed"]
     assert [c.id for c in vc.assignable()] == ["kinetics", "solution_prep", "conditions", "product_properties",
-                                               "analysis", "metadata", "methodology", "other"]
+                                               "analysis", "mineral_surfaces", "flow_reactor", "metadata", "methodology", "other"]
     assert vc.for_source("species", "sampled") == "products" and vc.for_source("species", "initial") == "starting_species"
     assert vc.for_source("species") == "starting_species" and vc.for_source("added_solution") == "solution_prep"
     try:
@@ -78,7 +78,7 @@ def test_open_ended_items_carry_a_category_unless_suggestions_are_off():
     spec = load_specs()["experimental_conditions"]
     _, result = spec.models()
     other = next(d for name, d in result.model_json_schema()["$defs"].items() if name.endswith("Other"))
-    assert other["properties"]["cat"]["enum"] == ["kinetics", "solution_prep", "conditions", "product_properties", "analysis",
+    assert other["properties"]["cat"]["enum"] == ["kinetics", "solution_prep", "conditions", "product_properties", "analysis", "mineral_surfaces", "flow_reactor",
                                                   "metadata", "methodology",
                                                   "other"]
     assert "cat" in other["required"] and "default" not in other["properties"]["cat"]

@@ -29,7 +29,8 @@ def test_prebiotic_blocks_and_derived_columns():
     assert cols[:4] == ["entry_number", "full_id", "set_id", "sample_id"]
     assert cols[-2:] == ["source_notes", "extraction_confidence"]
     labels = [label for label, _ in order.groups(cols)]
-    assert labels == ["Row", "Metadata", "Experimental Methodology", "Reaction Conditions", "Analysis",
+    assert labels == ["Row", "Metadata", "Experimental Methodology", "Reaction Conditions", "Flow reactor",
+                      "Mineral surfaces", "Analysis",
                       "Solution Preparation", "Starting Species", "Products", "Kinetics", "Other", "Provenance"]
     block = {c: label for label, cs in order.groups(cols) for c in cs}
     assert block["light_conditions"] == block["positive_control"] == "Experimental Methodology"   # chosen

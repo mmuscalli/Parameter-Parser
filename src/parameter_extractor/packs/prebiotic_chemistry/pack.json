@@ -8,7 +8,7 @@
   "species_cids": "species_cids.json",
   "builtin_stages": [],
   "postprocess": ["ambient_conditions", "atmospheric_start", "results_check"],
-  "modules": ["analysis", "solution_chemistry", "kinetics", "wet_dry", "peptides_oligomers"],
+  "modules": ["analysis", "solution_chemistry", "kinetics", "wet_dry", "peptides_oligomers", "mineral_surfaces", "flow_reactor"],
   "units": {"set": "experiment set", "sample": "sample"},
   "focused_row_plan": true,
   "variable_categories": [

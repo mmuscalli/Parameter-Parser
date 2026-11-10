@@ -155,7 +155,7 @@ def test_series_conditions_and_own_y_column():
     na.conditions = [SeriesCondition(column="initial_pressure_bar", value="22.2 MPa", source="caption"),
                      SeriesCondition(column="flow_rate_mL_min", value="10 mL min-1"),
                      SeriesCondition(column="experiment_type", value="hand-operated injection system"),
-                     SeriesCondition(column="injection_volume_mL", value="12 mL")]
+                     SeriesCondition(column="pump_stroke_volume_mL", value="12 mL")]
     dkp = na.model_copy(update=dict(label="DKP", y_column="sampled_cyclo_Gly-Gly_aq_mM", conditions=[]))
     fig.series = [na, dkp]
     rows, problems, new_vars = build_figure_rows([fig], meta, meth, "001", 1, 1)
@@ -164,7 +164,7 @@ def test_series_conditions_and_own_y_column():
     assert rows[0].provenance["initial_pressure_bar"].source.endswith("caption, from '22.2 MPa'")
     assert gg["experiment_type"] == meth.experiment_type.value                 # not overwritten by text
     assert any("experiment_type takes only Batch or Flowthrough" in p for p in problems)
-    assert [v.name for v in new_vars] == ["injection_volume_mL"]              # unknown column: review
+    assert [v.name for v in new_vars] == ["pump_stroke_volume_mL"]              # unknown column: review
     assert gg["sampled_Gly-Gly_aq_mM"] is not None and dk.get("sampled_Gly-Gly_aq_mM") is None
     assert dk["sampled_cyclo_Gly-Gly_aq_mM"] is not None                         # its own column (new name)
     assert dk.get("initial_pressure_bar") == meth.initial_pressure_bar.value  # no condition: paper-wide

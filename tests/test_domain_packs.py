@@ -40,7 +40,8 @@ def test_prebiotic_pack_carries_the_old_defaults():
         pack.prompt_path("chemistry").parent.parent.name == "solution_chemistry"
     assert pack.prompt_path("metadata").parent.parent.name == "parameter_extractor"   # generic: the app's
     from parameter_extractor.stages.optional import load_specs
-    assert list(load_specs()) == ["experimental_conditions", "kinetics", "wet_dry", "oligomer_linkage"]
+    assert list(load_specs()) == ["experimental_conditions", "kinetics", "wet_dry", "oligomer_linkage",
+                                 "mineral_surfaces", "flow_reactor"]
 
 
 def _write_pack(base: Path) -> Path:

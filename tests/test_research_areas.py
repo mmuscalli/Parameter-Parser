@@ -229,7 +229,7 @@ def test_categories_window():
             vc.use_local({})
             assert vc.by_id("light_source") is None
             vc.use_local(VariableRegistry(path).local_categories)
-            assert [c.id for c in vc.categories(pack)].index("light_source") == 7
+            assert [c.id for c in vc.categories(pack)].index("light_source") == 9
 
             dlg = CategoriesDialog(path)                     # reset an app category; back to the bundled one
             dlg.builtin_confirmed = True
