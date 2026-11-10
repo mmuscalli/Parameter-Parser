@@ -163,11 +163,49 @@ def _image_blocks(image_paths) -> list:
     return blocks
 
 
-def _paper_blocks(paper: PaperContext, long_lived: bool = False) -> list:
-    # batch mode: the 1-hour cache (batches can take longer than the default 5 minutes)
+def _paper_blocks(paper: PaperContext, long_lived: bool = False, cached: bool = True) -> list:
+    # batch mode: the 1-hour cache (batches can take longer than the default 5 minutes). `cached` False: the same
+    # blocks without the cache mark -- a request whose model no later request uses (Balanced: Sonnet plans the
+    # rows, Haiku reads the paper after it; a cache is per model, so Sonnet's would be paid for and never read)
     cache = {"type": "ephemeral", "ttl": "1h"} if long_lived else {"type": "ephemeral"}
-    return _image_blocks(paper.images) + [{"type": "text", "text": f"PAPER TEXT:\n\n{paper.text}",
-                                           "cache_control": cache}]
+    text = {"type": "text", "text": f"PAPER TEXT:\n\n{paper.text}"}
+    if cached:
+        text["cache_control"] = cache
+    return _image_blocks(paper.images) + [text]
+
+
+def steps_model_differs(config, stage: str = "structure_planner") -> bool:
+    """The steps after `stage` read the paper with another model (Balanced profile): `stage` caches nothing."""
+    try:
+        return config.model_for(stage) != config.model_for("chemistry")
+    except Exception:
+        return False
+
+
+def warm_cache(ctx: RunContext) -> None:
+    """Before the parallel steps of a run whose steps use another model than the row planning (Balanced): one tiny
+    request with the steps' shared prefix (tools, system, paper) writes the paper's cache for their model, so the
+    steps read it instead of each writing its own copy at the same time (2026-11-09 cost pass). Skipped in tests
+    (the network call is replaced), batch mode, handoff, local servers and without caching."""
+    cfg = ctx.config
+    if (ctx.paper is None or not cfg.prompt_caching or cfg.batch_mode or cfg.handoff_dir or getattr(cfg, "is_local", False)
+            or _send is not _REAL_SEND or not getattr(cfg, "api_key", None) or not steps_model_differs(cfg)):
+        return
+    model = cfg.model_for("chemistry")
+    content = _paper_blocks(ctx.paper) + [{"type": "text", "text": "(Writing the paper to the cache for the next "
+                                                                   "steps. Reply with one word: OK.)"}]
+    request = dict(model=model, max_tokens=1, system=ctx.paper.system_blocks(),
+                   messages=[{"role": "user", "content": content}])
+    if ctx.paper.tools:
+        request.update(tools=ctx.paper.tool_definitions(),
+                       tool_choice={"type": "auto", "disable_parallel_tool_use": True})
+    start = time.time()
+    try:
+        message = ctx.client.messages.create(**request)
+    except Exception:                        # a failed warm-up only means the steps write the cache themselves
+        return
+    _record(ctx, "cache_warmup", model, message, time.time() - start)
+    ctx.paper.last_used = time.time()
 
 
 def _record(ctx: RunContext, stage: str, model: str, response, elapsed: float) -> StageUsage:
@@ -593,8 +631,9 @@ def call_structured(
         if own is not None:            # the step's instructions are in the cached system prompt
             task_text = (f"Follow the instructions for step `{stage}` in the system prompt."
                          + (f"\n\n{own}" if own else ""))
-        content = _paper_blocks(ctx.paper, ctx.config.batch_mode) + [{"type": "text", "text": (
-            f"YOUR TASK: {system_prompt}\n\n" + task_text
+        content = _paper_blocks(ctx.paper, ctx.config.batch_mode,
+                                cached=not (stage == "structure_planner" and steps_model_differs(ctx.config))) + [
+            {"type": "text", "text": (f"YOUR TASK: {system_prompt}\n\n" + task_text
             + (f"\n\nAnswer by calling the `{stage}` tool." if stage in ctx.paper.tools else ""))}]
         system_prompt = ctx.paper.system_blocks()
         image_paths = ctx.paper.images
@@ -642,6 +681,9 @@ def call_structured(
         details = getattr(response, "stop_details", None)
         raise errors.ModelRefusedError(stage, getattr(details, "explanation", "") or "")
     parsed = response.parsed_output
+    if getattr(ctx, "plan_ids", None) and parsed is not None:       # ids for sets / samples -> their labels
+        from parameter_extractor.schemas.structure_plan import expand_ids
+        expand_ids(parsed, ctx.plan_ids)
     raw_text = next((b.text for b in response.content if b.type == "text"), None)
 
     usage = _record(ctx, stage, model, response, elapsed)
@@ -673,3 +715,6 @@ def call_structured(
     (run_dir / f"{name}.output.json").write_text(parsed.model_dump_json(indent=2))
 
     return parsed
+
+
+_REAL_SEND = _send          # warm_cache: tests replace _send to replay answers -- never call the API then

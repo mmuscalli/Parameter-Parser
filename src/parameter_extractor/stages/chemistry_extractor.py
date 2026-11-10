@@ -1,5 +1,6 @@
 import json
 import re
+from parameter_extractor.schemas.structure_plan import step_plan_json
 from pathlib import Path
 from typing import List, Optional
 from parameter_extractor.api_client import call_structured
@@ -36,7 +37,7 @@ def run_chemistry_extraction(
     ctx: RunContext, paper_text: str, structure_plan: StructurePlan,
     controlled_vocab: list[str], table_images: Optional[List[Path]] = None, grids: Optional[list] = None,
 ) -> ChemistryExtraction:
-    prompt = prompt_text(paper_text, structure_plan.model_dump_json(indent=2), controlled_vocab,
+    prompt = prompt_text(paper_text, step_plan_json(structure_plan), controlled_vocab,
                          ctx.config.scopes.get("chemistry"), grids=ctx.config.table_grids)
     result = call_structured(
         ctx,

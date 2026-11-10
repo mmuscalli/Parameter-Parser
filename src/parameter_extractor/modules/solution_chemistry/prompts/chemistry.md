@@ -29,7 +29,7 @@ clearly differs from the table image (a column split wrongly).
 `groups`: everything NOT in a table -- values stated in the text, and the
 starting composition when it's given in the text (as it usually is): one
 entry per set (and sample) that has species:
-`set` (the set_label; '' for values constant across the whole paper),
+`set` (the set's id from the plan, 'S2'; '' for values constant across the whole paper),
 `sample` when needed (below), and its `species`. Each species: `nm` name,
 `r` role, `ph` phase, `v` value and `u` unit as printed, `q` quote, `src`
 where it is, `c` confidence; and ONLY when they apply (leave them out
@@ -54,10 +54,11 @@ For each species:
   Never silently drop a species.
 - A compound whose name repeats one unit 4 or more times with hyphens is written with the count: "X-X-X-X" is "(X)4".
 {{MODULE_RULES}}
-- Give the concentration as printed (`v` + `u`). Add `mM` only when the
-  conversion is unambiguous (mol dm-3 -> mM is x1000; mass/volume needs a
-  molecular weight -- only for well-known compounds; otherwise leave `mM`
-  out and say why in `cn`). An AMOUNT (mol, mmol, µmol: "acid (3 mmol)") is
+- Give the concentration as printed (`v` + `u`). The app converts molar
+  units itself (M, mM, mol dm-3, mmol/L ...), so leave `mM` out for them. Add
+  `mM` only for a mass per volume (g/L, mg/mL, % w/v), which needs a molecular
+  weight -- only for well-known compounds; otherwise leave it out and say why
+  in `cn`. An AMOUNT (mol, mmol, µmol: "acid (3 mmol)") is
   given as printed with no `mM`: the pipeline divides it by the reaction
   volume itself.
 - `r`: "initial" for the starting composition, "sampled" for a measured
@@ -94,7 +95,7 @@ For each species:
   single species gets the whole total), `q`, `src`. Don't split the total
   yourself and don't put a share in the species' `v` -- list the species
   with `v` null, or leave them out; the pipeline divides the total.
-- `set`: exactly a `set_label` from the structure plan, or '' if the value
+- `set`: a set's id from the structure plan ('S2'), or '' if the value
   is constant across the whole paper (e.g. a fixed background reagent in
   every condition).
 - `sample`: for every "sampled" value, exactly the `sample_label` (within

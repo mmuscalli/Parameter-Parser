@@ -2752,3 +2752,24 @@ heat_flow_chamber, flow_reactor, fluid_inclusions (each one keyword step, min_hi
 `oligomer_linkage` (2'-5'/3'-5' shares; Prebiotic gets it -> its spec list / step counts in tests updated). Not linked by
 the Prebiotic pack (link them per pack). Cost record: rounds $0.605 / $0.359 / $0.313, held-out surveys $0.065, two
 validation extractions $0.46.
+
+## Cost pass on the module structure (2026-11-09, Mickey)
+
+eval/cost_pass_2026-11-09.md (pack Prebiotic chemistry, now also linking mineral_surfaces + flow_reactor; 5 references +
+Hirakawa/Ferris/Islam; Standard / Balanced / Economy). Built:
+- `structure_plan.step_plan_json` (one-line JSON, the fields steps use, ids 'S1' / 'S1.2' + ID_NOTE) replaces
+  `structure.model_dump_json(indent=2)` in every extraction step (not figure_planner); `plan_ids` -> RunContext.plan_ids
+  (pipeline after planning); `expand_ids` in api_client.call_structured (before audit/output are written) puts labels
+  back: set fields get the set label (also from a sample id), sample fields the sample label, other fields the label
+  of what they name; `_fill_set_from_sample` uses the sample id (labels like 't = 97.3 h' repeat across sets).
+  Prompts (optional_stage, chemistry, term_search, SAMPLE_KEY) ask for ids.
+- Row planning: PlannedSample.source default '' and only when it differs from the set's; excluded <= 8 words; notes one
+  sentence (prebiotic + generic structure prompts). Chemistry `mM` only for mass/volume (prompt + field description).
+- Balanced: `api_client.steps_model_differs` -> the planner's paper blocks uncached (`_paper_blocks(cached=False)`);
+  `warm_cache(ctx)` (one max_tokens=1 request with the steps' exact prefix: tools, system, paper) before the parallel
+  steps; skipped when `_send` is replaced (tests: `_REAL_SEND`), batch, handoff, local, no caching; usage stage
+  `cache_warmup` (stage_order).
+- SoluteEntry v / u / q / src / c have Python defaults (None / None / '' / '' / 'low') while staying required in the sent
+  schema (`_required`): one incomplete species no longer fails the step.
+Results: Standard reference cost $0.247 -> $0.229 (-7%, 8 papers -9%), accuracy 94.6% -> 96.6-98.1%; Balanced $0.103 ->
+$0.084 (-18%), 92-94%; Economy $0.016, 88%. tests/test_cost_pass.py.

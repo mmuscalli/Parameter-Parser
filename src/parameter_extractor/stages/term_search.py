@@ -7,6 +7,7 @@ other new variable -- nothing reaches the CSV without the user accepting it
 (or having accepted the same parameter on an earlier run).
 """
 import json
+from parameter_extractor.schemas.structure_plan import step_plan_json
 from typing import List
 
 from parameter_extractor.api_client import call_structured
@@ -21,7 +22,7 @@ def run_term_search(ctx: RunContext, terms: List[str], paper_text: str, structur
     prompt = load_prompt(
         "term_search",
         TERMS="\n".join(f"- {t}" for t in terms),
-        STRUCTURE_PLAN_JSON=structure_plan.model_dump_json(indent=2),
+        STRUCTURE_PLAN_JSON=step_plan_json(structure_plan),
         COLUMNS_JSON=json.dumps(columns),
         PAPER_TEXT=paper_text,
     )

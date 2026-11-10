@@ -14,8 +14,10 @@ label, `type` the set type, `varies` what distinguishes it from the other
 sets, `src` the table or section it comes from, `ds` the original reference
 when the data is reproduced from another publication ('' otherwise), and
 `samples` -- one per row: `label`, `hr` its duration in hours (`hi` the upper
-end when the duration is a range), `src` where it is, briefly ('Table 1, row
-3'). Then `n_rows`, `excluded` (each a short reason) and `notes`.
+end when the duration is a range), and `src` ONLY when the sample is somewhere
+other than its set's `src` (another table, a figure, a section) -- leave it '' when
+it's a row of the set's table. Then `n_rows`, `excluded` (each at most 8 words:
+what and why) and `notes` (one sentence, only for a real ambiguity, else '').
 
 Guidance:
 - A table with repeated sub-blocks (e.g. "Conditions: Na+ 3.33 mol dm-3, 81 C"

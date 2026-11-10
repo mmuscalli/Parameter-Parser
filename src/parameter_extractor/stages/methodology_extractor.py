@@ -1,4 +1,5 @@
 from parameter_extractor.api_client import call_structured
+from parameter_extractor.schemas.structure_plan import step_plan_json
 from parameter_extractor.run_context import RunContext
 from parameter_extractor.schemas.methodology import Methodology
 from parameter_extractor.schemas.structure_plan import StructurePlan
@@ -11,7 +12,7 @@ def run_methodology_extraction(
     prompt = load_prompt(
         "methodology",
         PAPER_TEXT=paper_text,
-        STRUCTURE_PLAN_JSON=structure_plan.model_dump_json(indent=2),
+        STRUCTURE_PLAN_JSON=step_plan_json(structure_plan),
     )
     return call_structured(
         ctx,

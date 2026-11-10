@@ -507,7 +507,12 @@ def extract_steps(ex: "Extraction") -> "Extraction":
             ex.structure = run_structure_planner(ctx, text, table_images=table_images)
         except AnswersNeededError as e:       # handoff: the parallel requests are written out too
             raise _all_requests(running, e) from None
+        from parameter_extractor.schemas.structure_plan import plan_ids
+        ctx.plan_ids = plan_ids(ex.structure)
         ex.structure_ready.set()
+        if ex.structure.experiment_sets:
+            from parameter_extractor.api_client import warm_cache
+            warm_cache(ctx)                   # Balanced: the steps' model caches the paper once, then they read it
 
         # a review, perspective, theory paper or abstract with no rows of its own: nothing for the extraction steps
         # (Mickey, 2026-11-03: they cost a full run); a search for the user's own terms still runs
@@ -728,7 +733,7 @@ def _paper_tools(pack, config: RunConfig, terms, has_figures: bool = False, pape
 # the order stages are listed in (summary, usage table) whatever order they finish in;
 # optional stages (specs) go before chemistry
 def stage_order() -> List[str]:
-    return (["structure_planner", "metadata", "methodology", "term_search"] + list(load_specs())
+    return (["structure_planner", "metadata", "cache_warmup", "methodology", "term_search"] + list(load_specs())
             + ["fit_models", "analysis", "chemistry", "equations", "figure_planner"])
 
 

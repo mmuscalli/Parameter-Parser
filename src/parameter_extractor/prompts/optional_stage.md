@@ -5,7 +5,7 @@ Parameters (give each value in the unit shown):
 {{PARAMETER_LIST}}
 
 Answer format: `rows` -- one entry per set (and sample) that has values:
-`set` (the set_label), {{SAMPLE_KEY}}and its `values`. Each value: `col` the
+`set` (the set's id from the plan), {{SAMPLE_KEY}}and its `values`. Each value: `col` the
 parameter, `v` the value, `u` the unit as printed, `q` the quote, `src`
 where it is, `c` your confidence; and ONLY when they apply (leave them out
 otherwise): `hi` the upper end of a range, `ep` / `em` upper / lower
@@ -41,7 +41,7 @@ Rules:
   words; for a table: row label, column label, value) and make `src` exact
   (table + row + column, or section + paragraph), so a reader can find the
   full context.
-- Give `set` exactly as the structure plan's set_label; use '' only when
+- Give `set` as the set's id from the structure plan ('S2'); use '' only when
   values apply to every {{SET_WORD}} set. If a value differs between sets,
   give it in each set's row.
 {{EXTRA_RULES}}

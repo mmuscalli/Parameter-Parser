@@ -4,6 +4,7 @@ data (facility, instrument, bands), joint fits, software, priors, assumptions
 (schemas/fit_models.py). One call; table pages go along as images, since priors
 are often tabulated. calculators/exoplanet_fits.py writes the columns.
 """
+from parameter_extractor.schemas.structure_plan import step_plan_json
 from pathlib import Path
 from typing import List, Optional
 
@@ -30,7 +31,7 @@ def run_fit_models(ctx: RunContext, paper_text: str, structure: StructurePlan,
         stage="fit_models",
         system_prompt="You record how an astronomy paper derived its reported parameters: models, data, "
                       "priors and assumptions. Report only what the paper states.",
-        user_content=prompt_text(paper_text, structure.model_dump_json(indent=2)),
+        user_content=prompt_text(paper_text, step_plan_json(structure)),
         response_model=FitModels,
         paper_text=paper_text,
         image_paths=table_images,

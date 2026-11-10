@@ -4,6 +4,7 @@ The 'analysis' step (Mickey, 2026-11-07): every analytical technique a paper use
 since instrument settings are often tabulated (Riggi2023 Table 2). calculators/analysis_columns.py writes the
 analysis_<technique>_<setting>[_<unit>] columns.
 """
+from parameter_extractor.schemas.structure_plan import step_plan_json
 from pathlib import Path
 from typing import List, Optional
 
@@ -41,7 +42,7 @@ def run_analysis(ctx: RunContext, paper_text: str, structure: StructurePlan,
         stage="analysis",
         system_prompt="You record how a chemistry paper analysed its products: the analytical techniques and "
                       "their instrument settings. Report only what the paper states.",
-        user_content=prompt_text(paper_text, structure.model_dump_json(indent=2), ctx.config.scopes.get("analysis")),
+        user_content=prompt_text(paper_text, step_plan_json(structure), ctx.config.scopes.get("analysis")),
         response_model=AnalysisResult,
         paper_text=paper_text,
         image_paths=table_images,

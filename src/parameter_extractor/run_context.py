@@ -71,6 +71,8 @@ class RunContext:
     batch_collector: object = None
     handoff_paper_dir: Optional[Path] = None   # developer handoff mode (handoff.py): this paper's folder
     vote_notes: list = field(default_factory=list)   # voting.Disagreement, with several passes
+    # the row plan's ids ('S1', 'S1.2') -> labels: later steps may answer with ids (structure_plan.expand_ids)
+    plan_ids: dict = field(default_factory=dict)
     # stages run in parallel (pipeline.extract): progress, usage and the client are shared
     _lock: threading.Lock = field(default_factory=threading.Lock, repr=False)
 

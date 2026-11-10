@@ -7,7 +7,7 @@ For EVERY search term return at least one finding:
 - If the paper states it: `found` = true, the parameter as the paper names
   it, its `value` with the unit exactly as stated, a short verbatim `quote`
   and its `source`. If the value differs between experiment sets, give one
-  finding per set with that set's exact `set_label` from the structure plan
+  finding per set with that set's id from the structure plan ('S2')
   below ('' if it applies to the whole paper).
 - If the paper doesn't state it: a single finding with `found` = false and
   the other text fields empty (''). Never guess or assume a typical value.

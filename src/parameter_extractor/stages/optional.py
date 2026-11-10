@@ -38,6 +38,7 @@ Columns that aren't template columns become standard columns of the app
 (registry.py), written after the template's block, in spec order.
 """
 from __future__ import annotations
+from parameter_extractor.schemas.structure_plan import step_plan_json
 import json
 import re
 from dataclasses import dataclass
@@ -294,7 +295,7 @@ class StageSpec(BaseModel):
         return _models(self.model_dump_json(), categories)
 
     def prompt(self, structure: StructurePlan, paper_text: str) -> str:
-        return self.prompt_text(paper_text, structure.model_dump_json(indent=2))
+        return self.prompt_text(paper_text, step_plan_json(structure))
 
     def prompt_text(self, paper_text: str, plan_json: str) -> str:
         """The stage's prompt (also the static instructions cached for every paper of a run: api_client)."""
@@ -304,10 +305,10 @@ class StageSpec(BaseModel):
                             for p in self.parameters)
         return load_prompt("optional_stage", INTRO=self.intro, PARAMETER_LIST=listing,
                            SET_WORD=self.set_word, SCHEMA_NAME=self.model_name,
-                           SAMPLE_KEY="`sample` (the sample_label, if the values are for one "
+                           SAMPLE_KEY="`sample` (the sample's id, 'S2.3', if the values are for one "
                                       f"{self.units('sample')} only) " if self.per == "sample" else "",
                            EXTRA_RULES="".join(f"- {r}\n" for r in self.rules + self._field_rules() + (
-                               [f"Give a row's `sample` exactly as the structure plan's sample_label when its "
+                               [f"Give a row's `sample` as the sample's id from the structure plan ('S2.3') when its "
                                 f"values belong to one {self.units('sample')} only; leave `sample` out for values "
                                 f"of the whole set."]
                                if self.per == "sample" else [])),

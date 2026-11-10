@@ -97,6 +97,9 @@ class SoluteEntry(BaseModel):
     exoplanet stages): short field-name ALIASES, entries grouped per set/sample (SoluteGroup),
     optional fields left out when they don't apply. The code reads the long names; answers
     recorded in the old flat format still load (populate_by_name)."""
+    # every field the model must give is REQUIRED in the schema it's sent (_required); the Python defaults only keep
+    # one incomplete species from failing the whole step (Haiku left out a `v` twice, truman2024, 2026-11-09): a
+    # missing value is 'not given', a missing confidence 'low' (flagged)
     model_config = ConfigDict(populate_by_name=True,
                               json_schema_extra=_required(["nm", "r", "ph", "v", "u", "q", "src", "c"]))
 
@@ -109,9 +112,9 @@ class SoluteEntry(BaseModel):
     # from the group (SoluteGroup) -- or, in older recordings, from the entry itself
     set_label: SkipJsonSchema[Optional[str]] = None
     sample_label: SkipJsonSchema[Optional[str]] = None
-    concentration_value: Optional[float] = Field(alias="v", description="Numeric value in the ORIGINAL reported "
+    concentration_value: Optional[float] = Field(None, alias="v", description="Numeric value in the ORIGINAL reported "
                                                                         "unit; null if the paper gives none.")
-    concentration_unit_raw: Optional[str] = Field(alias="u", description="Unit exactly as stated, e.g. 'mol dm-3', "
+    concentration_unit_raw: Optional[str] = Field(None, alias="u", description="Unit exactly as stated, e.g. 'mol dm-3', "
                                                                          "'%'.")
     # a range ('5-10 mM'; Mickey, 2026-10-31): v = the low end, hi = the high end; kept as 'low:high'
     concentration_high: float = Field(default=0.0, alias="hi",
@@ -132,13 +135,14 @@ class SoluteEntry(BaseModel):
                                                                      "(in added_solutions) it was added in.")
     concentration_mM: Optional[float] = Field(
         default=None, alias="mM",
-        description="Converted to mM, only when unambiguous; leave out otherwise (and say why in `cn` if an "
-                    "assumption such as a molecular weight would be needed).")
+        description="Only for a mass per volume (g/L, mg/mL, % w/v): converted to mM with the molecular weight. "
+                    "Leave out for molar units (the app converts them) and when the weight isn't certain (say why "
+                    "in `cn`).")
     conversion_note: Optional[str] = Field(default=None, alias="cn", description="Why there's no mM value; "
                                                                                  "at most 15 words.")
-    quote: str = Field(alias="q", description=QUOTE_DESC)
-    source: str = Field(alias="src", description=SOURCE_DESC)
-    confidence: Literal["high", "medium", "low"] = Field(alias="c")
+    quote: str = Field("", alias="q", description=QUOTE_DESC)
+    source: str = Field("", alias="src", description=SOURCE_DESC)
+    confidence: Literal["high", "medium", "low"] = Field("low", alias="c")
     # how the species was identified when the quote doesn't name it (Chen2007, 2026-10-23: Table 2
     # gives acids and amines only as structure drawings -- the quote can't show which one it was)
     identified_by: str = Field(default="", alias="how",
