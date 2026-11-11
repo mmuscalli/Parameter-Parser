@@ -242,7 +242,8 @@ def describe(module_id: str) -> List[str]:
     if mm.needs:
         out.append("uses: " + ", ".join(module_store.available()[n].label for n in mm.needs if n in module_store.available()))
     if mm.builtin_stages:
-        out.append("built-in step (one model request per paper): " + ", ".join(mm.builtin_stages))
+        out.append("switches on the built-in step " + ", ".join(f"'{s}'" for s in mm.builtin_stages)
+                   + " (part of the app, one model request per paper; view it on the Steps tab)")
     for path in m.stage_files():
         spec = json.loads(path.read_text())
         trig = spec.get("trigger") or {}
@@ -254,7 +255,8 @@ def describe(module_id: str) -> List[str]:
     if mm.postprocess:
         out.append("calculations (on your computer, no model requests): " + ", ".join(mm.postprocess))
     if mm.pack_parameters:
-        out.append("adds to the pack's first step (when missing): " + ", ".join(p["column"] for p in mm.pack_parameters))
+        out.append("adds to the data pack's conditions step (its first step that runs for every paper), when missing: "
+                   + ", ".join(p["column"] for p in mm.pack_parameters))
     if mm.standard_columns:
         out.append("columns: " + ", ".join(e["column"] for e in mm.standard_columns))
     if mm.variable_categories:
@@ -264,14 +266,16 @@ def describe(module_id: str) -> List[str]:
     if mm.stage_rules:
         out.append(f"rules added to the data pack's own steps: {len(mm.stage_rules)}")
     for step, rules in mm.prompt_rules.items():
-        out.append(f"rules for the {step} step: {len(rules)}")
+        out.append(f"rules added to the built-in {step} step's instructions: {len(rules)}")
+    for step in mm.stage_hints:
+        out.append(f"while the {step} step runs, a hint keeps its details out of the data pack's own steps")
     if mm.compound_series:
         out.append("the compound vocabulary gets every length of an oligomer series found in sample papers")
     vocab = m.file("analysis_vocab.json")
     if vocab:
         out.append(f"vocabulary: {len(json.loads(vocab.read_text()).get('techniques', []))} analytical techniques")
     if m.file("prompts/chemistry.md"):
-        out.append("prompt: the chemistry step's")
+        out.append("the chemistry step's instructions (prompts/chemistry.md)")
     return out
 
 

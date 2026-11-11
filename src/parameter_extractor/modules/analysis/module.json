@@ -2,7 +2,7 @@
   "id": "analysis",
   "label": "Analysis methods",
   "version": 1,
-  "description": "The analysis step: every analytical technique the paper used and each instrument setting it states, in analysis_<technique>_<setting> columns named from a vocabulary of techniques (analysis_vocab.json).",
+  "description": "Switches on the built-in analysis step (one request per paper: every analytical technique the paper used and each instrument setting it states, in analysis_<technique>_<setting> columns) and brings what it needs: the vocabulary of techniques and their settings (analysis_vocab.json), the Analysis column category, and a hint that keeps instrument details out of the data pack's other steps while it runs.",
   "covers": "every analytical technique the paper used and each instrument setting it states (HPLC/GC columns, mobile phases, detection wavelengths, MS/MALDI/NMR settings, standards, detection limits) -- so no parameters or stages for analysis details; one text column naming the analysis method is fine.",
   "builtin_stages": [
     "analysis"

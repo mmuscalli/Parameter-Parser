@@ -249,7 +249,7 @@ code { font-family: Menlo, monospace; } pre { white-space: pre-wrap; font-family
 def as_html(info: StepInfo, with_instructions: bool = True) -> str:
     e = html.escape
     parts = [STYLE, f"<h2>{e(info.label)}</h2>",
-             f"<p class='muted'>Built-in step <code>{e(info.name)}</code> · from {e(info.source)} · one request to "
+             f"<p class='muted'>Built-in step <code>{e(info.name)}</code> · switched on by {e(info.source)} · one request to "
              f"the AI model per paper · view only: data packs and modules switch it on and add rules to it, but its "
              f"answer format and instructions are part of the app.</p>",
              f"<p>{e(info.does)}</p>"]
