@@ -197,13 +197,16 @@ class QueueRun(QObject):
     def running(self) -> bool:
         return self.queue is not None and not self.summary
 
-    def start(self, items, config, review_figures: bool, review_variables: bool) -> None:
+    def start(self, items, config, review_figures: bool, review_variables: bool, resume_from=None,
+              rebuild: bool = False) -> None:
+        """`resume_from`: an earlier queue's folder (resume / rebuild, resume.py): its papers, reusing their answers."""
         from parameter_extractor.paper_queue import PaperQueue
         m = self.main
         self.summary, self._finishing = None, False
         self.skip_remaining_figures = not review_figures
         self._review_variables_at_end = review_variables
-        self.queue = PaperQueue(items, config, on_change=self._relay.changed.emit)
+        self.queue = PaperQueue(items, config, on_change=self._relay.changed.emit, resume_from=resume_from,
+                                rebuild=rebuild)
         for paper in self.queue.papers:
             self._paper_changed(paper)
         m.progress.setRange(0, len(self.queue.papers))

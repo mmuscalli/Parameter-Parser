@@ -188,7 +188,7 @@ def warm_cache(ctx: RunContext) -> None:
     steps read it instead of each writing its own copy at the same time (2026-11-09 cost pass). Skipped in tests
     (the network call is replaced), batch mode, handoff, local servers and without caching."""
     cfg = ctx.config
-    if (ctx.paper is None or not cfg.prompt_caching or cfg.batch_mode or cfg.handoff_dir or getattr(cfg, "is_local", False)
+    if (ctx.paper is None or not cfg.prompt_caching or getattr(cfg, "resume_from", None) or cfg.batch_mode or cfg.handoff_dir or getattr(cfg, "is_local", False)
             or _send is not _REAL_SEND or not getattr(cfg, "api_key", None) or not steps_model_differs(cfg)):
         return
     model = cfg.model_for("chemistry")
@@ -577,6 +577,22 @@ def _send_mapping_errors(ctx: RunContext, stage: str, model: str, **kwargs):
         raise errors.MalformedOutputError(stage, e.errors()[0].get("msg", "invalid JSON")) from None
 
 
+def request_fingerprint(model: str, system_prompt, user_content: str, cached_prefix: Optional[str], image_paths,
+                        response_model) -> str:
+    """What a step asks, as one hash (W1): the model, the step's own instructions and input (paper text, plan), the
+    images by file name (a new run renders them into its own folder) and the answer format. Taken before the
+    request is laid out for caching, batch mode or a local server, so it doesn't depend on those."""
+    import hashlib
+    try:
+        schema = json.dumps(response_model.model_json_schema(), sort_keys=True)
+    except Exception:                       # pragma: no cover -- every answer format has a schema
+        schema = response_model.__name__
+    record = {"model": model, "system": system_prompt if isinstance(system_prompt, str) else "",
+              "user": user_content, "prefix": cached_prefix or "",
+              "images": [Path(p).name for p in (image_paths or [])], "schema": schema}
+    return hashlib.sha256(json.dumps(record, sort_keys=True).encode()).hexdigest()
+
+
 def call_structured(
     ctx: RunContext,
     *,
@@ -605,6 +621,14 @@ def call_structured(
     actual page layout available, not just the OCR'd/column-garbled text.
     """
     model = "claude-code-handoff" if ctx.config.handoff_dir else ctx.config.model_for(stage)
+    name = (audit_name or stage) + (getattr(_streamed, "pass_suffix", "") or "")   # '.pass2' with several passes
+    fingerprint = request_fingerprint(model, system_prompt, user_content, cached_prefix, image_paths, response_model)
+    if getattr(ctx.config, "resume_from", None):        # an earlier run's saved answer (resume.py, W1)
+        from parameter_extractor import resume
+        reused = resume.saved_answer(ctx, stage, name, model, fingerprint, system_prompt, user_content,
+                                     cached_prefix, response_model)
+        if reused is not None:
+            return reused
     shared = (paper_text is not None and ctx.paper is not None and ctx.config.prompt_caching
               and paper_text in user_content)
     _streamed.tool = None
@@ -708,9 +732,9 @@ def call_structured(
         "cached_prefix": cached_prefix,
         "stop_reason": response.stop_reason,
         "message_id": response.id,
+        "request_fingerprint": fingerprint,          # a later resume reuses this answer for the same request
         "raw_response": json.loads(raw_text) if raw_text else None,
     }
-    name = (audit_name or stage) + (getattr(_streamed, "pass_suffix", "") or "")   # '.pass2' with several passes
     (run_dir / f"{name}.audit.json").write_text(json.dumps(audit, indent=2))
     (run_dir / f"{name}.output.json").write_text(parsed.model_dump_json(indent=2))
 

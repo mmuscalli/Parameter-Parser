@@ -120,6 +120,11 @@ class RunConfig:
     # switch off what only the API has (prompt caching, batches, shared cached instructions; __post_init__).
     provider: str = "anthropic"
     local: Dict = field(default_factory=dict)
+    # W1 (2026-11-11): reuse the answers saved in an earlier run's folder (resume.py). The run still writes a NEW
+    # folder, which names the old one. resume: a step whose request is unchanged is reused, the rest are asked;
+    # rebuild: nothing is asked -- every step's saved answer is used (flagged where its request changed)
+    resume_from: Optional[Path] = None
+    rebuild: bool = False
 
     def __post_init__(self) -> None:
         if self.provider == "local":
@@ -168,4 +173,5 @@ class RunConfig:
         d["pubchem_cache_path"] = str(self.pubchem_cache_path) if self.pubchem_cache_path else None
         d["arxiv_cache_dir"] = str(self.arxiv_cache_dir) if self.arxiv_cache_dir else None
         d["handoff_dir"] = str(self.handoff_dir) if self.handoff_dir else None
+        d["resume_from"] = str(self.resume_from) if self.resume_from else None
         return d

@@ -20,7 +20,7 @@ from typing import List, Optional
 
 import html
 
-from PySide6.QtCore import QSettings, Qt, QThread, QUrl
+from PySide6.QtCore import QSettings, Qt, QThread, QTimer, QUrl
 from PySide6.QtGui import QAction, QBrush, QColor, QDesktopServices, QKeySequence
 from PySide6.QtWidgets import (
     QAbstractItemView, QCheckBox, QComboBox, QFileDialog, QFormLayout, QGroupBox, QHBoxLayout,
@@ -121,6 +121,10 @@ class MainWindow(QMainWindow):
         self._worker: Optional[PipelineWorker] = None
         self._close_when_done = False
         self._quitting = False
+        self._resume_old = None         # the run folder a running resume / rebuild reuses (resume.py)
+        self._resumed_figures = None    # its digitized figures (digitized, skipped)
+        self._stopped_dir = None        # the folder of the last run that failed or was cancelled
+        self._pending_resume = None     # Resume chosen in a failure message: started once the run has ended
         self._key_was_stored = False
         # one run = background extraction + (optionally) a figure review running alongside it
         self._extraction: Optional[Extraction] = None   # live object, filled in as steps complete
@@ -174,6 +178,12 @@ class MainWindow(QMainWindow):
         # an earlier run shown in the results tabs (W3, 2026-11-11)
         self.open_results_action = QAction("Open a results folder…", self, triggered=self._open_results_folder)
         file_menu.addAction(self.open_results_action)
+        # W1: a stopped run asked again only for what's missing; a dataset rebuilt from saved answers
+        self.resume_action = QAction("Resume a stopped run…", self, triggered=lambda: self.resume_run())
+        self.rebuild_action = QAction("Rebuild a run's dataset from its saved answers…", self,
+                                      triggered=lambda: self.resume_run(rebuild=True))
+        file_menu.addAction(self.resume_action)
+        file_menu.addAction(self.rebuild_action)
         file_menu.addSeparator()
         file_menu.addAction(quit_action)
         # Settings: a menu like Data Packs (Mickey, 2026-11-08), not a button
@@ -649,7 +659,7 @@ class MainWindow(QMainWindow):
         self.settings_hint.setStyleSheet("QLabel { color: palette(link); font-weight: 600; }")
         self.settings_hint.linkActivated.connect(lambda _: self.open_settings())
         self.status.setTextFormat(Qt.TextFormat.RichText)
-        self.status.linkActivated.connect(lambda link: self.show_getting_started() if link == "help" else None)
+        self.status.linkActivated.connect(self._status_link)
         self.privacy_note = QLabel(PRIVACY_NOTE, wordWrap=True)
         self.privacy_note.setStyleSheet("color: palette(placeholder-text);")
         col = QVBoxLayout()
@@ -1019,7 +1029,12 @@ class MainWindow(QMainWindow):
             return
         pdf = items[0]
 
+        self._start_single(pdf, config)
+
+    def _start_single(self, pdf, config, resume_from=None) -> None:
+        """One paper on the background worker (a new run, or a resumed / rebuilt one)."""
         self._extraction, self._extraction_ok, self._review = None, False, None
+        self._resume_old, self._resumed_figures, self._stopped_dir = resume_from, None, None
         self._worker = PipelineWorker(pdf, config)
         self._thread = QThread(self)
         self._worker.moveToThread(self._thread)
@@ -1120,13 +1135,88 @@ class MainWindow(QMainWindow):
 
     def _on_succeeded(self, extraction: Extraction) -> None:
         self._extraction, self._extraction_ok = extraction, True
+        if self._worker is not None and self._worker.digitized is not None:     # a resumed run
+            self._resumed_figures = (self._worker.digitized, self._worker.skipped)
+
+    def _resumable(self) -> Optional[Path]:
+        """The folder of the run that just stopped, if resuming it would save something: it saved its paper and
+        settings, and at least one step's answer (else Resume would just run the paper again)."""
+        from parameter_extractor.resume import CONFIG_FILE
+        folder = getattr(self._worker, "stopped_run_dir", None) if self._worker is not None else None
+        if not folder or not (Path(folder) / CONFIG_FILE).is_file():
+            return None
+        return folder if any(Path(folder).glob("*.output.json")) else None
+
+    def _ask_resume(self, message: str) -> bool:
+        """The failure message with a Resume button; True when it was chosen."""
+        box = QMessageBox(QMessageBox.Icon.Critical, "Extraction failed", message, parent=self)
+        box.setInformativeText("Resume runs it again in a new folder: the steps that were answered are reused "
+                               "at no cost, and only the missing ones are asked.")
+        resume_btn = box.addButton("Resume", QMessageBox.ButtonRole.AcceptRole)
+        box.addButton("Close", QMessageBox.ButtonRole.RejectRole)
+        box.exec()
+        return box.clickedButton() is resume_btn
 
     def _on_failed(self, message: str) -> None:
         self.status.setText("The run stopped with an error.")
-        QMessageBox.critical(self, "Extraction failed", message)
+        self._stopped_dir = self._resumable()
+        if self._stopped_dir is None:
+            QMessageBox.critical(self, "Extraction failed", message)
+            return
+        if self._ask_resume(message):
+            self._pending_resume = self._stopped_dir       # started once this run has ended (_maybe_finish)
+        else:
+            self.status.setText("The run stopped with an error. <a href='resume'>Resume it</a> "
+                                "(only the missing steps are asked).")
 
     def _on_cancelled(self) -> None:
-        self.status.setText("Run cancelled. Partial outputs were kept in the run folder.")
+        self._stopped_dir = self._resumable()
+        self.status.setText("Run cancelled. Partial outputs were kept in the run folder."
+                            + (" <a href='resume'>Resume it</a> (only the missing steps are asked)."
+                               if self._stopped_dir else ""))
+
+    def _status_link(self, link: str) -> None:
+        if link == "help":
+            self.show_getting_started()
+        elif link == "resume" and self._stopped_dir is not None:
+            self.resume_run(self._stopped_dir)
+
+    def resume_run(self, folder=None, rebuild: bool = False) -> None:
+        """File > Resume a stopped run… / Rebuild a run's dataset… (W1, resume.py): a run folder or a paper queue's
+        folder, run again into a NEW folder next to it, reusing its saved answers."""
+        from parameter_extractor import resume
+        from parameter_extractor.errors import PipelineError
+        if self._busy:
+            return
+        what = "Rebuild a run's dataset" if rebuild else "Resume a stopped run"
+        if folder is None:
+            folder = QFileDialog.getExistingDirectory(self, f"{what}: choose its folder", self.out_edit.text())
+            if not folder:
+                return
+        folder = Path(folder)
+        base = self.current_config()
+        base.output_dir = folder.parent                  # the new folder next to the old one
+        try:
+            if resume.is_queue_folder(folder) and not (folder / resume.CONFIG_FILE).is_file():
+                papers = resume.queue_papers(folder)
+                self.papers.clear()
+                self.papers.add_items([p["item"] for p in papers])
+                self.papers.clear_statuses()
+                self.retry_btn.setHidden(True)
+                self.skip_figures_btn.setHidden(rebuild or not self.review_figures_box.isChecked())
+                self.skip_figures_btn.setEnabled(True)
+                self.queue_run.start([], base, self.review_figures_box.isChecked() and not rebuild,
+                                     self.review_variables_box.isChecked(), resume_from=folder, rebuild=rebuild)
+                self._set_inputs_enabled(False)
+                self.cancel_btn.setEnabled(True)
+                return
+            config = resume.config_for(folder, base, rebuild)
+            item = resume.original_item(folder)
+        except PipelineError as e:
+            QMessageBox.warning(self, what, str(e))
+            return
+        self._start_single(Path(item) if str(item).lower().endswith(".pdf") else item, config, resume_from=folder)
+        self.status.setText(f"{'Rebuilding' if rebuild else 'Resuming'} {folder.name}…")
 
     def _on_done(self) -> None:
         self._thread.quit()
@@ -1159,6 +1249,8 @@ class MainWindow(QMainWindow):
         review, self._review = self._review, None
         digitized = review.digitized if review else []
         skipped = review.skipped if review else []
+        if self._resumed_figures is not None:             # a resumed run: the earlier run's figures
+            digitized, skipped = self._resumed_figures
         extraction = self._extraction
         if self._extraction_ok and not self._quitting:
             self._finish(extraction, digitized, skipped)
@@ -1172,9 +1264,13 @@ class MainWindow(QMainWindow):
                     f"The dataset wasn't built, but the {len(digitized)} digitized figure(s) were "
                     f"saved to:\n{extraction.ctx.run_dir / 'figures'}")
         self._extraction, self._extraction_ok = None, False
+        self._resume_old = self._resumed_figures = None
         self._set_inputs_enabled(True)
         if self._close_when_done:
             self.close()
+        elif self._pending_resume is not None:            # Resume chosen in the failure message
+            folder, self._pending_resume = self._pending_resume, None
+            QTimer.singleShot(0, lambda: self.resume_run(folder))
 
     def _review_new_variables(self, groups, unfound_terms, registry):
         """Asked by pipeline.finish() before the CSV is written, if anything new was found."""
@@ -1186,8 +1282,12 @@ class MainWindow(QMainWindow):
     def _finish(self, extraction: Extraction, digitized, skipped) -> None:
         # the worker that reported progress so far is gone; report the last step here
         extraction.ctx.on_progress = lambda e: self._on_progress(e.step, e.total_steps, e.message)
+        review = self._review_new_variables
+        if self._resume_old is not None:          # variables decided in the earlier run's review: decided again
+            from parameter_extractor.resume import review_with_saved
+            review = review_with_saved(self._resume_old, review)
         try:
-            result = finish(extraction, digitized, skipped, review=self._review_new_variables)
+            result = finish(extraction, digitized, skipped, review=review)
         except PipelineError as e:
             self._on_failed(str(e))
             return
@@ -1313,7 +1413,7 @@ class MainWindow(QMainWindow):
                   self.new_pack_btn, self.edit_pack_btn, self.packs_btn, self.packs_window_action,
                   self.edit_pack_action, self.copy_pack_action, self.remove_pack_action, self.params,
                   self.profile_combo, self.passes_combo, self.words_edit, self.add_pdfs_action, self.add_list_action,
-                  self.open_results_action,
+                  self.open_results_action, self.resume_action, self.rebuild_action,
                   self.output_action, self.lookups_action, *self.option_toggles(), self.review_figures_box,
                   self.review_variables_box, self.tables_box, self.plan_box, self.whole_box):
             w.setEnabled(enabled)
@@ -1549,12 +1649,15 @@ class MainWindow(QMainWindow):
         vote_flags = [f for f in result.paper_flags if f.kind == "pass_disagreement"]
         auto_fig_flags = [f for f in result.paper_flags if f.kind == "auto_digitized"]
         analysis_flags = [f for f in result.paper_flags if f.kind == "analysis"]
+        reuse_flags = [f for f in result.paper_flags if f.kind == "reused_answer"]
         other_paper_flags = [f for f in result.paper_flags
                              if f.kind not in ("new_variable", "cited_data", "derived_value", "duplicate_removed",
                                                "archive_check", "archive_match", "fit_model",
                                                "multimodal", "other_estimates", "identity_not_quoted",
                                                "paper_source", "pass_disagreement", "auto_digitized",
-                                               "analysis", "scope")]
+                                               "analysis", "scope", "reused_answer")]
+        if reuse_flags:
+            add_group("Reused from an earlier run", reuse_flags)
         if scope_flags:
             add_group("Scope of this run (compounds / instrument families)", scope_flags)
         if source_flags:
@@ -1686,7 +1789,8 @@ class MainWindow(QMainWindow):
     def _fill_summary(self, result) -> None:
         usage_rows = "".join(
             f"<tr><td>{STEP_LABELS.get(u.stage) or stage_label(u.stage)}</td>"
-            f"<td>{u.model}{' (batch, half price)' if getattr(u, 'batch', False) else ''}</td>"
+            f"<td>{u.model}{' (batch, half price)' if getattr(u, 'batch', False) else ''}"
+            f"{' (reused from the earlier run)' if getattr(u, 'reused', False) else ''}</td>"
             f"<td align=right>{u.prompt_tokens:,}</td><td align=right>{u.cache_read_tokens:,}</td>"
             f"<td align=right>{u.output_tokens:,}</td>"
             f"<td align=right>{format_usd(u.cost_usd)}</td><td align=right>{u.elapsed_sec:.0f} s</td></tr>"

@@ -9,6 +9,8 @@ interface can't drift apart in behaviour.
     parameter-extract --pdf "/path/to/paper.pdf" --triage-only    # optional screening only
     parameter-extract --pdf paper.pdf --look-for "reaction volume" --look-for "stirring rate"
     parameter-extract --self-check [--pdf paper.pdf]             # check the installation (free)
+    parameter-extract --resume RUN_OR_QUEUE_FOLDER               # a stopped run: only the missing steps asked
+    parameter-extract --rebuild RUN_OR_QUEUE_FOLDER              # the dataset again from saved answers (free)
 
 New variables (no column yet) are left out of the CSV from the command line --
 the desktop app's review screen is where they're accepted. Variables accepted
@@ -53,6 +55,13 @@ def main() -> int:
                         help="Full extraction of every paper in a list (CSV/text of PDF paths, arXiv IDs, DOIs, ADS "
                              "bibcodes or reference links): figures skipped and new variables left out of the CSV "
                              "(use the app's Paper queue to review them); one combined CSV")
+    parser.add_argument("--resume", type=Path, metavar="FOLDER",
+                        help="Run a stopped run (or paper queue) again from its folder: steps answered before are "
+                             "reused at no cost, only the missing ones are asked. Writes a new folder next to it")
+    parser.add_argument("--rebuild", type=Path, metavar="FOLDER",
+                        help="Build a run's (or paper queue's) dataset again from the answers saved in its folder, "
+                             "asking the model nothing -- after changing accepted variables, a data pack's formulas or "
+                             "calculations. Writes a new folder next to it")
     parser.add_argument("--parallel", type=int, default=0, metavar="N",
                         help="With --queue: papers extracted at once (default 3, or 12 in batch mode)")
     focused = parser.add_argument_group(
@@ -222,8 +231,10 @@ def main() -> int:
         return _find_compounds(args.find_compounds, args)
     if args.focus:
         return _focused(args, parser)
-    if not args.pdf and not args.paper and not args.queue:
-        parser.error("--pdf, --paper or --queue is required")
+    if args.resume and args.rebuild:
+        parser.error("--resume and --rebuild: choose one")
+    if not args.pdf and not args.paper and not args.queue and not args.resume and not args.rebuild:
+        parser.error("--pdf, --paper, --queue, --resume or --rebuild is required")
 
     from parameter_extractor.registry import default_arxiv_cache_dir, default_pubchem_cache_path, default_registry_path
     overrides = {"paper_prefix": args.prefix, "registry_path": default_registry_path(),
@@ -242,6 +253,8 @@ def main() -> int:
         overrides["ads_token"] = args.ads_token
     if args.out:
         overrides["output_dir"] = args.out
+    elif args.resume or args.rebuild:                    # the new folder next to the old one
+        overrides["output_dir"] = Path(args.resume or args.rebuild).resolve().parent
     if args.handoff:
         if not dev_features.enabled():
             parser.error("--handoff is a developer-only option (set PARAMETER_EXTRACTOR_DEV=1 when running "
@@ -252,6 +265,8 @@ def main() -> int:
 
     if args.queue:
         return _queue(args, config)
+    if args.resume or args.rebuild:
+        return _resume(args, config)
     try:
         if args.triage_only:
             triage = run_triage_only(args.pdf, config, on_progress=print_progress)
@@ -272,6 +287,11 @@ def main() -> int:
         print("\nCancelled.", file=sys.stderr)
         return 130
 
+    _report(result)
+    return 0
+
+
+def _report(result) -> None:
     print(f"\nWrote {len(result.rows)} rows -> {result.csv_path}")
     if result.flags_path:
         print(f"{len(result.paper_flags)} paper-level flag(s), {len(result.row_flags)} row(s) "
@@ -290,6 +310,44 @@ def main() -> int:
                 print(f"  ({e.label})  {e.latex}")
     print(f"Tokens: {result.input_tokens:,} in ({result.cached_tokens:,} from cache) / {result.output_tokens:,} out "
           f"(estimated cost {format_usd(result.cost_usd)})")
+    reused = [u.stage for u in result.usage if getattr(u, "reused", False)]
+    if reused:
+        print(f"Reused from the earlier run (no cost): {', '.join(reused)}")
+
+
+def _queue_progress():
+    shown = {}
+    def changed(paper):
+        line = f"[{paper.prefix}] {paper.label}: {paper.status}" + (f" -- {paper.error}" if paper.error else "")
+        if shown.get(paper.prefix) != line:
+            shown[paper.prefix] = line
+            print(line)
+    return changed
+
+
+def _resume(args, config) -> int:
+    """--resume / --rebuild FOLDER (resume.py, W1): a run folder, or a paper queue's folder."""
+    from parameter_extractor import resume
+    from parameter_extractor.paper_queue import run_queue
+    folder, rebuild = Path(args.resume or args.rebuild), bool(args.rebuild)
+    what = "Rebuilding" if rebuild else "Resuming"
+    try:
+        if resume.is_queue_folder(folder) and not (folder / resume.CONFIG_FILE).is_file():
+            print(f"{what} the paper queue in {folder}")
+            queue = run_queue([], config, on_change=_queue_progress(), parallel=args.parallel, resume_from=folder,
+                              rebuild=rebuild)
+            finished = [p for p in queue.papers if p.result is not None]
+            print(f"\n{len(finished)} of {len(queue.papers)} paper(s) assembled -> {queue.out_dir}")
+            return 0 if finished else 1
+        print(f"{what} {folder}")
+        result = resume.resume_run(folder, config, rebuild=rebuild, on_progress=print_progress)
+    except PipelineError as e:
+        print(f"\nError: {e}", file=sys.stderr)
+        return 1
+    except KeyboardInterrupt:
+        print("\nCancelled.", file=sys.stderr)
+        return 130
+    _report(result)
     return 0
 
 
@@ -300,14 +358,8 @@ def _queue(args, config) -> int:
     if not items:
         print(f"No papers found in {args.queue}.", file=sys.stderr)
         return 1
-    shown = {}
-    def changed(paper):
-        line = f"[{paper.prefix}] {paper.label}: {paper.status}" + (f" -- {paper.error}" if paper.error else "")
-        if shown.get(paper.prefix) != line:
-            shown[paper.prefix] = line
-            print(line)
     try:
-        queue = run_queue(items, config, on_change=changed, parallel=args.parallel)
+        queue = run_queue(items, config, on_change=_queue_progress(), parallel=args.parallel)
     except KeyboardInterrupt:
         print("\nCancelled.", file=sys.stderr)
         return 130

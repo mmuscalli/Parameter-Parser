@@ -195,7 +195,7 @@ def _start(pdf_path, config: RunConfig, total_steps: int,
         if not dev_features.enabled():
             raise PipelineError("Answering steps in Claude Code (handoff) is a developer-only option and isn't "
                                 "available in this version of the app.")
-    elif config.needs_api_key and not config.api_key:  # fail fast, before creating a run folder or parsing anything
+    elif config.needs_api_key and not config.api_key and not config.rebuild:  # fail fast (a rebuild asks nothing), before creating a run folder or parsing anything
         raise ApiKeyMissingError()
     pdf_path = Path(pdf_path)
     # a PDF's stem; a paper named by identifier keeps its dots ('arXiv_2308.05343')
@@ -230,6 +230,9 @@ def _write_summary(ctx: RunContext, pdf_path: Path, started: datetime, **extra) 
         "estimated_cost_usd": total_cost(ctx.usage),
         "prices_checked": PRICES_CHECKED,
         "provider": ctx.config.provider,
+        **({"resumed_from": str(ctx.config.resume_from), "rebuilt": bool(ctx.config.rebuild),
+            "reused_steps": [u.stage for u in ctx.usage if getattr(u, "reused", False)]}
+           if getattr(ctx.config, "resume_from", None) else {}),
         **extra,
     }
     (ctx.run_dir / "run_summary.json").write_text(json.dumps(summary, indent=2))
@@ -327,6 +330,12 @@ def read_paper(
     terms = [t.strip() for t in config.focus_terms if t.strip()]
     item = pdf_path                             # a PDF, or an arXiv ID / DOI / ADS bibcode (paper_source)
     pdf_path, ctx = _start(Path(run_name(item)), config, 0, on_progress, cancel_event)
+    # the paper and settings, written first: a run that stops part-way can be resumed from them (resume.py, W1)
+    from parameter_extractor import __version__
+    from parameter_extractor.resume import CONFIG_FILE
+    (ctx.run_dir / CONFIG_FILE).write_text(json.dumps(
+        {"item": str(item), "app_version": __version__, "config": config.to_public_dict()},
+        indent=2, ensure_ascii=False))
     pack = packs.current()
     # parse, structure, metadata and assembly, plus the pack's built-in stages and the term search
     ctx.total_steps = 4 + pack.uses("methodology") + _chemistry_on(pack, config) + bool(terms)
@@ -1148,6 +1157,7 @@ def finish(
     if config.is_local:                   # results from a model the app hasn't been validated with
         from parameter_extractor.local_models import FLAG_TEXT, models_used
         paper_flags.append(Flag("local_model", FLAG_TEXT.format(models=", ".join(models_used(config)) or "?")))
+    paper_flags += _reuse_flags(ctx)
     paper_flags += stage_flags
     paper_flags += [Flag("assumed_default", m) for m in ex.ambient_notes]
     paper_flags += _identity_flags(ex.chemistry, ex.parsed.pages_for_lookup)
@@ -1426,6 +1436,29 @@ def finish(
                      figures=sorted(figure_summary, key=lambda f: f["figure_id"]), tables=list(ex.tables),
                      new_variables=held_out, accepted_variables=accepted, unfound_terms=unfound,
                      equations=list(ex.equations))
+
+
+def _reuse_flags(ctx: RunContext) -> List[Flag]:
+    """A resumed / rebuilt run (resume.py, W1): which answers came from the earlier folder, and -- for a rebuild --
+    which of them were made for a request that has changed since (the data pack's prompts or settings)."""
+    old = getattr(ctx.config, "resume_from", None)
+    if not old:
+        return []
+    reused = [u.stage for u in ctx.usage if getattr(u, "reused", False)]
+    asked = sorted({u.stage for u in ctx.usage if not getattr(u, "reused", False)})
+    what = "Rebuilt" if ctx.config.rebuild else "Resumed"
+    flags = [Flag("reused_answer", f"{what} from the earlier run {Path(old).name}: {len(reused)} answer(s) reused "
+                                   f"({', '.join(sorted(set(reused))) or 'none'})"
+                                   + (f"; asked again: {', '.join(asked)}" if asked else "; nothing was asked again")
+                                   + ". Digitized figures and review decisions of that run were used again.")]
+    changed = sorted(set(getattr(ctx, "reused_changed", [])))
+    if changed:
+        flags.append(Flag("reused_answer", f"Rebuilt with saved answers whose request has changed since they were "
+                                           f"made: {', '.join(changed)}. The data pack's instructions or settings for "
+                                           f"these steps differ now, so their answers may not match what this data "
+                                           f"pack would extract. Resume (instead of Rebuild) asks the model again for "
+                                           f"them."))
+    return flags
 
 
 def _cited_data_flags(structure: StructurePlan) -> List[Flag]:

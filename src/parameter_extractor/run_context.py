@@ -39,6 +39,7 @@ class StageUsage:
     cache_write_tokens: int = 0
     cache_read_tokens: int = 0
     batch: bool = False                    # sent through the Message Batches API (half price)
+    reused: bool = False                   # answered from an earlier run's folder (resume / rebuild): nothing sent
 
     @property
     def prompt_tokens(self) -> int:

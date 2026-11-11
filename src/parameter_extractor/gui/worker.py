@@ -30,6 +30,8 @@ class PipelineWorker(QObject):
         self.pdf_path = pdf_path
         self.config = config
         self._cancel = threading.Event()
+        self.digitized, self.skipped = None, None   # a resumed run: the earlier run's figures (resume.py)
+        self.stopped_run_dir = None                  # the run's folder, when it fails (offered for Resume)
 
     def cancel(self) -> None:
         """Takes effect before the next step starts (an API call already in
@@ -42,16 +44,21 @@ class PipelineWorker(QObject):
         from parameter_extractor.gui.error_log import latest_run_dir, record
         started = time.time()
         run_dir = lambda: latest_run_dir(self.config.output_dir, self.pdf_path, started)
+        progress = lambda e: self.progress.emit(e.step, e.total_steps, e.message)
         try:
-            result = extract(
-                self.pdf_path, self.config, cancel_event=self._cancel,
-                on_progress=lambda e: self.progress.emit(e.step, e.total_steps, e.message),
-                on_figures=self.figures_found.emit,
-            )
+            if self.config.resume_from:              # resume / rebuild: answers reused, figures from that run
+                from parameter_extractor.resume import extract_again
+                result, self.digitized, self.skipped = extract_again(
+                    self.config.resume_from, self.config, on_progress=progress, cancel_event=self._cancel)
+            else:
+                result = extract(self.pdf_path, self.config, cancel_event=self._cancel, on_progress=progress,
+                                 on_figures=self.figures_found.emit)
         except RunCancelledError:
+            self.stopped_run_dir = run_dir()
             self.cancelled.emit()
         except PipelineError as e:
-            record(f"Run failed: {e}", run_dir())
+            self.stopped_run_dir = run_dir()
+            record(f"Run failed: {e}", self.stopped_run_dir)
             self.failed.emit(str(e))
         except Exception as e:  # a bug, not a user error -- keep the details for a report
             path = record(traceback.format_exc(), run_dir())

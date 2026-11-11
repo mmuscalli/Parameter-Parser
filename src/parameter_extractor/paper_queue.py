@@ -50,6 +50,7 @@ class QueuedPaper:
     skipped: list = field(default_factory=list)
     result: object = None             # pipeline.RunResult once finished
     extracted: threading.Event = field(default_factory=threading.Event)   # set when steps end (any way)
+    resume_from: Optional[Path] = None   # its run folder in the queue being resumed (resume.py, W1)
 
     @property
     def figures(self) -> list:
@@ -67,7 +68,15 @@ _FIRST_LOCK = threading.Lock()
 class PaperQueue:
     def __init__(self, items: Sequence[PaperItem], config: RunConfig,
                  on_change: Optional[Callable[[QueuedPaper], None]] = None,
-                 cancel_event: Optional[threading.Event] = None, parallel: int = 0, digitize_by_hand: bool = True):
+                 cancel_event: Optional[threading.Event] = None, parallel: int = 0, digitize_by_hand: bool = True,
+                 resume_from: Optional[Path] = None, rebuild: bool = False):
+        """`resume_from`: an earlier queue's folder (resume / rebuild, W1): the papers are its papers (`items` is
+        ignored), each reusing the answers saved in its old run folder; this queue still gets a new folder."""
+        old_papers = []
+        if resume_from is not None:
+            from parameter_extractor.resume import queue_papers
+            old_papers = queue_papers(Path(resume_from))
+            items = [p["item"] for p in old_papers]
         stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
         self.out_dir = Path(config.output_dir) / f"queue_{stamp}"
         n = 2
@@ -82,6 +91,14 @@ class PaperQueue:
             if config.include_supplements else (list(dict.fromkeys(items)), [])
         self.papers = [QueuedPaper(item=item, prefix=f"{i:03d}", label=getattr(item, "label", "") or run_name(item))
                        for i, item in enumerate(items, start=1)]
+        self.resume_from, self.rebuild = (Path(resume_from) if resume_from else None), rebuild
+        for paper, old in zip(self.papers, old_papers):        # the same papers in the same order: same prefixes
+            paper.prefix, paper.label, paper.resume_from = old["prefix"], old["label"] or paper.label, old["run_dir"]
+        # the paper list, written first: a queue that stops part-way can be resumed from it
+        (self.out_dir / "queue.json").write_text(json.dumps(
+            {"papers": [{"prefix": p.prefix, "item": str(p.item), "label": p.label} for p in self.papers],
+             "resumed_from": str(self.resume_from) if self.resume_from else None, "rebuild": rebuild},
+            indent=2, ensure_ascii=False))
         self.on_change = on_change or (lambda paper: None)
         self.cancel_event = cancel_event or threading.Event()
         self.parallel = parallel or (BATCH_PARALLEL if config.batch_mode else DIRECT_PARALLEL)
@@ -108,7 +125,12 @@ class PaperQueue:
         self._reader.start()
 
     def _config_for(self, paper: QueuedPaper) -> RunConfig:
-        return dataclasses.replace(self.config, paper_prefix=paper.prefix, output_dir=self.out_dir)
+        config = dataclasses.replace(self.config, paper_prefix=paper.prefix, output_dir=self.out_dir)
+        if paper.resume_from is not None:           # that paper's own earlier settings, reusing its answers
+            from parameter_extractor.resume import config_for
+            config = config_for(paper.resume_from, config, self.rebuild)
+            config.paper_prefix, config.output_dir = paper.prefix, self.out_dir
+        return config
 
     def _set(self, paper: QueuedPaper, status: str = "", step: str = "", error: str = "") -> None:
         if status:
@@ -143,11 +165,16 @@ class PaperQueue:
                     self._set(paper, "failed", error=f"{type(e).__name__}: {e}")
                     paper.extracted.set()
                     continue
+                if paper.resume_from is not None:     # figures digitized in the earlier run: not offered again
+                    from parameter_extractor.resume import saved_figures
+                    paper.digitized, paper.skipped = saved_figures(
+                        paper.resume_from, paper.extraction.ctx.run_dir, [f.figure_id for f in paper.figures])
+                    paper.figures_reviewed = paper.figures_reviewed or bool(paper.digitized) or self.rebuild
                 if not paper.figures:
                     paper.figures_reviewed = True
                 # no figure will become rows: a paper with no rows from tables or text skips its extraction steps
-                paper.extraction.no_figure_rows = not paper.figures or (
-                    not self.digitize_by_hand and not self.config.auto_digitize_figures)
+                paper.extraction.no_figure_rows = not paper.digitized and (not paper.figures or (
+                    not self.digitize_by_hand and not self.config.auto_digitize_figures))
                 self._set(paper, "extracting", "Waiting for its turn")
                 self._pool.submit(self._extract, paper)
         finally:
@@ -206,6 +233,9 @@ class PaperQueue:
         """Rows, review (review(groups, unfound_terms, registry) -> decisions, or None: nothing new is
         added) and files for one extracted paper. Its digitized figures become rows too."""
         from parameter_extractor.pipeline import finish
+        if paper.resume_from is not None:               # variables decided in the earlier review: decided again
+            from parameter_extractor.resume import review_with_saved
+            review = review_with_saved(paper.resume_from, review)
         try:
             paper.result = finish(paper.extraction, paper.digitized, paper.skipped, review=review)
             self._set(paper, "finished", f"{len(paper.result.rows)} rows")
@@ -256,16 +286,18 @@ class PaperQueue:
 
 
 def run_queue(items: Sequence[PaperItem], config: RunConfig, on_change=None, cancel_event=None,
-              parallel: int = 0) -> PaperQueue:
+              parallel: int = 0, resume_from: Optional[Path] = None, rebuild: bool = False) -> PaperQueue:
     """The whole queue without a person: figures skipped, no new-variable review (new variables stay
     out of the CSV, listed in each paper's new_variables.json). For the command line."""
     queue = PaperQueue(items, config, on_change=on_change, cancel_event=cancel_event, parallel=parallel,
-                       digitize_by_hand=False)
+                       digitize_by_hand=False, resume_from=resume_from, rebuild=rebuild)
     queue.start()
     queue.wait()
     for paper in queue.papers:
         if paper.status == "extracted":
-            if config.auto_digitize_figures and paper.figures:      # the easy figures, from their suggestions
+            if paper.digitized:                                         # from the run being resumed
+                pass
+            elif config.auto_digitize_figures and paper.figures:      # the easy figures, from their suggestions
                 from parameter_extractor.pipeline import auto_digitize_figures
                 paper.digitized, paper.skipped = auto_digitize_figures(paper.extraction)
             else:
