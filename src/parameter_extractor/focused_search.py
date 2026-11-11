@@ -159,7 +159,7 @@ def passages(text: str, keywords: Sequence[str], whole_tables: bool = True) -> t
 
 def answer_model(columns: Sequence[str]):
     """The answer schema for these columns: flat, every field required (optional fields invited
-    runaway answers, see CLAUDE.md), short field names."""
+    runaway answers, see docs/history/), short field names."""
     Col = Literal[tuple(columns)]
     required = lambda names: {"json_schema_extra": {"required": names}}
     Value = create_model(

@@ -1,6 +1,6 @@
 """
 Papers from arXiv by identifier: an arXiv ID, a DOI or an ADS bibcode -> the arXiv record and its
-full text (evaluated 2026-10-24, see CLAUDE.md "arXiv full text evaluated").
+full text (evaluated 2026-10-24, see docs/history/2026-10.md "arXiv full text evaluated").
 
 - export.arxiv.org/api/query gives METADATA only (title, authors, DOI, journal reference, versions).
 - The full text comes from arxiv.org/html/<id> (LaTeXML rendering of the source; tables as text
