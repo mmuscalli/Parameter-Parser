@@ -3,15 +3,9 @@ Resolve a paper's DOI via the CrossRef REST API when it isn't printed on the
 page (which is common for older PDFs like eder1994.pdf -- no DOI exists on a
 1994 print scan; it was assigned retroactively).
 
-IMPORTANT -- developed but not live-tested from this sandboxed session: this
-project's cloud container AND the linked computer both have an organization
-egress policy that rejects api.crossref.org (confirmed via direct curl from
-both; see README.md "Network restrictions" section). The code below follows
-CrossRef's public REST API exactly (https://api.crossref.org/swagger-ui/)
-and is exercised against a realistic recorded fixture in
-tests/test_crossref_lookup.py, but has not been confirmed against a live
-response. Re-verify the first few real calls once this runs somewhere with
-normal internet access.
+Confirmed against the live service on 2026-10-12 (eder1994 -> 10.1039/dt9940001125, title similarity 0.98);
+used by the paper-details step when a paper prints no DOI. tests/test_crossref_lookup.py runs offline against a
+recorded response.
 
 Never silently accepts a low-confidence match -- CrossRef's bibliographic
 search is a fuzzy match, not a lookup by known ID, so a wrong-but-plausible

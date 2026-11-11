@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "parameter-extractor"          # working name -- rename before public release
 version = "0.1.0"
-description = "Extract experimental parameters from prebiotic peptide-synthesis papers into a structured dataset using the Claude API."
+description = "Extract experimental values from scientific papers into a reviewed dataset, with data packs per research area, using Claude or a locally hosted model."
 readme = "README.md"
 requires-python = ">=3.10"
 # license: not chosen yet -- must be decided before a public release.

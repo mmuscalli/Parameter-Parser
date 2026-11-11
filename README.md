@@ -1,340 +1,147 @@
 # Parameter Extractor
 
-Extracts experimental parameters from published prebiotic peptide-synthesis
-papers (metadata, experimental methodology, and reported solution chemistry)
-into the row/column shape of the EORE `PaperDataTemplate.xlsx` dataset, using
-the Claude API.
+Parameter Extractor reads published scientific papers and pulls the experimental values they report into a
+dataset: one row per experiment or sample, one column per variable, with the quote, page and confidence behind
+every value. It uses an AI model (Anthropic's Claude, or a model you host yourself) to read the paper, and local
+code for everything that can be done without one: parsing the PDF, unit conversions, calculations, checks.
 
-**Status: prototype.** It runs end to end and reproduces the hand-curated
-eder1994 dataset (42/42 rows), but it has been validated on one paper only.
-Every output is meant for human review: each run lists anything it's unsure
-about in `plausibility_flags.json`. A desktop app is planned (see "Roadmap").
+It is meant to speed up building a dataset by hand, not to replace the person checking it. Every run lists what
+deserves a second look ("Things to check"), and nothing the app is unsure about goes into the dataset without
+being flagged.
+
+**Status:** in development and used by its author; not yet publicly released. It ships with two data packs,
+*Prebiotic chemistry* and *Exoplanets*, and you can make your own for other fields. The macOS app is unsigned, and
+there is no Windows build yet.
 
 ## Install
 
-Requires Python 3.10+. No other software is needed: PDF handling is pure
-Python.
+Requires Python 3.10 or later. PDF handling is pure Python, so nothing else is needed.
 
 ```bash
 python -m venv .venv
-.venv/bin/pip install -e .          # from this folder
+.venv/bin/pip install -e ".[gui]"        # from this folder; leave out [gui] for the command line only
+.venv/bin/parameter-extractor-gui        # the desktop app
+.venv/bin/parameter-extract --help       # the command line
 ```
 
-This installs the `parameter-extract` command. (Without installing, `python main.py`
-from this folder does the same thing.)
+To build a double-clickable macOS app (no Python needed to run it), see [packaging/README.md](packaging/README.md).
+To check an installation without running an extraction (free): `parameter-extract --self-check`.
 
-For the desktop app, install the `gui` extra as well:
+## Before the first run
 
-```bash
-.venv/bin/pip install -e ".[gui]"
-.venv/bin/parameter-extractor-gui   # or: .venv/bin/python -m parameter_extractor.gui
-```
+- **An Anthropic API key** (Settings… in the app). It is kept in the system keychain, never in a file. For the
+  command line, set `ANTHROPIC_API_KEY`, or copy `config/.env.example` to `config/.env` and fill it in (that file is
+  ignored by git).
+- **Or a local model server** (Settings › Model provider): Ollama, LM Studio, llama.cpp or vLLM on your own
+  machine or network. No API key and no cost per paper, but slower, and results from local models haven't been
+  validated the way Claude's have (every such run is flagged). See [docs/local_model_notes.md](docs/local_model_notes.md).
+- **A results folder.** Every run writes a new folder there and never overwrites an earlier one.
 
-To build a standalone, double-clickable app (no Python needed to run it), see
-[packaging/README.md](packaging/README.md).
+**Privacy:** each paper's text and table images are sent to Anthropic (or to your own model server) to be read.
 
-To check an installation without running an extraction (free):
-`parameter-extract --self-check --pdf some-paper.pdf`.
+## Using the app
 
-## API key
+The window is laid out as five numbered steps.
 
-Runs call the Anthropic API, so you need your own API key. **The paper's text
-and table images are sent to Anthropic** as part of each run.
+1. **Data pack**: what to extract. A data pack defines one research area: its columns, the extraction steps
+   that fill them, its rules and its calculations. Pick the one for your field, or make one (below).
+2. **Papers**: add PDFs (or drop them on the window), type an arXiv ID, DOI or ADS bibcode, or add a list of
+   papers from a CSV or text file. A paper's supplementary information is read with it when it sits next to the
+   PDF (`paper_SI.pdf`).
+3. **What to extract**: everything ticked gives the full dataset. Untick whole steps you don't need, or untick
+   single values to run a cheaper *search for a few values* instead. Some steps can be narrowed further, e.g.
+   to a few compounds or a few instrument families.
+4. **Options**: the AI model (cost against accuracy), whether to read values two or three times and keep the
+   majority, half-price batch mode, reading the arXiv version of a paper, and more. Hover over any option for an
+   explanation.
+5. **Run**: press **Extract data**. Several papers become a queue, extracted a few at a time.
 
-For the command line, either set `ANTHROPIC_API_KEY` in your shell, or copy
-`config/.env.example` to `config/.env` and fill in the key. `config/.env` is
-git-ignored; never commit a real key.
+While a paper is read you may be asked which **figures** to digitize: a built-in plot digitizer reads values off
+a figure, with axis calibration, suggestions for the series and their conditions, and automatic detection of
+points and bars where the plot is simple enough. At the end, a **review** offers values the data pack has no
+column for yet (a new compound, a condition the pack doesn't record). Nothing new is added unless you accept it;
+with *Remember* ticked, later papers fill that column automatically.
 
-## Desktop app
+### Results
 
-Choose a PDF (or drop it onto the window), paste your API key, pick where
-results go, and click **Extract data**. A progress bar follows the six steps.
-Cancel stops after the current step. When the run finishes:
+The tabs at the bottom show:
 
-- **Rows**: the extracted CSV, measured values first. Hover any cell to see
-  where its value came from (step, location, quote, confidence). Flagged rows
-  are highlighted, and hovering shows why.
-- **Flags**: everything to check by hand. Select one to see the full issue,
-  the supporting quote from the paper, and where it appears.
-- **Summary**: token usage per step, plus buttons to open the results folder
-  or the CSV.
+- **Extracted data**: the dataset. Hover over a value to see where it came from: the step, the quote, the page,
+  the model's confidence, and any conversion or calculation.
+- **Things to check**: values worth a second look, grouped by kind (low confidence, assumed values, conflicting
+  values, unit problems, values calculated by the app, data reproduced from other papers, ...).
+- **Summary**: requests made, tokens used and cost per step; buttons to open the results folder or the CSV.
+- **Figures**, **Tables**, **Equations**: what was found in the PDF, and what was digitized.
 
-### Wet-dry cycling and cited data
+### Data packs and modules
 
-- **Wet-dry cycling** papers get an extra step (only when cycling sets are
-  found): each row's `cycle_number`, the set's `cycle_duration_hr`, and the
-  wet- and dry-phase conditions in the app's standard columns
-  `wet_phase_temperature_C`, `wet_phase_duration_hr`,
-  `wet_phase_relative_humidity_pct`, `dry_phase_temperature_C`,
-  `dry_phase_duration_hr` (written after the template's 280 columns, only
-  when filled; defined in `schemas/standard_columns.json`).
-- **Data reproduced from other publications** (reviews, comparison tables,
-  redrawn figures, quoted results) is detected per set and per digitized
-  figure. Those rows carry the original reference in
-  `original_data_reference`, and a warning suggests extracting from the
-  original paper instead.
+**Data Packs › All data packs and modules…** lists the packs, what each one asks the model per paper, and the
+shared modules they link (analysis methods, solution chemistry, kinetics, wet-dry cycling, peptides and oligomers,
+and more). A module is defined once and linked by any number of packs, so an improvement to it reaches all of them;
+a pack can still adjust a module's settings for itself (units, trigger words, rules).
 
-### Units and names
+To make a pack: **Data Packs › New data pack…** starts from a template, a copy of an existing pack, or a draft
+the app writes from a few sample papers you give it (a few cents). The pack editor (Data Packs › Edit…) covers
+columns, steps, rules, formulas, compounds and modules, and checks the pack before saving. **Help › How data packs
+work…** explains the parts. The template's guide is
+[src/parameter_extractor/packs/_template/README.md](src/parameter_extractor/packs/_template/README.md).
 
-- **Names**: species are matched onto the template's names before anything
-  is treated as new. For example "sodium chloride" / "NaCl(aq)" -> NaCl,
-  "glycine" -> Gly, "diglycine" / "Gly-Gly" / "(Gly)2" -> 2peptide_Gly,
-  "Ca2+" -> Ca+2, "CuCl2·2H2O" -> CuCl2. Only exact rules and a synonym table
-  are used, never fuzzy guessing; matches are noted in the value's
-  provenance.
-- **Concentrations** are recomputed from the value and unit as printed. A
-  missing mM value is filled in; if the extraction's own arithmetic
-  disagrees, the recomputed value is used and flagged.
-- **Units when adding a variable**: values are converted to the chosen
-  column's unit ("1 cm3" -> 1 for a `_mL` column, "45 min" -> 0.75 for
-  `_hr`). The review window shows each value's "Stored as" preview and
-  won't build the dataset with a value that can't be converted.
+## Cost and time
 
-### Parameters to look for
+Each paper gets a few requests: one to plan the rows, one for the paper's details, and one per extraction step
+the data pack uses. Recorded costs per paper:
 
-Optionally list parameters you especially want found, one per line (e.g.
-"extraction solvent volume", "flowthrough recirculation time"). A targeted
-search (one extra API call, ~$0.05) then answers every term explicitly: its
-value with a quote, or "not stated in the paper". Found values go to the
-review below. From the command line: `--look-for "term"` (repeatable).
+| Model choice | Typical paper | Long catalogue paper |
+|---|---|---|
+| Standard (Claude Sonnet; the default, most accurate) | $0.15–0.30, 1–2 min | up to about $1.85, ~5 min |
+| Balanced (Sonnet plans, Haiku extracts) | about $0.08–0.10 | not recommended for exoplanets |
+| Economy (Claude Haiku) | $0.01–0.05 | about $0.30–0.45 |
+| Local model server | free | free, but ~35 min on a 24 GB GPU |
 
-### Review new variables (before the CSV is written)
-
-PaperDataTemplate has a fixed set of columns. When a paper reports something
-without one -- a salt no curated paper used, a condition like stirring or
-irradiation (the methodology step lists these as "other parameters"), a
-searched-for parameter, a figure axis typed in by hand -- the app asks before
-writing the CSV. For each: **Don't add** (the default), **New column** (name
-editable; added after the template's 280 columns), or **Existing column**
-(merge, e.g. a reaction volume into `solvent_volume_mL`). Values can be edited
-first (e.g. "300 rpm" -> 300).
-
-With *Remember* ticked, choices are saved to your local variable registry
-(`~/Library/Application Support/Parameter Extractor/variable_registry.json`
-on macOS), so later papers fill those columns automatically without asking.
-The bundled template list is never modified. Values not added are kept in
-`new_variables.json`.
-
-**Variables → Remembered variables…** shows what the registry has learned:
-columns you added (rename or remove; removing also forgets the names mapped
-to it, so they're reviewed again) and synonyms (change the column or remove).
-The template's and the app's built-in columns are listed read-only. Changes
-are saved with **Save** and affect future runs only. The command line uses the same registry but never
-adds new variables itself.
-
-### Figures (digitizing plots)
-
-If the paper has figures ("Fig. N" captions), a review window opens as soon
-as the PDF has been read, while the text extraction carries on in the
-background (its progress shows in the window). It steps through the figures
-one at a time. For each, choose
-**Skip** (it stays out of the dataset) or **Digitize this figure**, which opens a
-plot digitizer on the page, zoomed to the figure:
-
-1. **Set X axis / Set Y axis**: click two well-separated points on each axis
-   (labelled ticks) and type their values. Log axes and slightly tilted scans
-   are handled.
-2. Check the **columns** each axis feeds (e.g. `duration_hr`,
-   `sampled_2peptide_Gly_%yield`) and the **multiplier** for unit conversion.
-3. Check the **series** (one per marker or legend entry) and their conditions
-   (composition in mM, temperature, pH).
-4. **Add points**: select a series and click its points. Drag to adjust,
-   right-click to remove, Ctrl+Z to undo. Only the selected series is
-   editable, so you can click right on top of another series' points.
-   **Show only the selected series** hides the others in crowded areas, and
-   Shift+click adds a point even on top of one of the same series.
-
-Navigation: pinch on a trackpad (or Cmd/Ctrl+scroll, or a mouse wheel) to
-zoom; two-finger scroll, or drag in **Pan / zoom** mode, to move around.
-
-Finding figures costs nothing (it's done locally from the PDF). Only for a
-figure you choose to digitize does the model suggest the axis columns, series
-and conditions, from the figure image, caption and the passages that mention
-it (one API call, about 15K input tokens or $0.05). If the text extraction
-hasn't reached the experiment structure yet, the request waits for it, so
-start calibrating meanwhile. It also warns if the figure seems to repeat a table's
-data. Everything it suggests is editable. Figures with several panels, or a
-second y-axis, get one coordinate system each (**Add axes**).
-
-The dataset is built once both the extraction and the figure review are
-finished, whichever ends last. Each digitized series becomes a new set of
-rows after the table rows, marked
-`extraction_confidence = digitized` with the figure and series named in
-`source_notes`.
-
-Tick *Remember on this computer* to keep the key in the system keychain
-(macOS Keychain / Windows Credential Manager). It's never written to a file.
-Results are saved exactly as with the command line.
+Batch mode halves the price and takes several minutes longer per paper. A search for a few values costs a fraction
+of a full extraction. The Summary tab shows what each run actually cost.
 
 ## Command line
 
 ```bash
-parameter-extract --pdf "path/to/paper.pdf"                 # extract a paper
-parameter-extract --pdf "path/to/paper.pdf" --out results/  # choose the output folder (default: ./runs)
-parameter-extract --pdf "path/to/paper.pdf" --triage-only   # optional screening only (see below)
+parameter-extract --pdf paper.pdf --out results/              # one paper, full extraction
+parameter-extract --paper 2308.05343 --pack exoplanets        # by arXiv ID, DOI or ADS bibcode
+parameter-extract --queue papers.csv --batch                  # many papers, half price
+parameter-extract --papers papers.csv --focus pl_orbper       # search for a few values in many papers
+parameter-extract --list-packs                                # data packs and their steps
+parameter-extract --list-parameters --pack exoplanets         # what a search can look for
+parameter-extract --provider local --models MY_PROFILE --pdf paper.pdf   # on your own model server
 ```
 
-A run takes about two minutes for a 6-page paper and uses roughly 75K input /
-21K output tokens.
-
-The paper is assumed to be one you've already chosen. `--triage-only` is an
-optional screen against one curator's inclusion criteria
-(`prompts/triage.md`), meant for filtering a pile of candidate papers. It never
-stops a normal extraction run.
+`parameter-extract --help` lists every option, including drafting data packs and modules from sample papers. The
+command line uses the same data packs and remembered variables as the app, but never adds new variables itself.
 
 ## What a run produces
 
-Each run writes a new folder, `<output>/<pdf name>_<date-time>/`, and never
-overwrites an earlier run:
+Each run writes `<results folder>/<paper name>_<date-time>/`:
 
 | File | Contents |
 |---|---|
-| `<pdf name>_observations.csv` | The same data in long format, one value per line: row, column, value, unit, and where it came from (extraction step, source location, supporting quote, confidence). This is the run's canonical record; the template-layout CSV is generated from it |
-| `<pdf name>_extracted.csv` | One row per sample. The first 280 columns are exactly PaperDataTemplate's, in its order (empty ones included), so rows paste straight into the template. After them: any columns the template doesn't have (e.g. a new species), then our provenance columns (`yield_below_threshold_note`, `source_notes`, `extraction_confidence`) |
-| `plausibility_flags.json` | Anything to check by hand (see below); absent if nothing was flagged |
-| `run_summary.json` | Settings used (never the key), models, token usage, timings |
-| `<stage>.output.json` / `<stage>.audit.json` | Each step's structured result, plus the exact prompt sent and the raw response |
-| `parsed_paper.json`, `page_images/` | The extracted text, and renders of pages containing tables |
-| `new_variables.json` | Variables beyond the template: what was accepted into which column, the review decisions, and every value not added (with set, sample and quote) |
-| `figures_found.json`, `figures/` | Detected figures (caption, location) with page renders; for each digitized figure, `fig-N.digitized.json` (calibration, every click and its value) and `fig-N.digitized.png` (the points drawn on the figure) |
+| `<paper>_extracted.csv` | The dataset: one row per sample, columns grouped by category (identifiers, metadata, methodology, conditions, starting compounds, products, ...), then provenance columns |
+| `<paper>_observations.csv` | The same values in long format, one per line, with unit, quote, page, step and confidence |
+| `<paper>_columns.csv` | Every column with its category |
+| `plausibility_flags.json` | The "Things to check" list |
+| `new_variables.json` | Values offered in the review: what was accepted, and everything left out |
+| `run_summary.json` | Settings (never the key), models, tokens, cost, timings |
+| `<step>.output.json`, `<step>.audit.json` | Each request's answer and exactly what was sent |
+| `tables/`, `figures/`, `equations/` | Crops of the paper's tables, figures and equations; digitized figures with every click |
 
-### Flags and confidence
+A queue writes one such folder per paper plus combined CSV files; a search for a few values writes one table for
+all papers.
 
-Every extracted value carries the model's own confidence rating
-(high/medium/low) and a supporting quote from the paper. `plausibility_flags.json`
-lists:
+## For developers
 
-- **Paper-level issues**: values below the confidence threshold, and
-  structural problems such as a concentration given both paper-wide and for
-  specific sets (it's left out of the CSV rather than copied onto every row).
-- **Row-level issues**: out-of-range values (temperatures, negative
-  concentrations, yields outside 0–100%) and low-confidence measured values.
+- Code: `src/parameter_extractor/`. `pipeline.py` is the entry point (`run_pipeline(pdf, RunConfig, ...)`); the
+  window (`gui/`) and the command line (`cli.py`) are thin layers over it.
+- Tests: `python scripts/run_tests.py` runs every offline test (no API calls, about two minutes). Many tests replay
+  recorded runs in `runs/`, which isn't in the repository (it contains the papers' text), so on a fresh clone those
+  tests skip.
+- `CLAUDE.md` is the guide for AI agents working on the code; `docs/history/` holds the dated record of every
+  decision and measurement, `eval/` the write-ups of measurements.
 
-- **New variables not added**: anything the paper reports that has no
-  column and wasn't added in the review (see below).
-- **Searched-for terms not found** in the paper.
-- **Assumed values**: a value the paper doesn't actually state (including the
-  paper's own hedges like "perhaps 130 °C") is never written automatically.
-  Every per-set and wet-dry value is marked stated, derived or assumed. An
-  assumed one is flagged and offered in the review, where you can still
-  include it. That choice is never remembered for later papers.
-
-The thresholds are `CONFIDENCE_FLAG_BELOW` (default `"high"`, so medium and low
-values are flagged) and `CONFIDENCE_DROP_BELOW` (default off; set it to blank
-low-confidence values out of the CSV) in `src/parameter_extractor/config/settings.py`.
-The confidence ratings are the model's self-assessment and vary between runs,
-so treat them as a prompt to check, not a guarantee.
-
-## How it works
-
-1. **Parse** the PDF to text (pdfplumber) and render pages with a "Table N"
-   caption to images (pypdfium2). Two-column tables often garble in plain text,
-   so the model is shown both and told to trust the image.
-2. **Plan structure**: identify experiment sets and samples (the CSV's rows).
-3. **Metadata**: title, authors, year, journal, DOI. If the paper doesn't
-   print a DOI, CrossRef is queried; a match is only accepted when both title
-   similarity and CrossRef's own score clear conservative thresholds.
-4. **Methodology**: vessel, solvent, temperature, pressure, analysis method, …
-5. **Chemistry**: every species and concentration (initial and measured),
-   mapped onto the template's controlled vocabulary. Unknown species are
-   kept and listed for review, never dropped.
-6. **Figures** (desktop app): skip or digitize each detected figure (above).
-7. **Assemble** the rows, run the checks, and write the outputs.
-
-The command line extracts text and tables only. It lists the figures it found
-in `run_summary.json` as "not digitized".
-
-## Using it from Python
-
-The command line is a thin wrapper over a library call that a GUI uses too:
-
-```python
-from parameter_extractor.config.run_config import RunConfig
-from parameter_extractor.pipeline import run_pipeline
-
-result = run_pipeline("paper.pdf", RunConfig(api_key="sk-ant-...", output_dir="results"),
-                      on_progress=lambda e: print(e.step, e.total_steps, e.message))
-result.csv_path, result.paper_flags, result.row_flags, result.input_tokens
-```
-
-Failures raise `parameter_extractor.errors.PipelineError` subclasses whose message
-is written for the end user (bad key, model unavailable, scanned PDF, …).
-Passing a `threading.Event` as `cancel_event` lets a caller stop a run
-between steps.
-
-## Project layout
-
-```
-src/parameter_extractor/
-  pipeline.py        run_pipeline() / run_triage_only(): the library entry points
-  cli.py             the parameter-extract command
-  config/            settings.py (defaults) and run_config.py (one run's settings)
-  run_context.py     progress events, cancellation, per-run API client and usage log
-  errors.py          user-facing error types
-  api_client.py      the only place that calls the Anthropic API
-  stages/            one module per extraction step
-  prompts/           the instructions sent for each step
-  schemas/           Pydantic models for each step's output, plus template_vocab.json
-                     (the controlled vocabulary, generated from PaperDataTemplate.xlsx)
-  ingestion/         PDF parsing, CrossRef lookup, flattening to template rows
-  validation/        plausibility/confidence checks; gold-standard scorer (off)
-  calculators/       simple deterministic conversions (unit conversion, % yield)
-  gui/               the desktop app (PySide6): main_window, background worker, keychain
-  digitizing/        plot calibration maths and the audit image for digitized figures
-  diagnostics.py     --self-check: verifies an install or packaged app (no API cost)
-packaging/           build the standalone app: PyInstaller spec, build script, icons
-tests/               offline tests: no API calls, run in a few seconds
-runs/                reference runs for eder1994 (see below)
-eval/gold_standard/  empty until a curated answer set exists
-```
-
-## Tests
-
-```bash
-.venv/bin/python tests/test_pipeline_offline.py
-.venv/bin/python tests/test_crossref_lookup.py
-.venv/bin/python tests/test_gui_offline.py      # needs the [gui] extra; runs off-screen
-.venv/bin/python tests/test_diagnostics.py
-.venv/bin/python tests/test_figures.py
-.venv/bin/python tests/test_truman2024_replay.py   # and test_new_variables, test_observations,
-                                                    # test_units_names, test_registry, ...
-```
-
-`test_pipeline_offline.py` replays the saved model responses from
-`runs/eder1994_auto/` through the full pipeline (real parsing, rendering,
-flattening and checks, with no API calls) and requires the output to match
-the committed CSV exactly. Run it after any change.
-
-## Reference runs in `runs/`
-
-- `eder1994/`: the original **hand-built** demo, produced by Claude reading the
-  paper and filling the same schemas, before any API key existed. Marked
-  `"model": "manual-claude-demo"` in its provenance files. One transcription
-  error (set 001013 is Ca²⁺, not Ba²⁺) was found by the automated run and
-  corrected, with a note in the provenance files.
-- `eder1994_auto/`: the first real automated run. It matches the hand-built
-  demo on all 42 rows and is used by the offline test.
-- `eder1994_check/`: a later run where the model mislabelled one NaCl value as
-  paper-wide; kept as the example that motivated the paper-wide species check.
-- `truman2024_auto/`: second reference paper, the first outside the hand-curated
-  set. It's a review reproducing wet-dry cycling data from Rodriguez-Garcia et
-  al. 2015 and Campbell et al. 2019, so it covers cited-data detection, cycle
-  numbers, wet/dry phase conditions and per-sample starting concentrations.
-  Replayed offline by `tests/test_truman2024_replay.py`.
-
-## Gold-standard validation (off)
-
-`validation/gold_standard_eval.py` scores output against a curated answer set.
-It's off (`ENABLED = False`, `settings.USE_GOLD_STANDARD = False`) until that
-set exists. Then drop its CSV into `eval/gold_standard/` and switch both on.
-
-## Roadmap
-
-1. ✅ Pipeline as a library (progress, cancellation, user-facing errors, run folders)
-2. ✅ Pure-Python PDF handling and installable package
-3. Desktop app (PySide6): window ✅; macOS app + .dmg build ✅ (unsigned);
-   still to do: code signing/notarization, Windows build
-4. Reading figures and scatter plots: hand digitizing with AI-suggested
-   variables ✅ (foundation; refinements to come)
-
-Before a public release: choose a project license and a final name.
+Before a public release: a project license, a final name, code signing for macOS, and a Windows build.
