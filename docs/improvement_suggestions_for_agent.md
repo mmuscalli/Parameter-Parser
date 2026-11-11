@@ -26,10 +26,9 @@ that and stop: in this project a measured "no" is a normal, useful result (see "
 - **How a paper is processed** (`pipeline.py`): `read_paper` (local: parse the PDF, table images, figures, equations)
   → `extract_steps` (model requests: the row plan first, then the other steps in parallel) → `finish` (local:
   build rows, calculations, review of new variables, flags, CSV files).
-- **Where the project's knowledge is.** `CLAUDE.md` in the repository root is loaded into your session
-  automatically. It is the project's dated history, written for agents, and records every decision and measurement.
-  It is very large (about 240 KB), so **don't read it again with a tool**: search it for a heading or keyword when
-  you need a detail. Other write-ups: `eval/*.md` (measurements), `docs/local_model_notes.md` (what changes with
+- **Where the project's knowledge is.** `CLAUDE.md` in the repository root (a short guide, loaded into your session
+  automatically) and `docs/history/` (the dated record of every decision and measurement, split out of CLAUDE.md on
+  2026-11-11 by P1; about 240 KB, so search it for a heading or keyword rather than reading it). Other write-ups: `eval/*.md` (measurements), `docs/local_model_notes.md` (what changes with
   local models), `README.md` (for people, out of date, see P3).
 - **Keep your context small.** A previous session ran out of context on this review, because CLAUDE.md alone takes
   much of the window. Read source files in ranges (grep for the function, then read 50–100 lines), not whole
@@ -69,9 +68,9 @@ find them.
 - **Leave these alone unless Mickey asks:** gold-standard validation (off on purpose; he is building the curated
   set), `PaperDataTemplate.xlsx` (frozen), code signing / notarization, the Windows build, triage as a gate.
 - **After a round of code changes:** build both apps (`packaging/build_macos.sh` and
-  `packaging/build_macos.sh --dev`) and run each with `--self-check`; add a dated section to CLAUDE.md saying what
-  was built, what was measured and what was decided (unless P1 is accepted and changes where that goes); commit
-  and push to the current branch. Commit messages end with `Co-Authored-By: Claude <noreply@anthropic.com>`.
+  `packaging/build_macos.sh --dev`) and run each with `--self-check`; add a dated section to the current month's `docs/history/YYYY-MM.md`
+  saying what was built, what was measured and what was decided (and its line in `docs/history/README.md`); commit
+  and push to the current branch. Commit messages end with the attribution line your session gives you.
   A docs-only change needs no build.
 
 ## Already measured and decided: don't propose these again
@@ -108,23 +107,30 @@ paid Claude runs or the local server. Update Status as you go: `proposed` → `a
 
 | ID | Suggestion | Area | Effort | Live | Status |
 |---|---|---|---|---|---|
-| E1 | Local models: send the paper first, so the server reads it once per paper | Efficiency | M | local server | proposed |
-| E2 | Local models: a per-model setting for thinking | Efficiency | S | local server | proposed |
-| E3 | Local models: know the real context and use the room better | Efficiency | S–M | local server | proposed |
-| E4 | Paper queues in batch mode: shared batches, more papers in flight | Efficiency | M | Claude (small) | proposed |
-| W1 | Resume a failed or cancelled run; rebuild a dataset from saved answers | Workflow | M–L | no | proposed |
-| W2 | Corrections and "checked" marks in the results window | Workflow | L | no | proposed |
-| W3 | Open a previous run in the window | Workflow | S–M | no | proposed |
-| W4 | Cost and time estimate before a run starts | Workflow | M | no | proposed |
-| W5 | Command line: scope flags; a notification when a long run ends | Workflow | S | no | proposed |
-| W6 | Keep the local-model test scripts in the repository | Workflow | S | no | proposed |
-| F1 | Units: read "uL/min" and other ASCII spellings of µ | Functionality | S | no | proposed |
-| F2 | Local models: table image size per model | Functionality | S–M | local server | proposed |
-| F3 | A free second reading of table values from the PDF's text layer | Functionality | L | no | proposed |
-| P1 | Split CLAUDE.md into a short guide and a dated history | Upkeep | M | no | proposed |
-| P2 | Back up the reference runs | Upkeep | S | no | proposed |
-| P3 | Bring README, package metadata and a stale comment up to date | Upkeep | S | no | proposed |
-| P4 | A main branch and version tags | Upkeep | S | no | proposed |
+| E1 | Local models: send the paper first, so the server reads it once per paper | Efficiency | M | local server | postponed |
+| E2 | Local models: a per-model setting for thinking | Efficiency | S | local server | postponed |
+| E3 | Local models: know the real context and use the room better | Efficiency | S–M | local server | postponed |
+| E4 | Paper queues in batch mode: shared batches, more papers in flight | Efficiency | M | Claude (small) | postponed |
+| W1 | Resume a failed or cancelled run; rebuild a dataset from saved answers | Workflow | M–L | no | postponed |
+| W2 | Corrections and "checked" marks in the results window | Workflow | L | no | postponed |
+| W3 | Open a previous run in the window | Workflow | S–M | no | postponed |
+| W4 | Cost and time estimate before a run starts | Workflow | M | no | postponed |
+| W5 | Command line: scope flags; a notification when a long run ends | Workflow | S | no | postponed |
+| W6 | Keep the local-model test scripts in the repository | Workflow | S | no | done (79666a5) |
+| F1 | Units: read "uL/min" and other ASCII spellings of µ | Functionality | S | no | done (fcb3c1a) |
+| F2 | Local models: table image size per model | Functionality | S–M | local server | postponed |
+| F3 | A free second reading of table values from the PDF's text layer | Functionality | L | no | postponed |
+| P1 | Split CLAUDE.md into a short guide and a dated history | Upkeep | M | no | done (caf1db3, 47f1b77) |
+| P2 | Back up the reference runs | Upkeep | S | no | done (76318c4) |
+| P3 | Bring README, package metadata and a stale comment up to date | Upkeep | S | no | done (57fb3b5) |
+| P4 | A main branch and version tags | Upkeep | S | no | done (6914f67, tag v0.3.0); remote `main` not replaced (see below) |
+
+**Mickey's answers (2026-11-11):** F1, P3, W6, P4, P1 and P2 accepted and done (F1: a bare "um" is read by the
+column; P1: write-ups go to `docs/history/`; P2: dated archives in `../Backups/`; P4: v0.3.0). The rest are meant to
+be implemented later; postponed for now. Open from P4: the remote already has a `main` branch (GitHub's initial
+commit, only a Python `.gitignore`), so the local `main` wasn't pushed; replacing it needs a force push and is
+Mickey's call, as is making `main` the default branch on GitHub. Earlier suggested order for the rest: E1 (with E2
+and E3 parts 1–2 in one local-server session), W3 → W1 (rebuild first) → W2, the F3 prototype, then E4, W4, W5, F2.
 
 A sensible order if Mickey accepts most of them: F1 and P3 (quick, no risk), P2 (protects everything else), P1
 (makes every later session cheaper), then E1 (the largest measurable gain), W1, W2, and the rest.
@@ -581,7 +587,7 @@ Write for him, not for a developer.
    listing their steps or columns.
 4. Run the full suite, and the robustness check if a data pack changed. Fix a failure at its cause.
 5. Build both apps and run `--self-check` if code changed.
-6. Write the round up (CLAUDE.md or the history file, as decided under P1), update any document the change makes
+6. Write the round up in `docs/history/` (decided under P1), update any document the change makes
    wrong (`docs/local_model_notes.md` for the local-model suggestions), mark the suggestion `done` with the commit,
    commit and push.
 7. Tell Mickey what was done, what was measured, and anything you found on the way that he should know, including

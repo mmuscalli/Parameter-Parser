@@ -105,3 +105,4 @@ current month's file (start `YYYY-MM.md` in a new month), with one line here.
 - Tests that survive data pack changes (2026-11-09, Mickey: linking a module kept breaking tests)
 - Local model server on Mickey's Windows PC; first real test (2026-11-10)
 - teng2023 on the local model; pain-point notes (2026-11-11, Mickey)
+- Review suggestions, first round: units, local-model tool, README, version, CLAUDE.md split, backups (2026-11-11, Mickey)
