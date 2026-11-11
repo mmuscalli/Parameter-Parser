@@ -111,9 +111,9 @@ paid Claude runs or the local server. Update Status as you go: `proposed` → `a
 | E2 | Local models: a per-model setting for thinking | Efficiency | S | local server | postponed |
 | E3 | Local models: know the real context and use the room better | Efficiency | S–M | local server | postponed |
 | E4 | Paper queues in batch mode: shared batches, more papers in flight | Efficiency | M | Claude (small) | postponed |
-| W1 | Resume a failed or cancelled run; rebuild a dataset from saved answers | Workflow | M–L | no | postponed |
+| W1 | Resume a failed or cancelled run; rebuild a dataset from saved answers | Workflow | M–L | no | done (c9733fa) |
 | W2 | Corrections and "checked" marks in the results window | Workflow | L | no | postponed |
-| W3 | Open a previous run in the window | Workflow | S–M | no | postponed |
+| W3 | Open a previous run in the window | Workflow | S–M | no | done (5335f6b) |
 | W4 | Cost and time estimate before a run starts | Workflow | M | no | postponed |
 | W5 | Command line: scope flags; a notification when a long run ends | Workflow | S | no | postponed |
 | W6 | Keep the local-model test scripts in the repository | Workflow | S | no | done (79666a5) |
@@ -129,7 +129,8 @@ paid Claude runs or the local server. Update Status as you go: `proposed` → `a
 column; P1: write-ups go to `docs/history/`; P2: dated archives in `../Backups/`; P4: v0.3.0). The rest are meant to
 be implemented later; postponed for now. Open from P4: the remote already has a `main` branch (GitHub's initial
 commit, only a Python `.gitignore`), so the local `main` wasn't pushed; replacing it needs a force push and is
-Mickey's call, as is making `main` the default branch on GitHub. Earlier suggested order for the rest: E1 (with E2
+Mickey's call, as is making `main` the default branch on GitHub. (Later the same day: `main` force-pushed on his OK;
+W3 and W1 accepted and done, W1 writing a resumed run into a new folder that names the old one.) Earlier suggested order for the rest: E1 (with E2
 and E3 parts 1–2 in one local-server session), W3 → W1 (rebuild first) → W2, the F3 prototype, then E4, W4, W5, F2.
 
 A sensible order if Mickey accepts most of them: F1 and P3 (quick, no risk), P2 (protects everything else), P1

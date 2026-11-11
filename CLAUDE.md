@@ -48,6 +48,8 @@ Version: `parameter_extractor.__version__` (0.3.0, tag `v0.3.0`), the one place 
   compounds per data pack), `column_order.py`, `value_types.py`, `variable_categories.py`, `formulas.py`, `voting.py`
   (passes), `scopes.py`, `compound_names.py`, `pubchem.py`, `pricing.py`.
 - Multi-paper: `paper_queue.py` (full extraction queue), `focused_search.py` (a few values across many papers).
+  Earlier runs: `run_folder.py` (a run folder read back into a RunResult: File > Open a results folder…),
+  `resume.py` (resume / rebuild from a run's or queue's saved answers into a NEW folder; CLI --resume / --rebuild).
   Pack authoring: `pack_editing.py` (+ `check`), `pack_drafting.py`, `compound_setup.py`, `conventions.py`,
   `pack_modules.py`, `module_drafting.py`, `pack_overview.py`.
 - `gui/`: `main_window.py` (five numbered steps: data pack, papers, what to extract, options, run; results tabs),
@@ -71,6 +73,10 @@ Version: `parameter_extractor.__version__` (0.3.0, tag `v0.3.0`), the one place 
   `scripts/record_reference.py` records a new reference. Replays don't see requests, so:
 - **Requests to Claude must not change by accident.** Prompts and schemas are tuned and measured; a change meant for
   local models must leave Claude's requests identical (there are tests for it).
+- **Run folders are an interface**: every run writes `run_config.json` (paper + settings) first, every audit a
+  `request_fingerprint`, a queue its `queue.json`; resume / rebuild and Open a results folder read them. Keep them
+  (and the files `run_folder.load_result` reads) when changing what a run writes; a run never writes into another
+  run's folder.
 - **GUI tests**: pump with `processEvents()` + `time.sleep`; never `QTest.qWait` (holds the GIL; the worker never
   runs). Check drawing natively too, not only offscreen. No window opens the next one from its own handlers (it
   records what comes next and closes; the opener opens it): `tests/test_window_chains.py`. Lists of settings use

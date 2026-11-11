@@ -134,6 +134,13 @@ Each run writes `<results folder>/<paper name>_<date-time>/`:
 A queue writes one such folder per paper plus combined CSV files; a search for a few values writes one table for
 all papers.
 
+**Earlier runs.** *File › Open a results folder…* shows a finished run (or one paper of a queue) in the result tabs
+again. *File › Resume a stopped run…* runs a run or queue that stopped part-way (network, credits, Cancel) again:
+steps already answered are reused at no cost and only the missing ones are asked. *File › Rebuild a run's dataset…*
+builds the dataset again from the saved answers without asking the model anything, e.g. after accepting variables
+or changing a data pack's formulas. Both write a new folder next to the old one. From the command line:
+`--resume FOLDER` and `--rebuild FOLDER`.
+
 ## For developers
 
 - Code: `src/parameter_extractor/`. `pipeline.py` is the entry point (`run_pipeline(pdf, RunConfig, ...)`); the
