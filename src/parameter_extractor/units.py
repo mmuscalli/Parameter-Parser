@@ -138,7 +138,35 @@ def canonical_unit(text: str) -> Optional[str]:
         return "µM"
     if t == "nM":
         return "nM"
-    return _ALIASES.get(low)
+    found = _ALIASES.get(low)
+    if found is None:
+        micro = _ASCII_MICRO.sub(lambda m: m.group(1) + "µ", t)
+        if micro != t:                   # 'uL/min', 'uM/h', 'usec': a plain u for µ, where the µ form is known
+            return canonical_unit(micro)
+    return found
+
+
+# a plain 'u' written for 'µ' at the start of a unit or of the part after a '/' (F1, 2026-11-11)
+_ASCII_MICRO = re.compile(r"(^|/)u(?=[A-Za-z])")
+
+# lower-case spellings that may mean molar or metre ('5 um' -> 5 µM or 5 µm?): read in the dimension of the column
+# they go into (Mickey, 2026-11-11); with no column, canonical_unit's reading (mm, nm -> lengths; um -> µM)
+_MOLAR_OR_METRE = {"mm": ("mM", "mm"), "um": ("µM", "µm"), "µm": ("µM", "µm"), "nm": ("nM", "nm")}
+
+
+def unit_for_dimension(text: str, dimension: Optional[str]) -> Optional[str]:
+    """canonical_unit, but 'mm' / 'um' / 'µm' / 'nm' are read as a concentration or a length, as `dimension` asks."""
+    pair = _MOLAR_OR_METRE.get(normalise_unit_text(text or ""))
+    if pair and dimension == "concentration":
+        return pair[0]
+    if pair and dimension == "length":
+        return pair[1]
+    return canonical_unit(text)
+
+
+def dimension_of(unit: Optional[str]) -> Optional[str]:
+    """The dimension of a canonical unit ('µM' -> 'concentration'), or None."""
+    return _UNITS[unit][0] if unit in _UNITS else None
 
 
 # '1,000 rpm' / '12,000 K' / '4,395,000': thousands separators (read as 1.0 rpm and 12 K before, 2026-11-09);
@@ -158,9 +186,10 @@ _QUANTITY = re.compile(
 _APPROX = re.compile(r"^(?:~|∼|≈|ca\.?\s|about\s|approximately\s|approx\.?\s|roughly\s|nearly\s)\s*", re.IGNORECASE)
 
 
-def parse_quantity(text: str) -> Optional[Tuple[float, str]]:
+def parse_quantity(text: str, dimension: Optional[str] = None) -> Optional[Tuple[float, str]]:
     """'1 cm3' -> (1.0, 'mL'); '1 × 10-3 M' -> (0.001, 'M'). None for ranges ('1-4 h'),
-    multiple quantities, or units not in the table."""
+    multiple quantities, or units not in the table. `dimension`: what the value should be ('length' reads
+    '5 um' as 5 µm, see unit_for_dimension)."""
     if text is None:
         return None
     t = _APPROX.sub("", str(text).strip())         # '~7 GPa', 'about 100 ns': the stated (approximate) value
@@ -169,7 +198,7 @@ def parse_quantity(text: str) -> Optional[Tuple[float, str]]:
     m = _QUANTITY.match(t)
     if not m:
         return None
-    unit = canonical_unit(m.group("unit")) if m.group("unit") else None
+    unit = unit_for_dimension(m.group("unit"), dimension) if m.group("unit") else None
     if unit is None:
         return None
     value = _number(m.group("num"))
@@ -254,15 +283,16 @@ def to_column_unit(raw, unit: Optional[str], column_unit: str, difference: bool 
     target = _COLUMN_UNITS.get(column_unit) or (column_unit if column_unit in _UNITS else None)
     if target is None:
         return None
+    dimension = dimension_of(target)
     if isinstance(raw, (int, float)):
-        source = canonical_unit(unit) if unit else None
+        source = unit_for_dimension(unit, dimension) if unit else None
         if source is None:
             return Conversion(float(raw), "") if not unit else None
         out = convert(float(raw), source, target, difference)
         return None if out is None else Conversion(_tidy(out), "" if source == target
                                                    else f"converted from {raw:g} {unit}")
     
-    parsed = parse_quantity(str(raw))
+    parsed = parse_quantity(str(raw), dimension)
     if parsed is None:
         try:
             return Conversion(float(str(raw).strip()), "")     # a bare number: assume the column's unit
@@ -392,7 +422,8 @@ def convert_printed(value: float, printed: str, target: str, is_error: bool = Fa
     if a and b and _ASTRO[a][0] == _ASTRO[b][0]:
         out = value * _ASTRO[a][1] / _ASTRO[b][1]
         return float(f"{out:.10g}"), f"converted from {value:g} {p}"
-    ca, cb = canonical_unit(p), canonical_unit(t)
+    cb = canonical_unit(t)
+    ca = unit_for_dimension(p, dimension_of(cb))
     if ca and cb:
         if is_error and _UNITS[ca][0] == "temperature" and _UNITS[cb][0] == "temperature":
             # an uncertainty is a temperature DIFFERENCE: no offset (±1 K = ±1 °C; ±9 °F = ±5 °C)

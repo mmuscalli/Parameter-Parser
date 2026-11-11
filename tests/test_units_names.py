@@ -43,6 +43,34 @@ def test_conversions():
     assert to_column_unit("5 g", None, "mL") is None                       # wrong dimension: refused
 
 
+def test_ascii_micro_spellings():
+    """A plain 'u' for 'µ' wherever the µ form is known (F1, 2026-11-11); forms that already worked unchanged."""
+    from parameter_extractor.units import canonical_unit
+    for printed, unit in [("uL/min", "µL/min"), ("ul/min", "µL/min"), ("uL min-1", "µL/min"), ("uM/h", "µM/h"),
+                          ("uM/min", "µM/min"), ("uM s-1", "µM/s"), ("umol dm-3", "µM"), ("usec", "µs"),
+                          ("uL", "µL"), ("ug", "µg"), ("umol", "µmol"), ("umol/L", "µM"), ("uM", "µM"),
+                          ("uA", "µA"), ("us", "µs")]:
+        assert canonical_unit(printed) == unit, (printed, canonical_unit(printed))
+    assert parse_quantity("50 uL/min") == (50.0, "µL/min")
+    assert to_column_unit("50 uL/min", None, "mL/min").value == 0.05
+    assert canonical_unit("ug/mL") is None                 # a mass concentration: no µ form in the table either
+    assert canonical_unit("unit") is None and canonical_unit("u") is None
+
+
+def test_molar_or_metre_read_by_column():
+    """'um', 'mm', 'nm' in lower case are read in the dimension of the column (Mickey, 2026-11-11)."""
+    from parameter_extractor.units import canonical_unit, convert_printed
+    assert to_column_unit("5 um", None, "µm").value == 5.0            # a length column: micrometres
+    assert to_column_unit("5 um", None, "mM").value == 0.005          # a concentration column: micromolar
+    assert to_column_unit(5, "um", "mm").value == 0.005
+    assert to_column_unit("5 mm", None, "mM").value == 5.0
+    assert to_column_unit("5 mm", None, "cm").value == 0.5
+    assert to_column_unit("5 um", None, "h") is None                  # neither: refused
+    assert to_column_unit("5 uM", None, "µm") is None                 # capital M is molar, whatever the column
+    assert convert_printed(5.0, "um", "mm")[0] == 0.005 and convert_printed(5.0, "um", "mM")[0] == 0.005
+    assert canonical_unit("um") == "µM" and canonical_unit("mm") == "mm"   # no column: unchanged
+
+
 def test_name_matching():
     cases = {"sodium chloride": "NaCl", "NaCl(aq)": "NaCl", "calcium chloride": "CaCl2",
              "CuCl2·2H2O": "CuCl2", "CuCl₂": "CuCl2", "cupric chloride": "CuCl2", "glycine": "Gly",
