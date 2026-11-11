@@ -1,8 +1,7 @@
 """
 Settings (Mickey, 2026-10-24: options consolidated so the main window stays uncluttered): the
-things set once -- who answers the model calls (the Anthropic API, or a local model server:
-gui/local_models_panel.py, 2026-11-08), the Anthropic API key, the optional NASA ADS token, where
-results are saved, online lookups. Opened from the menu (Settings…, Cmd+,) or the main window's Settings button.
+things set once -- the Anthropic API key, the optional NASA ADS token, where results are saved, online
+lookups. Which models answer (Claude or a model server) is the Models window's (gui/models_window.py, 2026-11-11). Opened from the menu (Settings…, Cmd+,) or the main window's Settings button.
 
 The widgets live as long as the main window (which reads them at run time and keeps its old
 attribute names: key_edit, out_edit, pubchem_box ...); closing the dialog only hides it.
@@ -50,25 +49,10 @@ class SettingsDialog(QDialog):
         outer.addWidget(scroll)
         layout = QVBoxLayout(body)
 
-        from parameter_extractor.gui.local_models_panel import LocalModelsPanel
-        provider = QGroupBox("Model provider")
-        pv = QVBoxLayout(provider)
-        prow = QHBoxLayout()
-        prow.addWidget(QLabel("Models run on:"))
-        self.provider_combo = QComboBox()
-        self.provider_combo.addItem("Anthropic API (recommended)", "anthropic")
-        self.provider_combo.addItem("A local model server (Ollama, LM Studio, ...)", "local")
-        self.provider_combo.setToolTip("Anthropic API: Claude models, validated for this app (needs an API key). "
-                                       "Local: a model on your own computer or server -- free and private, but not "
-                                       "validated, and usually much slower.")
-        prow.addWidget(self.provider_combo, 1)
-        pv.addLayout(prow)
-        self.local_panel = LocalModelsPanel()
-        pv.addWidget(self.local_panel)
-        self.provider_combo.currentIndexChanged.connect(
-            lambda _i: self.local_panel.setVisible(self.provider() == "local"))
-        self.local_panel.setVisible(False)
-        layout.addWidget(provider)
+        models_note = QLabel("Which models read a paper, and local or hosted model servers, are set up in the "
+                             "<b>Models</b> menu (Model profiles…, Connections…).", wordWrap=True)
+        models_note.setStyleSheet("color: palette(placeholder-text);")
+        layout.addWidget(models_note)
 
         keys = QGroupBox("Accounts")
         form = QFormLayout(keys)
@@ -122,9 +106,6 @@ class SettingsDialog(QDialog):
         buttons.accepted.connect(self.hide)
         outer.addWidget(buttons)
 
-    def provider(self) -> str:
-        return self.provider_combo.currentData() or "anthropic"
-
     def _choose_output_dir(self) -> None:
         path = QFileDialog.getExistingDirectory(self, "Save results to", self.out_edit.text())
         if path:
@@ -149,8 +130,7 @@ class SettingsDialog(QDialog):
     def lock(self, locked: bool) -> None:
         """Read-only while a run uses these settings."""
         for w in (self.key_edit, self.remember_key_box, self.ads_edit, self.remember_ads_box, self.out_edit,
-                  self.pubchem_box, self.handoff_box, self.handoff_edit, self.provider_combo):
+                  self.pubchem_box, self.handoff_box, self.handoff_edit):
             if w is None:
                 continue
             w.setEnabled(not locked)
-        self.local_panel.set_locked(locked)

@@ -108,7 +108,7 @@ Either of two kinds works. The app has a setting for each.
 
 ## What happens next (on the Mac, not your job)
 
-The user opens Parameter Extractor's Settings › Model provider and enters:
+The user opens Parameter Extractor's Models › Connections (before 2026-11-11: Settings › Model provider) and enters:
 
 - the server type and address,
 - each model's context length and whether it reads images,

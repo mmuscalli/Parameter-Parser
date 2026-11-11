@@ -213,8 +213,12 @@ def _record(ctx: RunContext, stage: str, model: str, response, elapsed: float) -
     write, read = getattr(u, "cache_creation_input_tokens", 0) or 0, getattr(u, "cache_read_input_tokens", 0) or 0
     write_1h = getattr(getattr(u, "cache_creation", None), "ephemeral_1h_input_tokens", 0) or 0
     batch = bool(ctx.config.batch_mode)
-    cost = 0.0 if getattr(ctx.config, "is_local", False) else request_cost(
-        model, u.input_tokens, u.output_tokens, write - write_1h, read, cache_write_1h_tokens=write_1h, batch=batch)
+    if getattr(ctx.config, "is_local", False):           # a model server: its own prices, free when private
+        from parameter_extractor.local_models import server_cost
+        cost = server_cost(ctx.config, model, u.input_tokens, u.output_tokens)
+    else:
+        cost = request_cost(model, u.input_tokens, u.output_tokens, write - write_1h, read,
+                            cache_write_1h_tokens=write_1h, batch=batch, prices=getattr(ctx.config, "prices", None))
     usage = StageUsage(stage=stage, model=model, input_tokens=u.input_tokens, output_tokens=u.output_tokens,
                        elapsed_sec=round(elapsed, 2), cost_usd=cost,
                        cache_write_tokens=write, cache_read_tokens=read, batch=batch)
@@ -239,6 +243,8 @@ def _send(ctx: RunContext, *, model: str, system_prompt: str, content, response_
     tool = getattr(_streamed, "tool", None)          # (tool name, every tool's definition): shared-paper mode
     request = dict(model=model, max_tokens=getattr(_streamed, "max_tokens", None) or ctx.config.max_tokens,
                    system=system_prompt, messages=[{"role": "user", "content": content}])
+    if getattr(ctx.config, "temperature", None) is not None:      # a profile's setting; not sent by default
+        request["temperature"] = ctx.config.temperature
     if tool:
         # "auto" (Sonnet 5.5 rejects a forced tool); the task names the tool; one call only
         request.update(tools=tool[1], tool_choice={"type": "auto", "disable_parallel_tool_use": True})

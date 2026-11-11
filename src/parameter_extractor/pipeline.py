@@ -508,7 +508,8 @@ def extract_steps(ex: "Extraction") -> "Extraction":
     convert_equations = bool(config.equations_to_latex and equations)
     if convert_equations:
         ctx.total_steps += 1            # optional (RunConfig.equations_to_latex), one small call
-    pool = ThreadPoolExecutor(max_workers=settings.MAX_PARALLEL_STAGES, thread_name_prefix="stage")
+    pool = ThreadPoolExecutor(max_workers=max(1, getattr(config, "max_parallel_stages", 0)
+                                              or settings.MAX_PARALLEL_STAGES), thread_name_prefix="stage")
     try:
         # metadata needs only page 1: it runs while the experiment structure is planned
         if source.record is not None:          # read from arXiv: its record has the metadata
@@ -1155,8 +1156,8 @@ def finish(
     paper_flags = check_extraction(ex.methodology, ex.chemistry, optional=ex.optional_list, **thresholds)
     paper_flags += _cited_data_flags(ex.structure)
     if config.is_local:                   # results from a model the app hasn't been validated with
-        from parameter_extractor.local_models import FLAG_TEXT, models_used
-        paper_flags.append(Flag("local_model", FLAG_TEXT.format(models=", ".join(models_used(config)) or "?")))
+        from parameter_extractor.local_models import flag_text
+        paper_flags.append(Flag("local_model", flag_text(config)))
     paper_flags += _reuse_flags(ctx)
     paper_flags += stage_flags
     paper_flags += [Flag("assumed_default", m) for m in ex.ambient_notes]

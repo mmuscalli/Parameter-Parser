@@ -667,7 +667,7 @@ def test_settings_and_run_options():
         assert w.key_edit.window() is w.settings_dialog and w.out_edit.window() is w.settings_dialog
         assert w.ads_edit.text() == "ads-stored" and w.remember_ads_box.isChecked()   # from the keychain
         titles = [a.text() for a in w.menuBar().actions()]
-        assert titles[:3] == ["File", "Settings", "Data Packs"], titles
+        assert titles[:4] == ["File", "Settings", "Models", "Data Packs"], titles
         assert w.suggest_box.isChecked() and w.current_config().suggest_new_variables   # on by default
         cfg = w.current_config()
         assert cfg.save_images and not cfg.save_all_figure_images and cfg.focus_terms == []

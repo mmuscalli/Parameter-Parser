@@ -107,3 +107,4 @@ current month's file (start `YYYY-MM.md` in a new month), with one line here.
 - teng2023 on the local model; pain-point notes (2026-11-11, Mickey)
 - Review suggestions, first round: units, local-model tool, README, version, CLAUDE.md split, backups (2026-11-11, Mickey)
 - Opening earlier runs; resume and rebuild (2026-11-11, Mickey: W3 then W1 of the review suggestions)
+- Models window: profiles and connections (2026-11-11, Mickey)

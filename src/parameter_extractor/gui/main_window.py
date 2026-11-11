@@ -131,6 +131,8 @@ class MainWindow(QMainWindow):
         self._extraction_ok = False
         self._review: Optional[FigureReviewDialog] = None
         self.registry_path = default_registry_path()     # local additions to the variable list
+        from parameter_extractor.model_profiles import default_path as models_default_path
+        self.models_path = models_default_path()          # model profiles and connections (Models window)
         self._load_category_edits()
 
         # inputs above, run controls + results below, with a handle between them the user can
@@ -205,6 +207,14 @@ class MainWindow(QMainWindow):
         for action in (self.output_action, self.open_output_action, self.lookups_action):
             settings_menu.addAction(action)
         settings_menu.setToolTipsVisible(True)
+        # which models read a paper and where they run (model_profiles.py, 2026-11-11): the provider used to be
+        # chosen in Settings; now every profile names its own connection
+        models_menu = self.menuBar().addMenu("Models")
+        self.model_profiles_action = QAction("Model profiles…", self, triggered=lambda: self.open_models())
+        self.model_connections_action = QAction("Connections (API and model servers)…", self,
+                                                triggered=lambda: self.open_models("connections"))
+        models_menu.addAction(self.model_profiles_action)
+        models_menu.addAction(self.model_connections_action)
         # one menu for everything about research areas (Mickey, 2026-11-07: the Variables and Data Packs menus
         # overlapped). Two layers: what a pack DEFINES (its window: columns, compounds, analysis methods, stages,
         # rules, formulas) and what YOU taught the app in reviews (accepted columns, synonyms, compound names,
@@ -271,8 +281,6 @@ class MainWindow(QMainWindow):
         self.out_edit, self.pubchem_box = d.out_edit, d.pubchem_box
         for edit in (self.key_edit, self.out_edit):
             edit.textChanged.connect(self._update_run_enabled)
-        d.provider_combo.currentIndexChanged.connect(lambda _i: self._refresh_profiles())
-        d.local_panel.changed.connect(self._refresh_profiles)
         if d.handoff_box is not None:          # developer builds only
             d.handoff_box.toggled.connect(self._update_run_enabled)
             d.handoff_edit.textChanged.connect(self._update_run_enabled)
@@ -441,8 +449,14 @@ class MainWindow(QMainWindow):
         form = QFormLayout()
         form.setFieldGrowthPolicy(QFormLayout.FieldGrowthPolicy.AllNonFixedFieldsGrow)
         self.profile_combo = QComboBox()
-        self.profile_combo.currentIndexChanged.connect(lambda _i: self._update_run_enabled())
-        form.addRow("Model:", self.profile_combo)
+        self.profile_combo.currentIndexChanged.connect(lambda _i: self._profile_chosen())
+        self.models_btn = QPushButton("Models…", clicked=lambda: self.open_models())
+        self.models_btn.setToolTip("Model profiles and connections: which models read a paper, where they run, and "
+                                   "their settings (Models menu).")
+        model_row = QHBoxLayout()
+        model_row.addWidget(self.profile_combo, 1)
+        model_row.addWidget(self.models_btn)
+        form.addRow("Model:", model_row)
         self.passes_combo = QComboBox()
         for n, label in ((1, "Once"), (2, "Twice, keep the majority"), (3, "Three times, keep the majority")):
             self.passes_combo.addItem(label, n)
@@ -591,39 +605,61 @@ class MainWindow(QMainWindow):
                                     + (f" -- only {narrowed}" if narrowed else ""))
             self.run_btn.setText(f"Extract data from {n} papers" if n > 1 else "Extract data")
 
+    def _model_store(self):
+        from parameter_extractor.model_profiles import ModelStore
+        return ModelStore(self.models_path)
+
     def _refresh_profiles(self) -> None:
-        """The Models list: the Claude profiles, or the local profiles set up in Settings > Model provider."""
-        local = self.settings_dialog.provider() == "local"
-        if getattr(self, "_profiles_local", None) is not None:      # remember the choice of the list being left
-            self._settings.setValue("local_model_profile" if self._profiles_local else "model_profile",
-                                    self.profile_combo.currentData())
-        self._profiles_local = local
+        """The Model list: every profile (model_profiles.py) -- the Claude defaults first, then the user's own grouped
+        by connection; the chosen one decides where requests go."""
+        from parameter_extractor import model_profiles as mp
+        store = self._model_store()
+        wanted = self.profile_combo.currentData() or self._settings.value("model_profile", "standard") or "standard"
         self.profile_combo.blockSignals(True)
         self.profile_combo.clear()
-        if local:
-            from parameter_extractor import local_models
-            profiles = self.settings_dialog.local_panel.settings().profiles
-            for name, roles in profiles.items():
-                self.profile_combo.addItem(f"{name} (local)", name)
-                tip = "<br>".join(f"{label}: {roles.get(role) or '-'}" for role, label in local_models.PROFILE_ROLES)
-                self.profile_combo.setItemData(self.profile_combo.count() - 1, f"<b>{name}</b><br>{tip}",
-                                               Qt.ItemDataRole.ToolTipRole)
-            self.profile_combo.setToolTip("Your local model profiles (Settings > Model provider). Local models "
-                                          "aren't validated for this app: check the values against the paper.")
-            wanted = self._settings.value("local_model_profile", "")
-        else:
-            for key, label, tip in MODEL_PROFILE_CHOICES:
-                self.profile_combo.addItem(label.split(" -- ")[0], key)       # the details are in the tooltip
-                self.profile_combo.setItemData(self.profile_combo.count() - 1, tip, Qt.ItemDataRole.ToolTipRole)
-            self.profile_combo.setToolTip("Which Claude models read the paper:<br><br>"
-                                          + "<br><br>".join(tip for _, _, tip in MODEL_PROFILE_CHOICES)
-                                          + "<br><br>Figure-digitizing suggestions and LaTeX conversion (when you "
-                                            "ask for them) always use Sonnet 5.5.")
-            wanted = self._settings.value("model_profile", "standard")
+        last = None
+        for p in store.profiles():
+            if last is not None and p.connection != last:
+                self.profile_combo.insertSeparator(self.profile_combo.count())
+            last = p.connection
+            conn = store.connection(p.connection)
+            label = p.label + (" (changed)" if store.is_changed(p.id) else "")
+            if conn is not None and not conn.is_anthropic:
+                label += f"  —  {conn.name}"
+            elif p.builtin:
+                label += {"standard": " (Claude Sonnet 5.5)", "balanced": " (Sonnet plans, Haiku extracts)",
+                          "economy": " (Claude Haiku 5.5)"}.get(p.id, "")
+            self.profile_combo.addItem(label, p.id)
+            tip = dict((k, t) for k, _l, t in MODEL_PROFILE_CHOICES).get(p.id, "") if p.builtin else ""
+            self.profile_combo.setItemData(self.profile_combo.count() - 1,
+                                           (tip + "<br><br>" if tip else "") + mp.summary(store, p),
+                                           Qt.ItemDataRole.ToolTipRole)
+        self.profile_combo.setToolTip("Which models read the paper and where they run. Hover over an entry for its "
+                                      "models; Models… to change them or add your own.")
         self.profile_combo.setCurrentIndex(max(0, self.profile_combo.findData(wanted)))
         self.profile_combo.blockSignals(False)
-        # batch mode is the Anthropic API's; a local run never uses it
-        self.batch_box.setEnabled(not local)
+        self._profile_chosen()
+
+    def _profile_provider(self) -> str:
+        """'anthropic' or 'local' (a model server) for the chosen profile."""
+        from parameter_extractor import model_profiles as mp
+        store = self._model_store()
+        p = store.profile(self.profile_combo.currentData() or "standard")
+        conn = store.connection(p.connection) if p else None
+        return "anthropic" if conn is None or conn.is_anthropic else "local"
+
+    def _profile_chosen(self) -> None:
+        # batch mode is the Anthropic API's; a run on a model server never uses it
+        self.batch_box.setEnabled(self._profile_provider() == "anthropic")
+        self._update_run_enabled()
+
+    def open_models(self, tab: str = "profiles") -> None:
+        """Models > Model profiles… / Connections… (gui/models_window.py)."""
+        from parameter_extractor.gui.models_window import ModelsWindow
+        window = ModelsWindow(self, store=self._model_store(), keys=key_store, tab=tab)
+        window.exec()
+        if window.saved:
+            self._refresh_profiles()
         self.batch_box.setToolTip(self._batch_tip if not local else "Not available with a local model server.")
         self._update_run_enabled()
 
@@ -657,7 +693,8 @@ class MainWindow(QMainWindow):
         # what's missing before a run (API key, results folder): right under the Run button, where it's seen
         self.settings_hint = QLabel(wordWrap=True)
         self.settings_hint.setStyleSheet("QLabel { color: palette(link); font-weight: 600; }")
-        self.settings_hint.linkActivated.connect(lambda _: self.open_settings())
+        self.settings_hint.linkActivated.connect(lambda link: self.open_models() if link == "models"
+                                                 else self.open_settings())
         self.status.setTextFormat(Qt.TextFormat.RichText)
         self.status.linkActivated.connect(self._status_link)
         self.privacy_note = QLabel(PRIVACY_NOTE, wordWrap=True)
@@ -768,14 +805,10 @@ class MainWindow(QMainWindow):
         self.params.load(self.pack_combo.currentData(), self.registry_path)           # no change signal if index 0 was kept
         self._show_pack_description()
         self.equations_box.setChecked(self._settings.value("equations_to_latex", False, type=bool))
-        from parameter_extractor import local_models
-        local = local_models.load()
-        local.api_key = key_store.load_key(key_store.LOCAL_ACCOUNT) or ""
-        self._local_saved = local.to_dict()            # written back only when changed
-        d = self.settings_dialog
-        d.local_panel.load(local)
-        d.provider_combo.setCurrentIndex(max(0, d.provider_combo.findData(
-            self._settings.value("provider", "anthropic"))))
+        if self._settings.value("provider", "anthropic") == "local":      # chosen before profiles named connections
+            from parameter_extractor.model_profiles import _slug
+            self._settings.setValue("model_profile", _slug(self._settings.value("local_model_profile", "") or ""))
+            self._settings.setValue("provider", "")
         self._refresh_profiles()
         self.batch_box.setChecked(self._settings.value("batch_mode", False, type=bool))
         self.arxiv_box.setChecked(self._settings.value("prefer_arxiv", False, type=bool))
@@ -845,23 +878,8 @@ class MainWindow(QMainWindow):
         self._settings.setValue("use_pubchem", self.pubchem_box.isChecked())
         self._settings.setValue("pack", self.pack_combo.currentData())
         self._settings.setValue("equations_to_latex", self.equations_box.isChecked())
-        local_run = self.settings_dialog.provider() == "local"
-        self._settings.setValue("local_model_profile" if local_run else "model_profile", self.profile_combo.currentData())
-        self._settings.setValue("provider", self.settings_dialog.provider())
-        from parameter_extractor import local_models
-        local = self.settings_dialog.local_panel.settings()
-        before = getattr(self, "_local_saved", {}) or {}
-        if local.to_dict(with_key=False) != {k: v for k, v in before.items() if k != "api_key"}:
-            try:
-                local_models.save(local)
-            except OSError:
-                self.status.setText("Note: couldn't save the local model settings.")
-        if local.api_key != before.get("api_key", ""):
-            if local.api_key:
-                key_store.save_key(local.api_key, key_store.LOCAL_ACCOUNT)
-            else:
-                key_store.delete_key(key_store.LOCAL_ACCOUNT)
-        self._local_saved = local.to_dict()
+        if self.profile_combo.currentData():
+            self._settings.setValue("model_profile", self.profile_combo.currentData())
         self._settings.setValue("batch_mode", self.batch_box.isChecked())
         self._settings.setValue("prefer_arxiv", self.arxiv_box.isChecked())
         self._settings.setValue("suggest_new_variables", self.suggest_box.isChecked())
@@ -932,10 +950,11 @@ class MainWindow(QMainWindow):
 
     def _update_run_enabled(self, *_args) -> None:
         handoff = self.settings_dialog.handoff_dir() is not None      # developer mode: no key needed
-        local = self.settings_dialog.provider() == "local"            # a local model server: no key either
+        local = self._profile_provider() == "local"                   # a model server: no Anthropic key either
         items = self.run_items()
         ready = bool(items and (handoff or local or self.key_edit.text().strip()) and self.out_edit.text().strip())
-        if local and not self.profile_combo.currentData():
+        problems = self._profile_problems()
+        if problems:
             ready = False
         if self.params.focused and not self.params.checked_columns():
             ready = False
@@ -943,11 +962,12 @@ class MainWindow(QMainWindow):
         missing = [what for what, edit in (("your Anthropic API key", self.key_edit),
                                            ("a folder for the results", self.out_edit))
                    if not edit.text().strip() and not ((handoff or local) and edit is self.key_edit)]
-        if local and not self.profile_combo.currentData():
-            missing.append("a local model profile")
-        self.settings_hint.setText(f"Add {' and '.join(missing)} in <a href='settings'>Settings…</a>"
-                                   if missing else "")
-        self.settings_hint.setVisible(bool(missing))
+        text = f"Add {' and '.join(missing)} in <a href='settings'>Settings…</a>" if missing else ""
+        if problems:
+            text = (text + "<br>" if text else "") + f"The model profile can't run: {problems}. Fix it in " \
+                f"<a href='models'>Models…</a>"
+        self.settings_hint.setText(text)
+        self.settings_hint.setVisible(bool(text))
         self._update_mode()
 
     # ---- running ---------------------------------------------------------------
@@ -960,7 +980,7 @@ class MainWindow(QMainWindow):
     def current_config(self) -> RunConfig:
         """The run configuration the window's settings and run options describe (also used by the
         focused-search window)."""
-        return RunConfig(api_key=self.key_edit.text().strip(),
+        config = RunConfig(api_key=self.key_edit.text().strip(),
                          output_dir=Path(self.out_edit.text().strip()).expanduser(),
                          registry_path=self.registry_path, focus_terms=self.focus_terms(),
                          use_pubchem=self.pubchem_box.isChecked(),
@@ -969,9 +989,7 @@ class MainWindow(QMainWindow):
                          online_checks=self.pubchem_box.isChecked(),
                          optional_stages=self.optional_stage_choices(), scopes=self.params.scopes(),
                          model_profile=self.profile_combo.currentData() or "standard",
-                         provider=self.settings_dialog.provider(),
-                         local=self.settings_dialog.local_panel.settings().to_dict(),
-                         batch_mode=self.batch_box.isChecked(),
+                         batch_mode=self.batch_box.isChecked() and self._profile_provider() == "anthropic",
                          prefer_arxiv=self.arxiv_box.isChecked(), ads_token=self.ads_edit.text().strip(),
                          suggest_new_variables=self.suggest_box.isChecked(),
                          include_supplements=self.si_box.isChecked(),
@@ -981,6 +999,34 @@ class MainWindow(QMainWindow):
                          passes=self.passes_combo.currentData() or 1,
                          handoff_dir=self.settings_dialog.handoff_dir(),
                          pubchem_cache_path=default_pubchem_cache_path(), arxiv_cache_dir=default_arxiv_cache_dir())
+        return self._with_profile(config)
+
+    def _with_profile(self, config: RunConfig) -> RunConfig:
+        """The chosen model profile applied (model_profiles.apply): where requests go, the model per role, its
+        settings. A profile that can't run is left out here; _update_run_enabled says why and keeps Run off."""
+        from parameter_extractor import model_profiles as mp
+        from parameter_extractor.errors import PipelineError
+        store = self._model_store()
+        p = store.profile(config.model_profile)
+        conn = store.connection(p.connection) if p else None
+        key = ""
+        if conn is not None and not conn.is_anthropic:
+            try:
+                key = key_store.load_key(conn.account) or ""
+            except Exception:
+                key = ""
+        try:
+            return mp.apply(config, config.model_profile, store, key=key)
+        except PipelineError:
+            return config
+
+    def _profile_problems(self) -> str:
+        from parameter_extractor import model_profiles as mp
+        store = self._model_store()
+        p = store.profile(self.profile_combo.currentData() or "standard")
+        if p is None:
+            return "it no longer exists"
+        return "; ".join(store.problems(p))
 
     def paper_item(self):
         """The paper field: a PDF path, or an arXiv ID / DOI / ADS bibcode (paper_source); None if
@@ -1412,7 +1458,8 @@ class MainWindow(QMainWindow):
         for w in (self.registry_action, self.categories_action, self.pack_combo, self.new_pack_action,
                   self.new_pack_btn, self.edit_pack_btn, self.packs_btn, self.packs_window_action,
                   self.edit_pack_action, self.copy_pack_action, self.remove_pack_action, self.params,
-                  self.profile_combo, self.passes_combo, self.words_edit, self.add_pdfs_action, self.add_list_action,
+                  self.profile_combo, self.models_btn, self.model_profiles_action,
+                  self.model_connections_action, self.passes_combo, self.words_edit, self.add_pdfs_action, self.add_list_action,
                   self.open_results_action, self.resume_action, self.rebuild_action,
                   self.output_action, self.lookups_action, *self.option_toggles(), self.review_figures_box,
                   self.review_variables_box, self.tables_box, self.plan_box, self.whole_box):

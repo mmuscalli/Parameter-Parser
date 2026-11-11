@@ -32,9 +32,15 @@ To check an installation without running an extraction (free): `parameter-extrac
 - **An Anthropic API key** (Settings… in the app). It is kept in the system keychain, never in a file. For the
   command line, set `ANTHROPIC_API_KEY`, or copy `config/.env.example` to `config/.env` and fill it in (that file is
   ignored by git).
-- **Or a local model server** (Settings › Model provider): Ollama, LM Studio, llama.cpp or vLLM on your own
-  machine or network. No API key and no cost per paper, but slower, and results from local models haven't been
-  validated the way Claude's have (every such run is flagged). See [docs/local_model_notes.md](docs/local_model_notes.md).
+- **Or a model server** (Models › Connections): a local one (Ollama, LM Studio, llama.cpp, vLLM on your own
+  machine or network: no API key, no cost per paper, but slower) or a hosted OpenAI-compatible service. Results
+  from models other than the default Claude ones haven't been validated the way Claude's have (every such run is
+  flagged). See [docs/local_model_notes.md](docs/local_model_notes.md).
+- **Models › Model profiles…** (or *Models…* beside the Model list) sets which model plans the rows, reads the
+  paper's details, does the extraction steps, suggests figure settings and converts equations, plus advanced
+  settings (output cap, temperature, prompt caching, steps at once, retries, prices). Standard, Balanced and Economy
+  are the tested defaults: changing one asks first, marks it as changed, and *Reset to default* restores it. Your own
+  profiles, on Claude or on a server, appear in the main window's Model list.
 - **A results folder.** Every run writes a new folder there and never overwrites an earlier one.
 
 **Privacy:** each paper's text and table images are sent to Anthropic (or to your own model server) to be read.

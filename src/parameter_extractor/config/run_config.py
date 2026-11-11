@@ -125,6 +125,15 @@ class RunConfig:
     # rebuild: nothing is asked -- every step's saved answer is used (flagged where its request changed)
     resume_from: Optional[Path] = None
     rebuild: bool = False
+    # model profiles (model_profiles.py, Models window): set by model_profiles.apply. profile_roles: the model per
+    # role of a changed or user-made Claude profile ({} = the built-in profile's own choice, model_profile);
+    # temperature None = not sent (the model's default); prices: $ per million tokens for Claude models the price
+    # table doesn't know {model: {"input": x, "output": y}}
+    profile_roles: Dict[str, str] = field(default_factory=dict)
+    temperature: Optional[float] = None
+    max_parallel_stages: int = settings.MAX_PARALLEL_STAGES
+    max_retries: int = 5
+    prices: Dict[str, Dict[str, float]] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
         if self.provider == "local":
@@ -154,6 +163,15 @@ class RunConfig:
         if self.is_local:
             from parameter_extractor.local_models import model_for
             return model_for(self.local, self.model_profile, stage)
+        if self.profile_roles:                       # a changed or user-made Claude profile (model_profiles.py)
+            roles = self.profile_roles
+            if roles.get(stage):
+                return roles[stage]
+            if stage == "equations" and roles.get("figure_planner"):
+                return roles["figure_planner"]
+            if stage == "triage":
+                return roles.get("metadata") or roles.get("*") or self.models["triage"]
+            return roles.get("*") or self.models.get(stage, self.models["chemistry"])
         profile = settings.MODEL_PROFILES.get(self.model_profile, {})
         if stage in profile:
             return profile[stage]

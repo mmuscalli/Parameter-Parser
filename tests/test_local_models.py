@@ -212,7 +212,7 @@ def test_profiles_settings_and_refusals():
         assert "Couldn't reach" in str(e)
 
 
-def test_settings_window_sets_up_a_local_run():
+def test_models_window_sets_up_a_local_run():
     """Settings > Model provider: Test connection lists the server's models, a profile is added, the main window's
     Models list shows it, a run needs no API key, batch mode is off; the settings file is written on close."""
     import os
@@ -227,31 +227,36 @@ def test_settings_window_sets_up_a_local_run():
     server = FakeServer("ollama")
     keys = FakeKeyStore()
     try:
-        with tempfile.TemporaryDirectory() as tmp, patch.object(main_window, "key_store", keys), \
-                patch.object(local_models, "default_path", lambda: Path(tmp) / "local_models.json"):
+        with tempfile.TemporaryDirectory() as tmp, patch.object(main_window, "key_store", keys):
+            from parameter_extractor.gui.models_window import ModelsWindow
             w = main_window.MainWindow()
             w.out_edit.setText(tmp)
             w.registry_path = Path(tmp) / "registry.json"
-            d = w.settings_dialog
-            d.provider_combo.setCurrentIndex(d.provider_combo.findData("local"))
+            w.models_path = Path(tmp) / "model_profiles.json"
+            w._refresh_profiles()
+            assert w.profile_combo.currentData() == "standard" and w.batch_box.isEnabled()
+            m = ModelsWindow(w, store=w._model_store(), keys=keys, tab="connections")
+            m.add_server("ollama", name="Local server")
+            m.url_edit.setText(server.url)
+            assert m.test_connection() and m._conn().models and list(m._conn().models) == ["fake:12b"]
+            assert m.models_table.cellWidget(0, 2).findChild(QCheckBox).isChecked()      # vision from /api/show
+            m.new_profile(m._conn_id, label="Local 1")
+            assert m.role_combos["*"].currentText() == "fake:12b"
+            m.save()
+            w._refresh_profiles()
+            index = w.profile_combo.findData("local-1")
+            assert index >= 0 and "Local server" in w.profile_combo.itemText(index)
+            w.profile_combo.setCurrentIndex(index)
             assert not w.batch_box.isEnabled()
-            panel = d.local_panel
-            panel.url_edit.setText(server.url)
-            assert panel.refresh_models() and panel.model_names() == ["fake:12b"]
-            assert panel.models_table.cellWidget(0, 2).findChild(QCheckBox).isChecked()      # vision from /api/show
-            assert w.profile_combo.count() == 0 and "local model profile" in w.settings_hint.text()
-            panel.add_profile()
-            assert w.profile_combo.currentData() == "Local 1"
             w.papers.add_items([PDF])
             assert w.run_btn.isEnabled()                         # no Anthropic key needed
             cfg = w.current_config()
             assert cfg.provider == "local" and cfg.model_for("chemistry") == "fake:12b" and not cfg.batch_mode
-            w._save_preferences()
-            saved = json.loads((Path(tmp) / "local_models.json").read_text())
-            assert saved["profiles"]["Local 1"]["*"] == "fake:12b" and saved["url"] == server.url
-            d.provider_combo.setCurrentIndex(d.provider_combo.findData("anthropic"))
-            assert w.profile_combo.currentData() == "standard" and w.batch_box.isEnabled()
-            assert not w.run_btn.isEnabled()                     # the API needs its key again
+            assert cfg.local["url"] == server.url and cfg.temperature == 0.0
+            saved = json.loads((Path(tmp) / "model_profiles.json").read_text())
+            assert saved["profiles"]["local-1"]["roles"]["*"] == "fake:12b"
+            w.profile_combo.setCurrentIndex(w.profile_combo.findData("standard"))
+            assert w.batch_box.isEnabled() and not w.run_btn.isEnabled()      # the API needs its key again
             w.close()
     finally:
         server.close()

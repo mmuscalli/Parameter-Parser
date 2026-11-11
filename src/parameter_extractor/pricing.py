@@ -38,11 +38,15 @@ BATCH_DISCOUNT = 0.5          # Message Batches API: half price on everything, c
 
 def request_cost(model: str, input_tokens: int, output_tokens: int,
                  cache_write_tokens: int = 0, cache_read_tokens: int = 0,
-                 cache_write_1h_tokens: int = 0, batch: bool = False) -> Optional[float]:
+                 cache_write_1h_tokens: int = 0, batch: bool = False, prices: Optional[dict] = None) -> Optional[float]:
     """Estimated USD for one request, or None for a model without a known price. `input_tokens`
     are the uncached ones (as the API reports them); `cache_write_tokens` the 5-minute cache
     writes, `cache_write_1h_tokens` the 1-hour ones (2x the input price); `batch` halves it all."""
     tiers = _tiers(model)
+    if tiers is None and prices and model in prices:      # a model profile's own prices (model_profiles.py)
+        p = prices[model]
+        i, o = float(p.get("input") or 0), float(p.get("output") or 0)
+        tiers = [(None, i, o, float(p.get("cache_write") or i * 1.25), float(p.get("cache_read") or i * 0.1))]
     if tiers is None:
         return None
     prompt = input_tokens + cache_write_tokens + cache_write_1h_tokens + cache_read_tokens

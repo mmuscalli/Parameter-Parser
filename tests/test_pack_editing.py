@@ -342,7 +342,7 @@ def test_menu():
     w = main_window.MainWindow()
     titles = [a.text() for a in w.menuBar().actions()]
     # one menu for research areas: what packs define, then what you taught the app in reviews (2026-11-07)
-    assert titles[:3] == ["File", "Settings", "Data Packs"] and "Variables" not in titles, titles   # Settings menu: 2026-11-08
+    assert titles[:4] == ["File", "Settings", "Models", "Data Packs"] and "Variables" not in titles, titles   # Models: 2026-11-11
     menu = next(a.menu() for a in w.menuBar().actions() if a.text() == "Data Packs")
     assert [a.text() for a in menu.actions() if a.text()] == ["All data packs and modules…", "New data pack…", "Edit data pack…",
                                                              "Copy a data pack…", "Check data pack…",

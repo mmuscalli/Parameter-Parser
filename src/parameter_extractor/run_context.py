@@ -116,5 +116,6 @@ class RunContext:
                 import anthropic  # lazy: parsing/flattening work without the SDK installed
                 # parallel stages can briefly exceed a key's per-minute token limit: the SDK
                 # waits and retries a rate-limited request (honouring retry-after)
-                self._client = anthropic.Anthropic(api_key=self.config.api_key, max_retries=5)
+                self._client = anthropic.Anthropic(api_key=self.config.api_key,
+                                                   max_retries=getattr(self.config, "max_retries", 5))
             return self._client

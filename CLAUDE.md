@@ -54,7 +54,12 @@ Version: `parameter_extractor.__version__` (0.3.0, tag `v0.3.0`), the one place 
   `pack_modules.py`, `module_drafting.py`, `pack_overview.py`.
 - `gui/`: `main_window.py` (five numbered steps: data pack, papers, what to extract, options, run; results tabs),
   `multi_runs.py`, `digitizer.py` + `figure_dialog.py`, `variable_review.py`, `registry_dialog.py`,
-  `pack_windows.py` / `packs_window.py` / `pack_assist.py`, `settings_dialog.py`, `local_models_panel.py`.
+  `pack_windows.py` / `packs_window.py` / `pack_assist.py`, `settings_dialog.py` (keys, folder, lookups),
+  `models_window.py` (Models menu: profiles and connections).
+- `model_profiles.py`: model profiles (a connection + a model per role + output cap, temperature, caching, steps at
+  once, retries, prices) and connections (Anthropic API; Ollama / OpenAI-compatible servers, local or hosted) in
+  `<app data>/model_profiles.json`; `apply(config, profile_id)` sets RunConfig (`profile_roles`, `temperature`,
+  `max_parallel_stages`, `max_retries`, `prices`, or provider "local" + `local` for a server).
 - `diagnostics.py`: `--self-check` (free; verifies an install or a built app).
 
 ## Rules for every change
@@ -107,7 +112,9 @@ Search `docs/history/` for the details and the measurements behind each.
   is local and free; a *module* is shared and linked by reference, never copied (`pack_modules.migrate_copies`).
 - **Defaults**: the Standard profile (Sonnet 5.5; paper details on Haiku) stays the default. Profiles: standard,
   balanced (Sonnet plans, Haiku extracts; not for exoplanets), economy (Haiku; figure suggestions and equations
-  stay on Sonnet). Passes 1–3 with a vote. Pressure unit: bar.
+  stay on Sonnet). Passes 1–3 with a vote. Pressure unit: bar. The built-ins can be changed in the Models window
+  (asks first; stored as changes; Reset): an UNCHANGED built-in must send exactly the requests it always did
+  (`profile_roles` empty -> the old `model_for` path; tests/test_model_profiles.py compares the built requests).
 - **Review before writing**: a value for a column outside the pack's vocabulary (new variable, new compound of any
   type) is written only after the user accepts it once (remembered in the registry). Vocabulary-defined columns
   (the pack's, its modules', analysis vocabulary) are written directly. Assumed values are flagged and offered,
@@ -137,7 +144,10 @@ Search `docs/history/` for the details and the measurements behind each.
 - **Developer handoff** (`handoff.py`: Claude Code answers the requests) only with `PARAMETER_EXTRACTOR_DEV=1` or the
   Dev build; excluded from the public build (claude.ai login can't be offered by third-party apps). Handoff answers
   are Claude Code's, so they can't evaluate a model.
-- **Local models**: unvalidated, every run flagged. Settings in `<app data>/local_models.json`; enter the context
+- **Local models**: unvalidated, every run flagged. Servers and profiles in the Models window
+  (`model_profiles.json`; the old `local_models.json` is brought over once as the connection "Local server"); a
+  server's key is in the keychain (account `model-connection:<id>`, the migrated one keeps `local-model-server`).
+  A hosted server without prices shows its cost as unknown, a private one as $0. Enter the context
   length that fits on the GPU, not the model's reported maximum. `local_models.LOCAL_REQUIRED` makes fields local
   models skip (`txt`, `sample`, `mode`, `meth`) required for local servers only. Pain points and the checklist for a
   new model: `docs/local_model_notes.md`; test tool `scripts/check_local_model.py`.

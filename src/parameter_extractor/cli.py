@@ -106,14 +106,16 @@ def main() -> int:
     parser.add_argument("--equations-latex", action="store_true",
                         help="Convert the paper's labelled equations to LaTeX (one small extra API call); "
                              "they're found and cropped either way")
-    parser.add_argument("--models", default=None,
-                        help="standard: Claude Sonnet 5.5 for every step (most accurate; the default); balanced: "
-                             "Sonnet plans the rows, Claude Haiku 5.5 extracts (about half price); economy: Haiku for "
-                             "every step (cheapest; best with --passes 3). With --provider local: one of your local "
-                             "model profiles (default: the first)")
+    parser.add_argument("--models", default=None, metavar="PROFILE",
+                        help="The model profile (Models window; --list-models lists them): standard (Claude Sonnet 5.5, "
+                             "the default, most accurate), balanced (Sonnet plans the rows, Claude Haiku 5.5 extracts; "
+                             "about half price), economy (Haiku; cheapest, best with --passes 3), or one of your own -- "
+                             "on the Anthropic API or a model server")
+    parser.add_argument("--list-models", action="store_true",
+                        help="List the model profiles and connections (Models window), then exit")
     parser.add_argument("--provider", choices=["anthropic", "local"], default="anthropic",
                         help="anthropic: the Anthropic API (default); local: a model on your own server -- Ollama or "
-                             "an OpenAI-compatible server, set up in the app's Settings > Model provider (or "
+                             "an OpenAI-compatible server, from the older local_models.json settings (or "
                              "--local-settings). No API key or cost; results aren't validated like the API's")
     parser.add_argument("--local-settings", type=Path, default=None,
                         help="local model settings file (default: the app's local_models.json)")
@@ -211,6 +213,8 @@ def main() -> int:
         return 0
     if args.list_local_models:
         return _list_local_models(args)
+    if args.list_models:
+        return _list_models()
     if args.draft_modules:
         return _draft_modules(args, parser)
     if args.draft_pack:
@@ -417,25 +421,69 @@ if __name__ == "__main__":
     raise SystemExit(main())
 
 
+PROFILE_FIELDS = ("provider", "model_profile", "profile_roles", "local", "max_tokens", "temperature",
+                  "max_parallel_stages", "max_retries", "prices", "prompt_caching")
+
+
 def _provider_overrides(args, parser) -> dict:
-    """--provider / --models -> RunConfig fields (local: the saved local model settings and one of their profiles)."""
+    """--models PROFILE -> RunConfig fields (model_profiles.apply: the profile's connection, models and settings).
+    --provider local (before profiles named their connection): the saved local_models.json and one of its profiles."""
     if args.provider != "local":
+        import os
+        from parameter_extractor import model_profiles as mp
+        from parameter_extractor.errors import PipelineError
+        store = mp.ModelStore()
         profile = args.models or "standard"
-        if profile not in ("standard", "balanced", "economy"):
-            parser.error(f"--models {profile}: choose standard, balanced or economy (local profiles need "
-                         f"--provider local)")
-        return {"model_profile": profile}
+        found = store.profile(profile)
+        if found is None:
+            parser.error(f"--models {profile}: no such profile ({', '.join(p.id for p in store.profiles())}; "
+                         f"--list-models describes them)")
+        conn = store.connection(found.connection)
+        key = os.environ.get("LOCAL_SERVER_API_KEY", "")
+        if conn is not None and not conn.is_anthropic and not key:
+            try:
+                from parameter_extractor.gui import key_store
+                key = key_store.load_key(conn.account) or ""
+            except Exception:
+                key = ""
+        try:
+            applied = mp.apply(RunConfig(api_key="", output_dir=Path(".")), profile, store, key=key)
+        except PipelineError as e:
+            parser.error(str(e))
+        out = {k: getattr(applied, k) for k in PROFILE_FIELDS}
+        out["prompt_caching"] = applied.prompt_caching and not getattr(args, "no_cache", False)
+        return out
     import os
     from parameter_extractor import local_models
     local = local_models.load(args.local_settings)
     local.api_key = os.environ.get("LOCAL_SERVER_API_KEY", "")
     if not local.profiles:
-        parser.error("no local model profiles yet: set them up in the app (Settings > Model provider), or write "
+        parser.error("no local model profiles yet: set up model servers in the app (Models > Connections) and use --models PROFILE, or write "
                      f"{args.local_settings or local_models.default_path()}")
     profile = args.models or next(iter(local.profiles))
     if profile not in local.profiles:
         parser.error(f"--models {profile}: not a local profile ({', '.join(local.profiles)})")
     return {"provider": "local", "local": local.to_dict(), "model_profile": profile}
+
+
+def _list_models() -> int:
+    from parameter_extractor import model_profiles as mp
+    store = mp.ModelStore()
+    print("Model profiles (--models PROFILE):")
+    for p in store.profiles():
+        conn = store.connection(p.connection)
+        changed = " (changed from the default)" if store.is_changed(p.id) else ""
+        print(f"  {p.id:20} {p.label}{changed} -- on {conn.name if conn else p.connection}")
+        for role, label in mp.ROLES:
+            print(f"      {label + ':':22} {p.roles.get(role) or '-'}")
+        problems = store.problems(p)
+        if problems:
+            print(f"      can't run: {'; '.join(problems)}")
+    print("Connections:")
+    for c in store.all_connections():
+        kind = "" if c.is_anthropic else f" ({mp.KINDS.get(c.kind, c.kind)}, {c.url})"
+        print(f"  {c.name}{kind}: {len(c.models)} model(s)")
+    return 0
 
 
 def _list_local_models(args) -> int:

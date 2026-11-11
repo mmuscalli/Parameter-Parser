@@ -46,6 +46,34 @@ PROFILE_ROLES = [("structure_planner", "Plans the rows"), ("*", "Extraction step
                  ("figure_planner", "Figure suggestions")]
 FLAG_TEXT = ("Extracted with a locally hosted model ({models}). Local models aren't validated for this app the way the "
              "default Anthropic models are: check the values against the paper.")
+HOSTED_FLAG_TEXT = ("Extracted with {models} on {server}. Models other than the default Anthropic ones aren't validated for "
+                    "this app: check the values against the paper.")
+
+
+def flag_text(config) -> str:
+    """The paper flag of a run on a model server: local, or a hosted service (Models > Connections)."""
+    local = config.local or {}
+    models = ", ".join(models_used(config)) or "?"
+    if local.get("name") and local.get("private") is False:
+        return HOSTED_FLAG_TEXT.format(models=models, server=local["name"])
+    return FLAG_TEXT.format(models=models)
+
+
+def _temperature(ctx) -> float:
+    """A profile's temperature; 0 when it sets none (repeatable answers)."""
+    t = getattr(ctx.config, "temperature", None)
+    return 0 if t is None else t
+
+
+def server_cost(config, model: str, input_tokens: int, output_tokens: int):
+    """$ for one request to a model server: the model's prices when set (Models > Connections); free on a private
+    server; unknown (None) on a hosted one without prices."""
+    local = config.local or {}
+    m = (local.get("models") or {}).get(model) or {}
+    if m.get("price_input") is not None or m.get("price_output") is not None:
+        return (input_tokens * float(m.get("price_input") or 0) + output_tokens * float(m.get("price_output") or 0)) \
+            / 1_000_000
+    return None if local.get("private") is False else 0.0
 
 
 @dataclass
@@ -115,7 +143,7 @@ def model_for(local: dict, profile: str, stage: str) -> str:
     if chosen.get("*"):
         return chosen["*"]
     raise errors.PipelineError(f"The local model profile '{profile}' names no model for the '{stage}' step. Choose "
-                               f"models in Settings > Model provider.")
+                               f"models in Models > Model profiles….")
 
 
 # ---- talking to the server ---------------------------------------------------------------------------------------
@@ -280,7 +308,7 @@ def send(ctx, stage: str, model: str, *, system_prompt, content, response_model)
     if room < 1024:
         raise errors.PipelineError(
             f"The '{stage}' step needs about {prompt_tokens:,} tokens of context, but '{model}' is set to "
-            f"{spec.context:,}. Raise its context length in Settings > Model provider (the model and your memory "
+            f"{spec.context:,}. Raise its context length in Models > Connections (the model and your memory "
             f"must allow it), or use a model with a longer context.")
     max_tokens = getattr(_streamed, "max_tokens", None) or ctx.config.max_tokens
     out_tokens = max(1024, min(max_tokens, room))
@@ -291,12 +319,12 @@ def send(ctx, stage: str, model: str, *, system_prompt, content, response_model)
             message["images"] = [data for _, data in images]
         body = {"model": model, "stream": True, "format": schema,
                 "messages": [{"role": "system", "content": system}, message],
-                "options": {"num_ctx": spec.context, "num_predict": out_tokens, "temperature": 0}}
+                "options": {"num_ctx": spec.context, "num_predict": out_tokens, "temperature": _temperature(ctx)}}
         path = "/api/chat"
     else:
         user = [{"type": "text", "text": p} if kind == "text" else
                 {"type": "image_url", "image_url": {"url": f"data:{p[0]};base64,{p[1]}"}} for kind, p in parts]
-        body = {"model": model, "stream": True, "temperature": 0, "max_tokens": out_tokens,
+        body = {"model": model, "stream": True, "temperature": _temperature(ctx), "max_tokens": out_tokens,
                 "stream_options": {"include_usage": True},
                 "response_format": {"type": "json_schema",
                                     "json_schema": {"name": stage, "schema": schema, "strict": True}},
@@ -363,13 +391,13 @@ def _stream(local: LocalSettings, path: str, body: dict, stage: str, model: str,
                 if e.code == 404 or "not found" in detail.lower():
                     raise errors.PipelineError(f"The local model '{model}' isn't installed on the server ({detail}). "
                                                f"Ollama: 'ollama pull {model}'; or choose another model in "
-                                               f"Settings > Model provider.") from None
+                                               f"Models > Connections.") from None
                 raise errors.ApiRequestError(f"The local model server returned an error during the '{stage}' step "
                                              f"({e.code}): {detail}") from None
             if isinstance(e, (TimeoutError, )) or "timed out" in str(e).lower():
                 raise errors.ApiRequestError(f"The local model didn't answer the '{stage}' step within "
                                              f"{local.timeout_sec} s. A long paper can take minutes to read on a "
-                                             f"local machine: raise the time limit in Settings > Model provider.") \
+                                             f"local machine: raise the time limit in Models > Connections.") \
                     from None
             if isinstance(e, (urllib.error.URLError, OSError)):
                 raise _unreachable(local, e) from None
