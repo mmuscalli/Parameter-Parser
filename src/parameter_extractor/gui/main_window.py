@@ -24,7 +24,7 @@ from PySide6.QtCore import QSettings, Qt, QThread, QUrl
 from PySide6.QtGui import QAction, QBrush, QColor, QDesktopServices, QKeySequence
 from PySide6.QtWidgets import (
     QAbstractItemView, QCheckBox, QComboBox, QFileDialog, QFormLayout, QGroupBox, QHBoxLayout,
-    QHeaderView, QLabel, QLineEdit, QMainWindow, QMessageBox, QPlainTextEdit, QProgressBar, QPushButton,
+    QHeaderView, QInputDialog, QLabel, QLineEdit, QMainWindow, QMessageBox, QPlainTextEdit, QProgressBar, QPushButton,
     QFrame, QMenu, QScrollArea, QSplitter, QToolButton, QWidgetAction,
     QTableWidget, QTableWidgetItem, QTabWidget, QTextBrowser, QTreeWidget, QTreeWidgetItem,
     QVBoxLayout, QWidget,
@@ -170,6 +170,10 @@ class MainWindow(QMainWindow):
         self.add_list_action = QAction("Add papers from a list (CSV)…", self, triggered=lambda: self.papers.add_list())
         file_menu.addAction(self.add_pdfs_action)
         file_menu.addAction(self.add_list_action)
+        file_menu.addSeparator()
+        # an earlier run shown in the results tabs (W3, 2026-11-11)
+        self.open_results_action = QAction("Open a results folder…", self, triggered=self._open_results_folder)
+        file_menu.addAction(self.open_results_action)
         file_menu.addSeparator()
         file_menu.addAction(quit_action)
         # Settings: a menu like Data Packs (Mickey, 2026-11-08), not a button
@@ -1309,6 +1313,7 @@ class MainWindow(QMainWindow):
                   self.new_pack_btn, self.edit_pack_btn, self.packs_btn, self.packs_window_action,
                   self.edit_pack_action, self.copy_pack_action, self.remove_pack_action, self.params,
                   self.profile_combo, self.passes_combo, self.words_edit, self.add_pdfs_action, self.add_list_action,
+                  self.open_results_action,
                   self.output_action, self.lookups_action, *self.option_toggles(), self.review_figures_box,
                   self.review_variables_box, self.tables_box, self.plan_box, self.whole_box):
             w.setEnabled(enabled)
@@ -1320,6 +1325,41 @@ class MainWindow(QMainWindow):
         self._update_run_enabled()
 
     # ---- results ---------------------------------------------------------------
+
+    def _open_results_folder(self, folder=None, pick=None) -> None:
+        """File > Open a results folder… (W3): an earlier run shown in the results tabs, read from its folder. A
+        queue folder (or any folder holding several runs) asks which paper; `pick` chooses one by name (tests)."""
+        from parameter_extractor import run_folder
+        from parameter_extractor.errors import PipelineError
+        if self._busy:
+            return
+        if folder is None:
+            folder = QFileDialog.getExistingDirectory(self, "Open a results folder", self.out_edit.text())
+            if not folder:
+                return
+        found = run_folder.runs_in(Path(folder))
+        if not found:
+            QMessageBox.information(self, "Open a results folder",
+                                    f"{folder} isn't a results folder of this app, and holds none: a run's folder "
+                                    "has a run_summary.json file.")
+            return
+        chosen = found[0]
+        if len(found) > 1:
+            names = [p.name for p in found]
+            if pick is None:
+                pick, ok = QInputDialog.getItem(self, "Open a results folder",
+                                                f"{len(found)} runs in this folder. Show which?", names, 0, False)
+                if not ok:
+                    return
+            chosen = found[names.index(pick)]
+        try:
+            result = run_folder.load_result(chosen)
+        except PipelineError as e:
+            QMessageBox.warning(self, "Open a results folder", str(e))
+            return
+        self.show_result(result)
+        note = f" ({len(result.opened_notes)} part(s) missing: see Summary)" if result.opened_notes else ""
+        self.status.setText(f"Showing an earlier run, {chosen.name}: {len(result.rows)} rows{note}.")
 
     def show_result(self, result) -> None:
         self._last_run_dir, self._last_csv = result.run_dir, result.csv_path
@@ -1346,7 +1386,8 @@ class MainWindow(QMainWindow):
         from parameter_extractor import packs
         from parameter_extractor.column_order import ColumnOrder
         from parameter_extractor.registry import VariableRegistry
-        run_pack = packs.available().get(self.pack_combo.currentData() or "")   # locked during the run
+        # the pack the run used: an opened folder names it; a run that just finished used the (locked) combo's
+        run_pack = packs.available().get(getattr(result, "pack", "") or self.pack_combo.currentData() or "")
         try:
             order = ColumnOrder(pack=run_pack, registry=VariableRegistry(self.registry_path, pack=run_pack),
                                 chosen={a["column"]: a.get("category", "") for a in result.accepted_variables})
@@ -1650,8 +1691,19 @@ class MainWindow(QMainWindow):
             f"<td align=right>{u.output_tokens:,}</td>"
             f"<td align=right>{format_usd(u.cost_usd)}</td><td align=right>{u.elapsed_sec:.0f} s</td></tr>"
             for u in result.usage)
+        opened = ""
+        if getattr(result, "opened", False):
+            from parameter_extractor import packs
+            run_pack = packs.available().get(result.pack) if result.pack else None
+            made = [f"data pack: {html.escape(run_pack.manifest.label if run_pack else result.pack)}"] if result.pack \
+                else []
+            made += [f"made by version {html.escape(result.app_version)}"] if result.app_version else []
+            missing = "".join(f"<li>{html.escape(n)}</li>" for n in result.opened_notes)
+            opened = (f"<p style='color:gray'>An earlier run, opened from its folder"
+                      f"{' (' + '; '.join(made) + ')' if made else ''}. Nothing was asked of the model again.</p>" + (f"<p>Parts of this folder couldn't be shown:</p><ul>{missing}</ul>"
+                                       if missing else ""))
         self.summary_text.setHtml(f"""
-            <h3>{result.paper_id}</h3>
+            <h3>{result.paper_id}</h3>{opened}
             <p><b>{len(result.rows)}</b> rows extracted &middot;
                <b>{len(result.paper_flags)}</b> thing(s) to check &middot;
                <b>{len(result.row_flags)}</b> row(s) marked for checking &middot;

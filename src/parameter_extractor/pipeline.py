@@ -119,6 +119,11 @@ class RunResult:
     new_variables: List[NewVariable] = field(default_factory=list)   # left out of the CSV (not accepted)
     accepted_variables: List[dict] = field(default_factory=list)     # [{name, kind, column, values, how}]
     unfound_terms: List[str] = field(default_factory=list)           # searched for, not stated in the paper
+    # set when the result was read back from its folder (run_folder.load_result, File > Open a results folder…)
+    opened: bool = False
+    pack: str = ""                                                   # the data pack the run used
+    app_version: str = ""
+    opened_notes: List[str] = field(default_factory=list)            # parts an older folder lacked
 
     @property
     def input_tokens(self) -> int:
