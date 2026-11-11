@@ -65,12 +65,11 @@ def pack_html(pack: packs.Pack) -> str:
 def module_html(mod, users) -> str:
     from parameter_extractor import pack_modules
     from parameter_extractor.pack_overview import STYLE
-    lines = "".join(f"<tr><td valign='top'>•</td><td>{escape(l)}</td></tr>" for l in pack_modules.describe(mod.id))
     where = "part of the app" if mod.builtin else "yours"
     used = ", ".join(escape(p.label) for p in users) or "no data pack yet"
     return (STYLE + f"<h2>{escape(mod.label)}</h2><p class='muted'>{where} &nbsp;·&nbsp; folder: "
             f"{escape(str(mod.folder))}</p><p>{escape(mod.manifest.description)}</p>"
-            f"<h3>What it brings</h3><table cellpadding='4' cellspacing='0'>{lines}</table>"
+            f"<h3>What it brings</h3>{pack_modules.brings_html(mod.id)}"
             f"<h3>Linked by</h3><p>{used}</p>"
             "<p class='muted'>A module is the same in every data pack that links it. A data pack can change how it "
             "works for that pack only, on the pack's Modules tab (Edit…).</p>")

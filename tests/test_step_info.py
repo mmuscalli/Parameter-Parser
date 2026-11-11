@@ -98,6 +98,29 @@ def test_the_pack_editor_shows_built_in_steps():
     e.close()
 
 
+def test_what_it_brings_has_one_format():
+    """Every module lists the same fields in the same order; empty ones read 'none' (lists) or '0' (counts)."""
+    from html import escape
+    from parameter_extractor import modules as store, pack_modules
+    labels = [label for _g, label, _k in pack_modules.BRINGS_FIELDS]
+    for mid in store.available():
+        rows = pack_modules.brings(mid)
+        assert [label for _g, label, _v in rows] == labels, mid
+        page = pack_modules.brings_html(mid)
+        for (_g, label, value), (_g2, _l2, kind) in zip(rows, pack_modules.BRINGS_FIELDS):
+            assert isinstance(value, (list, int, str)), (mid, label)
+            if kind == "count":
+                assert isinstance(value, (int, str)), (mid, label)
+        assert page.count("<tr>") == len(labels) + len({g for g, _l, _k in pack_modules.BRINGS_FIELDS})
+        assert all(f">{escape(label)}<" in page for label in labels), mid
+    peptides = dict((label, value) for _g, label, value in pack_modules.brings("peptides_oligomers"))
+    assert peptides["Built-in steps"] == [] and peptides["Row-planning rules"] == 0
+    assert peptides["Rules for built-in steps"] == "4 (the chemistry step)" or \
+        peptides["Rules for built-in steps"].endswith("(the chemistry step)")
+    page = pack_modules.brings_html("peptides_oligomers")
+    assert ">none<" in page and ">0<" in page
+
+
 if __name__ == "__main__":
     for name, fn in list(globals().items()):
         if name.startswith("test_") and callable(fn):

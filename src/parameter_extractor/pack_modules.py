@@ -235,47 +235,144 @@ def evidence_for(papers) -> Dict[str, Dict[str, List[str]]]:
     return out
 
 
-def describe(module_id: str) -> List[str]:
-    """What a module brings, line by line (the pack editor's Modules tab, the CLI)."""
+# "What it brings" (Mickey, 2026-11-11: one format for every module): the same rows in the same order for every
+# module, grouped; an empty list reads "none", a zero count "0". (group, label, kind: "list" | "count")
+BRINGS_FIELDS = [
+    ("Steps and calculations", "Uses other modules", "list"),
+    ("Steps and calculations", "Built-in steps", "list"),
+    ("Steps and calculations", "Configurable steps", "list"),
+    ("Steps and calculations", "Calculations", "list"),
+    ("Columns", "Columns added", "list"),
+    ("Columns", "Added to the conditions step", "list"),
+    ("Columns", "Column groups", "list"),
+    ("Rules", "Row-planning rules", "count"),
+    ("Rules", "Rules for the pack's own steps", "count"),
+    ("Rules", "Rules for built-in steps", "count"),
+    ("Rules", "Hints to other steps", "list"),
+    ("Reference data", "Vocabulary", "list"),
+    ("Reference data", "Instructions file", "list"),
+    ("Reference data", "Compound list fill-in", "list"),
+]
+BRINGS_HELP = {
+    "Uses other modules": "Modules linked along with this one.",
+    "Built-in steps": "Steps that are part of the app: one model request per paper. View them on the Steps tab.",
+    "Configurable steps": "The module's own steps: one model request each, for the papers they run for.",
+    "Calculations": "Run on your computer after the model's answers: no model requests.",
+    "Columns added": "Columns the module defines.",
+    "Added to the conditions step": "Columns added to the data pack's conditions step (its first step that runs for "
+                                    "every paper) when it doesn't have them.",
+    "Column groups": "Categories the dataset's columns are grouped under.",
+    "Row-planning rules": "Rules added to the instructions for planning a paper's rows.",
+    "Rules for the pack's own steps": "Rules added to the instructions of the data pack's configurable steps.",
+    "Rules for built-in steps": "Rules added to a built-in step's instructions.",
+    "Hints to other steps": "What the data pack's other steps are told while one of this module's steps runs.",
+    "Vocabulary": "Reference data the module's step works from.",
+    "Instructions file": "A step's full instructions, kept with the module.",
+    "Compound list fill-in": "What the module adds to a drafted data pack's compound list.",
+}
+
+
+def _runs_for(trig: dict) -> str:
+    if trig.get("always"):
+        return "every paper"
+    words = trig.get("keywords") or []
+    if words:
+        shown = ", ".join(f"“{w}”" for w in words[:3]) + (", …" if len(words) > 3 else "")
+        hits = trig.get("min_hits") or 1
+        return f"papers mentioning {shown}" + (f" (at least {hits} times)" if hits > 1 else "")
+    kinds = list(trig.get("set_types") or []) + list(trig.get("set_patterns") or [])
+    return "experiments of these kinds: " + ", ".join(kinds[:3]) if kinds else "papers that call for it"
+
+
+def brings(module_id: str) -> List[tuple]:
+    """What a module brings: (group, label, value) for every field of BRINGS_FIELDS, in order; value is a list of
+    strings or a count (int)."""
+    from parameter_extractor.pack_editing import CALCULATIONS
     m = module_store.available()[module_id]
-    mm, out = m.manifest, []
-    if mm.needs:
-        out.append("uses: " + ", ".join(module_store.available()[n].label for n in mm.needs if n in module_store.available()))
-    if mm.builtin_stages:
-        out.append("switches on the built-in step " + ", ".join(f"'{s}'" for s in mm.builtin_stages)
-                   + " (part of the app, one model request per paper; view it on the Steps tab)")
+    mm = m.manifest
+    found = module_store.available()
+    steps = []
     for path in m.stage_files():
         spec = json.loads(path.read_text())
-        trig = spec.get("trigger") or {}
-        when = ("every paper" if trig.get("always") else "papers mentioning " + ", ".join(trig.get("keywords", [])[:4]) + " ..."
-                if trig.get("keywords") else "wet-dry experiments" if trig.get("set_types") or trig.get("set_patterns") else "")
-        out.append(f"configurable step '{spec.get('label', spec['name'])}' (one model request for {when}; "
-                   f"{len(spec.get('parameters', []))} values): "
-                   + ", ".join(p["column"] for p in spec.get("parameters", [])))
-    if mm.postprocess:
-        out.append("calculations (on your computer, no model requests): " + ", ".join(mm.postprocess))
-    if mm.pack_parameters:
-        out.append("adds to the data pack's conditions step (its first step that runs for every paper), when missing: "
-                   + ", ".join(p["column"] for p in mm.pack_parameters))
-    if mm.standard_columns:
-        out.append("columns: " + ", ".join(e["column"] for e in mm.standard_columns))
-    if mm.variable_categories:
-        out.append("column blocks: " + ", ".join(c["label"] for c in mm.variable_categories))
-    if mm.row_rules:
-        out.append(f"rules for planning the rows: {len(mm.row_rules)}")
-    if mm.stage_rules:
-        out.append(f"rules added to the data pack's own steps: {len(mm.stage_rules)}")
-    for step, rules in mm.prompt_rules.items():
-        out.append(f"rules added to the built-in {step} step's instructions: {len(rules)}")
-    for step in mm.stage_hints:
-        out.append(f"while the {step} step runs, a hint keeps its details out of the data pack's own steps")
-    if mm.compound_series:
-        out.append("the compound vocabulary gets every length of an oligomer series found in sample papers")
-    vocab = m.file("analysis_vocab.json")
-    if vocab:
-        out.append(f"vocabulary: {len(json.loads(vocab.read_text()).get('techniques', []))} analytical techniques")
-    if m.file("prompts/chemistry.md"):
-        out.append("the chemistry step's instructions (prompts/chemistry.md)")
+        cols = [prm["column"] for prm in spec.get("parameters", [])]
+        # one item on three lines (brings_html indents the second and third)
+        steps.append(f"{spec.get('label', spec['name'])}\nruns for {_runs_for(spec.get('trigger') or {})}\n"
+                     f"fills {len(cols)} column{'s' if len(cols) != 1 else ''}: {', '.join(cols)}")
+    vocab = []
+    vocab_file = m.file("analysis_vocab.json")
+    if vocab_file:
+        data = json.loads(vocab_file.read_text())
+        vocab.append(f"{len(data.get('techniques', []))} analytical techniques in {len(data.get('families', {}))} "
+                     f"instrument families (analysis_vocab.json)")
+    prompts_dir = m.folder / "prompts"
+    instructions = [f"the {f.stem} step's instructions (prompts/{f.name})"
+                    for f in sorted(prompts_dir.glob("*.md"))] if prompts_dir.is_dir() else []
+    hints = [f"while the {step} step runs, the data pack's other steps leave its details out (and include them "
+             f"when it is switched off)" for step in mm.stage_hints]
+    built_in_rules = sum(len(r) for r in mm.prompt_rules.values())
+    values = {
+        "Uses other modules": [found[n].label for n in mm.needs if n in found],
+        "Built-in steps": [f"{s} (part of the app)" for s in mm.builtin_stages],
+        "Configurable steps": steps,
+        "Calculations": [f"{c}: {CALCULATIONS[c][0]}" if c in CALCULATIONS else c for c in mm.postprocess],
+        "Columns added": [e["column"] for e in mm.standard_columns],
+        "Added to the conditions step": [prm["column"] for prm in mm.pack_parameters],
+        "Column groups": [c["label"] for c in mm.variable_categories],
+        "Row-planning rules": len(mm.row_rules),
+        "Rules for the pack's own steps": len(mm.stage_rules),
+        "Rules for built-in steps": built_in_rules,
+        "Hints to other steps": hints,
+        "Vocabulary": vocab,
+        "Instructions file": instructions,
+        "Compound list fill-in": (["every length of an oligomer series found in the sample papers"]
+                                  if mm.compound_series else []),
+    }
+    out = []
+    for group, label, _kind in BRINGS_FIELDS:
+        value = values[label]
+        if label == "Rules for built-in steps" and value:
+            per_step = [(s, len(r)) for s, r in mm.prompt_rules.items() if r]
+            value = (f"{value} (the {per_step[0][0]} step)" if len(per_step) == 1
+                     else f"{value} (" + ", ".join(f"{n} for the {s} step" for s, n in per_step) + ")")
+        out.append((group, label, value))
+    return out
+
+
+def brings_html(module_id: str) -> str:
+    """The "What it brings" table: groups as headings, labels in one column, values in the next (each item on its
+    own line); "none" / "0" for what the module doesn't bring."""
+    from html import escape
+    rows, last = [], None
+    for group, label, value in brings(module_id):
+        if group != last:
+            top = "14" if last is not None else "2"
+            rows.append(f"<tr><td colspan='2' style='padding-top:{top}px; font-weight:600'>{escape(group)}</td></tr>")
+            last = group
+        if isinstance(value, int) or (isinstance(value, str) and value[:1].isdigit()):
+            shown = escape(str(value)) if value else "<span style='color:gray'>0</span>"
+        elif not value:
+            shown = "<span style='color:gray'>none</span>"
+        else:
+            def item(v: str) -> str:            # a step's details on indented lines under its name
+                first, *more = v.split("\n")
+                return escape(first) + "".join(f"<br><span style='color:gray'>&nbsp;&nbsp;&nbsp;&nbsp;{escape(x)}"
+                                               f"</span>" for x in more)
+            gap = "<div style='margin-top:6px'></div>" if any("\n" in v for v in value) else "<br>"
+            shown = gap.join(item(v) for v in value)
+        rows.append(f"<tr><td width='230' valign='top' style='padding:2px 14px 2px 14px'"
+                    f" title='{escape(BRINGS_HELP.get(label, ''))}'>{escape(label)}</td>"
+                    f"<td valign='top' style='padding:2px 0'>{shown}</td></tr>")
+    return "<table cellspacing='0' cellpadding='0' width='100%'>" + "".join(rows) + "</table>"
+
+
+def describe(module_id: str) -> List[str]:
+    """What a module brings, one line per field it has something for ('label: value'), for text reports (the draft
+    report, add_modules)."""
+    out = []
+    for _group, label, value in brings(module_id):
+        if value:
+            out.append(f"{label}: " + (str(value) if not isinstance(value, list)
+                                       else "; ".join(v.replace("\n", ", ") for v in value)))
     return out
 
 

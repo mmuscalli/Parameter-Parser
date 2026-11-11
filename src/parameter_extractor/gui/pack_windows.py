@@ -1067,9 +1067,7 @@ class PackEditor(QDialog):
         pv.addLayout(head)
         about = QLabel(escape(mod.manifest.description), wordWrap=True)
         pv.addWidget(about)
-        brings = QLabel("<table cellpadding='3' cellspacing='0'>" + "".join(
-            f"<tr><td valign='top'>•</td><td>{escape(l)}</td></tr>" for l in pack_modules.describe(mod.id))
-            + "</table>", wordWrap=True)
+        brings = QLabel(pack_modules.brings_html(mod.id), wordWrap=True)
         brings.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
         box = QGroupBox("What it brings")
         bv = QVBoxLayout(box)
