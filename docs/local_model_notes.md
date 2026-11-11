@@ -5,7 +5,8 @@ the default Anthropic models, and what was done about it. It's meant as a checkl
 most of these will come up again with any model of similar size.
 
 Setup so far: `qwen3.8:27b` on an RTX 3090 (24 GB), Ollama 0.40.16, served over the LAN; details in
-`local_model_server_report.md`. Runs and the scripts that ran them are kept in `runs/local_models/` (local only).
+`local_model_server_report.md`. Runs are kept in `runs/local_models/` (local only). The test runs and their
+comparison with the references are one tool, `scripts/check_local_model.py` (see the checklist).
 
 ## Results so far
 
@@ -24,7 +25,7 @@ Setup so far: `qwen3.8:27b` on an RTX 3090 (24 GB), Ollama 0.40.16, served over 
 For comparison, Claude Standard (Sonnet) reproduces eder1994's values except wording, for about $0.26 (the reference
 itself was made with it), and on teng2023 matches 2,132 archive values with 0 real differences and 27 not extracted,
 for about $1.40–1.85. Archive counts are for the 36 rows the archive adopted, against the archive snapshot saved with
-the Claude reference run (`runs/local_models/run_teng2023_local.py`, `archive_summary.py`).
+the Claude reference run (`scripts/check_local_model.py --paper teng2023`).
 
 ## Issues and what was done
 
@@ -140,11 +141,12 @@ starting concentrations). About 27–31B is where the results became usable.
 ## Checklist for trying another model
 
 1. Measure the context that fits on the GPU; don't use the reported maximum.
-2. Run eder1994 first (short, every prebiotic step, a reference to score against) and score it with
-   `scripts/eval_references.py --score`.
+2. Run eder1994 first (short, every prebiotic step, a reference to score against):
+   `python scripts/check_local_model.py MODEL --context N`. It prints each step's tokens and time, the share of the
+   reference's cells reproduced and the most-missed columns. `--score RUN_DIR` compares a finished run again.
 3. Look at empty columns in the scored misses: a column empty on every row usually means a skipped field (issue 1).
 4. Look at the review items and analysis flags: numbers that arrived as text (issue 2).
-5. Then teng2023: several rows per set (issue 9), modes (issue 10), the context (issue 11) and uncertainties (12).
-   Compare with `runs/local_models/archive_summary.py`; look at `conflicting_values` flags: many of them usually mean
-   a field that places values (sample, mode, method) was left out.
+5. Then teng2023 (`--paper teng2023`, ~35 min): several rows per set (issue 9), modes (issue 10), the context
+   (issue 11) and uncertainties (12). The tool prints the archive matches; look at `conflicting_values` flags: many
+   of them usually mean a field that places values (sample, mode, method) was left out.
 6. Any new optional field added to an answer format is a candidate for `local_models.LOCAL_REQUIRED`.
