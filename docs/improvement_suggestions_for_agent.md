@@ -123,7 +123,7 @@ paid Claude runs or the local server. Update Status as you go: `proposed` → `a
 | P1 | Split CLAUDE.md into a short guide and a dated history | Upkeep | M | no | done (caf1db3, 47f1b77) |
 | P2 | Back up the reference runs | Upkeep | S | no | done (76318c4) |
 | P3 | Bring README, package metadata and a stale comment up to date | Upkeep | S | no | done (57fb3b5) |
-| P4 | A main branch and version tags | Upkeep | S | no | done (6914f67, tag v0.3.0); remote `main` not replaced (see below) |
+| P4 | A main branch and version tags | Upkeep | S | no | done (6914f67, tag v0.3.0); `main` force-pushed over GitHub's initial commit on Mickey's OK |
 
 **Mickey's answers (2026-11-11):** F1, P3, W6, P4, P1 and P2 accepted and done (F1: a bare "um" is read by the
 column; P1: write-ups go to `docs/history/`; P2: dated archives in `../Backups/`; P4: v0.3.0). The rest are meant to

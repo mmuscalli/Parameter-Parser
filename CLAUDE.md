@@ -164,7 +164,8 @@ estimates, local-model speed-ups, ...) and their status: `docs/improvement_sugge
   Extractor/`; `PARAMETER_EXTRACTOR_DATA_DIR` replaces it (tests).
 - Keychain across rebuilds: builds are re-signed with the local identity from `packaging/make_signing_identity.sh`
   when present, so "Always Allow" survives a rebuild.
-- Branches: `flexible-variables` (current work); local `main` at `v0.3.0`. Tags: `v0.2-figure-digitizer`,
+- Branches: `main` (on GitHub since 2026-11-11) and `flexible-variables`, both at the same commit; keep them
+  together until Mickey retires `flexible-variables`. Tags: `v0.2-figure-digitizer`,
   `backup/flexible-variables-before-public`, `v0.3.0`. Tag a state whenever both apps are built for use.
 - Backups: full project archive `../Backups/EORE_Data_Project_FULL_BACKUP_20261012_030042.tar` (before this
   pipeline); dated `runs/` archives from `scripts/backup_runs.py` in `../Backups/`.
