@@ -192,6 +192,50 @@ def test_command_line_models_option():
             assert cli._list_models() == 0
 
 
+def test_opening_the_window_from_the_menu_and_closing_it():
+    """Mickey's crash (2026-11-11): add a server and a profile on it, remove both, close -- through open_models (the
+    menu / Models… button path), with Save and with Cancel."""
+    from PySide6.QtCore import QCoreApplication, QSettings
+    from PySide6.QtWidgets import QApplication
+    QCoreApplication.setOrganizationName("ParameterExtractorTests")
+    app = QApplication.instance() or QApplication([])
+    from parameter_extractor.gui import main_window
+    from parameter_extractor.gui.models_window import ModelsWindow
+    from test_gui_offline import FakeKeyStore
+    with tempfile.TemporaryDirectory() as tmp:
+        QSettings().clear()
+        keys = FakeKeyStore()
+        with patch.object(main_window, "key_store", keys):
+            w = main_window.MainWindow()
+            w.models_path = Path(tmp) / "model_profiles.json"
+            w._refresh_profiles()
+
+            def add_and_remove(window, save=True):
+                window.tabs.setCurrentIndex(1)
+                window.add_server("ollama", name="Test server")
+                window.add_model("test:7b")
+                window.new_profile(window._conn_id, label="Test profile")
+                window.tabs.setCurrentIndex(0)
+                window.remove_profile()
+                window.tabs.setCurrentIndex(1)
+                window._fill_connections(select="test-server")
+                window.remove_server()
+                if save:
+                    window.save()
+                else:
+                    window.reject()
+                return 0
+            for save in (True, False):
+                with patch.object(ModelsWindow, "exec", lambda self, save=save: add_and_remove(self, save)):
+                    w.open_models()                       # crashed here before the fix
+                    w.open_models("connections")
+                app.processEvents()
+            assert w.profile_combo.currentData() == "standard" and w.batch_box.isEnabled()
+            saved = json.loads((Path(tmp) / "model_profiles.json").read_text())
+            assert saved["connections"] == {} and saved["profiles"] == {}
+            w.close()
+
+
 def test_the_models_window():
     from PySide6.QtCore import QCoreApplication, QSettings
     from PySide6.QtWidgets import QApplication

@@ -650,7 +650,9 @@ class MainWindow(QMainWindow):
 
     def _profile_chosen(self) -> None:
         # batch mode is the Anthropic API's; a run on a model server never uses it
-        self.batch_box.setEnabled(self._profile_provider() == "anthropic")
+        anthropic = self._profile_provider() == "anthropic"
+        self.batch_box.setEnabled(anthropic)
+        self.batch_box.setToolTip(getattr(self, "_batch_tip", "") if anthropic else "Not available with a model server.")
         self._update_run_enabled()
 
     def open_models(self, tab: str = "profiles") -> None:
@@ -660,8 +662,6 @@ class MainWindow(QMainWindow):
         window.exec()
         if window.saved:
             self._refresh_profiles()
-        self.batch_box.setToolTip(self._batch_tip if not local else "Not available with a local model server.")
-        self._update_run_enabled()
 
     def open_settings(self) -> None:
         self.settings_dialog.show()

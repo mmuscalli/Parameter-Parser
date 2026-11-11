@@ -391,6 +391,7 @@ def _focused(args, parser) -> int:
     if args.out:
         overrides["output_dir"] = args.out
     if args.handoff:
+        from parameter_extractor import dev_features
         if not dev_features.enabled():
             parser.error("--handoff is a developer-only option (set PARAMETER_EXTRACTOR_DEV=1 when running "
                          "from source)")
