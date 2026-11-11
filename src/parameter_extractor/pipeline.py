@@ -210,7 +210,9 @@ def _start(pdf_path, config: RunConfig, total_steps: int,
 
 
 def _write_summary(ctx: RunContext, pdf_path: Path, started: datetime, **extra) -> None:
+    from parameter_extractor import __version__
     summary = {
+        "app_version": __version__,
         "source_pdf": str(pdf_path),
         "started": started.isoformat(timespec="seconds"),
         "finished": datetime.now().isoformat(timespec="seconds"),

@@ -4,9 +4,9 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "parameter-extractor"          # working name -- rename before public release
-version = "0.1.0"
 description = "Extract experimental values from scientific papers into a reviewed dataset, with data packs per research area, using Claude or a locally hosted model."
 readme = "README.md"
+dynamic = ["version"]                 # from parameter_extractor.__version__ (one place)
 requires-python = ">=3.10"
 # license: not chosen yet -- must be decided before a public release.
 dependencies = [
@@ -39,6 +39,9 @@ parameter-extract = "parameter_extractor.cli:main"
 
 [project.gui-scripts]
 parameter-extractor-gui = "parameter_extractor.gui.app:main"
+
+[tool.setuptools.dynamic]
+version = {attr = "parameter_extractor.__version__"}
 
 [tool.setuptools.packages.find]
 where = ["src"]
