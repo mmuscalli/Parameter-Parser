@@ -217,19 +217,25 @@ def _system_text(system_prompt) -> str:
     return "\n\n".join(b.get("text", "") for b in system_prompt or [])
 
 
-# fields optional in the compact answer formats (left out to save Claude tokens) that a local model must still give:
-# qwen3.8:27b left a text parameter's `txt` out and sent v = 0 (eder1994, 2026-11-10) -- 84 values lost. Local runs
-# are free, so the grammar makes them required; Claude's requests are unchanged. Only in configurable steps' values
-# (objects with `col`: each parameter is declared text or number) -- required in the analysis step's settings, where
-# nothing says which are text, qwen wrote every number as text and dropped the units.
-LOCAL_REQUIRED = ("txt",)
+# fields optional in the compact answer formats (left out to save Claude tokens) that a local model must still give.
+# Local runs are free, so the grammar makes them required; Claude's requests are unchanged. Each rule: (field, the
+# property an object must also have for the rule to apply).
+# - `txt` in configurable steps' values (objects with `col`, each parameter declared text or number): qwen3.8:27b named
+#   experiment_type / solution_type but left the text out (eder1994, 2026-11-10; 84 values). NOT in the analysis
+#   step's settings, where nothing says which are text: required there, qwen wrote every number as text, units lost.
+# - `sample` wherever an answer names a set and a sample: qwen3.8:27b left it out of every planet row (teng2023,
+#   2026-11-10), so each value counted for the whole system -- planet c got planet b's numbers, joint-fit rows the
+#   RV fit's (168 archive differences).
+# - `mode` / `meth` in configurable steps' values: qwen gave teng2023 Table 4's prograde / retrograde inclinations as
+#   plain second values (no `mode`), so they read as conflicts instead of posterior modes.
+LOCAL_REQUIRED = (("txt", "col"), ("sample", "set"), ("mode", "col"), ("meth", "col"))
 
 
 def _require_local_fields(node):
     if isinstance(node, dict):
         props = node.get("properties")
-        if isinstance(props, dict) and "col" in props:
-            wanted = [k for k in LOCAL_REQUIRED if k in props]
+        if isinstance(props, dict):
+            wanted = [field for field, alongside in LOCAL_REQUIRED if field in props and alongside in props]
             if wanted:
                 node["required"] = list(dict.fromkeys(list(node.get("required") or []) + wanted))
         for v in node.values():

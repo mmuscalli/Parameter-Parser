@@ -2827,3 +2827,17 @@ Two causes, both fixed:
   (`_NUMBER_AS_TEXT`; no unit -> the setting's, noted). Third live run: 100.0%, 4.5 min, all 13 HPLC settings in their
   columns with units, no review items. Runs kept in runs/local_models/ (-fixed, -fixed2). Unit table gap seen on the
   way: 'uL/min' (ASCII) isn't read, 'µL/min' is. Next: a long exoplanet paper for the 128K context.
+
+## teng2023 on the local model; pain-point notes (2026-11-11, Mickey)
+
+`docs/local_model_notes.md` = running record of what breaks moving from Claude to a local model (13 issues, results
+table, checklist for the next model) -- keep it updated with every local-model test. teng2023 (exoplanets, qwen3.8:27b,
+131072 context; `runs/local_models/run_teng2023_local.py` uses the archive snapshot of runs/teng2023_auto;
+`archive_summary.py` totals an archive_validation.json): run 1 1,984 archive matches / 168 differ -- the model left
+`sample` out of every planet row, so values counted for the whole system (planet c got b's; joint rows the RV fit's).
+`local_models.LOCAL_REQUIRED` is now rules (field, required when the object also has): ("txt","col"), ("sample","set"),
+("mode","col"), ("meth","col"). Run 2 (+sample) 2,126 / 21; run 3 (+mode/meth: Table 4's prograde / retrograde
+inclinations had come back as conflicts) 2,130 match / 18 differ (all uncertainties from dense Table 3) / 0 missing --
+Claude Standard 2,132 / 0 / 27. ~34 min per run; each request ~86K tokens of paper, planet answers 30-38K (~120-125K of
+131K). eder1994 stays 100% with all four (chemistry output 6.2K -> 10.5K with `sample` required). All runs kept in
+runs/local_models/.

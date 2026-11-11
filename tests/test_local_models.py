@@ -286,6 +286,23 @@ def test_text_values_a_local_model_must_give():
     walk(local_models.answer_schema(AnalysisResult))
     found = walk_into
     assert analysis and not any(analysis)      # not in the analysis step's settings: qwen then wrote numbers as text
+    # the sample (planet) of a row: qwen3.8:27b left it out on teng2023 -> every value counted for the whole system
+    from parameter_extractor.stages.optional import load_specs as _specs
+    _, planet = _specs(pf.pack("exoplanets"))["planet_parameters"].models()
+    rows = []
+
+    def rows_of(node):
+        if isinstance(node, dict):
+            props = node.get("properties") or {}
+            if "set" in props and "sample" in props:
+                rows.append("sample" in (node.get("required") or []))
+            for v in node.values():
+                rows_of(v)
+        elif isinstance(node, list):
+            for v in node:
+                rows_of(v)
+    rows_of(local_models.answer_schema(planet))
+    assert rows and all(rows)
     from anthropic.lib._parse._transform import transform_schema
     from parameter_extractor.api_client import model_facing_schema
     assert "txt" not in json.dumps(model_facing_schema(transform_schema(Result)).get("required", []))  # Claude: as before
