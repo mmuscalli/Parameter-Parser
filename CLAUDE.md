@@ -60,6 +60,8 @@ Version: `parameter_extractor.__version__` (0.3.0, tag `v0.3.0`), the one place 
   once, retries, prices) and connections (Anthropic API; Ollama / OpenAI-compatible servers, local or hosted) in
   `<app data>/model_profiles.json`; `apply(config, profile_id)` sets RunConfig (`profile_roles`, `temperature`,
   `max_parallel_stages`, `max_retries`, `prices`, or provider "local" + `local` for a server).
+- `step_info.py`: what a built-in step (chemistry, analysis, fit_models) reads, records, fills and is told for a pack
+  (read-only pages in the pack editor's Steps tab and on module pages). Update its `DOCS` when a step's columns change.
 - `diagnostics.py`: `--self-check` (free; verifies an install or a built app).
 
 ## Rules for every change

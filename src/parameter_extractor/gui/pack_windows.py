@@ -1072,7 +1072,23 @@ class PackEditor(QDialog):
             + "</table>", wordWrap=True)
         brings.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
         box = QGroupBox("What it brings")
-        QVBoxLayout(box).addWidget(brings)
+        bv = QVBoxLayout(box)
+        bv.addWidget(brings)
+        from parameter_extractor import step_info
+        saved = self._saved_pack()
+        steps = [s for s in step_info.STEPS if (s in mod.manifest.builtin_stages or s in (mod.manifest.prompt_rules or {}))
+                 and saved is not None and s in saved.manifest.builtin_stages]
+        if steps:
+            row = QHBoxLayout()
+            for s in steps:
+                verb = "brings" if s in mod.manifest.builtin_stages else "adds rules to"
+                btn = QPushButton(f"View the {step_info.DOCS[s]['label'].split(' (')[0].lower()} step…",
+                                  clicked=lambda _c=False, s=s: self._view_builtin_from_module(s))
+                btn.setToolTip(f"This module {verb} the built-in step '{s}': see what it reads, records and fills, "
+                               f"and its instructions for this data pack (view only).")
+                row.addWidget(btn)
+            row.addStretch(1)
+            bv.addLayout(row)
         pv.addWidget(box)
         if linked:
             pv.addWidget(_titled(f"Settings for this data pack", "Changes here apply to this data pack only; the "
@@ -1087,6 +1103,14 @@ class PackEditor(QDialog):
             self._fill_vocab()
         pv.addStretch(1)
         self.module_scroll.setWidget(page)
+
+    def _view_builtin_from_module(self, name: str) -> None:
+        """A module page's 'View the … step' button: the Steps tab on that built-in step."""
+        self.tabs.setCurrentIndex(self.tab_index("Steps"))
+        for r in range(self.builtin_list.count()):
+            if self.builtin_list.item(r).data(Qt.ItemDataRole.UserRole) == name:
+                self.builtin_list.setCurrentRow(r)
+                return
 
     def _reset_module(self, mid: str) -> None:
         self.module_settings_tab.reset(mid)
@@ -1535,6 +1559,16 @@ class PackEditor(QDialog):
         left.addWidget(self.stage_list, 1)
         self.module_stages_note = _hint("")          # stages the linked modules bring (shown, not edited here)
         left.addWidget(self.module_stages_note)
+        # built-in steps (code: chemistry, analysis, fitting models), view only (Mickey, 2026-11-11: what the chemistry
+        # step contains wasn't shown anywhere): step_info.py
+        self.builtin_title = _titled("Built-in steps (view only)", "Steps that are part of the app: this data pack or "
+                                     "its modules switch them on and add rules to them, but their answer format and "
+                                     "instructions can't be edited. Select one to see what it reads, records and fills.")
+        left.addWidget(self.builtin_title)
+        self.builtin_list = QListWidget()
+        self.builtin_list.setWordWrap(True)
+        self.builtin_list.currentRowChanged.connect(self._on_builtin_row)
+        left.addWidget(self.builtin_list)
         buttons = QHBoxLayout()
         for text, slot in (("New…", self._new_stage), ("Duplicate", self._duplicate_stage),
                            ("Remove", self._remove_stage)):
@@ -1640,14 +1674,70 @@ class PackEditor(QDialog):
         form_w.layout().setContentsMargins(0, 0, 0, 0)
         self.stage_form = form_w
 
+        from PySide6.QtWidgets import QStackedWidget, QTextBrowser
+        self.builtin_view = QTextBrowser()
+        self.builtin_view.setOpenExternalLinks(False)
+        self.builtin_view.document().setDocumentMargin(14)
+        self.stage_stack = QStackedWidget()
+        self.stage_stack.addWidget(form_w)
+        self.stage_stack.addWidget(self.builtin_view)
         split = QSplitter(Qt.Orientation.Horizontal)
         split.addWidget(left_w)
-        split.addWidget(form_w)
+        split.addWidget(self.stage_stack)
         split.setSizes([220, 1080])
         split.splitterMoved.connect(lambda *_: self._fit_rows())
         outer.addWidget(split)
         self._fill_stage_list()
+        self._fill_builtin_list()
         return w
+
+    def _saved_pack(self):
+        """The pack as saved (built-in step pages describe it; unsaved edits aren't in it yet)."""
+        try:
+            return packs.Pack(self.draft.folder)
+        except Exception:
+            return None
+
+    def _fill_builtin_list(self) -> None:
+        from parameter_extractor import step_info
+        pack = self._saved_pack()
+        self.builtin_list.blockSignals(True)
+        self.builtin_list.clear()
+        for name in (step_info.built_in_steps(pack) if pack else []):
+            item = QListWidgetItem(step_info.DOCS[name]["label"])
+            item.setData(Qt.ItemDataRole.UserRole, name)
+            item.setToolTip(f"Built-in step '{name}': {step_info.DOCS[name]['label']} (view only)")
+            self.builtin_list.addItem(item)
+        self.builtin_list.blockSignals(False)
+        rows = max(1, self.builtin_list.count())          # as tall as its rows: no empty box, no scrolling
+        self.builtin_list.setFixedHeight(rows * (self.builtin_list.sizeHintForRow(0) or 22) + 8)
+        self.builtin_title.setVisible(self.builtin_list.count() > 0)
+        self.builtin_list.setVisible(self.builtin_list.count() > 0)
+
+    def _on_builtin_row(self, row: int) -> None:
+        if row < 0:
+            return
+        self._store_stage()
+        self.stage_list.blockSignals(True)
+        self.stage_list.clearSelection()
+        self.stage_list.setCurrentRow(-1)
+        self.stage_list.blockSignals(False)
+        self._stage = None
+        self.show_builtin_step(self.builtin_list.item(row).data(Qt.ItemDataRole.UserRole))
+
+    def show_builtin_step(self, name: str) -> None:
+        """The built-in step's page (step_info.py) in place of the step form."""
+        from html import escape
+        from parameter_extractor import step_info
+        pack = self._saved_pack()
+        try:
+            page = step_info.as_html(step_info.describe(name, pack))
+        except Exception as e:                      # a description is a convenience: never in the way of editing
+            page = f"<p>The step's description couldn't be built: {escape(str(e))}</p>"
+        page = ("<p style='color:gray'><i>Shown as this data pack is saved: changes you haven't saved yet (modules, "
+                "rules, compounds) appear after Save.</i></p>") + page
+        self.builtin_view.setHtml(page)
+        self.stage_stack.setCurrentIndex(1)
 
     def _toggle_advanced(self, shown: bool) -> None:
         self.advanced_box.setVisible(shown)
@@ -1674,6 +1764,11 @@ class PackEditor(QDialog):
             self._on_stage_row(row)
 
     def _on_stage_row(self, row: int) -> None:
+        if row >= 0 and hasattr(self, "stage_stack"):     # back from a built-in step's page
+            self.stage_stack.setCurrentIndex(0)
+            self.builtin_list.blockSignals(True)
+            self.builtin_list.setCurrentRow(-1)
+            self.builtin_list.blockSignals(False)
         self._store_stage()
         if row < 0 or row >= self.stage_list.count():
             self._stage = None
@@ -2249,6 +2344,7 @@ class PackEditor(QDialog):
             return False
         self.setWindowTitle(f"Data pack: {self.draft.manifest.get('label', '')}")
         self._refresh_overview()
+        self._fill_builtin_list()           # modules linked or unlinked: their built-in steps
         self.saved.emit(self.draft.manifest.get("id", ""))
         return True
 
