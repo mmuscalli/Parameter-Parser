@@ -11,6 +11,8 @@ is flagged (kind 'analysis', GUI group "Analysis methods").
 """
 from __future__ import annotations
 from collections import OrderedDict
+import re
+from types import SimpleNamespace
 from typing import Callable, Dict, List, Optional, Tuple
 
 from parameter_extractor import analysis_vocab as av
@@ -51,6 +53,10 @@ def convert(value: float, printed: str, target: str) -> Tuple[Optional[float], s
     return _tidy(out), ("" if unit == target else f"converted from '{value:g} {printed}'")
 
 
+# one number, optionally followed by its unit, and nothing else
+_NUMBER_AS_TEXT = re.compile(r"^\s*([-+]?\d+(?:[.,]\d+)?)\s*([^\d\s;,][^;,]{0,20})?\s*$")
+
+
 def _value(setting, spec: Optional[av.Setting]):
     """(value, column unit, is_range, note, problem) for one setting."""
     from parameter_extractor.units import canonical_unit, format_range
@@ -67,6 +73,11 @@ def _value(setting, spec: Optional[av.Setting]):
         if not text and has_number:
             text = f"{setting.value:g} {printed}".strip()
         return text, "", False, "", ""
+    m = _NUMBER_AS_TEXT.match(text) if not has_number and spec is not None and spec.unit else None
+    if m:       # a number setting answered in the text field ('200', '0.35 mL/min'; qwen3.8:27b, 2026-11-10)
+        setting = SimpleNamespace(value=float(m.group(1).replace(",", ".")), unit=(m.group(2) or "").strip(),
+                                  high=0.0)
+        has_number, printed = True, setting.unit
     if not has_number:                                # a number setting answered in text, or an unknown text one
         return text, "", False, "", ("given as text" if spec is not None and text else "")
     target = spec.unit if spec is not None else (canonical_unit(printed) or "")

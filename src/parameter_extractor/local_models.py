@@ -219,14 +219,16 @@ def _system_text(system_prompt) -> str:
 
 # fields optional in the compact answer formats (left out to save Claude tokens) that a local model must still give:
 # qwen3.8:27b left a text parameter's `txt` out and sent v = 0 (eder1994, 2026-11-10) -- 84 values lost. Local runs
-# are free, so the grammar makes them required; Claude's requests are unchanged.
+# are free, so the grammar makes them required; Claude's requests are unchanged. Only in configurable steps' values
+# (objects with `col`: each parameter is declared text or number) -- required in the analysis step's settings, where
+# nothing says which are text, qwen wrote every number as text and dropped the units.
 LOCAL_REQUIRED = ("txt",)
 
 
 def _require_local_fields(node):
     if isinstance(node, dict):
         props = node.get("properties")
-        if isinstance(props, dict):
+        if isinstance(props, dict) and "col" in props:
             wanted = [k for k in LOCAL_REQUIRED if k in props]
             if wanted:
                 node["required"] = list(dict.fromkeys(list(node.get("required") or []) + wanted))

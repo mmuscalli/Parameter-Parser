@@ -2820,4 +2820,10 @@ Two causes, both fixed:
   Claude requests unchanged); `optional.stage_values` reports a text parameter answered without text as a problem
   (-> unit_conversion flag naming the model's note) instead of skipping it silently; the low-confidence flag shows
   '(no text given)' for such values, not '= 0'. tests/test_local_models.py::test_text_values_a_local_model_must_give.
-  NOT yet re-run live (server down) -- next: eder1994 again, then a long exoplanet paper for the 128K context.
+- Re-run live (same day): 100.0% of the reference (654/654), 6.7 min -- but with `txt` required EVERYWHERE the analysis
+  step wrote every setting as text ('200', '0.35', units dropped -> 6 review items). Now LOCAL_REQUIRED applies only to
+  objects with `col` (configurable steps' values, which declare text vs number); analysis settings unchanged; and
+  `analysis_columns._value` reads a number setting answered as one number (+ optional unit) in the text
+  (`_NUMBER_AS_TEXT`; no unit -> the setting's, noted). Third live run: 100.0%, 4.5 min, all 13 HPLC settings in their
+  columns with units, no review items. Runs kept in runs/local_models/ (-fixed, -fixed2). Unit table gap seen on the
+  way: 'uL/min' (ASCII) isn't read, 'µL/min' is. Next: a long exoplanet paper for the 128K context.

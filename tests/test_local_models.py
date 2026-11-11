@@ -278,7 +278,14 @@ def test_text_values_a_local_model_must_give():
             for v in node:
                 walk(v)
     walk(schema)
-    assert found and all(found)                                  # required wherever the field exists
+    assert found and all(found)                                  # required in every configurable step's values
+    from parameter_extractor.schemas.analysis import AnalysisResult
+    analysis = []
+    walk_into = found
+    found = analysis
+    walk(local_models.answer_schema(AnalysisResult))
+    found = walk_into
+    assert analysis and not any(analysis)      # not in the analysis step's settings: qwen then wrote numbers as text
     from anthropic.lib._parse._transform import transform_schema
     from parameter_extractor.api_client import model_facing_schema
     assert "txt" not in json.dumps(model_facing_schema(transform_schema(Result)).get("required", []))  # Claude: as before
@@ -298,6 +305,27 @@ def test_text_values_a_local_model_must_give():
     flags = check_extraction(empty_methodology("p"), ChemistryExtraction(), optional=[(conditions, result)])
     shown = [f.message for f in flags if "experiment_type" in f.message]
     assert shown and "(no text given)" in shown[0] and "= 0 " not in shown[0], shown
+
+
+def test_analysis_numbers_given_as_text():
+    """qwen3.8:27b (2026-11-10, with `txt` required) wrote HPLC settings as text: '200', '0.35'. A number setting
+    answered with one number (and maybe its unit) in the text is read as that number, in the setting's unit."""
+    from types import SimpleNamespace
+    from parameter_extractor import analysis_vocab as av
+    from parameter_extractor.calculators.analysis_columns import _value
+    packs.activate(pf.linked("prebiotic_chemistry", "analysis").id)
+    try:
+        vocab = av.vocabulary()
+        spec = next(st for _, settings in vocab.families.values() for st in settings if st.name == "flow-rate")
+        s = lambda text: SimpleNamespace(value=0.0, unit="", high=0.0, text=text)
+        value, unit, _, note, problem = _value(s("0.35"), spec)
+        assert value == 0.35 and unit == spec.unit and "no unit printed" in note and not problem
+        value, unit, _, _, problem = _value(s("350 µL/min"), spec)
+        assert abs(value - 0.35) < 1e-9 and not problem
+        value, _, _, _, problem = _value(s("fast, about 0.35"), spec)       # not just a number: kept as text
+        assert value == "fast, about 0.35" and problem == "given as text"
+    finally:
+        packs.activate("prebiotic_chemistry")
 
 
 if __name__ == "__main__":
