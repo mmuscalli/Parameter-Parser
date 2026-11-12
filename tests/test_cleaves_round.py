@@ -304,7 +304,9 @@ def test_cleaves_figure_2_markers_in_their_series():
             ed.auto_axes_box.setChecked(False)
             ed.auto_points_box.setChecked(False)
         assert all(p.x_cal.complete() and p.y_cal.complete() for p in ed.fig.panels), ed.auto_status.text()
-        counts = {(ed.fig.panels[x.panel].name, x.label.split(" [")[0]): len(x.points) for x in ed.fig.series}
+        # (labels repeated across panels carry their panel: 'DKP (A)', 'DKP (B)')
+        counts = {(ed.fig.panels[x.panel].name, x.label.split(" [")[0].replace(f" {ed.fig.panels[x.panel].name}", "")):
+                  len(x.points) for x in ed.fig.series}
         assert counts == {("(A)", "glycine"): 4, ("(A)", "DKP"): 3, ("(A)", "gly2"): 2, ("(A)", "gly3"): 1,
                           ("(A)", "gly4"): 1, ("(B)", "glycine"): 4, ("(B)", "DKP"): 2, ("(B)", "gly2"): 3,
                           ("(C)", "glycine"): 4}, (counts, ed.points_status.text())
@@ -398,6 +400,53 @@ def test_rows_say_whether_their_results_are_measured_or_calculated():
     assert third.get("calculated_Gly-Gly_aq_mM") == 5e-11 and "sampled_Gly-Gly_aq_mM" not in third   # moved
     assert len(flags) == 1 and "moved to calculated_ columns" in flags[0].message and "001003001" in flags[0].message
     assert rows[0].provenance["result_basis"].origin == "calculated"
+
+
+def test_figure_concentrations_per_panel_and_lost_superscripts():
+    """Cleaves2008 Fig. 2 (2026-11-12): the caption's '(A) 10 − 1 M, (B) 10 − 2 M, (C) 10 − 3 M' came back as '10-1 M'
+    (superscripts lost in the PDF's text) with series labels repeated across panels -- no glycine reached the rows. Now:
+    '10-n M' read as 10^-n M (noted), each concentration only in its panel (`panel`, else 'panel (A)' in its source),
+    repeated labels get their panel, and a point far outside its axes' range is reported."""
+    from parameter_extractor.digitizing.auto_figure import apply_plan, concentration_value
+    from parameter_extractor.ingestion.figure_rows import build_figure_rows
+    from parameter_extractor.ingestion.flatten_to_template import row_to_template_dict
+    from parameter_extractor.registry import VariableRegistry
+    from parameter_extractor.schemas.figures import (AxisCalibration, AxisVariable, CalibrationPoint, ConcentrationFound,
+                                                     DigitizedFigure, DigitizedPoint, FigurePlan, PlannedPanel,
+                                                     PlannedSeries)
+    from parameter_extractor.schemas.methodology import empty_methodology
+    from parameter_extractor.schemas.paper_metadata import PaperMetadata
+    from parameter_extractor.units import parse_quantity
+    assert parse_quantity("10^-1 M") == (0.1, "M") and parse_quantity("1e-3 M") == (0.001, "M")
+    assert parse_quantity("10-1 M") is None                                  # alone: refused, as ever
+    conv, note = concentration_value("10-2 M")
+    assert abs(conv.value - 10.0) < 1e-9 and "read as 10^-2" in note
+    packs.activate("prebiotic_chemistry")
+    x = AxisVariable(label="T", column="initial_temperature_C")
+    y = AxisVariable(label="% yield", column="sampled_Gly-Gly_aq_%yield")
+    plan = FigurePlan(figure_id="Fig. 2", is_data_plot=True, plot_kind="scatter", duplicates_tabulated_data=False,
+                      panels=[PlannedPanel(name="(A)", x=x, y=y, series=[PlannedSeries(label="DKP"), PlannedSeries(label="gly4")]),
+                              PlannedPanel(name="(B)", x=x, y=y, series=[PlannedSeries(label="DKP")])],
+                      concentrations=[ConcentrationFound(species="Gly", value="10-1 M", series=["DKP", "gly4"],
+                                                         source="caption: panel (A) initial glycine"),
+                                      ConcentrationFound(species="Gly", value="10^-2 M", panel="(B)")])
+    fig = DigitizedFigure(figure_id="Fig. 2", number=2, page=5, caption="c", render_scale=1.0, page_image="")
+    assert apply_plan(fig, plan)
+    got = {s.label: [(sp.name, sp.concentration_mM) for sp in s.initial_species] for s in fig.series}
+    assert got == {"DKP (A)": [("Gly", 100.0)], "gly4": [("Gly", 100.0)], "DKP (B)": [("Gly", 10.0)]}, got
+    assert any("read as 10^-1" in n for n in fig.plan_notes)
+    cal = lambda a, b, lo, hi: AxisCalibration(p1=CalibrationPoint(px=a[0], py=a[1], value=lo),  # noqa: E731
+                                               p2=CalibrationPoint(px=b[0], py=b[1], value=hi))
+    for p in fig.panels:
+        p.x_cal, p.y_cal = cal((0, 100), (100, 100), 100, 250), cal((0, 100), (0, 0), 0, 10)
+    fig.series[0].points = [DigitizedPoint(px=50, py=50)]
+    fig.series[2].points = [DigitizedPoint(px=400, py=50)]                   # far beyond its x axis
+    meta = PaperMetadata(paper_id="p", paper_title="t", authors=["A"], year_published=2008, journal_published="j")
+    rows, problems, _ = build_figure_rows([fig], meta, empty_methodology("p"), "001", 1, 1,
+                                          registry=VariableRegistry(None, pack="prebiotic_chemistry"))
+    assert [row_to_template_dict(r)["initial_Gly_aq_mM"] for r in rows] == [100.0, 10.0]
+    assert any("far outside the x axis range" in p and "DKP (B)" in p for p in problems)
+    assert sum("read as 10^-1" in p for p in problems) == 1                   # reported once
 
 
 if __name__ == "__main__":

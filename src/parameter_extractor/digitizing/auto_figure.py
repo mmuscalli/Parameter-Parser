@@ -27,23 +27,61 @@ AUTO_DECIMALS = 2
 
 # ---- the model's suggestions -> the figure's coordinate systems and series ------------------------------------
 
-def fill_concentrations(series: List[DigitizedSeries], found) -> List[str]:
+# a starting concentration printed as a power of ten whose superscript the PDF's text lost: '10-1 M', '10 − 3 mM'
+_LOST_POWER = re.compile(r"^\s*10\s*[-−–]\s*(\d{1,2})\s*((?:[mµuμn]?M|mol\s*(?:dm-3|dm−3|/\s*L|L-1|l-1)))\s*$")
+
+
+def _panel_key(name: str) -> str:
+    """'(A)', 'A', 'panel (a)', '(A) left y-axis' -> 'a'."""
+    m = re.search(r"\(([A-Za-z])\)|^\s*(?:panel\s*)?([A-Za-z])\b", name or "")
+    return (m.group(1) or m.group(2)).lower() if m else (name or "").strip().lower()
+
+
+def concentration_value(value: str):
+    """(Conversion to mM, note): the value as printed; a '10-n M' starting concentration as 10^-n M (no one writes 10
+    minus n molar) -- with a note, so it's checked."""
+    from parameter_extractor.units import to_column_unit
+    conv = to_column_unit(value, None, "mM")
+    if conv is not None:
+        return conv, ""
+    m = _LOST_POWER.match(value or "")
+    if m:
+        conv = to_column_unit(f"10^-{m.group(1)} {m.group(2)}", None, "mM")
+        if conv is not None:
+            return conv, (f"'{value}' read as 10^-{m.group(1)} {m.group(2)} (a superscript lost in the PDF's text) "
+                          f"-- check it")
+    return None, ""
+
+
+def fill_concentrations(series: List[DigitizedSeries], found, panels=None) -> List[str]:
     """Fill each series' species that have no concentration from the plan's list of
     concentrations found in the paper (converted to mM here, never by the model);
-    adds the species if the series doesn't list it yet. Returns what couldn't be used (not converted to mM) --
-    before 2026-11-12 those were dropped without a word (Cleaves2008's '10^-1 M')."""
-    from parameter_extractor.units import to_column_unit
-    skipped = []
+    adds the species if the series doesn't list it yet. Returns what to check: values not used (not convertible to mM
+    -- before 2026-11-12 those were dropped without a word, Cleaves2008's '10^-1 M') and '10-n M' read as powers.
+    `panels`: the figure's coordinate systems (a concentration for panel '(A)' fills only that panel's series; older
+    plans name the panel in `source`, 'caption: panel (A) ...')."""
+    notes = []
     for c in found:
-        conv = to_column_unit(c.value, None, "mM")
+        conv, note = concentration_value(c.value)
         if conv is None:
-            skipped.append(f"{c.species} '{c.value}' ({', '.join(c.series) or 'every series'}): not a "
-                           f"concentration the app can put in mM -- enter it in the series' composition")
+            notes.append(f"{c.species} '{c.value}' ({', '.join(c.series) or 'every series'}): not a "
+                         f"concentration the app can put in mM -- enter it in the series' composition")
             continue
+        if note:
+            notes.append(f"{c.species} {note}")
+        panel = getattr(c, "panel", "") or ""
+        if not panel:
+            m = re.search(r"\bpanel\s*\(?([A-Za-z])\)?(?![A-Za-z])", c.source or "")
+            panel = m.group(1) if m else ""
         labels = {l.strip().lower() for l in c.series}
         for s in series:
+            if panel and panels is not None and 0 <= s.panel < len(panels) and \
+                    _panel_key(panels[s.panel].name) != _panel_key(panel):
+                continue                                  # another panel's series (labels repeat across panels)
             base = re.sub(r"\s*\[[^\]]*\]$", "", s.label).strip().lower()   # label without " [marker]"
-            if labels and base not in labels and s.label.strip().lower() not in labels:
+            own = panels[s.panel].name.strip().lower() if panels is not None and 0 <= s.panel < len(panels) else ""
+            bare = base[: -len(own)].strip() if own and base.endswith(own) else base   # without the added ' (B)'
+            if labels and base not in labels and bare not in labels and s.label.strip().lower() not in labels:
                 continue
             source = f"{'indirect -- ' if c.basis == 'indirect' else ''}{c.source or 'stated in the paper'} " \
                      f"('{c.value}')"
@@ -56,7 +94,7 @@ def fill_concentrations(series: List[DigitizedSeries], found) -> List[str]:
             else:
                 s.initial_species.append(SpeciesAmount(name=c.species, concentration_mM=conv.value,
                                                        basis=c.basis, source=source))
-    return skipped
+    return notes
 
 
 def with_shared(own: list, shared: list) -> list:
@@ -79,6 +117,12 @@ def apply_plan(fig: DigitizedFigure, plan: FigurePlan) -> bool:
     the list). False when the plan has no coordinate systems."""
     old_panels, old_series = fig.panels, fig.series
     panels, series = [], []
+    # a label used in several panels ('DKP' in A and B) gets its panel, so the series list tells them apart (2026-11-12:
+    # a panel-B 'DKP' ended up read against panel A's axes)
+    counts: Dict[str, int] = {}
+    for pp in plan.panels or []:
+        for ps in pp.series:
+            counts[ps.label.strip().lower()] = counts.get(ps.label.strip().lower(), 0) + 1
     for i, pp in enumerate(plan.panels or []):
         base = old_panels[i] if i < len(old_panels) else DigitizedPanel()
         x_cal = base.x_cal.model_copy(update={"log": pp.x.scale == "log"})
@@ -86,7 +130,10 @@ def apply_plan(fig: DigitizedFigure, plan: FigurePlan) -> bool:
         panels.append(DigitizedPanel(name=pp.name, x_cal=x_cal, y_cal=y_cal, x=with_new_column(pp.x),
                                      y=with_new_column(pp.y)))
         for ps in pp.series:
-            label = ps.label + (f" [{ps.marker}]" if ps.marker and ps.marker not in ps.label else "")
+            name = ps.label
+            if counts.get(ps.label.strip().lower(), 0) > 1 and pp.name and pp.name.lower() not in ps.label.lower():
+                name = f"{ps.label} {pp.name}"
+            label = name + (f" [{ps.marker}]" if ps.marker and ps.marker not in ps.label else "")
             series.append(DigitizedSeries(
                 label=label, panel=i, initial_species=list(ps.initial_species),
                 initial_temperature_C=ps.initial_temperature_C, initial_pH=ps.initial_pH,
@@ -94,7 +141,7 @@ def apply_plan(fig: DigitizedFigure, plan: FigurePlan) -> bool:
                 notes=ps.notes))
     if not panels:
         return False
-    fill_concentrations(series, plan.concentrations)
+    fig.plan_notes = fill_concentrations(series, plan.concentrations, panels)
     for i, s in enumerate(old_series):
         if s.points:
             if i < len(series):

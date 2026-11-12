@@ -159,20 +159,25 @@ def test_cancel_between_stages():
         if event.stage == "experimental_conditions":
             cancel.set()  # user presses cancel while metadata is running...
 
-    with tempfile.TemporaryDirectory() as tmp, patch.object(api_client, "_send", _replay_send):
-        try:
-            run_pipeline(PDF, _config(Path(tmp)), on_progress=on_progress, cancel_event=cancel)
-        except errors.RunCancelledError:
-            pass  # ...and the run stops before the next stage starts
-        else:
-            raise AssertionError("expected RunCancelledError")
-        # steps already running finish in the background (Cancel doesn't wait for a request): let them write their
-        # files before the folder is removed -- deleting it under them failed the test now and then (2026-11-12)
+    # steps already running finish in the background after a cancel (Cancel doesn't wait for a request) and may still
+    # write their files: the folder is removed with retries afterwards (deleting it under them failed now and then)
+    tmp = tempfile.mkdtemp()
+    try:
+        with patch.object(api_client, "_send", _replay_send):
+            try:
+                run_pipeline(PDF, _config(Path(tmp)), on_progress=on_progress, cancel_event=cancel)
+            except errors.RunCancelledError:
+                pass  # ...and the run stops before the next stage starts
+            else:
+                raise AssertionError("expected RunCancelledError")
+    finally:
+        import shutil
         import time
-        deadline = time.time() + 15
-        while time.time() < deadline and any(th.name.startswith("ThreadPoolExecutor") and th.is_alive()
-                                             for th in threading.enumerate()):
-            time.sleep(0.05)
+        for _ in range(20):
+            shutil.rmtree(tmp, ignore_errors=True)
+            if not Path(tmp).exists():
+                break
+            time.sleep(0.25)
 
 
 def test_refusal_and_truncation_become_named_errors():

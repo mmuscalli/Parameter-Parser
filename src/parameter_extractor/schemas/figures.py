@@ -187,9 +187,16 @@ class ConcentrationFound(BaseModel):
     the series has no concentration for that species yet). Flat, no Optional fields."""
     model_config = ConfigDict(json_schema_extra=_require_all)
     species: str = Field(description="Species name as in the series' initial_species, e.g. 'Gly'.")
-    value: str = Field(description="As printed, with its unit, e.g. '0.065 M', '1.0 mol dm-3', '50 mM'.")
+    value: str = Field(description="As printed, with its unit, e.g. '0.065 M', '1.0 mol dm-3', '50 mM'; a power "
+                                   "of ten as '10^-1 M' (when the text shows '10 - 1 M' or '10-1 M', its superscript "
+                                   "was lost: check the figure).")
+    # Mickey, 2026-11-12 (Cleaves2008 Fig. 2): series labels repeat across panels ('DKP' in A and B), so a
+    # concentration for panel A also reached panel B's series
+    panel: str = Field(default="", description="The panel it applies to, exactly as in `panels` (e.g. '(A)'); '' "
+                                               "when it holds in every panel.")
     series: List[str] = Field(default_factory=list,
-                              description="Exact labels of the series it applies to; [] = all series.")
+                              description="Exact labels of the series it applies to (within `panel`); [] = all "
+                                          "series (of that panel).")
     basis: Literal["stated", "indirect"] = Field(
         default="stated", description="'indirect' when the paper gives it another way than as the starting "
                                       "concentration (control run without reaction, feed/injected solution).")
@@ -301,6 +308,9 @@ class DigitizedFigure(BaseModel):
     # digitized without the editor ("Digitize easy figures automatically", digitizing/auto_figure.py)
     auto_digitized: bool = False
     auto_summary: str = ""
+    # what applying the suggestions' concentrations needs checked ('10-1 M' read as 10^-1 M; not convertible) --
+    # reported with the figure's rows (figure_rows) and shown in the digitizer
+    plan_notes: List[str] = Field(default_factory=list)
 
     @property
     def tag(self) -> str:

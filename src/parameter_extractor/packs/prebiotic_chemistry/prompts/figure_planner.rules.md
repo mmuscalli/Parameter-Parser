@@ -46,7 +46,10 @@
   saying exactly what it is and where it's stated). A null concentration is
   only for a species whose amount the paper doesn't give at all.
 - Say each concentration ONCE, in `concentrations` (as printed, with its unit,
-  `basis`, `source`): `series` [] when it holds for every series (a fixed
+  `basis`, `source`; a power of ten as '10^-1 M' -- caption text like
+  '10 - 1 M' lost its superscript, so read it from the figure): `panel` the
+  panel it belongs to ('(A)') when panels differ, `series` [] when it holds
+  for every series of that panel (or of every panel) (a fixed
   CuCl2 or glycine background, a 15 mM ImpA solution) -- the app adds it to
   each series -- or the exact labels of the series it applies to. A series'
   own `initial_species` (in mM) only for a component that is on no

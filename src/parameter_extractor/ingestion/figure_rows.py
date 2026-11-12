@@ -217,13 +217,15 @@ def build_figure_rows(
 
     for fig in figures:
         fig_start, fig_vars_start, fig_set, fig_entry = len(rows), len(new_vars), set_idx, entry
+        problems += [f"{fig.figure_id}: concentration {n}" for n in getattr(fig, "plan_notes", []) or []]
         # the suggestions' starting concentrations for series that list none (Cleaves2008 Fig. 2: '10^-1 M' wasn't
         # read when the figure was digitized, so its series had no glycine) -- a series' own composition is kept
         if fig.plan is not None and fig.plan.concentrations and any(not s.initial_species for s in fig.series):
             from parameter_extractor.digitizing.auto_figure import fill_concentrations
             bare = [s.model_copy(deep=True) if not s.initial_species else None for s in fig.series]
             problems += [f"{fig.figure_id}: concentration {p}" for p in
-                         fill_concentrations([s for s in bare if s is not None], fig.plan.concentrations)]
+                         fill_concentrations([s for s in bare if s is not None], fig.plan.concentrations,
+                                             fig.panels)]
             fig = fig.model_copy(update={"series": [b if b is not None else s for b, s in zip(bare, fig.series)]})
         row_meta: Dict[str, tuple] = {}         # full_id -> (panel group, x value, x column, series label, point)
         for series in fig.series:
@@ -296,6 +298,21 @@ def build_figure_rows(
             to_data = (lambda p: (p.px, pixel_to_y(panel, p.px, p.py))) if categorical else \
                 (lambda p: pixel_to_data(panel, p.px, p.py))
             points = sorted(series.points, key=lambda p: to_data(p)[0])
+            # a point far outside its axes' calibrated range: the series likely reads against the wrong coordinate
+            # system (Cleaves2008: panel B's points read with panel A's axes -> 475 C on a 100-250 C axis)
+            far = []
+            for axis_name, cal in (("x", panel.x_cal), ("y", panel.y_cal)):
+                if axis_name == "x" and categorical or not cal.complete() or cal.log:
+                    continue
+                lo, hi = sorted((cal.p1.value, cal.p2.value))
+                span = hi - lo
+                k = 0 if axis_name == "x" else 1
+                if span > 0 and any(not (lo - 0.6 * span <= to_data(p)[k] <= hi + 0.6 * span) for p in points):
+                    far.append(axis_name)
+            if far:
+                problems.append(f"{fig.figure_id} series '{series.label}': point(s) read far outside the "
+                                f"{' and '.join(far)} axis range of coordinate system '{panel.name}' -- check the "
+                                f"series' 'Read against' setting and the calibration markers.")
             for sample_idx, pt in enumerate(points, start=1):
                 x, y = to_data(pt)
                 fields = {
@@ -451,7 +468,7 @@ def build_figure_rows(
             rows[fig_start:] = merged
             for v in new_vars[fig_vars_start:]:
                 v.row_ids = list(dict.fromkeys(id_map.get(r, r) for r in v.row_ids))
-    return rows, problems, new_vars
+    return rows, list(dict.fromkeys(problems)), new_vars
 
 
 _MERGED_FIELDS = ("duration_hr", "initial_temperature_C", "sampled_temperature_C", "initial_pressure_bar",

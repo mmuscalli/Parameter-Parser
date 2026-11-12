@@ -1535,6 +1535,7 @@ class DigitizerWidget(QWidget):
         if self._untouched():
             self.apply_plan(plan)
             notes.insert(0, "Suggestions applied (axes columns, series, conditions) -- check and edit as needed.")
+            notes += [f"Concentration: {n}" for n in self.fig.plan_notes]
         else:
             self._pending_plan = plan
             self.apply_plan_btn.setVisible(True)
