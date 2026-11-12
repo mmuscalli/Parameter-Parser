@@ -22,6 +22,7 @@ from parameter_extractor.pipeline import run_pipeline, starting_composition_flag
 from test_pipeline_offline import PDF, _config, _have_inputs, _replay_send  # noqa: E402
 
 RIGGI = Path(__file__).resolve().parents[2] / "Paper Files" / "Test Paper List" / "Riggi2023.pdf"
+CLEAVES = Path(__file__).resolve().parents[2] / "Paper Files" / "Paper Lists" / "cleaves2008.pdf"
 
 
 def test_values_the_paper_calculated():
@@ -264,6 +265,50 @@ def test_find_similar_points_outside_a_frame():
                                      name="main", x=AxisVariable(label="T", column=None),
                                      y=AxisVariable(label="y", column=None), series=[])]))
         assert ed.fig.rows_by_x and ed.rows_by_x_box.isChecked()
+
+
+def test_cleaves_figure_2_markers_in_their_series():
+    """Mickey's Cleaves2008 Fig. 2 (2026-11-12): 8-px filled diamonds with error bars were taken for filled circles
+    (gly2 got the glycine points) and two were missed (a 3-px error bar kept them 'a line'); the gly4 square on top
+    of a gly2 circle was a circle; panel C's x axis ('1' '00') didn't calibrate. Now every marker in its series."""
+    if not CLEAVES.is_file():
+        print(f"SKIP: needs {CLEAVES}")
+        return
+    from PySide6.QtWidgets import QApplication
+    QApplication.instance() or QApplication([])
+    from test_auto_points import _editor
+    from parameter_extractor.schemas.figures import AxisVariable, FigurePlan, PlannedPanel, PlannedSeries
+    T = [100.0, 150.0, 200.0, 250.0]
+    log_y = [-3.0, -2.0, -1.0, 0.0, 1.0, 2.0]
+    s = lambda label, marker: PlannedSeries(label=label, marker=marker)               # noqa: E731
+    panel = lambda name, y, series: PlannedPanel(                                       # noqa: E731
+        name=name, x=AxisVariable(label="T (°C)", column="initial_temperature_C", tick_labels=T),
+        y=AxisVariable(label=y[0], column=None, tick_labels=y[1]), series=series)
+    plan = FigurePlan(figure_id="Fig. 2", is_data_plot=True, plot_kind="scatter", duplicates_tabulated_data=False,
+                      rows_by_x=True, panels=[
+                          panel("(A)", ("log (% yield / recovery)", log_y), [
+                              s("glycine", "filled diamond with error bars"), s("DKP", "open circle"),
+                              s("gly2", "filled circle"), s("gly3", "filled triangle"), s("gly4", "filled square")]),
+                          panel("(B)", ("log (% yield / recovery)", log_y), [
+                              s("glycine", "filled diamond with error bars"), s("DKP", "open circle"),
+                              s("gly2", "filled circle")]),
+                          panel("(C)", ("% Recovery", [0.0, 20.0, 40.0, 60.0, 80.0, 100.0]), [
+                              s("glycine", "filled diamond with error bars")])])
+    with tempfile.TemporaryDirectory() as tmp:
+        ed = _editor(CLEAVES, "2", tmp)
+        ed.auto_axes_box.setChecked(True)
+        ed.auto_points_box.setChecked(True)
+        try:
+            ed.apply_plan(plan)
+        finally:
+            ed.auto_axes_box.setChecked(False)
+            ed.auto_points_box.setChecked(False)
+        assert all(p.x_cal.complete() and p.y_cal.complete() for p in ed.fig.panels), ed.auto_status.text()
+        counts = {(ed.fig.panels[x.panel].name, x.label.split(" [")[0]): len(x.points) for x in ed.fig.series}
+        assert counts == {("(A)", "glycine"): 4, ("(A)", "DKP"): 3, ("(A)", "gly2"): 2, ("(A)", "gly3"): 1,
+                          ("(A)", "gly4"): 1, ("(B)", "glycine"): 4, ("(B)", "DKP"): 2, ("(B)", "gly2"): 3,
+                          ("(C)", "glycine"): 4}, (counts, ed.points_status.text())
+        assert ed.fig.rows_by_x
 
 
 if __name__ == "__main__":

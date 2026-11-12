@@ -50,6 +50,11 @@ class Found:
     filled: float = 1.0          # share of the marker's area that is ink (1 solid, ~0.3-0.6 open)
     fill_ratio: float = 1.0      # area / bounding box (circle ~0.79, square 1, triangle / diamond ~0.5)
     pointing: float = 0.0        # centroid below (+) / above (-) the box centre, in heights: triangles
+    # corner tests on the marker's own ink (2026-11-12, Cleaves2008 Fig. 2: 8-px diamonds lost their tips to the
+    # opening and measured as circles): ink between the diamond and the circle through its tips (diamond ~0, circle
+    # and square ~1), and between that circle and its square (square ~1, circle and diamond ~0); -1 = not measured
+    round_corners: float = -1.0
+    square_corners: float = -1.0
     sideways: float = 0.0        # the same across, in widths: a triangle pointing left / right (arrowheads)
     size: float = 0.0
     box: Box = (0, 0, 0, 0)
@@ -308,10 +313,11 @@ def find_markers(rgb: np.ndarray, frame: Box, exclude: Sequence[Box] = ()) -> Li
     for bx0, by0, bx1, by1 in exclude:           # legends and text
         ink[max(int(by0) - y0 - 2, 0):max(int(by1) - y0 + 3, 0), max(int(bx0) - x0 - 2, 0):max(int(bx1) - x0 + 3, 0)] = False
     filled = fill_holes(ink)
+    marks = without_straight_lines(filled)      # error bars, caps, drop lines off (features use `filled`)
 
     # thickness: how many 3x3 erosions a pixel survives (lines 0-1, a marker's core ~ its inradius)
     t = np.zeros(filled.shape, dtype=np.int16)
-    m = filled
+    m = marks
     for depth in range(1, MAX_MARKER_PX // 2):
         m = erode(m, 3)
         if not m.any():
@@ -329,7 +335,7 @@ def find_markers(rgb: np.ndarray, frame: Box, exclude: Sequence[Box] = ()) -> Li
     # opened with a disc a little smaller than the thinnest common marker (triangles have a small
     # inradius) but wider than the lines: lines and curves vanish, markers keep their shape
     radius = max(1.5, min(4.0, 0.5 * float(np.percentile(peaks, 75))))
-    opened = disc_dilate(disc_erode(filled, radius), radius) & filled
+    opened = disc_dilate(disc_erode(marks, radius), radius) & marks
     labels, n = label(opened)
     if n == 0:
         return []
@@ -348,6 +354,9 @@ def find_markers(rgb: np.ndarray, frame: Box, exclude: Sequence[Box] = ()) -> Li
     for i in keep:
         comp = labels[by0[i]:by1[i] + 1, bx0[i]:bx1[i] + 1] == i
         count = int(area[i] / single + 0.3) if single else 1     # lines stuck to touching markers add area
+        long_side, short_side = max(widths[i], heights[i]), min(widths[i], heights[i])
+        if count >= 2 and long_side >= 1.5 * short_side:
+            count = max(1, int(long_side / short_side + 0.4))   # a straight stack: one marker per marker width
         compact = area[i] / (widths[i] * heights[i]) >= 0.45 and max(widths[i], heights[i]) <= 3 * min(widths[i], heights[i])
         if not compact:
             continue                            # a thick curve or a filled area, not markers
@@ -384,10 +393,99 @@ def find_markers(rgb: np.ndarray, frame: Box, exclude: Sequence[Box] = ()) -> Li
                 disc = comp & ((xx - mx) ** 2 + (yy - my) ** 2 <= (0.5 * size) ** 2)
                 part_ink = ink[by0[i]:by1[i] + 1, bx0[i]:bx1[i] + 1] & disc
                 own_solid = float(part_ink.sum() / max(disc.sum(), 1))
+            extent = ((widths[i] / 2.0, heights[i] / 2.0) if count < 2 else (0.6 * size, 0.6 * size))
+            rounds, squares = corner_tests(filled, bx0[i] + float(mx), by0[i] + float(my), size, extent)
             found.append(Found(x=x0 + bx0[i] + float(mx), y=y0 + by0[i] + float(my), kind="marker", color=colour,
                                filled=own_solid, fill_ratio=ratio, pointing=pointing, sideways=sideways, size=size,
-                               box=(x0 + bx0[i], y0 + by0[i], x0 + bx1[i], y0 + by1[i])))
+                               box=(x0 + bx0[i], y0 + by0[i], x0 + bx1[i], y0 + by1[i]),
+                               round_corners=rounds, square_corners=squares))
     return found
+
+
+def _run_lengths(mask: np.ndarray, axis: int) -> np.ndarray:
+    """For each ink pixel, the length of the run of ink along `axis` (1: across a row, 0: down a column) it is in."""
+    m = mask if axis == 1 else mask.T
+    out = np.zeros(m.shape, dtype=np.int32)
+    for r in range(m.shape[0]):
+        row = m[r]
+        if not row.any():
+            continue
+        padded = np.concatenate(([False], row, [False]))
+        edges = np.flatnonzero(padded[1:] != padded[:-1])
+        for a, b in zip(edges[::2], edges[1::2]):
+            out[r, a:b] = b - a
+    return out if axis == 1 else out.T
+
+
+def without_straight_lines(mask: np.ndarray, thin: int = 3) -> np.ndarray:
+    """The mask without thin straight vertical and horizontal lines -- error bars and their caps, grid lines, drop
+    lines (at most `thin` px across; a vertical one at least thin + 1 long -- short error bars count, a marker's 1-2-row tip doesn't). A 3-px error bar survived the opening and made a
+    diamond 'a piece of a line' (Cleaves2008 Fig. 2A)."""
+    across, down = _run_lengths(mask, 1), _run_lengths(mask, 0)
+    # a line is a run of THIN pixels: counted only through pixels that are thin themselves, so a marker's own narrow
+    # tip (a triangle's top row or two) isn't one
+    narrow, flat = mask & (across <= thin), mask & (down <= thin)
+    line = (narrow & (_run_lengths(narrow, 0) >= thin + 1)) | (flat & (_run_lengths(flat, 1) >= 4 * thin))
+    return mask & ~line
+
+
+def corner_tests(filled: np.ndarray, cx: float, cy: float, size: float,
+                 extent: Optional[Tuple[float, float]] = None) -> Tuple[float, float]:
+    """(round_corners, square_corners) of a marker centred at (cx, cy) in `filled` (see Found). `extent`: the marker's
+    half-width and half-height once lines are removed -- caps runs that a line crossing at a slant lengthens."""
+    h, w = filled.shape
+    row = int(round(cy))
+    if not (0 <= row < h and 0 <= int(round(cx)) < w) or not filled[row, int(round(cx))]:
+        return -1.0, -1.0
+    col = int(round(cx))
+    a = b = col
+    while a > 0 and filled[row, a - 1]:
+        a -= 1
+    while b < w - 1 and filled[row, b + 1]:
+        b += 1
+    c = d = row
+    while c > 0 and filled[c - 1, col]:
+        c -= 1
+    while d < h - 1 and filled[d + 1, col]:
+        d += 1
+    # half-widths across and down through the centre; a run much longer than the other was lengthened by a line (an
+    # error bar down, a nearly level curve across) and is set to the other -- a tall diamond (20 x 30) stays tall
+    rx, ry = (b - a + 1) / 2.0, (d - c + 1) / 2.0
+
+    def even_out(rx, ry):
+        return (ry, ry) if rx > 1.6 * ry else (rx, rx) if ry > 1.6 * rx else (rx, ry)
+    rx, ry = even_out(rx, ry)
+    if min(rx, ry) < 3 or min(rx, ry) < 0.35 * size or max(rx, ry) > 1.4 * size:
+        return -1.0, -1.0                        # too small to tell, or an extent that isn't the marker's
+    # the marker's extent once lines are removed caps runs a slanted line lengthened: closely for the square test
+    # (opening keeps a square's box), with room for the tips opening takes off a diamond for the round test
+    if extent:
+        round_r = even_out(min(rx, extent[0] + 1.5), min(ry, extent[1] + 1.5))
+        square_r = even_out(min(rx, extent[0] + 0.5), min(ry, extent[1] + 0.5))
+    else:
+        round_r = square_r = (rx, ry)
+
+    def sample(radii):
+        # half-pixel sampling (at R ~ 5 px whole pixels can miss the thin bands between the shapes), in coordinates
+        # scaled to the marker's half-widths (u, v in -1..1)
+        ax, ay = radii
+        yy, xx = np.mgrid[-ay - 1:ay + 1.01:0.5, -ax - 1:ax + 1.01:0.5]
+        ys, xs = np.round(cy + yy).astype(int), np.round(cx + xx).astype(int)
+        inside = (ys >= 0) & (ys < h) & (xs >= 0) & (xs < w)
+        ink = np.zeros(yy.shape, dtype=bool)
+        ink[inside] = filled[ys[inside], xs[inside]]
+        u, v = xx / ax, yy / ay
+        return inside, ink, u ** 2 + v ** 2, np.abs(u) + np.abs(v), np.maximum(np.abs(u), np.abs(v))
+
+    def share(inside, ink, region):
+        region = inside & region
+        return float(ink[region].mean()) if region.sum() >= 3 else -1.0
+
+    inside, ink, d2, l1, _ = sample(round_r)
+    rounds = share(inside, ink, (d2 <= 0.95 ** 2) & (l1 >= 1.12))       # in an ellipse, outside its diamond
+    inside, ink, d2, _, linf = sample(square_r)
+    squares = share(inside, ink, (linf <= 0.95) & (d2 >= 1.1 ** 2))      # in a rectangle, outside its ellipse
+    return rounds, squares
 
 
 def _split(comp: np.ndarray, count: int) -> List[Tuple[float, float]]:
@@ -419,6 +517,10 @@ def shape_of(f: Found) -> str:
         return "triangle" if f.pointing > 0 else "down triangle"
     if abs(f.sideways) >= 0.05:
         return "side triangle"                 # pointing left or right: arrowheads, rarely a marker
+    if f.round_corners >= 0:                   # the corner tests, when measured: they don't depend on the opening
+        if f.round_corners < 0.35:
+            return "diamond"
+        return "square" if f.square_corners >= 0.6 else "circle"
     return min(("circle", "square", "diamond"), key=lambda k: abs(SHAPE_PROTOTYPES[k][0] - f.fill_ratio))
 
 

@@ -365,6 +365,12 @@ def calibrate_axis(gray: np.ndarray, frame: Frame, side: str, labels: List[float
         # bottom-left origin: order y positions from the bottom
         ordered = sorted(found) if horizontal_axis else sorted(found, reverse=True)
         values = sorted(labels)
+        # a number printed with wide letter spacing reads as two ('1' '00': Cleaves2008 Fig. 2C): the tick marks,
+        # when there is one per expected number and they're evenly spaced, place the numbers instead
+        marks = sorted(set(round(t) for t in ticks)) if horizontal_axis else \
+            sorted(set(round(t) for t in ticks), reverse=True)
+        if len(ordered) != len(values) and len(marks) == len(values) >= 2 and _even(marks):
+            ordered = [float(t) for t in marks]
         if len(ordered) != len(values):
             raise AutoAxisError(f"found {len(ordered)} tick numbers along the {side} axis but expected "
                                 f"{len(values)} ({', '.join(f'{v:g}' for v in values)}) -- calibrate it by hand")
