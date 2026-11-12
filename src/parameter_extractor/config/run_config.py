@@ -134,6 +134,9 @@ class RunConfig:
     max_parallel_stages: int = settings.MAX_PARALLEL_STAGES
     max_retries: int = 5
     prices: Dict[str, Dict[str, float]] = field(default_factory=dict)
+    # F3 (2026-11-11): each value read from a table compared with a second reading of it (ingestion/table_check.py;
+    # the arXiv text when online lookups are on and the paper is on arXiv, else the PDF's text layer): flags only
+    table_check: bool = True
 
     def __post_init__(self) -> None:
         if self.provider == "local":

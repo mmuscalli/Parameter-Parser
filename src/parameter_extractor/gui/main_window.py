@@ -1697,14 +1697,21 @@ class MainWindow(QMainWindow):
         auto_fig_flags = [f for f in result.paper_flags if f.kind == "auto_digitized"]
         analysis_flags = [f for f in result.paper_flags if f.kind == "analysis"]
         reuse_flags = [f for f in result.paper_flags if f.kind == "reused_answer"]
+        table_flags = [f for f in result.paper_flags if f.kind == "table_check"]
+        not_found_flags = [f for f in result.paper_flags if f.kind == "table_not_found"]
         other_paper_flags = [f for f in result.paper_flags
                              if f.kind not in ("new_variable", "cited_data", "derived_value", "duplicate_removed",
                                                "archive_check", "archive_match", "fit_model",
                                                "multimodal", "other_estimates", "identity_not_quoted",
                                                "paper_source", "pass_disagreement", "auto_digitized",
-                                               "analysis", "scope", "reused_answer")]
+                                               "analysis", "scope", "reused_answer", "table_check",
+                                               "table_not_found")]
         if reuse_flags:
             add_group("Reused from an earlier run", reuse_flags)
+        if table_flags:
+            add_group("Table values a second reading disagrees with", table_flags)
+        if not_found_flags:
+            add_group("Table values not found in their row of a second reading", not_found_flags)
         if scope_flags:
             add_group("Scope of this run (compounds / instrument families)", scope_flags)
         if source_flags:

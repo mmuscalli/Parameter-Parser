@@ -110,3 +110,4 @@ current month's file (start `YYYY-MM.md` in a new month), with one line here.
 - Models window: profiles and connections (2026-11-11, Mickey)
 - Built-in steps shown, read-only (2026-11-11, Mickey)
 - Local model server: paper first + priming, thinking setting, CPU spill (2026-11-11, Mickey: E1, E2, E3 parts 1-2)
+- Second reading of table values, coverage first (2026-11-11, Mickey: F3 prototype, then build it)

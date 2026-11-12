@@ -154,11 +154,40 @@ def _columns(lines: List[dict]) -> List[float]:
     return [(merged[i][1] + merged[i + 1][0]) / 2 for i in range(len(merged) - 1)]
 
 
+def _in_reading_order(words: List[dict]) -> List[dict]:
+    """Words line by line (tops within LINE_TOL of the line's first word), left to right -- not by rounded height:
+    on turned pages a decimal point sits ~1.7 pt above its digits (teng2023 Table 3: '312', '.', '08') and sorted
+    by height it landed before '312'. Small characters that touch on one line (superscript uncertainties drawn one
+    glyph at a time: '+', '1', '.', '36') are joined into one word."""
+    lines: List[List[dict]] = []
+    for w in sorted((dict(w) for w in words), key=lambda w: (w["top"], w["x0"])):
+        for ln in lines:
+            if abs(ln[0]["top"] - w["top"]) <= LINE_TOL and abs(ln[0].get("size", 0) - w.get("size", 0)) < 0.5:
+                ln.append(w)
+                break
+        else:
+            lines.append([w])
+    out: List[dict] = []
+    for ln in sorted(lines, key=lambda l: l[0]["top"]):
+        ln.sort(key=lambda w: w["x0"])
+        merged: List[dict] = []
+        for w in ln:
+            prev = merged[-1] if merged else None
+            if (prev is not None and w["x0"] - prev["x1"] < 1.2 and len(w["text"]) <= 3
+                    and w.get("size", 10) < 6.5 and prev.get("size", 10) < 6.5):
+                prev["text"] += w["text"]
+                prev["x1"] = w["x1"]
+                continue
+            merged.append(w)
+        out += merged
+    return out
+
+
 def _join_decimals_drop_leaders(words: List[dict]) -> List[dict]:
     """EXOFAST-style tables (nielsen2019 Table 3): the decimal point is a word of its own ('11', '.', '53533') and
     dot leaders ('. . . .') fill the gaps between columns. Digits-dot-digits close together become one number;
     the dots left are leaders and go."""
-    ws = [dict(w) for w in sorted(words, key=lambda w: (round(w["top"]), w["x0"]))]
+    ws = _in_reading_order(words)
     out: List[dict] = []
     i = 0
     digit_end = lambda t: bool(re.search(r"\d$", t))
@@ -182,12 +211,20 @@ def _join_decimals_drop_leaders(words: List[dict]) -> List[dict]:
     return [w for w in out if not re.fullmatch(r"\.+", w["text"])]
 
 
+def _body_size(words: List[dict]) -> float:
+    """The table's body text size: the largest size at least 15% of the words have. (The median was fooled by tables
+    with more uncertainty glyphs than values -- teng2023 Table 3 -- and then saw no superscripts at all.)"""
+    sizes = [round(w.get("size", 10), 1) for w in words]
+    common = [sz for sz in set(sizes) if sizes.count(sz) >= 0.15 * len(sizes)]
+    return max(common) if common else statistics.median(sizes)
+
+
 def grid_rows(words: List[dict]) -> List[List[str]]:
     """Words of one table's body (caption left out) -> rows of cells."""
     if not words:
         return []
     words = _join_decimals_drop_leaders(words)
-    size = statistics.median(w.get("size", 10) for w in words)
+    size = _body_size(words)
     normal = [dict(w) for w in words if w.get("size", size) >= SMALL * size]
     small = [w for w in words if w.get("size", size) < SMALL * size]
     lines = _lines(normal)
@@ -270,7 +307,15 @@ def _turned_tables(pdf_path: str, index: int, angle: int):
     with pdfplumber.open(buf) as d:
         page = d.pages[0]
         words = _words(page)
-        return [(f, words) for f in _find_on_page(page, index + 1)]
+        found = _find_on_page(page, index + 1)
+    # a table on a landscape page spans the page: the finder's column logic can keep only part of its width
+    # (teng2023 Table 3: box to x = 505, its last two columns to ~600) -- widen to every word in its rows
+    for f in found:
+        x0, top, x1, bottom = f["box"]
+        band = [w for w in words if top <= w["top"] <= bottom]
+        if band:
+            f["box"] = (min(x0, min(w["x0"] for w in band)), top, max(x1, max(w["x1"] for w in band)), bottom)
+    return [(f, words) for f in found]
 
 
 # ---- text with ' | ' rows (arXiv HTML) ----------------------------------------------------------------------

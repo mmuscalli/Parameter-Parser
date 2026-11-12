@@ -42,7 +42,8 @@ Version: `parameter_extractor.__version__` (0.3.0, tag `v0.3.0`), the one place 
   Loader `packs/__init__.py` (merged manifest = pack + linked modules + `module_settings.py`).
 - `ingestion/`: PDF parsing (`pdf_parser.py`: pdfplumber text, pypdfium2 renders; no poppler), table / figure /
   equation finders, supplements, arXiv and CrossRef sources, rows (`flatten_to_template.py`, `figure_rows.py`),
-  `normalize.py`, `new_variables.py`, `observations.py`. `calculators/`: local calculations (mixing, amounts, totals,
+  `normalize.py`, `new_variables.py`, `observations.py`, `table_check.py` (table values vs a second reading:
+  arXiv text, else the PDF's text layer; flags only). `calculators/`: local calculations (mixing, amounts, totals,
   exoplanet masses, ...). `validation/`: plausibility flags, quote checks, exoplanet archive check, gold standard (off).
 - Shared logic at the top level: `units.py`, `names.py` (species matching), `registry.py` (columns, synonyms,
   compounds per data pack), `column_order.py`, `value_types.py`, `variable_categories.py`, `formulas.py`, `voting.py`

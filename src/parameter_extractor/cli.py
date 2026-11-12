@@ -55,6 +55,9 @@ def main() -> int:
                         help="Full extraction of every paper in a list (CSV/text of PDF paths, arXiv IDs, DOIs, ADS "
                              "bibcodes or reference links): figures skipped and new variables left out of the CSV "
                              "(use the app's Paper queue to review them); one combined CSV")
+    parser.add_argument("--no-table-check", action="store_true",
+                        help="Don't compare table values with a second reading of the tables (the arXiv text, else "
+                             "the PDF's text layer)")
     parser.add_argument("--resume", type=Path, metavar="FOLDER",
                         help="Run a stopped run (or paper queue) again from its folder: steps answered before are "
                              "reused at no cost, only the missing ones are asked. Writes a new folder next to it")
@@ -251,7 +254,7 @@ def main() -> int:
                  "suggest_new_variables": not args.no_suggestions, "passes": args.passes,
                  "include_supplements": not args.no_si,
                  "save_images": not args.no_images, "save_all_figure_images": args.all_figure_images,
-                 "auto_digitize_figures": args.auto_figures,
+                 "auto_digitize_figures": args.auto_figures, "table_check": not args.no_table_check,
                  "pubchem_cache_path": default_pubchem_cache_path(), "arxiv_cache_dir": default_arxiv_cache_dir()}
     if args.ads_token is not None:
         overrides["ads_token"] = args.ads_token

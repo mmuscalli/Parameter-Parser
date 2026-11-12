@@ -119,7 +119,7 @@ paid Claude runs or the local server. Update Status as you go: `proposed` → `a
 | W6 | Keep the local-model test scripts in the repository | Workflow | S | no | done (79666a5) |
 | F1 | Units: read "uL/min" and other ASCII spellings of µ | Functionality | S | no | done (fcb3c1a) |
 | F2 | Local models: table image size per model | Functionality | S–M | local server | postponed |
-| F3 | A free second reading of table values from the PDF's text layer | Functionality | L | no | postponed |
+| F3 | A free second reading of table values from the PDF's text layer | Functionality | L | no | done: built (flags only; coverage extended first); 'not in its row' tier on trial |
 | P1 | Split CLAUDE.md into a short guide and a dated history | Upkeep | M | no | done (caf1db3, 47f1b77) |
 | P2 | Back up the reference runs | Upkeep | S | no | done (76318c4) |
 | P3 | Bring README, package metadata and a stale comment up to date | Upkeep | S | no | done (57fb3b5) |

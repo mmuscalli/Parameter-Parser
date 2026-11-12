@@ -38,10 +38,38 @@ def _norm(s: str) -> str:
     return re.sub(r"[^a-z0-9]", "", s)
 
 
+def _tokens(cell: str) -> list:
+    """A cell split into its values: dense tables whose columns ran together give one cell with several
+    ('18.42^{+2.53}_{−2.43} 0.269^{+0.165}_{−0.150}'); spaces inside ^{...} / _{...} don't split."""
+    out, depth, cur = [], 0, ""
+    for ch in cell:
+        depth += {"{": 1, "}": -1}.get(ch, 0)
+        if ch.isspace() and depth == 0:
+            if cur:
+                out.append(cur)
+            cur = ""
+        else:
+            cur += ch
+    if cur:
+        out.append(cur)
+    return [cell] + (out if len(out) > 1 else [])
+
+
 def _close(a: float, b: float) -> bool:
     if a is None or b is None:
         return False
     return abs(a - b) <= max(1e-9, 1e-6 * max(abs(a), abs(b)))
+
+
+def find_tables_of(pdf: Path) -> list:
+    """The app's table finder on a PDF (for run folders that kept no tables.json)."""
+    import tempfile
+    from parameter_extractor.ingestion.pdf_parser import parse_pdf
+    from parameter_extractor.ingestion.table_finder import find_tables
+    parsed = parse_pdf(str(pdf))
+    with tempfile.TemporaryDirectory() as tmp:
+        return find_tables(str(pdf), sorted(parsed.table_pages), Path(tmp),
+                           rotations=getattr(parsed, "page_rotations", None))
 
 
 def pdf_second_reading(pdf: Path, tables: list) -> list:
@@ -115,22 +143,26 @@ def _lines_for(grids: list, key: str):
                     yield g, [row[j] for row in g.rows[i + 1:] if j < len(row)]
 
 
-def check(grids: list, row_label: str, value, ep, em):
-    """'agree' / 'disagree' (with what the cell says) / None when the row isn't found."""
+def check(grids: list, row_label: str, value, ep, em, table: str = ""):
+    """'agree' / 'disagree' (with what the cell says) / 'not found' / None when the row isn't found. When the row
+    can't be located (a layout with one parameter per row, or an answer naming only the table), the whole named
+    table is searched -- weaker: a repeated number can stand for another cell."""
     key = _norm(row_label)
-    if not key:
-        return None, ""
-    lines = list(_lines_for([g for g in grids if not garbled(g)], key))
+    readable = [g for g in grids if not garbled(g)]
+    lines = list(_lines_for(readable, key)) if key else []
+    if not lines and table:
+        lines = [(g, [c for r in g.rows for c in r]) for g in readable if g.table_id.lower() == table.lower()]
     if not lines:
         return None, ""
     best = ""
     for g, cells in lines:
-        for c in cells:
+        for c in [t for cell in cells for t in _tokens(cell)]:
             c = re.sub(r"(?<![_^])\{([-+]?[\d.]+)\}", r"\1", c)         # '${30.7}_{-4.9}' -> '$30.7_{-4.9}'
             cv = cell_value(c)
             if not _close(cv.value, value):
                 continue
-            if (not ep and not em) or (_close(cv.err_plus, ep) and _close(cv.err_minus, em)) or \
+            no_errors_here = not cv.err_plus and not cv.err_minus     # its uncertainty printed elsewhere
+            if (not ep and not em) or no_errors_here or (_close(cv.err_plus, ep) and _close(cv.err_minus, em)) or \
                     (ep and _close(cv.err_plus, ep) and not cv.err_minus and not em):
                 return "agree", c
             best = best or c
@@ -162,7 +194,8 @@ def evaluate(run: Path, grids: list, label: str, show: int) -> None:
     counts, flags = Counter(), []
     for step, row_label, sample, col, v, ep, em, src in items(run):
         counts["table values"] += 1
-        verdict, cell = check(grids, row_label, v, ep, em)
+        m = re.match(r"\s*(Table\s+[A-Z]?\d+)", src, re.I)
+        verdict, cell = check(grids, row_label, v, ep, em, m.group(1).title() if m else "")
         if verdict is None:
             continue
         counts["checked"] += 1
@@ -197,13 +230,17 @@ def evaluate(run: Path, grids: list, label: str, show: int) -> None:
 
 # ---- chemistry tables (prebiotic reference runs, PDF text layer) ------------------------------------------------
 _CELL_SOURCE = re.compile(r"(Table\s+[A-Z]?\d+|Table\s+S\d+)\s*,\s*row\s+(.+?)\s*,\s*column", re.I)
+# the older answer format: 'Table 1, 240 °C/10.0 s, Gly-Gly' -- the row named by its conditions, then the column
+_SHORT_SOURCE = re.compile(r"(Table\s+[A-Z]?\d+|Table\s+S\d+)\s*,\s*([^,]+?)\s*,\s*[^,]+$", re.I)
 
 
 def chemistry_items(run: Path):
     """(table id, row label, value) for chemistry values read from a table cell (the source names its row)."""
     d = json.loads((run / "chemistry.output.json").read_text())
     for sol in d.get("solutes", []):
-        m = _CELL_SOURCE.search(sol.get("source") or "")
+        m = _CELL_SOURCE.search(sol.get("source") or "") or _SHORT_SOURCE.search(sol.get("source") or "")
+        if m and "caption" in m.group(2).lower():
+            continue
         if m and sol.get("concentration_value") is not None:
             yield re.sub(r"\s+", " ", m.group(1)).title().replace("Table S", "Table S"), m.group(2), \
                 sol["concentration_value"]
@@ -219,12 +256,20 @@ def _row_cells(grids: list, table: str, label: str):
             for r in g.rows:
                 if r and _norm(r[0]) and (_norm(r[0]).startswith(key) or key.startswith(_norm(r[0]))):
                     found.append(list(r))
+    if not found:                                  # a row named by its conditions: '240 °C/10.0 s' -> 240, 10.0
+        nums = [float(x) for x in re.findall(r"[-+]?\d+(?:\.\d+)?", label)]
+        if nums:
+            for g in mine:
+                for r in g.rows:
+                    lead = [cell_value(c).value for c in r[:len(nums)]]
+                    if len(lead) == len(nums) and all(_close(a, b) for a, b in zip(lead, nums)):
+                        found.append(list(r))
     yield from found
 
 
 def _values(cells) -> list:
     out = []
-    for c in cells:
+    for c in [t for cell in cells for t in _tokens(cell)]:
         v = cell_value(re.sub(r"(?<![_^])\{([-+]?[\d.]+)\}", r"\1", c)).value
         if v is not None:
             out.append(v)
@@ -238,10 +283,7 @@ def evaluate_chemistry(ref: Path) -> None:
     from parameter_extractor.ingestion.table_finder import find_tables
     info = json.loads((ref / "reference.json").read_text())
     pdf = ROOT.parent / "Paper Files" / info["pdf"]
-    parsed = parse_pdf(str(pdf))
-    with tempfile.TemporaryDirectory() as tmp:
-        tables = find_tables(str(pdf), sorted(parsed.table_pages), Path(tmp))
-    grids = pdf_second_reading(pdf, tables)
+    grids = pdf_second_reading(pdf, find_tables_of(pdf))
     usable_grids = [g for g in grids if not garbled(g)]
     items = list(chemistry_items(ref))
     c, wrong_rows = Counter(), []
@@ -292,7 +334,8 @@ def main() -> int:
         return 0
     for run in a.runs:
         if a.source in ("pdf", "both"):
-            tables = json.loads((run / "tables.json").read_text()) if (run / "tables.json").is_file() else []
+            tables = json.loads((run / "tables.json").read_text()) if (run / "tables.json").is_file() else \
+                find_tables_of(a.pdf)
             evaluate(run, pdf_second_reading(a.pdf, tables), "PDF text layer", a.show)
         if a.source in ("arxiv", "both"):
             evaluate(run, arxiv_second_reading(a.arxiv), "arXiv text", a.show)

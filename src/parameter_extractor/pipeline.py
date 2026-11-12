@@ -1162,6 +1162,7 @@ def finish(
     paper_flags += _reuse_flags(ctx)
     paper_flags += stage_flags
     paper_flags += [Flag("assumed_default", m) for m in ex.ambient_notes]
+    paper_flags += _table_check_flags(ex, config)
     paper_flags += _identity_flags(ex.chemistry, ex.parsed.pages_for_lookup)
     paper_flags += _not_a_compound_flags(ex.chemistry)
     paper_flags += [Flag("unit_conversion", n.message, quote=n.quote or None, source=n.source or None)
@@ -1438,6 +1439,27 @@ def finish(
                      figures=sorted(figure_summary, key=lambda f: f["figure_id"]), tables=list(ex.tables),
                      new_variables=held_out, accepted_variables=accepted, unfound_terms=unfound,
                      equations=list(ex.equations))
+
+
+def _table_check_flags(ex: "Extraction", config: RunConfig) -> List[Flag]:
+    """F3: table values compared with a second reading of the tables (ingestion/table_check.py); never stops a run."""
+    if not getattr(config, "table_check", True):
+        return []
+    try:
+        from parameter_extractor.ingestion import table_check as tc
+        values = tc.values_from(ex.optional_list, ex.chemistry)
+        if not values:
+            return []
+        grids, reading, reliable = tc.second_reading(ex, config)
+        if not grids:
+            return []
+        findings = tc.cross_check(values, grids, reliable)
+        ex.ctx.note("assemble", f"Second reading of the tables ({reading}): {len(values)} table values, "
+                                f"{len(findings)} to check")
+        return [Flag(kind, message) for kind, message in tc.flag_messages(findings, reading)]
+    except Exception as e:                             # a cross-check is a convenience
+        ex.ctx.note("assemble", f"The second reading of the tables failed: {e}")
+        return []
 
 
 def _reuse_flags(ctx: RunContext) -> List[Flag]:
