@@ -124,6 +124,10 @@ class FlaggedValuesWindow(QDialog):
             with open(r.observations_path, newline="", encoding="utf-8") as f:
                 obs = list(csv.DictReader(f))
         index = ft.Index(obs, self.header)
+        # each cell's own provenance (its value, quote, location): shown above its flags -- a flag's quote can be
+        # another cell's (one flag about several values)
+        self.cell_info = {(o.get("full_id", ""), o.get("column", "")): o for o in obs}
+        self._cell_html = ""
         all_rows = {row.get("full_id", "") for row in self.rows}
         self.cell_flags: Dict[Tuple[str, str], List[Tuple[object, str]]] = {}
         self.everywhere: List[Tuple[object, str, List[str]]] = []
@@ -217,6 +221,7 @@ class FlaggedValuesWindow(QDialog):
 
     def _show_cell(self, r: int, c: int) -> None:
         cell = self._cell_of(r, c)
+        self._cell_html = self._this_value(cell) if cell else ""
         self.flag_list.blockSignals(True)
         self.flag_list.clear()
         for flag, key in (self.cell_flags.get(cell, []) if cell else []):
@@ -229,7 +234,7 @@ class FlaggedValuesWindow(QDialog):
         if self.flag_list.count():
             self.flag_list.setCurrentRow(0)
         else:
-            self.details.setHtml("<p style='color:gray'>No flags on this value.</p>" if cell else "")
+            self.details.setHtml(self._cell_html + ("<p style='color:gray'>No flags on this value.</p>" if cell else ""))
             self._show_place(None)
 
     def _show_flag(self, item) -> None:
@@ -240,10 +245,27 @@ class FlaggedValuesWindow(QDialog):
         quote = flag.quote or flag.table_image_quote or flag.unverified_quote or ""
         where = ", ".join(x for x in (flag.source or "", f"p. {flag.page}" if flag.page else "") if x)
         self.details.setHtml(
-            f"<p><b>Issue</b> ({escape(flag.kind.replace('_', ' '))})<br>{escape(flag.message).replace(chr(10), '<br>')}</p>"
-            + (f"<p><b>Quote</b><br><i>“{escape(quote)}”</i></p>" if quote else "")
+            self._cell_html +
+            f"<p><b>Flag</b> ({escape(flag.kind.replace('_', ' '))})<br>{escape(flag.message).replace(chr(10), '<br>')}</p>"
+            + (f"<p><b>The flag's quote</b><br><i>“{escape(quote)}”</i></p>" if quote else "")
             + (f"<p><b>Where</b><br>{escape(where)}</p>" if where else ""))
         self._show_place(flag)
+
+    def _this_value(self, cell) -> str:
+        """The selected cell's own value, quote and location (from the observations file)."""
+        o = self.cell_info.get(cell) or {}
+        row = next((r for r in self.rows if r.get("full_id") == cell[0]), {})
+        value = row.get(cell[1], "")
+        parts = [f"<b>This value</b> ({escape(cell[1])}, row {escape(cell[0])}): {escape(value) or '<i>empty</i>'}"]
+        if o.get("extracted_value"):
+            parts.append(f"extracted as {escape(o['extracted_value'])} (corrected)")
+        if o.get("quote"):
+            check = {"no": " -- not found word for word in the paper", "table image": " -- read from the table image"}
+            parts.append(f"quote: <i>“{escape(o['quote'])}”</i>{check.get(o.get('quote_in_paper', ''), '')}")
+        where = ", ".join(x for x in (o.get("source", ""), f"p. {o['page']}" if o.get("page") else "") if x)
+        if where:
+            parts.append(f"where: {escape(where)}")
+        return "<p style='background: rgba(120,120,120,0.12); padding: 4px'>" + "<br>".join(parts) + "</p>"
 
     def _image_for(self, flag) -> Tuple[Optional[str], str]:
         """(image path, caption) of the saved table / figure the flag's location names, else its page's render."""

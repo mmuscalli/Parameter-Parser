@@ -114,3 +114,4 @@ current month's file (start `YYYY-MM.md` in a new month), with one line here.
 - Corrections and checked marks in the results window (2026-11-11, Mickey: W2)
 - Version 0.4.0 (2026-11-11, Mickey)
 - Flagged values window; flags about the same value merged (2026-11-11, Mickey's eder1994 review)
+- Flags placed on the right cells; quotes that don't contain their value (2026-11-11, Mickey's second eder1994 review)

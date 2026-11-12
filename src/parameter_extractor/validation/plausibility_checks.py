@@ -27,7 +27,7 @@ FlagKind = Literal["out_of_range", "low_confidence", "ambiguous_paper_wide_speci
                    "archive_check", "archive_match", "fit_model", "multimodal",
                    "other_estimates", "assumed_default", "no_results",
                    "identity_not_quoted", "paper_source", "value_range", "reused_answer",
-                   "table_check", "table_not_found"]
+                   "table_check", "table_not_found", "quote_unrelated"]
 
 
 @dataclass

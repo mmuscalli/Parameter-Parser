@@ -38,7 +38,9 @@ Rules:
 - `n` is at most 15 words of your own -- never a place to repeat the value,
   its method or its mode.
 - Keep every `q` to the shortest span that shows the value (at most 20
-  words; for a table: row label, column label, value) and make `src` exact
+  words; for a table: row label, column label, value) -- the span must
+  contain the value itself (its number, or the words of a text value), not
+  a sentence near it -- and make `src` exact
   (table + row + column, or section + paragraph), so a reader can find the
   full context.
 - Give `set` as the set's id from the structure plan ('S2'); use '' only when

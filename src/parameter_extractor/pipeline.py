@@ -1412,6 +1412,8 @@ def finish(
 
     # flags about exactly the same values become one entry (Mickey, 2026-11-11: BaCl2 of eder1994 flagged twice --
     # identity inferred, and medium confidence): the strongest reason leads, the others listed under it (flag_targets)
+    from parameter_extractor.validation.quotes import unrelated_quotes
+    paper_flags += unrelated_quotes(observations, ex.parsed.page_texts or [ex.parsed.text])   # quote misses its value
     from parameter_extractor import flag_targets
     paper_flags, row_flags = flag_targets.consolidate(
         paper_flags, row_flags, flag_targets.Index(({"full_id": o.full_id, "column": o.column, "value": o.value,

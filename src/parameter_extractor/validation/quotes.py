@@ -22,7 +22,7 @@ table's text layer is garbled -- the label says that too.
 from __future__ import annotations
 import bisect
 import re
-from typing import Iterable, List, Optional
+from typing import Iterable, List, Optional, Tuple
 
 QUOTE_SEPARATOR = " | "          # grouped flags join several quotes with this
 
@@ -253,3 +253,94 @@ def unnamed_species(solutes, page_texts: Optional[List[str]] = None) -> list:
                 continue
         out.append(s)
     return out
+
+
+# ---- quotes that don't contain their value (2026-11-11, Mickey's eder1994 review: reagent_suppliers 'Fluka (...);
+# Merck (...)' quoted as "All chemicals were used without further purification.") ------------------------------------
+_STOP = set("the and with was were for from that this used each all other into than then only also been have has not "
+            "are its their which these those under using without some such more most most very".split())
+# values whose quote isn't meant to contain them: computed or composed by the app, paper details, method summaries
+_NOT_QUOTED_ORIGINS = {"", "calculated", "pipeline", "metadata", "fitting models"}
+_NOT_QUOTED_COLUMNS = {"solvent_name", "author_list", "data_location", "original_data_reference"}
+
+
+def _distinctive(text: str) -> set:
+    return {w for w in re.findall(r"[a-z][a-z0-9+\-]{3,}", (text or "").lower()) if w not in _STOP}
+
+
+def _is_number(v) -> bool:
+    try:
+        float(v)
+        return True
+    except (TypeError, ValueError):
+        return False
+
+
+def _span(line: str, wanted: set, room: int = 3, most: int = 30) -> str:
+    tokens = line.split()
+    hits = [k for k, t in enumerate(tokens) if _distinctive(t) & wanted]
+    lo, hi = max(0, hits[0] - room), min(len(tokens), hits[-1] + room + 1)
+    hi = min(hi, lo + most)
+    return ("… " if lo else "") + " ".join(tokens[lo:hi]) + (" …" if hi < len(tokens) else "")
+
+
+def _best_passage(page_texts: List[str], wanted: set) -> Tuple[str, Optional[int]]:
+    """Where the paper names the value: up to five lines of one page, chosen for the value's RAREST words (a
+    supplier's name counts more than 'grade'), each cut to the span of those words (+-3 words), in reading order.
+    Two-column scans interleave their columns on a line, so a span can carry the other column's words too."""
+    lines = [(page_no, line) for page_no, page in enumerate(page_texts, start=1) for line in page.splitlines()]
+    counts: dict = {}
+    for _, line in lines:
+        for w in _distinctive(line) & wanted:
+            counts[w] = counts.get(w, 0) + 1
+    if not counts:
+        return "", None
+    weight = lambda words: sum(1.0 / counts[w] for w in words)        # noqa: E731
+    first = max(range(len(lines)), key=lambda i: weight(_distinctive(lines[i][1]) & wanted))
+    page_no = lines[first][0]
+    chosen, covered = [first], _distinctive(lines[first][1]) & wanted
+    while len(chosen) < 5:
+        rest = [i for i, (pg, _) in enumerate(lines) if pg == page_no and i not in chosen]
+        if not rest:
+            break
+        i = max(rest, key=lambda i: weight((_distinctive(lines[i][1]) & wanted) - covered))
+        new = (_distinctive(lines[i][1]) & wanted) - covered
+        if not new or weight(new) < 0.5:              # only common words left: no more lines
+            break
+        chosen.append(i)
+        covered |= new
+    if len(covered) < 2:
+        return "", None
+    text = " … ".join(_span(lines[i][1], wanted) for i in sorted(chosen))
+    return re.sub(r"(?:\s*…\s*){2,}", " … ", text)[:400], page_no
+
+
+def unrelated_quotes(observations: Iterable, page_texts: List[str]) -> list:
+    """One `quote_unrelated` flag per column whose text values have a quote sharing none of their distinctive words
+    (at least two, of four letters or more) -- the quote is in the paper but isn't where the value is said -- with the
+    passage of the paper that does contain them. Numbers aren't checked (often converted from the printed unit);
+    values the app composes or rewrites aren't either."""
+    from parameter_extractor.validation.plausibility_checks import Flag
+    by_column: dict = {}
+    for o in observations:
+        column, value, quote = o.column, o.value, o.quote or ""
+        if (not quote or not isinstance(value, str) or _is_number(value) or o.origin in _NOT_QUOTED_ORIGINS
+                or column in _NOT_QUOTED_COLUMNS or column.startswith(("paper_", "year_", "journal_"))
+                or re.search(r"(method|desc|note|ref|refname)$", column)):
+            continue
+        wanted = _distinctive(value)
+        if len(wanted) < 2 or wanted & _distinctive(quote):
+            continue
+        entry = by_column.setdefault(column, {"rows": [], "value": value, "quote": quote, "source": o.source,
+                                              "wanted": wanted})
+        entry["rows"].append(o.full_id)
+    flags = []
+    for column, e in by_column.items():
+        passage, page = _best_passage(page_texts or [], e["wanted"])
+        where = f" The paper says it here (p. {page}): “{passage}”" if passage and page else (
+            f" The paper says it here: “{passage}”" if passage else " Its words weren't found in the paper either.")
+        flags.append(Flag("quote_unrelated",
+                          f"{column}: the quote given for this value doesn't contain it ({len(e['rows'])} row(s)) -- "
+                          f"the quote is in the paper, but it isn't where the value is said.{where} Check the value.",
+                          quote=e["quote"], source=e["source"] or None, page=page))
+    return flags

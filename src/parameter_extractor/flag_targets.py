@@ -24,7 +24,7 @@ NOT_ABOUT_VALUES = {"reused_answer", "paper_source", "cited_data", "scope", "loc
                     "duplicate_removed", "analysis", "fit_model", "lookup_unavailable", "archive_match",
                     "term_not_found", "figure_problem", "auto_digitized"}
 # which reason leads when flags are merged: the more specific / serious first
-PRIORITY = ["identity_not_quoted", "assumed_value", "table_check", "conflicting_values", "out_of_range",
+PRIORITY = ["identity_not_quoted", "quote_unrelated", "assumed_value", "table_check", "conflicting_values", "out_of_range",
             "unit_conversion", "value_range", "table_not_found", "concentration_not_stated", "pass_disagreement",
             "multimodal", "other_estimates", "archive_check", "assumed_default", "derived_value", "low_confidence"]
 _COMPOUND = re.compile(r"^(initial|stock|sampled)_(.+?)_(aq|gas|s)_")
@@ -37,6 +37,13 @@ def _norm_text(s: str) -> str:
     ('Table 2, Conditions [mM computed by the pipeline from 2.5 mol dm-3]')."""
     s = re.sub(r"\s*\[[^\]]*\]", "", s or "")
     return re.sub(r"\s+", " ", s.strip().lower())
+
+
+def _quote_matches(cell_quote: str, flag_quote: str) -> bool:
+    """A cell's quote and a flag's: the same, or one inside the other (a grouped flag quotes several cells, joined)."""
+    if not cell_quote or not flag_quote:
+        return False
+    return cell_quote == flag_quote or cell_quote in flag_quote or (len(flag_quote) > 12 and flag_quote in cell_quote)
 
 
 def _number(v) -> Optional[float]:
@@ -118,9 +125,15 @@ def located(flag, index: Index, row_id: str = "") -> Tuple[Set[Cell], bool]:
         return {(row_id, c) for c in columns}, True
     candidates = {(fid, c) for c in columns for fid in index.rows_with(c)}
     src, quote = _norm_text(flag.source or ""), _norm_text(flag.quote or "")
-    matched = {cell for cell in candidates
-               if (src and index.source.get(cell) == src) or (quote and index.quote.get(cell) == quote)}
-    return (matched, True) if matched else (candidates, False)
+    # the quote first: it tells the cells apart where a location doesn't (eder1994: 'Table 2, Conditions' is every
+    # CaCl2 cell's location, but '2.50 mol dm-3 80 °C' is the quote of the three the flag is about)
+    by_quote = {cell for cell in candidates if quote and _quote_matches(index.quote.get(cell, ""), quote)}
+    if by_quote:
+        return by_quote, True
+    by_source = {cell for cell in candidates if src and index.source.get(cell) == src}
+    if by_source and by_source != candidates:          # a location every cell shares tells nothing apart
+        return by_source, True
+    return candidates, False
 
 
 def _rank(kind: str) -> int:

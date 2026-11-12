@@ -1760,17 +1760,20 @@ class MainWindow(QMainWindow):
         reuse_flags = [f for f in result.paper_flags if f.kind == "reused_answer"]
         table_flags = [f for f in result.paper_flags if f.kind == "table_check"]
         not_found_flags = [f for f in result.paper_flags if f.kind == "table_not_found"]
+        unrelated_flags = [f for f in result.paper_flags if f.kind == "quote_unrelated"]
         other_paper_flags = [f for f in result.paper_flags
                              if f.kind not in ("new_variable", "cited_data", "derived_value", "duplicate_removed",
                                                "archive_check", "archive_match", "fit_model",
                                                "multimodal", "other_estimates", "identity_not_quoted",
                                                "paper_source", "pass_disagreement", "auto_digitized",
                                                "analysis", "scope", "reused_answer", "table_check",
-                                               "table_not_found")]
+                                               "table_not_found", "quote_unrelated")]
         if reuse_flags:
             add_group("Reused from an earlier run", reuse_flags)
         if table_flags:
             add_group("Table values a second reading disagrees with", table_flags)
+        if unrelated_flags:
+            add_group("Quotes that don't contain their value", unrelated_flags)
         if not_found_flags:
             add_group("Table values not found in their row of a second reading", not_found_flags)
         if scope_flags:
