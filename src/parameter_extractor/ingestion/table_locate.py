@@ -25,7 +25,8 @@ _SCI = re.compile(r"(?<![\w.])([-−+]?\d+(?:\.\d+)?)\s*(?:[eE]\s*([-−+]?\d+)|
 # a power of ten alone: '10-9 M', '10^-9'
 _POWER = re.compile(r"(?<![\w.])10\s*(?:\^|\*\*)\s*\(?([-−+–]?\d+)\)?|(?<![\w.])10([-−–]\d+)(?!\d)")
 _NUMBER = re.compile(r"(?<![A-Za-z\d.])[-−+]?\d+(?:\.\d+)?(?![\d])")
-_WORD_NUMBER = re.compile(r"^[(\[<>~≈±]*([-−+]?\d+(?:\.\d+)?)[)\]%,;:*a-z†‡§¶]{0,2}$")
+# a number with a unit stuck to it counts as that number ('25°C', '300 °C' read as one word, '5%')
+_WORD_NUMBER = re.compile(r"^[(\[<>~≈±]*([-−+]?\d+(?:\.\d+)?)(?:\s?[°º]\s?[CFK]?|[)\]%,;:*a-z†‡§¶]{0,2})[,;)]?$")
 
 
 @dataclass
@@ -123,19 +124,35 @@ def joined_words(words: List["Word"]) -> List["Word"]:
 class TableWords:
     """The words of one saved table crop, positioned on the crop image."""
 
-    def __init__(self, pdf: Path, entry: dict):
+    def __init__(self, pdf, entry: dict):
         self.words: List[Word] = []
         self.problem = ""
+        self.how = "the PDF's text"
         if entry.get("turned"):
             self.problem = "a landscape page shown whole: values aren't located on it"
-            return
-        if not entry.get("box") or not entry.get("page_no") or not entry.get("image"):
+        elif not entry.get("box") or not entry.get("page_no") or not entry.get("image"):
             self.problem = "this table's position on its page wasn't saved"
+        elif not pdf or not Path(pdf).is_file():
+            self.problem = "the paper's PDF isn't where the run read it"
+        else:
+            try:
+                self._read(Path(pdf), entry)
+            except Exception as e:                   # never stops the window: just no highlights
+                self.problem = f"the PDF couldn't be read here ({type(e).__name__})"
+        if self.problem and entry.get("image") and Path(entry["image"]).is_file():
+            self._recognise(Path(entry["image"]))
+
+    def _recognise(self, image: Path) -> None:
+        """No usable text layer: the values read from the table's image (macOS text recognition, table_ocr.py)."""
+        from parameter_extractor.ingestion import table_ocr
+        if not table_ocr.available():
             return
         try:
-            self._read(Path(pdf), entry)
-        except Exception as e:                       # never stops the window: just no highlights
-            self.problem = f"the PDF couldn't be read here ({type(e).__name__})"
+            found = table_ocr.words(image)
+        except Exception:                            # (the text layer's reason stays the problem)
+            return
+        if found:
+            self.words, self.problem, self.how = found, "", "text recognition on the image"
 
     def _read(self, pdf: Path, entry: dict) -> None:
         import pdfplumber

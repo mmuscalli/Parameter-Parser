@@ -94,6 +94,31 @@ def run_checks(pdf: Optional[Path] = None, api_key: Optional[str] = None) -> Lis
         return f"numpy {np.__version__}, marker matching OK"
     checks.append(_run("Digitizer automation", automation))
 
+    def text_recognition():
+        """macOS Vision on a rendered number: table images without a text layer (ingestion/table_ocr.py)."""
+        import sys as _sys
+        import tempfile
+        from PIL import Image, ImageDraw, ImageFont
+        from parameter_extractor.ingestion import table_ocr
+        if _sys.platform != "darwin":
+            return "not on macOS -- tables without a text layer aren't highlighted"
+        if not table_ocr.available():
+            raise RuntimeError("the Vision framework bindings aren't bundled")
+        im = Image.new("RGB", (360, 80), "white")
+        try:
+            font = ImageFont.truetype("/System/Library/Fonts/Helvetica.ttc", 40)
+        except OSError:
+            font = ImageFont.load_default()
+        ImageDraw.Draw(im).text((10, 15), "7.25 mM", fill="black", font=font)
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "ocr.png"
+            im.save(path)
+            found = " ".join(w.text for w in table_ocr.words(path))
+        if "7.25" not in found:
+            raise RuntimeError(f"read {found!r} instead of '7.25 mM'")
+        return "macOS Vision reads table images"
+    checks.append(_run("Text recognition", text_recognition))
+
     def arxiv_and_focused() -> str:
         """arXiv full text and the focused search are bundled and work (no network needed)."""
         import ssl

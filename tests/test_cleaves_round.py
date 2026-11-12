@@ -311,6 +311,67 @@ def test_cleaves_figure_2_markers_in_their_series():
         assert ed.fig.rows_by_x
 
 
+def test_methods_the_experiments_share_are_filled_in():
+    """Cleaves2008: the analysis settings, vessel and solvent were on the text-result rows only. Rows with measured
+    results get a shared column's value when every row that states it has the same one -- not rows of calculated
+    values, not data from another paper, not when the rows differ; one grouped flag, provenance 'assumed shared'."""
+    from parameter_extractor.calculators.shared_values import fill_shared
+    from parameter_extractor.column_order import ColumnOrder
+    from parameter_extractor.ingestion.flatten_to_template import row_to_template_dict
+    from parameter_extractor.schemas.row_schema import CellSource, ExtractedRow
+    packs.activate("prebiotic_chemistry")
+    base = dict(set_type="Independent", paper_title="t", authors=[], year_published=2008, journal_published="j",
+                experiment_type="Flowthrough", solution_type="Wet")
+    row = lambda i, extra, **k: ExtractedRow(full_id=f"00100100{i}", set_id="001001", sample_id=f"00{i}",  # noqa
+                                             entry_number=i, extra=extra, **base, **k)
+    rows = [row(1, {"sampled_Gly-Gly_aq_%yield": 1.0, "analysis_method": "RP-HPLC", "analysis_UV-Vis_cell": "quartz"},
+                vessel_material="Hastelloy"),
+            row(2, {"sampled_Gly-Gly_aq_%yield": 2.0, "analysis_method": "RP-HPLC", "analysis_UV-Vis_cell": "glass"}),
+            row(3, {"sampled_Gly_aq_%yield": 3.0}),                                    # measured, states nothing
+            row(4, {"calculated_Gly-Gly_aq_mM": 1e-11}),                               # calculated only
+            row(5, {"sampled_Gly_aq_%yield": 4.0}, original_data_reference="Smith 1999")]  # another paper's data
+    rows[0].provenance["vessel_material"] = CellSource(origin="experimental conditions", quote="Hastelloy C-22",
+                                                       source="Methods")
+    flags = fill_shared(rows, packs.current().manifest.shared_columns, ColumnOrder(packs.current()))
+    rec = {r.full_id: row_to_template_dict(r) for r in rows}
+    assert rec["001001002"]["vessel_material"] == rec["001001003"]["vessel_material"] == "Hastelloy"
+    assert rec["001001003"]["analysis_method"] == "RP-HPLC"
+    assert not rec["001001003"].get("analysis_UV-Vis_cell")                 # the rows differ: not filled
+    assert not rec["001001004"].get("vessel_material") and not rec["001001005"].get("vessel_material")
+    assert rows[2].provenance["vessel_material"].confidence == "low"
+    assert "assumed shared" in rows[2].provenance["vessel_material"].origin
+    assert len(flags) == 2 and all(f.kind == "assumed_shared" for f in flags)  # one per set of rows filled
+    assert any("vessel_material = 'Hastelloy'" in f.message and "001001002" in f.message for f in flags)
+
+
+def test_table_images_without_text_are_read_by_text_recognition():
+    """Cleaves2008's Table 1 is drawn as shapes (no text for its values): on macOS the saved image is read by the
+    system's text recognition and the values are boxed from that; '25°C' counts as 25."""
+    import sys as _sys
+    from PIL import Image, ImageDraw, ImageFont
+    from parameter_extractor.ingestion import table_ocr
+    from parameter_extractor.ingestion.table_locate import TableWords, Word, locate
+    assert Word("25°C", (0, 0, 1, 1)).number == 25.0 and Word("7×10-14", (0, 0, 1, 1)).number == 7e-14
+    if _sys.platform != "darwin" or not table_ocr.available():
+        print("SKIP: text recognition is macOS only")
+        return
+    with tempfile.TemporaryDirectory() as tmp:
+        im = Image.new("RGB", (700, 160), "white")
+        font = ImageFont.truetype("/System/Library/Fonts/Helvetica.ttc", 32)
+        d = ImageDraw.Draw(im)
+        d.text((20, 20), "25°C", fill="black", font=font)
+        d.text((300, 20), "300°C", fill="black", font=font)
+        d.text((20, 90), "5×10-34", fill="black", font=font)
+        d.text((300, 90), "4×10-46", fill="black", font=font)
+        path = Path(tmp) / "table-1.png"
+        im.save(path)
+        words = TableWords(None, {"table_id": "Table 1", "image": str(path)})   # no PDF, no position: the image
+        assert words.how == "text recognition on the image" and not words.problem
+        boxes, _how = locate(words.words, "5e-31", "25°C, 3×10-4 M 5e-34")   # the value converted, its quote
+        assert any(b[1] > 60 for b in boxes)                                  # the 5×10-34 cell (and its row label)
+        assert locate(words.words, "300.0", "300°C")[0]
+
+
 if __name__ == "__main__":
     for name, fn in list(globals().items()):
         if name.startswith("test_") and callable(fn):

@@ -18,6 +18,13 @@ dependencies = [
     "Pillow>=10.0",
     "requests>=2.31",       # CrossRef DOI lookup
     "numpy>=1.26",          # digitizer automation: axis and marker detection in the page image
+    # macOS text recognition (Vision framework) for table images without a text layer -- Flagged values window
+    # (ingestion/table_ocr.py); 12.2.2 was > 2 weeks old when pinned (13.0: 2026-10-30)
+    "pyobjc-core==12.2.2; sys_platform == 'darwin'",
+    "pyobjc-framework-Cocoa==12.2.2; sys_platform == 'darwin'",
+    "pyobjc-framework-CoreML==12.2.2; sys_platform == 'darwin'",
+    "pyobjc-framework-Quartz==12.2.2; sys_platform == 'darwin'",
+    "pyobjc-framework-Vision==12.2.2; sys_platform == 'darwin'",
 ]
 
 [project.optional-dependencies]

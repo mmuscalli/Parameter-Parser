@@ -34,7 +34,10 @@ a = Analysis(
     datas=datas,
     # imported lazily inside functions, so make sure they're bundled
     hiddenimports=["parameter_extractor.diagnostics", "pdfplumber", "pypdfium2", "anthropic",
-                   "requests", "keyring"] + (["parameter_extractor.handoff"] if DEV else []),
+                   "requests", "keyring",
+                   # macOS text recognition on table images (ingestion/table_ocr.py)
+                   "objc", "Foundation", "Quartz", "Vision", "parameter_extractor.ingestion.table_ocr"]
+                  + (["parameter_extractor.handoff"] if DEV else []),
     # numpy is needed (digitizer automation); pandas/matplotlib are not
     excludes=["tkinter", "matplotlib", "pandas", "IPython", "pytest",
               "PySide6.QtNetwork", "PySide6.QtQml", "PySide6.QtQuick", "PySide6.QtSql",

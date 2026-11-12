@@ -107,6 +107,9 @@ class RunConfig:
     # capture (~1.5% of a run's tokens), and only assumed values and the user's own search terms are
     # reviewed -- the rest stays out of the CSV (new_variables.json, one summary flag).
     suggest_new_variables: bool = True
+    # fill the data pack's shared columns (analysis, methods) into measured rows that lack them, flagged as assumed
+    # (calculators/shared_values.py, 2026-11-12)
+    fill_shared_values: bool = True
     # Developer only (dev_features.py, never in public builds): write model requests to this folder for
     # answers from a Claude Code session instead of calling the API (handoff.py); no API key needed
     handoff_dir: Optional[Path] = None

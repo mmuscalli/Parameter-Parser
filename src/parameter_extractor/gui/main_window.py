@@ -543,7 +543,15 @@ class MainWindow(QMainWindow):
             "For figures you choose to digitize: a simple bar chart or scatter plot is read without opening the "
             "digitizer (and listed under Things to check, so you can verify it). Other figures open in the digitizer "
             "as usual.")
+        self.shared_box = QCheckBox("Fill in methods the experiments share")
+        self.shared_box.setChecked(True)
+        self.shared_box.setToolTip(
+            "When every row with measured results that states a method value (analysis settings, vessel, solvent ...) "
+            "has the same one, the rows that don't state it get it too -- assumed, and listed under Things to check "
+            "(one entry per column). Done on this computer, no extra cost. Rows of calculated values or of data from "
+            "other papers are left alone.")
         rv.addWidget(self.suggest_box)
+        rv.addWidget(self.shared_box)
         rv.addWidget(self.auto_figures_box)
 
         rv.addWidget(self._section("Saved with the results"))
@@ -608,7 +616,7 @@ class MainWindow(QMainWindow):
 
     def option_toggles(self) -> List[QCheckBox]:
         """The on/off run options, in the panel's order."""
-        return [self.batch_box, self.arxiv_box, self.si_box, self.suggest_box, self.auto_figures_box,
+        return [self.batch_box, self.arxiv_box, self.si_box, self.suggest_box, self.shared_box, self.auto_figures_box,
                 self.images_box, self.all_figures_box, self.equations_box]
 
     def _update_options_summary(self, *_args) -> None:
@@ -878,6 +886,7 @@ class MainWindow(QMainWindow):
         self.batch_box.setChecked(self._settings.value("batch_mode", False, type=bool))
         self.arxiv_box.setChecked(self._settings.value("prefer_arxiv", False, type=bool))
         self.suggest_box.setChecked(self._settings.value("suggest_new_variables", True, type=bool))
+        self.shared_box.setChecked(self._settings.value("fill_shared_values", True, type=bool))
         self.si_box.setChecked(self._settings.value("include_supplements", True, type=bool))
         self.images_box.setChecked(self._settings.value("save_images", True, type=bool))
         self.all_figures_box.setChecked(self._settings.value("save_all_figure_images", False, type=bool))
@@ -948,6 +957,7 @@ class MainWindow(QMainWindow):
         self._settings.setValue("batch_mode", self.batch_box.isChecked())
         self._settings.setValue("prefer_arxiv", self.arxiv_box.isChecked())
         self._settings.setValue("suggest_new_variables", self.suggest_box.isChecked())
+        self._settings.setValue("fill_shared_values", self.shared_box.isChecked())
         self._settings.setValue("include_supplements", self.si_box.isChecked())
         self._settings.setValue("save_images", self.images_box.isChecked())
         self._settings.setValue("save_all_figure_images", self.all_figures_box.isChecked())
@@ -1057,6 +1067,7 @@ class MainWindow(QMainWindow):
                          batch_mode=self.batch_box.isChecked() and self._profile_provider() == "anthropic",
                          prefer_arxiv=self.arxiv_box.isChecked(), ads_token=self.ads_edit.text().strip(),
                          suggest_new_variables=self.suggest_box.isChecked(),
+                         fill_shared_values=self.shared_box.isChecked(),
                          include_supplements=self.si_box.isChecked(),
                          save_images=self.images_box.isChecked(),
                          save_all_figure_images=self.images_box.isChecked() and self.all_figures_box.isChecked(),
@@ -1813,6 +1824,7 @@ class MainWindow(QMainWindow):
         archive_flags = [f for f in result.paper_flags if f.kind in ("archive_check", "archive_match")]
         derived_flags = [f for f in result.paper_flags if f.kind == "derived_value"]
         composition_flags = [f for f in result.paper_flags if f.kind == "no_starting_composition"]
+        shared_flags = [f for f in result.paper_flags if f.kind == "assumed_shared"]
         repeat_flags = [f for f in result.paper_flags if f.kind == "duplicate_removed"]
         fit_flags = [f for f in result.paper_flags if f.kind in ("fit_model", "multimodal", "other_estimates")]
         identity_flags = [f for f in result.paper_flags if f.kind == "identity_not_quoted"]
@@ -1831,7 +1843,8 @@ class MainWindow(QMainWindow):
                                                "multimodal", "other_estimates", "identity_not_quoted",
                                                "paper_source", "pass_disagreement", "auto_digitized",
                                                "analysis", "scope", "reused_answer", "table_check",
-                                               "table_not_found", "quote_unrelated", "no_starting_composition")]
+                                               "table_not_found", "quote_unrelated", "no_starting_composition",
+                                               "assumed_shared")]
         if reuse_flags:
             add_group("Reused from an earlier run", reuse_flags)
         if table_flags:
@@ -1852,6 +1865,8 @@ class MainWindow(QMainWindow):
             add_group("Calculated by the app (not stated in the paper)", derived_flags)
         if composition_flags:
             add_group("Products without a starting composition", composition_flags)
+        if shared_flags:
+            add_group("Filled in from the other experiments (assumed shared)", shared_flags)
         if archive_flags:
             add_group("Checked against the NASA Exoplanet Archive", archive_flags)
         if identity_flags:

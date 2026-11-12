@@ -1401,6 +1401,10 @@ def finish(
                     f"max_oligomer_length_nt for {len(o_lengths)} row(s) as the longest oligomer with a value"
                     if o_lengths else "") if x)
                 + ". Rows where the paper states them keep the stated values; hover a value to see what was used."))
+    if config.fill_shared_values and pack.manifest.shared_columns:   # methods every experiment shares (2026-11-12)
+        from parameter_extractor.calculators.shared_values import fill_shared
+        from parameter_extractor.column_order import ColumnOrder
+        paper_flags += fill_shared(rows, pack.manifest.shared_columns, ColumnOrder(pack))
     if pack.manifest.formulas:                   # the research area's own calculations (formulas.py), after the review
         from parameter_extractor.formulas import apply_formulas, formula_flags
         paper_flags += formula_flags(apply_formulas(rows, pack.manifest.formulas))

@@ -81,6 +81,8 @@ class PackManifest(BaseModel):
     is_template: bool = False
     # calculations declared without code: [{column, expression, description, if_present}] (formulas.py)
     formulas: List[dict] = Field(default_factory=list)
+    # columns the paper's experiments share (calculators/shared_values.py): {categories, columns, patterns, exclude}
+    shared_columns: dict = Field(default_factory=dict)
     # shared modules the pack uses (parameter_extractor/modules/), linked in when the pack loads
     modules: List[str] = Field(default_factory=list)
     # the pack's changes to its modules' defaults (module_settings.py): {module id: {steps, parameters, ...}}

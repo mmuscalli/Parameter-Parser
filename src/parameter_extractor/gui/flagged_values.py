@@ -77,6 +77,7 @@ KIND_LABELS = {
     "other_estimates": "Other estimates reported",
     "archive_check": "Differs from the NASA Exoplanet Archive",
     "no_starting_composition": "Products without a starting composition",
+    "assumed_shared": "Assumed the same as the other experiments",
 }
 
 
@@ -687,7 +688,9 @@ class FlaggedValuesWindow(QDialog):
         name = f"{cell[1]} of row {cell[0]}"
         if not boxes:
             return [], (f"{name}: not found in the table's text layer -- look for it by eye." if own else "")
-        return boxes, f"{name}: boxed where the table's text has {how}" + \
+        where = "the table's text" if getattr(words, "how", "") != "text recognition on the image" else \
+            "the table's image (read by text recognition)"
+        return boxes, f"{name}: boxed where {where} has {how}" + \
             (f" ({len(boxes)} places)" if len(boxes) > 1 else "") + "."
 
     def _figure_marks(self, cell, path: str) -> Tuple[list, str]:
@@ -716,12 +719,8 @@ class FlaggedValuesWindow(QDialog):
         from parameter_extractor.ingestion.table_locate import TableWords
         key = entry.get("table_id", "")
         if key not in self._table_words:
-            pdf = self._pdf_for(entry)
-            words = TableWords(pdf, entry) if pdf else None
-            if words is None:
-                from types import SimpleNamespace
-                words = SimpleNamespace(words=[], problem="the paper's PDF isn't where the run read it")
-            self._table_words[key] = words
+            # no PDF (moved) or no text layer: TableWords reads the saved image by text recognition where it can
+            self._table_words[key] = TableWords(self._pdf_for(entry), entry)
         return self._table_words[key]
 
     def _pdf_for(self, entry) -> Optional[Path]:

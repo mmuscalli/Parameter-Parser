@@ -187,6 +187,7 @@ estimates, local-model speed-ups, ...) and their status: `docs/improvement_sugge
 
 - Project venv one level up: `../.venv` (package installed editable, `pip install -e ".[gui,build]"`).
   PySide6-Essentials pinned `>=6.11,<6.12`; PyInstaller 6.22.3. numpy is a dependency (not excluded in the spec);
+  pyobjc 12.2.2 (Vision, Quartz; macOS only) reads table images without a text layer (`ingestion/table_ocr.py`);
   pandas is excluded; scipy is not used.
 - Papers: `../Paper Files/` (PDFs, never in the repository). Reference runs and fixtures: `runs/` (local).
 - User data (packs, modules, registry, caches, local model settings): `~/Library/Application Support/Parameter

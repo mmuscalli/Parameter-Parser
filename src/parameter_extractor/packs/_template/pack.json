@@ -34,6 +34,8 @@
   "compact_text": false,
   "_about_focused_row_plan": "true: a focused search plans each paper's rows like a full extraction (more accurate rows, a little more cost).",
   "focused_row_plan": true,
+  "_about_shared_columns": "Columns the paper's experiments normally share (methods, instruments): when every row with measured results that states one has the same value, the rows that don't state it get it too -- assumed and flagged, one entry per column (calculators/shared_values.py). By variable category ids, column names, regex 'patterns'; 'exclude' keeps a column out. {} = off.",
+  "shared_columns": {"categories": ["methodology"], "exclude": ["set_type"]},
 
   "_about_variable_categories": "Categories for variables the model suggests beyond the columns (shown in the review and used to place columns). Shared ones -- Metadata, Experimental Methodology, Other -- exist already. Fields: id, label, description (the model reads it), value_type (number / text / any), max_words, table_order (lower = further left), model_assigns (the model may put suggestions in it), patterns (regexes of column names placed in it). Can also be edited in the app (Variables > Variable categories).",
   "variable_categories": [
