@@ -36,6 +36,13 @@ Return a FigurePlan:
     labelled point group), using the legend or caption to identify it. If a
     series is the same object or experiment as a set in the structure plan
     below, give that `set_label` exactly.
+  - `rows_by_x`: true when each x value is ONE experiment and the series are
+    the different quantities measured in it -- e.g. the yields of several
+    products (one marker each) at each temperature, each temperature a
+    separate run. Then every series gets its own `y_column` (its product's
+    column), and the app makes one row per x value. False when each series
+    is its own experiment followed along x (a time course, a dilution
+    series).
   - Put each stated condition of a series in `conditions` -- what the
     caption, legend, axis titles or passages state for it and isn't on an
     axis: the column it belongs in from the list below, and the value

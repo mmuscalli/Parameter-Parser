@@ -549,6 +549,15 @@ class DigitizerWidget(QWidget):
         sform.setFieldGrowthPolicy(QFormLayout.FieldGrowthPolicy.AllNonFixedFieldsGrow)
         sform.addRow("Data reproduced from:", self.source_edit)
         v.addLayout(sform)
+        self.rows_by_x_box = QCheckBox("One row per x value: the series are columns of the same experiment")
+        self.rows_by_x_box.setToolTip(
+            "For a figure where each x value is its own experiment and the series are the quantities measured in it "
+            "(e.g. product yields at each temperature): the points of a coordinate system at the same x become one "
+            "row, each series in its own column (set each series' 'Read against' column). Off: one row per point, "
+            "each series its own experiment set.")
+        self.rows_by_x_box.setChecked(bool(self.fig.rows_by_x))
+        self.rows_by_x_box.toggled.connect(lambda on: setattr(self.fig, "rows_by_x", bool(on)))
+        v.addWidget(self.rows_by_x_box)
         v.addStretch(1)
         return page
 
@@ -1513,6 +1522,9 @@ class DigitizerWidget(QWidget):
             notes.append("The model doesn't think this is a numeric data plot -- you may want to skip it.")
         if plan.duplicates_tabulated_data:
             notes.append(f"Possibly the same data as a table: {plan.duplicate_note or ''}")
+        if getattr(plan, "rows_by_x", False):
+            notes.append("Each x value is one experiment and the series are its measured quantities: one row per x "
+                         "value, each series in its own column ('One row per x value', Axes tab).")
         if plan.data_source:
             notes.append(f"This figure reproduces another publication's data: {plan.data_source}")
             if not self.fig.data_source:
@@ -1542,6 +1554,7 @@ class DigitizerWidget(QWidget):
     def apply_plan(self, plan: FigurePlan) -> None:
         if not apply_plan_to(self.fig, plan):
             return
+        self.rows_by_x_box.setChecked(bool(self.fig.rows_by_x))
         self.panel_idx = 0
         self.series_idx = 0 if self.fig.series else -1
         self._undo.clear()

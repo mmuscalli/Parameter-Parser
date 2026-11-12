@@ -122,3 +122,4 @@ current month's file (start `YYYY-MM.md` in a new month), with one line here.
 - Themes; Mark all flags checked (2026-11-12, Mickey)
 - Cleaves2008 round: calculated values, starting compositions, column replace + undo, row images, digitizer crash (2026-11-12, Mickey)
 - Log-valued figure axes get their own column (2026-11-12, Mickey)
+- One row per x value; a failed dataset build no longer hangs the run (2026-11-12, Mickey's Cleaves2008 Fig. 2)

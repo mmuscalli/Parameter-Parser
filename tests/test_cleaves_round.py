@@ -131,6 +131,71 @@ def test_log_valued_axes_get_their_own_column():
     assert "total_sampled_peptides_yield" not in row_to_template_dict(rows[0])
 
 
+def _fig(rows_by_x, series):
+    from parameter_extractor.schemas.figures import (AxisCalibration, AxisVariable, CalibrationPoint, DigitizedFigure,
+                                                     DigitizedPanel, DigitizedPoint, DigitizedSeries)
+    cal = lambda a, b, lo, hi: AxisCalibration(p1=CalibrationPoint(px=a[0], py=a[1], value=lo),  # noqa: E731
+                                               p2=CalibrationPoint(px=b[0], py=b[1], value=hi))
+    panel = DigitizedPanel(name="(A)", x_cal=cal((0, 100), (300, 100), 0, 300), y_cal=cal((0, 100), (0, 0), 0, 10),
+                           x=AxisVariable(label="T (°C)", column="initial_temperature_C"),
+                           y=AxisVariable(label="% yield", column="sampled_Gly-Gly_aq_%yield"))
+    return DigitizedFigure(figure_id="Fig. 2", number=2, page=5, caption="c", render_scale=1.0, page_image="",
+                           rows_by_x=rows_by_x, panels=[panel], series=[
+                               DigitizedSeries(label=label, y_column=col, points=[DigitizedPoint(px=x, py=y) for x, y in pts])
+                               for label, col, pts in series])
+
+
+def test_one_row_per_x_value():
+    """Cleaves2008 Fig. 2: each temperature its own experiment, the series its products -- one row per x value with
+    each series in its own column (points a few pixels apart in x are the same experiment); off: one row per point.
+    A value waiting in the review moves to the merged row; two points of one series at one x are reported."""
+    from parameter_extractor.ingestion.figure_rows import build_figure_rows
+    from parameter_extractor.ingestion.flatten_to_template import row_to_template_dict
+    from parameter_extractor.registry import VariableRegistry
+    from parameter_extractor.schemas.methodology import empty_methodology
+    from parameter_extractor.schemas.paper_metadata import PaperMetadata
+    packs.activate("prebiotic_chemistry")
+    meta = PaperMetadata(paper_id="p", paper_title="t", authors=["A"], year_published=2008, journal_published="j")
+    series = [("DKP", "sampled_cyclo_Gly-Gly_aq_%yield", [(150, 80), (201, 60)]),
+              ("gly2", "sampled_Gly-Gly_aq_%yield", [(148, 90), (200, 70), (250, 50)]),
+              ("zz new", "sampled_Zz9_aq_%yield", [(152, 95)])]                     # a new compound: reviewed
+    build = lambda fig: build_figure_rows([fig], meta, empty_methodology("p"), "001", 4, 10,  # noqa: E731
+                                          registry=VariableRegistry(None, pack="prebiotic_chemistry"))
+    rows, problems, new_vars = build(_fig(False, series))
+    assert len(rows) == 6 and not problems
+    rows, problems, new_vars = build(_fig(True, series))
+    assert [r.full_id for r in rows] == ["001004001", "001004002", "001004003"] and not problems
+    first = row_to_template_dict(rows[0])
+    assert first["sampled_cyclo_Gly-Gly_aq_%yield"] == 2.0 and first["sampled_Gly-Gly_aq_%yield"] == 1.0
+    assert abs(first["initial_temperature_C"] - 150.0) < 0.01                    # the points' average x
+    assert [r.entry_number for r in rows] == [10, 11, 12] and all(r.set_type == "Independent" for r in rows)
+    assert "one row per x value" in rows[0].source_notes and "series 'DKP'" in rows[0].source_notes
+    assert [v.row_ids for v in new_vars if v.kind == "figure_axis"] == [["001004001"]]   # moved to the merged row
+    _rows, problems, _nv = build(_fig(True, [("gly2", "sampled_Gly-Gly_aq_%yield", [(148, 90), (150, 40)])]))
+    assert len(problems) == 1 and "series 'gly2' has two points here" in problems[0]
+
+
+def test_a_failure_while_building_the_dataset_ends_the_run():
+    """Mickey's run stayed on 'Step 10 of 10' until force-closed: an unexpected error while building the dataset now
+    ends the run (recorded, figures kept, the window usable again)."""
+    from types import SimpleNamespace
+    from PySide6.QtWidgets import QApplication
+    QApplication.instance() or QApplication([])
+    from parameter_extractor.gui import main_window
+    with tempfile.TemporaryDirectory() as tmp:
+        w = main_window.MainWindow()
+        failed = []
+        ex = SimpleNamespace(ctx=SimpleNamespace(run_dir=Path(tmp), on_progress=None))
+
+        def boom(*a, **k):
+            raise RuntimeError("something unexpected")
+        with patch.object(main_window, "finish", boom), patch.object(w, "_on_failed", failed.append):
+            w._finish(ex, [], [])                                                   # no exception escapes
+        assert failed and "bug in the app" in failed[0] and "something unexpected" in failed[0]
+        assert QApplication.overrideCursor() is None                                # the busy cursor is gone
+        w.close()
+
+
 def _window(tmp):
     from PySide6.QtWidgets import QApplication
     app = QApplication.instance() or QApplication([])
@@ -191,6 +256,14 @@ def test_find_similar_points_outside_a_frame():
         ed = _editor(RIGGI, "3", tmp)
         ed.add_series()
         assert isinstance(ed.find_points_like(3.0, 3.0), int)                  # the page corner: outside every frame
+        # a plan saying each x value is one experiment ticks 'One row per x value'
+        from parameter_extractor.schemas.figures import AxisVariable, FigurePlan, PlannedPanel
+        assert not ed.rows_by_x_box.isChecked()
+        ed.apply_plan(FigurePlan(figure_id="Fig. 3", is_data_plot=True, plot_kind="scatter", rows_by_x=True,
+                                 duplicates_tabulated_data=False, panels=[PlannedPanel(
+                                     name="main", x=AxisVariable(label="T", column=None),
+                                     y=AxisVariable(label="y", column=None), series=[])]))
+        assert ed.fig.rows_by_x and ed.rows_by_x_box.isChecked()
 
 
 if __name__ == "__main__":

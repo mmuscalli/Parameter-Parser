@@ -105,7 +105,8 @@ Version: `parameter_extractor.__version__` (0.4.0, tag `v0.4.0`), the one place 
 - **Keys**: only in `RunConfig` and the keychain (`gui/key_store.py`); never in files or logs.
   `PARAMETER_EXTRACTOR_NO_KEYCHAIN=1` in tests and ad-hoc scripts (reading the keychain from the venv prompts).
 - **`runs/` is local, never pushed** (audits hold the papers' text). Back it up with `scripts/backup_runs.py`.
-- **After a round of code changes:** build both apps (`packaging/build_macos.sh`, `packaging/build_macos.sh --dev`),
+- **After a round of code changes:** build both apps (`packaging/build_macos.sh`, `packaging/build_macos.sh --dev`;
+  never while Mickey has that app open -- a bundle rebuilt under a running app breaks it; the script refuses),
   run each with `--self-check` (`env -i HOME=$HOME ".../Contents/MacOS/Parameter Extractor" --self-check`), write
   the round up (below), commit and push. A docs-only change needs no build.
 - **Writing a round up:** append a dated section (`## Title (YYYY-MM-DD, Mickey: why)`) to the current month's

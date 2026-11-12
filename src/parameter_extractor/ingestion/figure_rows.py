@@ -20,7 +20,7 @@ and returned as NewVariable records, like any other unaccepted variable.
 from __future__ import annotations
 import math
 import re
-from typing import List, Optional, Tuple
+from typing import Dict, List, Optional, Tuple
 
 from parameter_extractor.ingestion.data_location import COLUMN as DATA_LOCATION, location
 from parameter_extractor.ingestion.flatten_to_template import log_base, with_average, with_log
@@ -216,8 +216,14 @@ def build_figure_rows(
     set_idx, entry = first_set_index, first_entry_number
 
     for fig in figures:
+        fig_start, fig_vars_start, fig_set, fig_entry = len(rows), len(new_vars), set_idx, entry
+        row_meta: Dict[str, tuple] = {}         # full_id -> (panel group, x value, x column, series label, point)
         for series in fig.series:
             if not series.points:
+                continue
+            if not 0 <= series.panel < len(fig.panels):        # its coordinate system is gone: skipped, not an error
+                problems.append(f"{fig.figure_id} series '{series.label}': its coordinate system no longer exists "
+                                f"-- left out.")
                 continue
             panel = fig.panels[series.panel]
             # bars of categories: no numeric x axis -- only y is calibrated, and x has no column
@@ -334,9 +340,12 @@ def build_figure_rows(
                             x_axis = ax
                 # a category axis has no number: its value is the series' category (below)
                 errors = _error_bar(pt, y, to_data, y_axis)
+                x_stored = None
                 for axis, value in ([(y_axis, y)] if categorical else [(x_axis, x), (y_axis, y)]):
                     offset = offsets.get("y" if axis is y_axis else "x", 0.0)
                     value = round(rounded(value, getattr(axis, "decimals", None)) * axis.multiplier + offset, 6)
+                    if axis is x_axis:
+                        x_stored = value
                     read = CellSource(origin=f"{fig.figure_id} (digitized)", confidence=DIGITIZED,
                                       source=f"{where}, point {sample_idx} (page {fig.page_label or fig.page}), read off axis "
                                              f"'{axis.label}'"
@@ -420,8 +429,106 @@ def build_figure_rows(
                         origin=f"{fig.figure_id} series conditions",
                         source=f"{where}" + (f"; {note}" if note else "")))
                 rows.append(row_obj)
+                if not categorical:
+                    from parameter_extractor.digitizing.auto_figure import panel_sides
+                    row_meta[row_obj.full_id] = (panel_sides(panel.name or "")[2] or str(series.panel), x_stored,
+                                                 x_axis.column, series.label, sample_idx, panel)
                 entry += 1
             for v in held_species + held_conditions:
                 v.row_ids = list(series_row_ids)
             new_vars += held_species + held_conditions
+        if getattr(fig, "rows_by_x", False) and row_meta:
+            merged, id_map, set_idx, entry = _merge_rows_by_x(
+                fig, rows[fig_start:], row_meta, paper_prefix, fig_set, fig_entry, problems)
+            rows[fig_start:] = merged
+            for v in new_vars[fig_vars_start:]:
+                v.row_ids = list(dict.fromkeys(id_map.get(r, r) for r in v.row_ids))
     return rows, problems, new_vars
+
+
+_MERGED_FIELDS = ("duration_hr", "initial_temperature_C", "sampled_temperature_C", "initial_pressure_bar",
+                  "vessel_material", "solvent_name", "analysis_method", "headspace_gas")
+
+
+def _merge_rows_by_x(fig, fig_rows, meta, paper_prefix, first_set, first_entry, problems):
+    """One row per x value (Mickey, 2026-11-12, Cleaves2008 Fig. 2: each temperature its own experiment, the series
+    its products): the points of one coordinate system (with its other y axis) within 2% of the x axis's range become
+    one row -- its x their average, each series' value in its own column; one experiment set per coordinate system,
+    rows numbered by x. Two series writing different values into one column: the first kept, a problem reported.
+    Returns (rows, {old id: new id}, next set index, next entry number)."""
+    groups: Dict[str, list] = {}
+    for r in fig_rows:
+        if r.full_id in meta:
+            groups.setdefault(meta[r.full_id][0], []).append(r)
+    kept = [r for r in fig_rows if r.full_id not in meta]          # (category charts: unchanged)
+    out, id_map, set_idx, entry = [], {}, first_set, first_entry
+    for group, members in groups.items():
+        members.sort(key=lambda r: meta[r.full_id][1] if meta[r.full_id][1] is not None else float("inf"))
+        panel = meta[members[0].full_id][5]
+        span = abs((panel.x_cal.p2.value or 0) - (panel.x_cal.p1.value or 0)) if panel.x_cal.complete() else 0
+        tol = 0.02 * span if span else 1e-9
+        clusters: List[list] = []
+        for r in members:
+            x = meta[r.full_id][1]
+            if clusters and x is not None and meta[clusters[-1][-1].full_id][1] is not None \
+                    and abs(x - meta[clusters[-1][-1].full_id][1]) <= tol:
+                clusters[-1].append(r)
+            else:
+                clusters.append([r])
+        set_id = f"{paper_prefix}{set_idx:03d}"
+        set_idx += 1
+        for k, cluster in enumerate(clusters, start=1):
+            first = cluster[0]
+            xs = [meta[r.full_id][1] for r in cluster if meta[r.full_id][1] is not None]
+            x_col = meta[first.full_id][2]
+            row = first.model_copy(deep=True)
+            for other in cluster[1:]:
+                for name in _MERGED_FIELDS:
+                    if getattr(row, name) is None and getattr(other, name) is not None:
+                        setattr(row, name, getattr(other, name))
+                for store in ("species_mM", "extra"):
+                    mine, theirs = getattr(row, store), getattr(other, store)
+                    for column, value in theirs.items():
+                        if column not in mine:
+                            mine[column] = value
+                            if column in other.provenance:
+                                row.provenance[column] = other.provenance[column]
+                        elif mine[column] != value and column != x_col and column != DATA_LOCATION:
+                            a, b = meta[first.full_id][3], meta[other.full_id][3]
+                            at = f"{fig.figure_id} {group} at {x_col} = {meta[first.full_id][1]:g}"
+                            problems.append(
+                                f"{at}: series '{a}' has two points here ({column}: {mine[column]} and {value}) -- "
+                                f"the first kept. Check the series' points." if a == b else
+                                f"{at}: {column} is given by two series ('{a}': {mine[column]}, '{b}': {value}) -- "
+                                f"the first kept. Give each series its own column ('Read against').")
+            if xs and x_col:
+                mean = round(sum(xs) / len(xs), 6)
+                if x_col in ExtractedRow.model_fields:
+                    setattr(row, x_col, mean)
+                elif x_col in row.species_mM:
+                    row.species_mM[x_col] = mean
+                else:
+                    row.extra[x_col] = mean
+            sample_id = f"{k:03d}"
+            for r in cluster:
+                id_map[r.full_id] = f"{set_id}{sample_id}"
+            parts = "; ".join(f"series '{meta[r.full_id][3]}' point {meta[r.full_id][4]}" for r in cluster)
+            row.full_id, row.set_id, row.sample_id, row.entry_number = f"{set_id}{sample_id}", set_id, sample_id, entry
+            row.set_type = "Time Series" if x_col == "duration_hr" else "Independent"
+            row.source_notes = (f"digitized from {fig.figure_id} (page {fig.page_label or fig.page}), {group}"
+                                + (f" at {x_col} = {xs[0] if len(xs) == 1 else round(sum(xs) / len(xs), 6):g}"
+                                   if xs and x_col else "")
+                                + f", one row per x value: {parts}")
+            out.append(row)
+            entry += 1
+    new_sets: Dict[str, str] = {}
+    for r in kept:                                                   # renumbered after the merged sets, set by set
+        if r.set_id not in new_sets:
+            new_sets[r.set_id] = f"{paper_prefix}{set_idx:03d}"
+            set_idx += 1
+        set_id = new_sets[r.set_id]
+        id_map[r.full_id] = f"{set_id}{r.sample_id}"
+        r.full_id, r.set_id, r.entry_number = f"{set_id}{r.sample_id}", set_id, entry
+        entry += 1
+        out.append(r)
+    return out, id_map, set_idx, entry

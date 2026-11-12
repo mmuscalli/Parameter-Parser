@@ -98,6 +98,8 @@ def apply_plan(fig: DigitizedFigure, plan: FigurePlan) -> bool:
                 series.append(s.model_copy(update={"panel": min(s.panel, len(panels) - 1)}))
     fig.plan = plan
     fig.panels, fig.series = panels, series
+    if getattr(plan, "rows_by_x", False):          # one row per x value, the series its columns (2026-11-12)
+        fig.rows_by_x = True
     return True
 
 

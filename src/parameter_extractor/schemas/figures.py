@@ -210,6 +210,15 @@ class FigurePlan(BaseModel):
                                 "reference (e.g. a figure 'redrawn from ref. 12' -> that reference as the "
                                 "reference list gives it).")
     duplicate_note: Optional[str] = None
+    # Mickey, 2026-11-12 (Cleaves2008 Fig. 2): each temperature is its own experiment and the series are the products
+    # measured in it -- one row per x value, one column per series, not one row per point
+    rows_by_x: bool = Field(
+        default=False,
+        description="True when each x value is ONE experiment and the series are different quantities measured in "
+                    "it (e.g. the yields of glycine, DKP, gly2, gly3 at each temperature, each run separately): the "
+                    "app then makes one row per x value with each series in its own column -- give every series "
+                    "its own `y_column`. False when each series is its own experiment followed over x (a time "
+                    "course, a titration).")
     # said once for the whole figure instead of on each of its series (2026-11-03: Riggi2023 Fig. 2 repeated
     # ten paper-wide conditions on all 29 bars -- 63% of a 13.6K-token answer)
     shared_conditions: List[SeriesCondition] = Field(
@@ -282,6 +291,7 @@ class DigitizedFigure(BaseModel):
     tick_numbers: List[Tuple[float, float, float]] = Field(default_factory=list)   # see FigureCandidate
     text_boxes: List[Tuple[float, float, float, float]] = Field(default_factory=list)  # see FigureCandidate
     data_source: str = ""                           # original reference if the plotted data is cited
+    rows_by_x: bool = False                         # one row per x value, series as columns (FigurePlan.rows_by_x)
     panels: List[DigitizedPanel] = Field(default_factory=lambda: [DigitizedPanel()])
     series: List[DigitizedSeries] = Field(default_factory=list)
     plan: Optional[FigurePlan] = None               # the suggestions it started from, for the audit trail

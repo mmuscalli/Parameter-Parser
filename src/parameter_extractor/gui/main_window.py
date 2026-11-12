@@ -1404,11 +1404,25 @@ class MainWindow(QMainWindow):
         QApplication.processEvents()
         try:
             result = finish(extraction, digitized, skipped, review=_with_normal_cursor(review))
-        except PipelineError as e:
-            self._on_failed(str(e))
-            return
-        finally:
+        except Exception as e:
+            # any failure here ends the run cleanly (Mickey, 2026-11-12: an unexpected error left the window on 'Step
+            # 10 of 10' until the app was force-closed): the error recorded, the digitized figures kept, the window
+            # usable again (_maybe_finish goes on after this returns)
             QApplication.restoreOverrideCursor()
+            saved = self._keep_figures(extraction, digitized)
+            if isinstance(e, PipelineError):
+                message = str(e)
+            else:
+                import traceback
+                from parameter_extractor.gui.error_log import record
+                log = record("Building the dataset failed:\n" + traceback.format_exc(), extraction.ctx.run_dir)
+                message = (f"Building the dataset failed ({type(e).__name__}: {e}). This is a bug in the app; the "
+                           f"details were saved to {log}.")
+            self._on_failed(message + (f"\n\nYour {saved} digitized figure(s) were saved to "
+                                       f"{extraction.ctx.run_dir / 'figures'}; File > Rebuild a run's dataset… "
+                                       f"builds it again from the saved answers and figures." if saved else ""))
+            return
+        QApplication.restoreOverrideCursor()
         self.progress.setValue(self.progress.maximum())
         n_flags = len(result.paper_flags) + sum(len(f) for f in result.row_flags.values())
         n_fig_rows = sum(f["points"] for f in result.figures)
@@ -1416,6 +1430,18 @@ class MainWindow(QMainWindow):
                             + (f" ({n_fig_rows} digitized from figures)" if n_fig_rows else "")
                             + f", {n_flags} item(s) flagged for review. Saved to {result.run_dir}")
         self.show_result(result)
+
+    @staticmethod
+    def _keep_figures(extraction, digitized) -> int:
+        """Save the digitized figures of a run whose dataset couldn't be built; how many were saved."""
+        n = 0
+        for fig in digitized or []:
+            try:
+                save_digitized(fig, extraction.ctx.run_dir / "figures")
+                n += 1
+            except Exception:                        # (keep going: one bad figure doesn't lose the others)
+                pass
+        return n
 
     def open_registry(self, area: Optional[str] = None) -> None:
         """View / undo what the variable registry remembered from earlier reviews (`area`: shown filtered)."""

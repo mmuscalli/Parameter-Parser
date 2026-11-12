@@ -41,6 +41,14 @@ fi
 VERSION="$("$PY" -c 'import sys; sys.path.insert(0, "src"); import parameter_extractor as p; print(p.__version__)')"
 ARCH="$(uname -m)"
 
+# never replace an app that is running: it reads its code from the bundle as it goes, and a rebuilt bundle under it
+# fails later ("zlib.error ... unknown compression method" -- 2026-11-12, a run stuck at its last step).
+# ALLOW_RUNNING=1 overrides.
+if [[ -z "${ALLOW_RUNNING:-}" ]] && pgrep -f "$(pwd)/dist/${NAME}.app/Contents/MacOS/" >/dev/null 2>&1; then
+  echo "dist/${NAME}.app is running: quit it first (rebuilding under a running app breaks it)." >&2
+  exit 2
+fi
+
 "$PY" -m PyInstaller --noconfirm --clean --distpath dist --workpath build packaging/parameter_extractor.spec
 
 APP="dist/${NAME}.app"
