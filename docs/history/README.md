@@ -117,3 +117,4 @@ current month's file (start `YYYY-MM.md` in a new month), with one line here.
 - Flags placed on the right cells; quotes that don't contain their value (2026-11-11, Mickey's second eder1994 review)
 - Flagged values window: several values at once, zoom, source_notes; declined variables not flagged (2026-11-11, Mickey's third eder1994 review)
 - Kinetics suggestions tidied; values boxed on table images (2026-11-12, Mickey)
+- Flagged values: the selected value alone; flags placed by the set they name; details panel reworked (2026-11-12, Mickey)

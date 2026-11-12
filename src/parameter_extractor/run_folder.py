@@ -130,7 +130,8 @@ def load_result(run_dir: Path):
         from parameter_extractor import flag_targets
         with open(observations, newline="") as f:
             paper_flags, row_flags = flag_targets.consolidate(paper_flags, row_flags,
-                                                              flag_targets.Index(csv.DictReader(f)))
+                                                              flag_targets.Index(csv.DictReader(f),
+                                                              set_labels=flag_targets.plan_set_labels(observations.parent)))
 
     known = {f.name for f in fields(StageUsage)}
     usage = [StageUsage(**{k: v for k, v in u.items() if k in known}) for u in summary.get("usage", [])]

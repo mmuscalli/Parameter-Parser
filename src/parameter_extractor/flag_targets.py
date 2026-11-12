@@ -5,9 +5,10 @@ of "Things to check" concerns, worked out from the run's own files, so it works 
 - the columns: dataset columns the message names (`experiment_type`), else the compounds it names, mapped to their
   columns (`initial BaCl2` -> initial_BaCl2_aq_mM; a bare 'BaCl2' -> every column of BaCl2); table cross-check flags
   list their values one per line ('- HD 4732 b, pl_orbeccen: read 0.266 ...') and are matched by column and value;
-- the rows: a row flag's own row; else the cells whose recorded source or quote is the flag's (the BaCl2 flags of
-  eder1994 and their three cells all say 'Table 2, Conditions (right block, third group)'); else every row with a
-  value in the column.
+- the rows: a row flag's own row; else the experiment sets whose labels the message names ("initial BaCl2 = 2.5 mol
+  dm-3 (set 'Ba2+ 2.50 mol dm-3, 87 C')": that set's rows only -- 2026-11-12, it had marked every BaCl2 cell); then the
+  cells whose recorded quote, else source, is the flag's (the quote may be kept as a table-image or unverified quote);
+  else every row with a value in the column (a guess).
 
 Used by `consolidate` (flags about exactly the same cells become one entry: the strongest reason first, the others
 listed under it -- nothing dropped) and by the Flagged values view (gui/flagged_values.py).
@@ -46,6 +47,22 @@ def _quote_matches(cell_quote: str, flag_quote: str) -> bool:
     return cell_quote == flag_quote or cell_quote in flag_quote or (len(flag_quote) > 12 and flag_quote in cell_quote)
 
 
+def _label_text(s: str) -> str:
+    """A set label for matching: lower case, single spaces, no degree signs ('87 °C' and '87 C' alike)."""
+    return re.sub(r"\s+", " ", (s or "").replace("°", " ").lower()).replace(" ,", ",").strip()
+
+
+def plan_set_labels(run_dir) -> List[str]:
+    """The set labels of a run's row plan (structure_planner.output.json), in order; [] when absent."""
+    import json
+    from pathlib import Path
+    try:
+        plan = json.loads((Path(run_dir) / "structure_planner.output.json").read_text())
+    except (OSError, ValueError):
+        return []
+    return [s.get("set_label", "") or s.get("label", "") for s in plan.get("experiment_sets", plan.get("sets", []))]
+
+
 def _number(v) -> Optional[float]:
     try:
         return float(v)
@@ -56,8 +73,12 @@ def _number(v) -> Optional[float]:
 class Index:
     """The run's cells: values by (row, column), and each cell's recorded source and quote."""
 
-    def __init__(self, observations: Iterable[dict], header: Iterable[str] = ()):
+    def __init__(self, observations: Iterable[dict], header: Iterable[str] = (), set_labels: Iterable[str] = ()):
         self.values: Dict[Cell, str] = {}
+        self.set_of: Dict[str, str] = {}                                 # row -> its set's number in the plan
+        # the row plan's set labels, in order (set n = rows whose set_id ends in n): flags name sets by label
+        self.set_labels = [(_label_text(label), f"{n:03d}") for n, label in enumerate(set_labels, start=1)
+                           if len(_label_text(label)) >= 6]
         self.source: Dict[Cell, str] = {}
         self.quote: Dict[Cell, str] = {}
         cols = set(header)
@@ -67,6 +88,7 @@ class Index:
                 continue
             # a value corrected to empty is still the value the flag was about: its value as extracted
             self.values[key] = str(o.get("value", "") or o.get("extracted_value", "") or "")
+            self.set_of[key[0]] = str(o.get("set_id", "") or "")[-3:]
             self.source[key] = _norm_text(o.get("source", ""))
             self.quote[key] = _norm_text(o.get("quote", ""))
             cols.add(key[1])
@@ -76,6 +98,14 @@ class Index:
             m = _COMPOUND.match(c)
             if m:
                 self.compounds.setdefault(m.group(2), []).append((m.group(1), c))
+
+    def sets_named(self, text: str) -> Set[str]:
+        """The plan sets whose labels `text` names (a label inside a longer named label doesn't count)."""
+        text = _label_text(text)
+        spans = []
+        for label, number in self.set_labels:
+            spans += [(m.start(), m.end(), number) for m in re.finditer(re.escape(label), text)]
+        return {n for a, b, n in spans if not any(a2 <= a and b <= b2 and (a2, b2) != (a, b) for a2, b2, _ in spans)}
 
     def rows_with(self, column: str) -> List[str]:
         return [fid for (fid, col), v in self.values.items() if col == column and v != ""]
@@ -124,7 +154,13 @@ def located(flag, index: Index, row_id: str = "") -> Tuple[Set[Cell], bool]:
     if row_id:
         return {(row_id, c) for c in columns}, True
     candidates = {(fid, c) for c in columns for fid in index.rows_with(c)}
-    src, quote = _norm_text(flag.source or ""), _norm_text(flag.quote or "")
+    narrowed = False
+    named = index.sets_named(flag.message or "")
+    in_sets = {cell for cell in candidates if index.set_of.get(cell[0]) in named}
+    if in_sets:
+        candidates, narrowed = in_sets, True
+    src = _norm_text(flag.source or "")
+    quote = _norm_text(flag.quote or flag.table_image_quote or flag.unverified_quote or "")
     # the quote first: it tells the cells apart where a location doesn't (eder1994: 'Table 2, Conditions' is every
     # CaCl2 cell's location, but '2.50 mol dm-3 80 °C' is the quote of the three the flag is about)
     by_quote = {cell for cell in candidates if quote and _quote_matches(index.quote.get(cell, ""), quote)}
@@ -133,7 +169,7 @@ def located(flag, index: Index, row_id: str = "") -> Tuple[Set[Cell], bool]:
     by_source = {cell for cell in candidates if src and index.source.get(cell) == src}
     if by_source and by_source != candidates:          # a location every cell shares tells nothing apart
         return by_source, True
-    return candidates, False
+    return candidates, narrowed
 
 
 def _rank(kind: str) -> int:

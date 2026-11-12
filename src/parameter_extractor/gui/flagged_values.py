@@ -13,8 +13,12 @@ Flagged values (Mickey, 2026-11-11): the review of a run's flagged values in one
   refreshed after.
 - Flags about a column on every row are in a collapsed "On every row" list; "Review all" puts their values in the
   table too (Mickey, 2026-11-11). source_notes is always the last column (it says what the row is).
-- The table / figure image zooms: buttons, Cmd + scroll, pinch. On a saved table, the selected (or hovered) value is
-  boxed where the PDF's text layer has it (ingestion/table_locate.py; local, no model).
+- The table / figure image zooms: buttons, Cmd + scroll, pinch. The SELECTED value alone decides what is shown (not
+  the mouse: hovering had shown another value's table beside this one's flags -- Mickey, 2026-11-12); on a saved
+  table it is boxed where the PDF's text layer has it (ingestion/table_locate.py; local, no model).
+- The details panel: this value (column, row, value, quote, where), then each flag on it -- in plain words, only the
+  part of a grouped flag about this value ("Show the whole flag" for the rest), its quote only when it is this
+  value's.
 Which cells a flag is about: flag_targets.py.
 """
 from __future__ import annotations
@@ -43,6 +47,104 @@ MARK_FILL = QColor(255, 214, 0, 90)
 ROW_ID_COLUMNS = ["full_id", "set_id", "sample_id"]
 LAST_COLUMN = "source_notes"               # always shown, last: a short description of the row
 ZOOM_STEPS = (0.25, 0.33, 0.5, 0.67, 0.8, 1.0, 1.25, 1.5, 2.0, 2.5, 3.0, 4.0)
+
+
+DETAILS_STYLE = """<style>
+h3 { margin: 6px 0 4px 0; font-size: 13pt; } h4 { margin: 10px 0 2px 0; font-size: 12pt; }
+p { margin: 2px 0 6px 0; } td { padding: 2px 10px 2px 0; vertical-align: top; } td.k { color: gray; }
+p.more { color: gray; margin-top: 8px; } div.value { background: rgba(120,120,120,0.12); }
+</style>"""
+# flag kinds in plain words (the Things to check groups say the same)
+KIND_LABELS = {
+    "identity_not_quoted": "Which compound it is was inferred",
+    "quote_unrelated": "The quote doesn't contain the value",
+    "low_confidence": "The model wasn't sure",
+    "assumed_value": "Assumed, not stated in the paper",
+    "assumed_default": "Filled in by a convention",
+    "table_check": "A second reading of the table disagrees",
+    "table_not_found": "Not found in its row of the table's text",
+    "conflicting_values": "The paper gives different values",
+    "out_of_range": "Outside the usual range",
+    "unit_conversion": "Unit or format problem",
+    "value_range": "A range, not one value",
+    "concentration_not_stated": "Concentration not stated",
+    "pass_disagreement": "The passes disagreed",
+    "derived_value": "Calculated by the app",
+    "multimodal": "Several modes reported",
+    "other_estimates": "Other estimates reported",
+    "archive_check": "Differs from the NASA Exoplanet Archive",
+}
+
+
+def kind_label(kind: str) -> str:
+    return KIND_LABELS.get(kind, (kind or "flag").replace("_", " ").capitalize())
+
+
+def _table(rows) -> str:
+    return "<table>" + "".join(f"<tr><td class='k'>{k}</td><td>{v}</td></tr>" for k, v in rows) + "</table>"
+
+
+def _html_text(text: str) -> str:
+    return escape(text).replace("\n", "<br>")
+
+
+def _split_merged(message: str) -> Tuple[str, List[Tuple[str, str]]]:
+    """(the lead flag's message, [(kind, message)] of the flags merged into it -- flag_targets.consolidate)."""
+    head, sep, rest = message.partition("\nAlso flagged for the same value(s):\n")
+    if not sep:
+        return message, []
+    merged = []
+    for line in rest.split("\n- "):
+        m = re.match(r"-?\s*\(([^)]*)\)\s*(.*)", line.strip(), re.S)
+        if m:
+            merged.append((m.group(1).replace(" ", "_"), m.group(2)))
+    return head, merged
+
+
+def _top_level_items(text: str) -> List[str]:
+    """Split on '; ' outside brackets ('Ba2+ 2.50 ... (Set labelled Ba2+ in plan; printed table row ...)' is one)."""
+    items, depth, start = [], 0, 0
+    for i, ch in enumerate(text):
+        depth += ch in "([" and 1 or (ch in ")]" and -1 or 0)
+        if depth == 0 and text.startswith("; ", i):
+            items.append(text[start:i])
+            start = i + 2
+    items.append(text[start:])
+    return [i for i in (x.strip() for x in items) if i]
+
+
+def _about(message: str, labels: List[str], numbers: List[str]) -> Tuple[str, int]:
+    """The part of a grouped flag about one value: its message lists several ('CaCl2: ...: Ca2+ 1.67 mol dm-3, 85 C
+    (...); Ca2+ 1.50 mol dm-3, 89 C (...); ...'). Keeps the lead-in, the items naming this value's set label (else all
+    its quote's numbers), and a closing 'Check the paper.'; returns (text, how many items were left out)."""
+    body, tail = message, ""
+    m = re.search(r"(?<=[.)])\s+(Check [^.;]*\.|Correct it[^;]*\.)\s*$", message)
+    if m:
+        body, tail = message[:m.start()], m.group(1)
+    items = _top_level_items(body)
+    if len(items) < 2:
+        return message, 0
+    lead = ""
+    first = items[0]
+    cut = first.rfind(": ")
+    if cut > 0:
+        lead, items[0] = first[:cut + 2], first[cut + 2:]
+
+    def names_it(item: str) -> bool:
+        text = ft._label_text(item)
+        if any(ft._label_text(l) in text for l in labels if l):
+            return True
+        found = re.findall(r"\d+(?:\.\d+)?", item)
+        as_numbers = {f"{float(x):g}" for x in found}
+        return bool(numbers) and all(n in as_numbers for n in numbers)
+
+    keep = [i for i in items if names_it(i)]
+    if not keep or len(keep) == len(items):
+        return message, 0
+    text = lead + "; ".join(keep)
+    if tail:
+        text += ("" if text.rstrip().endswith(".") else ".") + " " + tail
+    return text, len(items) - len(keep)
 
 
 class _ZoomFilter(QObject):
@@ -153,9 +255,6 @@ class FlaggedValuesWindow(QDialog):
         self.table.setSelectionMode(QAbstractItemView.SelectionMode.ExtendedSelection)
         self.table.currentCellChanged.connect(lambda r, c, *_: self._show_cell(r, c))
         self.table.itemChanged.connect(self._edited)
-        self.table.setMouseTracking(True)                # hovering a value boxes it on the table image
-        self.table.cellEntered.connect(lambda r, c: self._hover_cell(self._cell_of(r, c)))
-        self.table.viewport().installEventFilter(self)
         self.table.itemSelectionChanged.connect(self._selection_changed)
         self.table.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         self.table.customContextMenuRequested.connect(self._table_menu)
@@ -165,12 +264,18 @@ class FlaggedValuesWindow(QDialog):
         self.flag_list.itemChanged.connect(self._flag_ticked)
         self.flag_list.currentItemChanged.connect(lambda item, _p: self._show_flag(item))
         self.details = QTextBrowser(placeholderText="Select a flagged (orange) value to see its issues.")
+        self.details.setOpenLinks(False)
+        self.details.anchorClicked.connect(self._details_link)
+        self.details.document().setDocumentMargin(10)
+        self._whole_flag = False                     # "Show the whole flag" (a grouped flag's other values too)
+        self._shown_flag = None
         left = QWidget()
         lv = QVBoxLayout(left)
         lv.setContentsMargins(0, 0, 0, 0)
         lv.addWidget(QLabel("<b>Flags on this value</b> (tick once dealt with)"))
-        lv.addWidget(self.flag_list, 1)
-        lv.addWidget(self.details, 2)
+        self.flag_list.setMaximumHeight(110)            # a short line per flag; the details get the room
+        lv.addWidget(self.flag_list)
+        lv.addWidget(self.details, 1)
         self.image_caption = QLabel(wordWrap=True)
         self.image = QLabel(alignment=Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft)
         self.image_scroll = QScrollArea(widgetResizable=True)
@@ -178,7 +283,6 @@ class FlaggedValuesWindow(QDialog):
         self.image_path = None
         self._flag = None                            # the flag whose location is shown
         self._cell = None                            # the selected value
-        self._hover = None                           # the value under the mouse
         self._image_entry = None                     # the tables.json entry shown (None: a figure or page)
         self._boxes: list = []
         self._table_words: dict = {}
@@ -233,7 +337,7 @@ class FlaggedValuesWindow(QDialog):
         if r.observations_path and Path(r.observations_path).is_file():
             with open(r.observations_path, newline="", encoding="utf-8") as f:
                 obs = list(csv.DictReader(f))
-        index = ft.Index(obs, self.header)
+        index = ft.Index(obs, self.header, set_labels=ft.plan_set_labels(r.run_dir))
         # each cell's own provenance (its value, quote, location): shown above its flags -- a flag's quote can be
         # another cell's (one flag about several values)
         self.cell_info = {(o.get("full_id", ""), o.get("column", "")): o for o in obs}
@@ -342,47 +446,119 @@ class FlaggedValuesWindow(QDialog):
         self.flag_list.blockSignals(True)
         self.flag_list.clear()
         for flag, key in (self.cell_flags.get(cell, []) if cell else []):
-            item = QListWidgetItem(f"[{flag.kind.replace('_', ' ')}] {flag.message.splitlines()[0][:300]}")
+            merged = _split_merged(flag.message or "")[1]
+            item = QListWidgetItem(kind_label(flag.kind) + (f"  (also: {', '.join(kind_label(k) for k, _m in merged)})"
+                                                            if merged else ""))
+            item.setToolTip(flag.message.splitlines()[0][:400])
             item.setData(Qt.ItemDataRole.UserRole, (flag, key))
             item.setFlags(item.flags() | Qt.ItemFlag.ItemIsUserCheckable)
             item.setCheckState(Qt.CheckState.Checked if key in self.checked else Qt.CheckState.Unchecked)
             self.flag_list.addItem(item)
         self.flag_list.blockSignals(False)
         if self.flag_list.count():
+            self._shown_flag = None
             self.flag_list.setCurrentRow(0)
         else:
-            self.details.setHtml(self._cell_html + ("<p style='color:gray'>No flags on this value.</p>" if cell else ""))
+            self._shown_flag = None
+            self.details.setHtml(DETAILS_STYLE + self._cell_html
+                                 + ("<p class='more'>No flags on this value.</p>" if cell else ""))
             self._show_place(None)
 
     def _show_flag(self, item) -> None:
         data = item.data(Qt.ItemDataRole.UserRole) if item is not None else None
         if not data:
             return
-        flag = data[0]
+        if data[0] is not self._shown_flag:
+            self._whole_flag = False
+        self._shown_flag = data[0]
+        self._render_details()
+        self._show_place(data[0])
+
+    def _details_link(self, url) -> None:
+        if url.toString() == "#whole":
+            self._whole_flag = not self._whole_flag
+            self._render_details()
+
+    def _render_details(self) -> None:
+        flag = self._shown_flag
+        if flag is None:
+            return
+        cell = self._cell if self._cell in self.cell_flags and any(
+            f is flag for f, _k in self.cell_flags.get(self._cell, [])) else None
+        self.details.setHtml(DETAILS_STYLE + self._flag_html(flag, cell) + (self._cell_html if cell else ""))
+
+    def _flag_html(self, flag, cell) -> str:
+        """A flag in plain words: the part about this value (a grouped flag lists several), the other flags merged
+        into it, and its quote and location when they are this value's."""
+        main, merged = _split_merged(flag.message or "")
+        o = self.cell_info.get(cell) or {} if cell else {}
+        hints = self._cell_hints(cell) if cell else ([], [])
+        parts, hidden = [], 0
+        text, left = (main, 0) if self._whole_flag or not cell else _about(main, *hints)
+        hidden = max(hidden, left)
+        parts.append(f"<h3>{escape(kind_label(flag.kind))}</h3><p>{_html_text(text)}</p>")
+        # the flag's quote and location: shown when they add something -- not when they are this value's own (shown
+        # above), and another value's only with the whole flag
         quote = flag.quote or flag.table_image_quote or flag.unverified_quote or ""
         where = ", ".join(x for x in (flag.source or "", f"p. {flag.page}" if flag.page else "") if x)
-        self.details.setHtml(
-            self._cell_html +
-            f"<p><b>Flag</b> ({escape(flag.kind.replace('_', ' '))})<br>{escape(flag.message).replace(chr(10), '<br>')}</p>"
-            + (f"<p><b>The flag's quote</b><br><i>“{escape(quote)}”</i></p>" if quote else "")
-            + (f"<p><b>Where</b><br>{escape(where)}</p>" if where else ""))
-        self._show_place(flag)
+        cell_quote = ft._norm_text(o.get("quote", ""))
+        same_quote = bool(cell_quote) and ft._norm_text(quote) == cell_quote
+        own = not cell or not cell_quote or ft._quote_matches(cell_quote, ft._norm_text(quote))
+        cell_where = ", ".join(x for x in (re.sub(r"\s*\[[^\]]*\]", "", o.get("source", "")),
+                                           f"p. {o['page']}" if o.get("page") else "") if x)
+        rows = []
+        if quote and not same_quote and (own or self._whole_flag):
+            label = "Flag's quote" if own else "Flag's quote (another value's)"
+            rows.append((label, f"<i>“{escape(quote)}”</i>" + (" -- not found word for word in the paper"
+                                                              if quote == flag.unverified_quote else "")))
+        if where and ft._norm_text(where) != ft._norm_text(cell_where) and (own or self._whole_flag or not quote):
+            rows.append(("Flag's location", escape(where)))
+        if rows:
+            parts.append(_table(rows))
+        for kind, msg in merged:
+            text, left = (msg, 0) if self._whole_flag or not cell else _about(msg, *hints)
+            hidden = max(hidden, left)
+            parts.append(f"<h4>Also flagged: {escape(kind_label(kind))}</h4><p>{_html_text(text)}</p>")
+        if hidden or self._whole_flag:
+            parts.append("<p class='more'>" + (f"This flag also lists {hidden} other value(s). "
+                                               "<a href='#whole'>Show the whole flag</a>" if not self._whole_flag
+                                               else "<a href='#whole'>Show only the part about this value</a>")
+                         + "</p>")
+        return "".join(parts)
+
+    def _cell_hints(self, cell) -> Tuple[List[str], List[str]]:
+        """What identifies this value in a flag's text: its set's label, its quote's numbers."""
+        from parameter_extractor.ingestion.table_locate import numbers_in
+        labels = []
+        n = (self.cell_info.get(cell) or {}).get("set_id", "")[-3:]
+        plan = ft.plan_set_labels(self.result.run_dir)
+        if n.isdigit() and 0 < int(n) <= len(plan):
+            labels.append(plan[int(n) - 1])
+        quote = (self.cell_info.get(cell) or {}).get("quote", "")
+        return labels, [f"{x:g}" for x in numbers_in(quote)]
 
     def _this_value(self, cell) -> str:
         """The selected cell's own value, quote and location (from the observations file)."""
         o = self.cell_info.get(cell) or {}
         row = next((r for r in self.rows if r.get("full_id") == cell[0]), {})
         value = row.get(cell[1], "")
-        parts = [f"<b>This value</b> ({escape(cell[1])}, row {escape(cell[0])}): {escape(value) or '<i>empty</i>'}"]
-        if o.get("extracted_value"):
-            parts.append(f"extracted as {escape(o['extracted_value'])} (corrected)")
+        rows = [("Column", f"<b>{escape(cell[1])}</b>"),
+                ("Row", escape(cell[0]) + (f" -- set {escape(row.get('set_id', ''))}, sample "
+                                           f"{escape(row.get('sample_id', ''))}" if row.get("set_id") else "")),
+                ("Value", (f"<b>{escape(value)}</b>" if value else "<i>empty</i>")
+                 + (f" (corrected; extracted as {escape(o['extracted_value'])})" if o.get("extracted_value") else ""))]
         if o.get("quote"):
             check = {"no": " -- not found word for word in the paper", "table image": " -- read from the table image"}
-            parts.append(f"quote: <i>“{escape(o['quote'])}”</i>{check.get(o.get('quote_in_paper', ''), '')}")
-        where = ", ".join(x for x in (o.get("source", ""), f"p. {o['page']}" if o.get("page") else "") if x)
+            rows.append(("Quote", f"<i>“{escape(o['quote'])}”</i>{check.get(o.get('quote_in_paper', ''), '')}"))
+        source = o.get("source", "")
+        notes = re.findall(r"\[([^\]]*)\]", source)
+        where = ", ".join(x for x in (re.sub(r"\s*\[[^\]]*\]", "", source), f"p. {o['page']}" if o.get("page") else "")
+                          if x)
         if where:
-            parts.append(f"where: {escape(where)}")
-        return "<p style='background: rgba(120,120,120,0.12); padding: 4px'>" + "<br>".join(parts) + "</p>"
+            rows.append(("Where", escape(where)))
+        for note in notes:
+            rows.append(("Note", escape(note)))
+        return "<div class='value'><h4>This value</h4>" + _table(rows) + "</div>"
 
     def _saved_table(self, text: str):
         """The tables.json entry of the first saved table `text` names."""
@@ -427,19 +603,8 @@ class FlaggedValuesWindow(QDialog):
         self._flag = flag
         self._refresh_place()
 
-    def _hover_cell(self, cell) -> None:
-        if cell != self._hover:
-            self._hover = cell
-            self._refresh_place()
-
-    def eventFilter(self, obj, event):
-        if obj is self.table.viewport() and event.type() == QEvent.Type.Leave and self._hover is not None:
-            self._hover = None
-            self._refresh_place()
-        return super().eventFilter(obj, event)
-
     def _refresh_place(self) -> None:
-        cell = self._hover or self._cell
+        cell = self._cell
         path, caption, entry = self._image_for(self._flag, cell)
         self.zoom_bar.setVisible(bool(path))
         if not path:

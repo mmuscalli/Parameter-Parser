@@ -100,6 +100,39 @@ def test_a_quote_that_doesnt_contain_its_value():
     assert len(merged) == 1 and merged[0].kind == "quote_unrelated" and "Medium confidence" in merged[0].message
 
 
+def test_a_flag_naming_a_set_is_placed_on_that_set():
+    """Mickey's eder1994 run (2026-11-12): "initial BaCl2 = 2.5 mol dm-3 (set 'Ba2+ 2.50 mol dm-3, 87 C') has confidence
+    'medium'" had no quote and the source every BaCl2 cell shares, so it was shown on the 1.67 M cells too. The set
+    label it names places it."""
+    labels = ["Ba2+ 1.67 mol dm-3, 80 C", "Ba2+ 2.50 mol dm-3, 87 C"]
+    obs = [{"full_id": f"0010{s}00{i}", "set_id": f"0010{s}", "column": "initial_BaCl2_aq_mM", "value": v,
+            "source": "Table 2, Conditions", "quote": q}
+           for s, v, q in (("01", "1670.0", "Ba2+ 1.67 mol dm-3 80 °C"), ("02", "2500.0", "Ba2+ 2.50 mol dm-3 87 °C"))
+           for i in (1, 2, 3)]
+    index = ft.Index(obs, set_labels=labels)
+    low = Flag("low_confidence", "initial BaCl2 = 2.5 mol dm-3 (set 'Ba2+ 2.50 mol dm-3, 87 C') has confidence "
+                                 "'medium'.", source="Table 2, Conditions")
+    cells, precise = ft.located(low, index)
+    assert precise and cells == {(f"00100200{i}", "initial_BaCl2_aq_mM") for i in (1, 2, 3)}
+    # a label inside a longer one isn't named by it
+    assert ft.Index([], set_labels=["Na+ 3.33 M", "Na+ 3.33 M, 81 C"]).sets_named("set 'Na+ 3.33 M, 81 C'") == {"002"}
+
+
+def test_the_details_show_the_part_about_this_value():
+    """A grouped flag lists several values; the panel shows the one about the selected value (its set label, else its
+    quote's numbers), with the lead-in and 'Check the paper.'; brackets with '; ' inside stay one item."""
+    from parameter_extractor.gui.flagged_values import _about, _split_merged
+    msg = ("CaCl2: the quotes for 3 value(s) don't name it -- inferred: Ca2+ 1.67 mol dm-3, 85 C (Ca2+ from CaCl2); "
+           "Ca2+ 2.50 mol dm-3, 80 C (row; follows the Ca block); Ba2+ 2.50 mol dm-3, 87 C (layout). Check the paper.")
+    text, left = _about(msg, ["Ca2+ 2.50 mol dm-3, 80 C"], [])
+    assert left == 2 and text == ("CaCl2: the quotes for 3 value(s) don't name it -- inferred: Ca2+ 2.50 mol dm-3, "
+                                  "80 C (row; follows the Ca block). Check the paper.")
+    assert _about(msg, [], ["1.67", "85"])[0].count("1.67") == 1             # by the quote's numbers
+    assert _about(msg, [], ["9.9"]) == (msg, 0)                               # nothing names it: all of it
+    head, merged = _split_merged("A.\nAlso flagged for the same value(s):\n- (low confidence) B.\n- (derived value) C.")
+    assert head == "A." and merged == [("low_confidence", "B."), ("derived_value", "C.")]
+
+
 def test_values_are_located_on_table_images():
     """table_locate (Mickey, 2026-11-12): a cell's value boxed on its table image, from the PDF's text layer -- the
     value itself ('5.6' printed '5.60'), else the numbers of its quote where they occur together (eder1994 Table 2:
@@ -163,7 +196,11 @@ def test_the_flagged_values_window():
         assert t.item(r, c).background().color().name() == "#ff9646"
         t.setCurrentCell(r, c)
         app.processEvents()
-        assert w.flag_list.count() >= 1 and "This value" in w.details.toPlainText() and "Flag" in w.details.toPlainText()
+        text = w.details.toPlainText()
+        assert w.flag_list.count() >= 1 and "This value" in text
+        flag0 = w.flag_list.item(0).data(Qt.ItemDataRole.UserRole)[0]
+        from parameter_extractor.gui.flagged_values import kind_label
+        assert w.flag_list.item(0).text().startswith(kind_label(flag0.kind)) and text.startswith(kind_label(flag0.kind))
         if w.image_caption.text():                                 # a table, figure or page image where there is one
             assert "Table" in w.image_caption.text() or "page" in w.image_caption.text()
         item = w.flag_list.item(0)
@@ -205,10 +242,11 @@ def test_the_flagged_values_window():
         # a value read from a saved table is boxed on its image (selected or hovered)
         located = next(((fid, col) for (fid, col), o in w.cell_info.items() if w._saved_table(o.get("source", ""))
                         and col.endswith("%yield")), None)
-        if located:
-            w._hover_cell(located)
+        if located:                                   # (the selected value alone decides; hovering does nothing)
+            w._cell, w._flag = located, None
+            w._refresh_place()
             assert w._boxes and "boxed where the table" in w.image_caption.text()
-            w._hover_cell(None)
+            assert not w.table.hasMouseTracking()
         # correcting a flagged value from here
         full_id, column = w._cell_of(r, c)
         if column not in corr.FIXED_COLUMNS and "_mM" in column:

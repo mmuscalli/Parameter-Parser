@@ -1425,7 +1425,9 @@ def finish(
     from parameter_extractor import flag_targets
     paper_flags, row_flags = flag_targets.consolidate(
         paper_flags, row_flags, flag_targets.Index(({"full_id": o.full_id, "column": o.column, "value": o.value,
-                                                     "source": o.source, "quote": o.quote} for o in observations)))
+                                                     "source": o.source, "quote": o.quote, "set_id": o.set_id}
+                                                    for o in observations),
+                                                   set_labels=[s.set_label for s in ex.structure.experiment_sets]))
     flags_path = None
     if paper_flags or row_flags:
         flags_path = ctx.run_dir / "plausibility_flags.json"
