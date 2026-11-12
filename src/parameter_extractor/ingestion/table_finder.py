@@ -57,7 +57,33 @@ MIN_TABLE_HEIGHT = 18.0     # points below (or above) the caption
 MARGIN = 4.0
 
 
+_WORDS: dict = {}            # (file, size, mtime, page) -> words: a page is parsed once per run, not per use
+
+
+def _page_key(page):
+    import os
+    name = getattr(getattr(page.pdf, "stream", None), "name", None)
+    if not isinstance(name, str) or not os.path.isfile(name):
+        return None
+    st = os.stat(name)
+    return (name, st.st_size, st.st_mtime, page.page_number)
+
+
 def _words(page) -> List[dict]:
+    """The page's words (finding tables, then the second reading of their values: table_grid) -- kept for the
+    process, so a page isn't parsed again (0.5 s on Cleaves2008's table page, before the review window opened)."""
+    key = _page_key(page)
+    if key is not None and key in _WORDS:
+        return [dict(w) for w in _WORDS[key]]
+    words = _read_words(page)
+    if key is not None:
+        if len(_WORDS) > 400:
+            _WORDS.clear()
+        _WORDS[key] = [dict(w) for w in words]
+    return words
+
+
+def _read_words(page) -> List[dict]:
     from parameter_extractor.ingestion.pdf_parser import (MERGED_WORDS_THRESHOLD, TIGHT_X_TOLERANCE,
                                                           _merged_word_ratio)
     words = page.extract_words(keep_blank_chars=False, use_text_flow=False, extra_attrs=["size"])

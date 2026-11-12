@@ -24,7 +24,8 @@ Box = Tuple[float, float, float, float]          # x0, y0, x1, y1 in the crop's 
 _SCI = re.compile(r"(?<![\w.])([-−+]?\d+(?:\.\d+)?)\s*(?:[eE]\s*([-−+]?\d+)|[x×✕·*]\s*10\s*(?:\^|\*\*)?\s*\(?\s*([-−+–]?\s*\d+)\)?)")
 # a power of ten alone: '10-9 M', '10^-9'
 _POWER = re.compile(r"(?<![\w.])10\s*(?:\^|\*\*)\s*\(?([-−+–]?\d+)\)?|(?<![\w.])10([-−–]\d+)(?!\d)")
-_NUMBER = re.compile(r"(?<![A-Za-z\d.])[-−+]?\d+(?:\.\d+)?(?![\d])")
+# not a subscript right after a bracket or a letter ('[Gly]0', 'Gly2'), an exponent or a charge
+_NUMBER = re.compile(r"(?<![A-Za-z\d.\]])[-−+]?\d+(?:\.\d+)?(?![\d])")
 # a number with a unit stuck to it counts as that number ('25°C', '300 °C' read as one word, '5%')
 _WORD_NUMBER = re.compile(r"^[(\[<>~≈±]*([-−+]?\d+(?:\.\d+)?)(?:\s?[°º]\s?[CFK]?|[)\]%,;:*a-z†‡§¶]{0,2})[,;)]?$")
 
@@ -87,6 +88,8 @@ def numbers_in(text: str) -> List[float]:
 def _same(a: float, b: float) -> bool:
     if a == b:
         return True
+    if a == 0 or b == 0:                         # 0 isn't 'close' to 7e-14 (it matched every tiny value: 2026-11-12)
+        return False
     if a and b and (abs(a) < 1e-3 or abs(b) < 1e-3 or abs(a) > 1e6):       # small / large: relative only
         return abs(a - b) <= 1e-6 * max(abs(a), abs(b))
     return abs(a - b) <= 1e-9 * max(1.0, abs(a), abs(b))

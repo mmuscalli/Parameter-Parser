@@ -1194,8 +1194,9 @@ def finish(
     paper_flags += _reuse_flags(ctx)
     paper_flags += stage_flags
     paper_flags += [Flag("assumed_default", m) for m in ex.ambient_notes]
-    paper_flags += _table_check_flags(ex, config)
-    paper_flags += _identity_flags(ex.chemistry, ex.parsed.pages_for_lookup)
+    # the second reading of tables and the identity check don't change the rows: run after the review (it opens ~1 s
+    # sooner -- Mickey, 2026-11-12, the pause after digitizing), their flags put back in this place
+    late_at = len(paper_flags)
     paper_flags += _not_a_compound_flags(ex.chemistry)
     paper_flags += [Flag("unit_conversion", n.message, quote=n.quote or None, source=n.source or None)
                     for n in normalization if n.kind == "unit_corrected"]
@@ -1332,6 +1333,8 @@ def finish(
     unsuggested = [] if config.suggest_new_variables else [g for g in groups if not _always_reviewed(g)]
     shown = [g for g in groups if g not in unsuggested]
     decisions = review(shown, unfound, registry) if (review and (shown or unfound)) else []
+    paper_flags[late_at:late_at] = (_table_check_flags(ex, config)
+                                    + _identity_flags(ex.chemistry, ex.parsed.pages_for_lookup))
     left_out = apply_decisions(rows, groups, decisions, registry)
     conversion_problems += apply_decisions.problems
     paper_flags += [Flag("unit_conversion", p) for p in conversion_problems]

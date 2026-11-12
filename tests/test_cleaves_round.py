@@ -77,6 +77,10 @@ def test_scientific_notation_on_table_images():
     values = numbers_in("25°C, 3×10-4 M 3e-4")                              # one number each, not 3, 10, -4
     assert len(values) == 3 and all(abs(v - 3e-4) < 1e-12 for v in values[:2]) and values[2] == 25.0
     assert numbers_in("10-9 M")[0] == 1e-9 and numbers_in("1.2 x 10^-3") == [0.0012]
+    # a subscript after a bracket isn't a number, and 0 isn't 'equal' to a tiny value (every Table 1 cell was boxed
+    # for '[Gly]0 3×10-4 M' -- 2026-11-12)
+    from parameter_extractor.ingestion.table_locate import _same
+    assert numbers_in("[Gly]0 3×10-4 M") == [numbers_in("3e-4")[0]] and not _same(0.0, 7e-14)
     w = lambda t, x, y=100: Word(t, (x, y, x + 30, y + 20))                    # noqa: E731
     words = [w("3×10", 60), w("−4", 92, 95), w("M", 130), w("7×10−14", 300),       # a raised exponent; one word
              w("3", 500, 200), w("×", 512, 200), w("10−4", 524, 200), w("5×10−14", 300, 200)]
