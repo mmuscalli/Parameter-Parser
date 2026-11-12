@@ -10,7 +10,7 @@
       "table_order": 74,
       "label": "Kinetics",
       "value_type": "number",
-      "description": "rate constants, rates and half-lives of the reactions, activation energies -- one entry per constant, named by the constant and the reaction it describes",
+      "description": "rate constants, reaction orders, half-lives and activation energies, as numbers -- one entry per constant, named by the constant and the reaction it describes (not the experiment)",
       "patterns": [
         "^rate_constant",
         "^half_life",

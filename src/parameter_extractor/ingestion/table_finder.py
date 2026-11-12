@@ -257,7 +257,10 @@ def find_tables(pdf_path: str, pages: List[int], out_dir: Path, supplement: bool
                            "page_label": f"S{c['page_no']}" if supplement else str(c["page_no"]),
                            "caption": c["caption"], "image": str(path),
                            # where it is, for reading its cells (table_grid.py)
-                           "page_no": c["page_no"], "box": list(c["box"]), "caption_box": list(c["caption_box"])})
+                           "page_no": c["page_no"], "box": list(c["box"]), "caption_box": list(c["caption_box"]),
+                           # the crop on the page render (pixels at `scale`): where values are found on it
+                           # (table_locate.py)
+                           "crop_px": [int(v) for v in box], "scale": scale})
         for p in turned:              # landscape page: the whole page, upright, cropped to its content
             img = pdf[p - 1].render(scale=scale, rotation=rotations[p]).to_pil().convert("RGB")
             x0, y0, x1, y1 = _content_box(_ink(img))

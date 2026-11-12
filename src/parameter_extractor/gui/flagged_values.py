@@ -13,7 +13,8 @@ Flagged values (Mickey, 2026-11-11): the review of a run's flagged values in one
   refreshed after.
 - Flags about a column on every row are in a collapsed "On every row" list; "Review all" puts their values in the
   table too (Mickey, 2026-11-11). source_notes is always the last column (it says what the row is).
-- The table / figure image zooms: buttons, Cmd + scroll, pinch.
+- The table / figure image zooms: buttons, Cmd + scroll, pinch. On a saved table, the selected (or hovered) value is
+  boxed where the PDF's text layer has it (ingestion/table_locate.py; local, no model).
 Which cells a flag is about: flag_targets.py.
 """
 from __future__ import annotations
@@ -25,7 +26,7 @@ from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
 from PySide6.QtCore import QEvent, QItemSelection, QItemSelectionModel, QObject, Qt
-from PySide6.QtGui import QBrush, QColor, QPixmap
+from PySide6.QtGui import QBrush, QColor, QPainter, QPen, QPixmap
 from PySide6.QtWidgets import (QAbstractItemView, QCheckBox, QDialog, QDialogButtonBox, QHBoxLayout, QLabel,
                                QLineEdit, QListWidget, QListWidgetItem, QMenu, QMessageBox, QPushButton, QScrollArea,
                                QSplitter, QTableWidget, QTableWidgetItem, QTextBrowser, QToolButton, QVBoxLayout,
@@ -37,6 +38,8 @@ from parameter_extractor import flag_targets as ft
 FLAG_COLOR = QColor(255, 150, 70)          # a flagged value: obvious, readable in light and dark themes
 CHECKED_COLOR = QColor(230, 230, 230)      # a flagged value whose flags are all checked
 CORRECTED_COLOR = QColor(196, 222, 255)    # (as the main window's)
+MARK_PEN = QColor(255, 110, 0)             # a located value on the table image
+MARK_FILL = QColor(255, 214, 0, 90)
 ROW_ID_COLUMNS = ["full_id", "set_id", "sample_id"]
 LAST_COLUMN = "source_notes"               # always shown, last: a short description of the row
 ZOOM_STEPS = (0.25, 0.33, 0.5, 0.67, 0.8, 1.0, 1.25, 1.5, 2.0, 2.5, 3.0, 4.0)
@@ -150,6 +153,9 @@ class FlaggedValuesWindow(QDialog):
         self.table.setSelectionMode(QAbstractItemView.SelectionMode.ExtendedSelection)
         self.table.currentCellChanged.connect(lambda r, c, *_: self._show_cell(r, c))
         self.table.itemChanged.connect(self._edited)
+        self.table.setMouseTracking(True)                # hovering a value boxes it on the table image
+        self.table.cellEntered.connect(lambda r, c: self._hover_cell(self._cell_of(r, c)))
+        self.table.viewport().installEventFilter(self)
         self.table.itemSelectionChanged.connect(self._selection_changed)
         self.table.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         self.table.customContextMenuRequested.connect(self._table_menu)
@@ -170,6 +176,12 @@ class FlaggedValuesWindow(QDialog):
         self.image_scroll = QScrollArea(widgetResizable=True)
         self.image_scroll.setWidget(self.image)
         self.image_path = None
+        self._flag = None                            # the flag whose location is shown
+        self._cell = None                            # the selected value
+        self._hover = None                           # the value under the mouse
+        self._image_entry = None                     # the tables.json entry shown (None: a figure or page)
+        self._boxes: list = []
+        self._table_words: dict = {}
         self.zoom: Optional[float] = None            # None = fit the pane's width
         self._zoom_filter = _ZoomFilter(self)
         self.image_scroll.viewport().installEventFilter(self._zoom_filter)
@@ -325,6 +337,7 @@ class FlaggedValuesWindow(QDialog):
 
     def _show_cell(self, r: int, c: int) -> None:
         cell = self._cell_of(r, c)
+        self._cell = cell
         self._cell_html = self._this_value(cell) if cell else ""
         self.flag_list.blockSignals(True)
         self.flag_list.clear()
@@ -371,46 +384,122 @@ class FlaggedValuesWindow(QDialog):
             parts.append(f"where: {escape(where)}")
         return "<p style='background: rgba(120,120,120,0.12); padding: 4px'>" + "<br>".join(parts) + "</p>"
 
-    def _image_for(self, flag) -> Tuple[Optional[str], str]:
-        """(image path, caption) of the saved table / figure the flag's location names, else its page's render."""
+    def _saved_table(self, text: str):
+        """The tables.json entry of the first saved table `text` names."""
+        for m in _PLACE.finditer(text or ""):
+            if m.group(1).lower().startswith("table"):
+                for t in self.result.tables or []:
+                    if str(t.get("table_id", "")).lower() == f"table {m.group(2)}".lower() and t.get("image") and \
+                            Path(t["image"]).is_file():
+                        return t
+        return None
+
+    def _image_for(self, flag, cell=None) -> Tuple[Optional[str], str, Optional[dict]]:
+        """(image path, caption, tables.json entry) of the saved table the value's own location names, else the saved
+        table / figure the flag's location names, else the flag's page render."""
+        own = self._saved_table((self.cell_info.get(cell) or {}).get("source", "")) if cell else None
+        if own is not None:
+            return own["image"], f"{own['table_id']} (as saved with the run)", own
         if flag is None:
-            return None, ""
+            return None, "", None
         text = " ".join(x for x in (flag.source or "", flag.message or "") if x)
         m = _PLACE.search(text)
         if m:
             kind, number = m.group(1).lower(), m.group(2)
             if kind.startswith("table"):
-                for t in self.result.tables or []:
-                    if str(t.get("table_id", "")).lower() == f"table {number}".lower() and t.get("image") and \
-                            Path(t["image"]).is_file():
-                        return t["image"], f"{t['table_id']} (as saved with the run)"
+                t = self._saved_table(text)
+                if t is not None:
+                    return t["image"], f"{t['table_id']} (as saved with the run)", t
             else:
                 for f in self.result.figures or []:
                     if str(f.get("figure_id", "")).lower() == f"fig. {number}".lower():
                         image = f.get("annotated_image") or f.get("image")
                         if image and Path(image).is_file():
-                            return image, f"{f['figure_id']} (as saved with the run)"
+                            return image, f"{f['figure_id']} (as saved with the run)", None
         if flag.page:
             page = Path(self.result.run_dir) / "page_images" / f"page-{flag.page}.jpg"
             pieces = sorted(page.parent.glob(f"page-{flag.page}*.jpg")) if page.parent.is_dir() else []
             if pieces:
-                return str(pieces[0]), f"page {flag.page} of the paper"
-        return None, ""
+                return str(pieces[0]), f"page {flag.page} of the paper", None
+        return None, "", None
 
     def _show_place(self, flag) -> None:
-        path, caption = self._image_for(flag)
+        self._flag = flag
+        self._refresh_place()
+
+    def _hover_cell(self, cell) -> None:
+        if cell != self._hover:
+            self._hover = cell
+            self._refresh_place()
+
+    def eventFilter(self, obj, event):
+        if obj is self.table.viewport() and event.type() == QEvent.Type.Leave and self._hover is not None:
+            self._hover = None
+            self._refresh_place()
+        return super().eventFilter(obj, event)
+
+    def _refresh_place(self) -> None:
+        cell = self._hover or self._cell
+        path, caption, entry = self._image_for(self._flag, cell)
         self.zoom_bar.setVisible(bool(path))
         if not path:
-            self._pixmap = None
-            self.image_path = None
+            self._pixmap, self.image_path, self._image_entry, self._boxes = None, None, None, []
             self.image.clear()
             self.image_caption.setText("<span style='color:gray'>No saved table or figure for this flag's "
-                                       "location.</span>" if flag is not None else "")
+                                       "location.</span>" if self._flag is not None else "")
             return
-        self.image_caption.setText(f"<b>{escape(caption)}</b>")
-        self.image_path = path
-        self._pixmap = QPixmap(path)
-        self._render_image()
+        if path != self.image_path:
+            self.image_path = path
+            self._pixmap = QPixmap(path)
+        self._image_entry = entry
+        self._boxes, note = self._marks(cell, entry)
+        self.image_caption.setText(f"<b>{escape(caption)}</b>" + (f"<br><span style='color:gray'>{escape(note)}"
+                                                                   f"</span>" if note else ""))
+        self._render_image(scroll=True)
+
+    def _marks(self, cell, entry) -> Tuple[list, str]:
+        """Boxes on the table image for the value `cell` (its own location must be this table), and a note."""
+        if cell is None or entry is None:
+            return [], ""
+        o = self.cell_info.get(cell) or {}
+        if self._saved_table(o.get("source", "")) is not entry:
+            return [], ""
+        words = self._words_of(entry)
+        if words.problem:
+            return [], f"Not marked: {words.problem}."
+        from parameter_extractor.ingestion.table_locate import locate
+        boxes, how = locate(words.words, o.get("extracted_value") or o.get("value", ""), o.get("quote", ""))
+        name = f"{cell[1]} of row {cell[0]}"
+        if not boxes:
+            return [], f"{name}: not found in the table's text layer -- look for it by eye."
+        return boxes, f"{name}: boxed where the table's text has {how}" + \
+            (f" ({len(boxes)} places)" if len(boxes) > 1 else "") + "."
+
+    def _words_of(self, entry):
+        from parameter_extractor.ingestion.table_locate import TableWords
+        key = entry.get("table_id", "")
+        if key not in self._table_words:
+            pdf = self._pdf_for(entry)
+            words = TableWords(pdf, entry) if pdf else None
+            if words is None:
+                from types import SimpleNamespace
+                words = SimpleNamespace(words=[], problem="the paper's PDF isn't where the run read it")
+            self._table_words[key] = words
+        return self._table_words[key]
+
+    def _pdf_for(self, entry) -> Optional[Path]:
+        import json
+        try:
+            pdf = Path(json.loads((Path(self.result.run_dir) / "source.json").read_text()).get("pdf") or "")
+        except (OSError, ValueError):
+            return None
+        if not pdf.is_file():
+            return None
+        if str(entry.get("page_label", "")).startswith("S"):        # a supplement's table: its own PDF
+            from parameter_extractor.ingestion.supplements import find_supplements
+            found = find_supplements(pdf)
+            return found[0] if found else None
+        return pdf
 
     def current_zoom(self) -> float:
         """The zoom in use: 1.0 = the image's own pixels at the screen's logical size."""
@@ -432,16 +521,28 @@ class FlaggedValuesWindow(QDialog):
         else:
             self.set_zoom(next((z for z in reversed(ZOOM_STEPS) if z < now * 0.99), ZOOM_STEPS[0]))
 
-    def _render_image(self) -> None:
+    def _render_image(self, scroll: bool = False) -> None:
         pix = getattr(self, "_pixmap", None)
         if pix is None or pix.isNull():
             return
+        if self._boxes:
+            pix = QPixmap(pix)                        # the saved image stays as it is
+            painter = QPainter(pix)
+            painter.setPen(QPen(MARK_PEN, 3))
+            painter.setBrush(MARK_FILL)
+            for x0, y0, x1, y1 in self._boxes:
+                painter.drawRect(int(x0) - 4, int(y0) - 3, int(x1 - x0) + 8, int(y1 - y0) + 6)
+            painter.end()
         zoom = self.current_zoom()
         ratio = self.devicePixelRatioF() or 1.0         # sharp on Retina screens: scaled in device pixels
         scaled = pix.scaledToWidth(max(1, int(pix.width() * zoom * ratio)), Qt.TransformationMode.SmoothTransformation)
         scaled.setDevicePixelRatio(ratio)
         self.image.setPixmap(scaled)
         self.zoom_label.setText(f"{zoom:.0%}" + (" (fit width)" if self.zoom is None else ""))
+        if scroll and self._boxes:                    # the first mark in view (zoomed in, it can be off-screen)
+            x0, y0, x1, y1 = self._boxes[0]
+            self.image.adjustSize()
+            self.image_scroll.ensureVisible(int((x0 + x1) / 2 * zoom), int((y0 + y1) / 2 * zoom), 120, 80)
 
     def resizeEvent(self, event) -> None:
         super().resizeEvent(event)

@@ -65,6 +65,9 @@ class StageParameter(BaseModel):
     # case-insensitively to these spellings; anything else is left out and reported
     choices: Optional[List[str]] = None
     integer: bool = False           # a count (cycle_number): written as a whole number
+    # a text parameter the model sometimes lists among `other` instead (kinetics: 'rate law for ...' is kinetic_model):
+    # regexes on the `other` entry's name; a match becomes this parameter (reroute_other). Not sent to the model.
+    other_names: List[str] = Field(default_factory=list)
 
 
 class StageTrigger(BaseModel):
@@ -1062,3 +1065,34 @@ def toggleable_stages(pack=None) -> List[StageToggle]:
         if pack.uses(name):
             out.append(StageToggle(name, label, description, False))
     return out
+
+
+def reroute_other(spec: "StageSpec", result) -> int:
+    """`other` entries that are really one of the step's text parameters (StageParameter.other_names) become that
+    parameter, where the answer has no value for it for the same experiments (Mickey, 2026-11-12: eder1994's kinetics
+    step put 'rate law for diglycine formation' among `other`, where it was offered as a new column, instead of in
+    kinetic_model). Entries for which a value is already given stay in `other` (reviewed as before). Returns how
+    many were moved."""
+    targets = [(p, [re.compile(x, re.IGNORECASE) for x in p.other_names]) for p in spec.parameters
+               if p.other_names and p.kind == "text"]
+    if result is None or not targets or not getattr(result, "other", None):
+        return 0
+    from parameter_extractor.calculators.ambient import _row
+    Item, _ = spec.models()
+    rows = list(getattr(result, "rows", []))
+    given = {(r.set_label, getattr(r, "sample_label", ""), v.parameter) for r in rows for v in r.values}
+    kept, moved = [], 0
+    for o in result.other:
+        param = next((p for p, pats in targets if any(x.search(o.name or "") for x in pats)), None)
+        where = (o.set_label or "", getattr(o, "sample_label", "") or "")
+        if param is None or not (o.value or "").strip() or (*where, param.column) in given \
+                or ("", "", param.column) in given:
+            kept.append(o)
+            continue
+        _row(result, *where).values.append(Item.model_validate({
+            "col": param.column, "v": 0, "u": "", "txt": o.value, "b": "stated", "q": o.quote, "src": o.source,
+            "c": o.confidence, "n": f"listed by the model as '{o.name}'"}))
+        given.add((*where, param.column))
+        moved += 1
+    result.other = kept
+    return moved

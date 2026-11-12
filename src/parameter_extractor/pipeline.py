@@ -587,6 +587,9 @@ def extract_steps(ex: "Extraction") -> "Extraction":
         if pack.uses("ambient_conditions"):     # 'ambient temperature' -> 25 °C, 'ambient pressure' -> 1 bar
             from parameter_extractor.calculators.ambient import apply_ambient
             ex.ambient_notes = [m for spec, result in ex.optional_list for m in apply_ambient(spec, result)]
+        from parameter_extractor.stages.optional import reroute_other
+        for spec, result in ex.optional_list:     # e.g. a rate law listed among `other` -> kinetic_model
+            reroute_other(spec, result)
         _collect_other_parameters(ex)
         ctx.sort_usage(stage_order())
     except BaseException as e:

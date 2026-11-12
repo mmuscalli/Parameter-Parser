@@ -100,6 +100,44 @@ def test_a_quote_that_doesnt_contain_its_value():
     assert len(merged) == 1 and merged[0].kind == "quote_unrelated" and "Medium confidence" in merged[0].message
 
 
+def test_values_are_located_on_table_images():
+    """table_locate (Mickey, 2026-11-12): a cell's value boxed on its table image, from the PDF's text layer -- the
+    value itself ('5.6' printed '5.60'), else the numbers of its quote where they occur together (eder1994 Table 2:
+    '2.50 mol dm-3 80 °C' and '... 87 °C' both print 2.50); exponents and charges are not numbers."""
+    from parameter_extractor.ingestion.table_locate import Word, locate, numbers_in
+    assert numbers_in("Ca2+ 2.50 mol dm-3 80 °C") == [2.5, 80.0]
+    w = lambda text, x, y: Word(text, (x, y, x + 30, y + 20))          # noqa: E731
+    words = [w("2.50", 100, 200), w("mol", 140, 200), w("80", 100, 222), w("2.50", 100, 266), w("87", 100, 288),
+             w("5.60", 300, 222), w("80", 600, 500)]
+    assert locate(words, "5.6", "245.8 5.60") == ([(300, 222, 330, 242)], "the value")
+    boxes, how = locate(words, "2500.0", "2.50 mol dm-3 80 °C")
+    assert how == "the numbers of its quote" and set(boxes) == {(100, 222, 130, 242), (100, 200, 130, 220)}
+    boxes, _ = locate(words, "2500.0", "2.50 mol dm-3 87 °C")
+    assert set(boxes) == {(100, 288, 130, 308), (100, 266, 130, 286)}
+    assert locate(words, "7.1", "7.1") == ([], "")
+
+
+def test_table_crops_save_their_place_and_older_ones_are_found():
+    """New runs save each crop's place on its page (crop_px); for older runs it's found by matching the crop."""
+    if not _have_inputs():
+        return
+    import pypdfium2 as pdfium
+    from PIL import Image
+    from parameter_extractor.ingestion import table_locate as tl
+    from parameter_extractor.ingestion.pdf_parser import render_offset
+    with tempfile.TemporaryDirectory() as tmp:
+        with patch.object(api_client, "_send", _replay_send):
+            result = run_pipeline(PDF, _config(Path(tmp)))
+        entry = next(t for t in result.tables if t.get("crop_px"))
+        doc = pdfium.PdfDocument(str(PDF))
+        page = doc[entry["page_no"] - 1]
+        found = tl._find_crop(page, entry, render_offset(page), entry["scale"], Image.open(entry["image"]))
+        doc.close()
+        assert list(found) == entry["crop_px"][:2]
+        words = tl.TableWords(PDF, entry)
+        assert not words.problem and len(words.words) > 20
+
+
 def test_the_flagged_values_window():
     if not _have_inputs():
         return
@@ -164,6 +202,13 @@ def test_the_flagged_values_window():
         assert t.rowCount() == before_rows
         r, c = next((r, c) for r in range(t.rowCount()) for c in range(t.columnCount())
                     if w._cell_of(r, c) in w.cell_flags)
+        # a value read from a saved table is boxed on its image (selected or hovered)
+        located = next(((fid, col) for (fid, col), o in w.cell_info.items() if w._saved_table(o.get("source", ""))
+                        and col.endswith("%yield")), None)
+        if located:
+            w._hover_cell(located)
+            assert w._boxes and "boxed where the table" in w.image_caption.text()
+            w._hover_cell(None)
         # correcting a flagged value from here
         full_id, column = w._cell_of(r, c)
         if column not in corr.FIXED_COLUMNS and "_mM" in column:

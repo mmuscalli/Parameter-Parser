@@ -130,6 +130,28 @@ def test_compact_answer_format():
     finally:
         packs.activate("prebiotic_chemistry")
 
+def test_a_rate_law_listed_among_other_goes_to_kinetic_model():
+    """Mickey's eder1994 run (2026-11-12): the kinetics step listed 'rate law for diglycine formation' among `other`
+    (offered as a new column) instead of kinetic_model. reroute_other moves it where the step has no value for those
+    experiments; other entries, and entries for which a value is already given, stay."""
+    from parameter_extractor.stages.optional import reroute_other
+    spec = pf.module_step("kinetics")
+    _, Result = spec.models()
+    other = [{"nm": "rate law for diglycine formation", "cat": "kinetics", "v": "d[GG]/dt = k[Gly]^2", "set": "",
+              "q": "d[GG]/dt", "src": "eq. 1", "c": "medium"},
+             {"nm": "k2 GG -> DKP", "cat": "kinetics", "v": "0.01 h-1", "set": "", "q": "k2", "src": "Table 3",
+              "c": "high"}]
+    res = Result.model_validate({"rows": [], "other": other})
+    assert reroute_other(spec, res) == 1 and [o.name for o in res.other] == ["k2 GG -> DKP"]
+    moved = [v for r in res.rows for v in r.values]
+    assert [(v.parameter, v.text) for v in moved] == [("kinetic_model", "d[GG]/dt = k[Gly]^2")]
+    assert "rate law for diglycine formation" in moved[0].note
+    given = Result.model_validate({"rows": [{"set": "", "sample": "", "values": [
+        {"col": "kinetic_model", "v": 0, "u": "", "txt": "pseudo-first-order", "q": "", "src": "", "c": "high"}]}],
+        "other": other})
+    assert reroute_other(spec, given) == 0 and len(given.other) == 2          # already given: left for the review
+
+
 if __name__ == "__main__":
     for name, fn in list(globals().items()):
         if name.startswith("test_") and callable(fn):

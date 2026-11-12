@@ -33,7 +33,7 @@
   "suffix_separator": "_",
   "table_images": true,
   "open_ended": true,
-  "open_ended_hint": "Further rate constants of a model with several reactions (k1, k2, ... or a1, b1, ...): one entry each, named by the constant and what it describes as the paper writes it (e.g. 'k1 Gly -> GlyGly', 'a2 (GG -> DKP)'), value with its unit as printed, category kinetics. Not concentrations or yields (another step records them), not the experimental conditions.",
+  "open_ended_hint": "ONLY further kinetic constants the paper states as numbers -- a model's other rate constants (k1, k2, ... or a1, b1, ...), reaction orders: one entry each. `nm` at most 5 words: the constant and the reaction it describes as the paper writes it (e.g. 'k1 Gly -> GlyGly', 'a2 (GG -> DKP)', 'reaction order in H+') -- never the experiment, cation, salt or system it was measured in (that is `set`), never a comparison. `v` the number with its unit as printed, category kinetics. NOT in `other`: the rate law or kinetic model (that is kinetic_model); yields, equilibrium values or the time to reach them, concentrations (another step records them); statements comparing rates ('faster by a factor of 1.8'); the experimental conditions",
   "parameters": [
     {
       "column": "rate_constant_first_order_per_hr",
@@ -63,13 +63,19 @@
       "column": "rate_constant_reaction",
       "unit": "",
       "kind": "text",
-      "description": "which reaction or species the rate constant / half-life above describes, as the paper names it (at most 10 words), e.g. 'ImpA hydrolysis', 'Gly dimerization'."
+      "description": "which reaction or species the rate constant / half-life above describes, as the paper names it (at most 10 words), e.g. 'ImpA hydrolysis', 'Gly dimerization' -- only for rows that have a rate constant or half-life."
     },
     {
       "column": "kinetic_model",
       "unit": "",
       "kind": "text",
-      "description": "the rate law or model the values come from, briefly (e.g. 'pseudo-first-order fit', 'consecutive reactions A -> B -> C, fitted', 'initial rates')."
+      "description": "the rate law or model the values come from, briefly, as printed (e.g. 'd[GG]/dt = k[Gly]^2', 'pseudo-first-order fit', 'consecutive reactions A -> B -> C, fitted', 'initial rates'). A rate law the paper states goes here even when it gives no rate constant; set '' when it holds for every experiment.",
+      "other_names": [
+        "rate\\s+(law|equation|expression)",
+        "kinetic\\s+(model|scheme|law)",
+        "\\bmechanism\\b",
+        "\\border\\s+of\\s+(the\\s+)?reaction\\b"
+      ]
     }
   ],
   "rules": [
