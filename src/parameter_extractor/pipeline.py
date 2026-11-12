@@ -1396,12 +1396,6 @@ def finish(
         for row in rows:
             for src in row.provenance.values():
                 src.page = ex.parsed.page_label(src.page)
-    flags_path = None
-    if paper_flags or row_flags:
-        flags_path = ctx.run_dir / "plausibility_flags.json"
-        flags_path.write_text(json.dumps(flags_to_json(paper_flags, row_flags),
-                                         indent=2, ensure_ascii=False))
-
     # the long-format record is canonical; the wide template CSV is generated from it
     from parameter_extractor.column_order import ColumnOrder, write_column_list
     chosen = {a["column"]: a.get("category", "") for a in accepted}
@@ -1415,6 +1409,18 @@ def finish(
     write_template_csv(observations_to_records(observations), csv_path, column_categories=chosen, registry=registry)
     # every column of the dataset with its category (the dataset CSV keeps one header row)
     write_column_list(write_template_csv.header, order, ctx.run_dir / f"{ex.paper_id}_columns.csv")
+
+    # flags about exactly the same values become one entry (Mickey, 2026-11-11: BaCl2 of eder1994 flagged twice --
+    # identity inferred, and medium confidence): the strongest reason leads, the others listed under it (flag_targets)
+    from parameter_extractor import flag_targets
+    paper_flags, row_flags = flag_targets.consolidate(
+        paper_flags, row_flags, flag_targets.Index(({"full_id": o.full_id, "column": o.column, "value": o.value,
+                                                     "source": o.source, "quote": o.quote} for o in observations)))
+    flags_path = None
+    if paper_flags or row_flags:
+        flags_path = ctx.run_dir / "plausibility_flags.json"
+        flags_path.write_text(json.dumps(flags_to_json(paper_flags, row_flags),
+                                         indent=2, ensure_ascii=False))
 
     carried = []
     if getattr(config, "resume_from", None):        # W2: the earlier run's corrections and checked marks come along

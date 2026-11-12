@@ -53,6 +53,8 @@ Version: `parameter_extractor.__version__` (0.4.0, tag `v0.4.0`), the one place 
   `resume.py` (resume / rebuild from a run's or queue's saved answers into a NEW folder; CLI --resume / --rebuild).
   `corrections.py` (the reviewer's corrections -> corrections.json + the dataset files; checked marks ->
   flags_checked.json; carried over by rebuild / resume).
+  `flag_targets.py` (which cells a flag is about; flags of different kinds about the same cells merged) and
+  `gui/flagged_values.py` (Things to check > Review flagged values…).
   Pack authoring: `pack_editing.py` (+ `check`), `pack_drafting.py`, `compound_setup.py`, `conventions.py`,
   `pack_modules.py`, `module_drafting.py`, `pack_overview.py`.
 - `gui/`: `main_window.py` (five numbered steps: data pack, papers, what to extract, options, run; results tabs),

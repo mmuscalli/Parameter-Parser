@@ -126,6 +126,11 @@ def load_result(run_dir: Path):
     flags = _json(run_dir / "plausibility_flags.json", notes, "the things to check", {})
     paper_flags = [_flag(d) for d in flags.get("paper_level", [])]
     row_flags = {fid: [_flag(d) for d in fs] for fid, fs in flags.get("rows", {}).items()}
+    if observations.is_file():                    # flags about the same values as one entry (older folders too)
+        from parameter_extractor import flag_targets
+        with open(observations, newline="") as f:
+            paper_flags, row_flags = flag_targets.consolidate(paper_flags, row_flags,
+                                                              flag_targets.Index(csv.DictReader(f)))
 
     known = {f.name for f in fields(StageUsage)}
     usage = [StageUsage(**{k: v for k, v in u.items() if k in known}) for u in summary.get("usage", [])]

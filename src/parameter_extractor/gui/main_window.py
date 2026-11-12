@@ -761,7 +761,15 @@ class MainWindow(QMainWindow):
         flags_top = QWidget()
         ft = QVBoxLayout(flags_top)
         ft.setContentsMargins(0, 0, 0, 0)
-        ft.addWidget(self.unchecked_only_box)
+        flags_row = QHBoxLayout()
+        flags_row.addWidget(self.unchecked_only_box)
+        flags_row.addStretch(1)
+        self.review_flagged_btn = QPushButton("Review flagged values…", clicked=self.review_flagged_values)
+        self.review_flagged_btn.setToolTip("Only the rows with a flagged value, the flagged values highlighted; select "
+                                           "one for its issues and the table or figure it came from, correct it or "
+                                           "tick its flags off.")
+        flags_row.addWidget(self.review_flagged_btn)
+        ft.addLayout(flags_row)
         ft.addWidget(self.flags_tree, 1)
         flags_split.addWidget(flags_top)
         flags_split.addWidget(self.flag_details)
@@ -1801,6 +1809,26 @@ class MainWindow(QMainWindow):
         self._apply_flag_filter()
 
     # ---- W2: corrections and checked marks -------------------------------------------------------------------
+    def review_flagged_values(self) -> None:
+        """Things to check > Review flagged values… (gui/flagged_values.py)."""
+        result = self._shown_result
+        if result is None or not result.csv_path:
+            return
+        from parameter_extractor.gui.flagged_values import FlaggedValuesWindow
+        from parameter_extractor.registry import VariableRegistry
+        try:
+            registry = VariableRegistry(self.registry_path) if self.registry_path else None
+        except Exception:
+            registry = None
+        FlaggedValuesWindow(result, registry, self, on_changed=self._refresh_results).exec()
+
+    def _refresh_results(self) -> None:
+        """After corrections or ticks made elsewhere (the Flagged values window): both tabs again from the files."""
+        if self._shown_result is not None:
+            self._fill_rows(self._shown_result)
+            self._fill_flags(self._shown_result)
+            self._update_flags_title()
+
     def _flag_entries(self):
         tree = self.flags_tree
         for g in range(tree.topLevelItemCount()):
