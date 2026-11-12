@@ -1324,7 +1324,12 @@ def finish(
     paper_flags += [Flag("unit_conversion", p) for p in apply_column_types(rows, registry.builtin_types())]
     held_out = [v for g in left_out for v in g.values]
     paper_flags += [Flag("pass_disagreement", m) for m in disagreement_flags(ctx.vote_notes)]
-    paper_flags += _new_variable_flags([g for g in left_out if g not in unsuggested])
+    # what the user decided in the review ("Don't add", or values unticked) was just checked there: not flagged
+    # again (Mickey, 2026-11-11; the values stay in new_variables.json). Variables nobody decided on -- runs
+    # without a review (CLI, unattended queues) -- are still flagged.
+    seen = set(by_key)
+    paper_flags += _new_variable_flags([g for g in left_out if g not in unsuggested
+                                        and (g.kind, g.alias_name) not in seen])
     if unsuggested:
         paper_flags.append(_unsuggested_flag(unsuggested))
     paper_flags += [Flag("term_not_found", f"You asked for '{t}': the paper doesn't state it "

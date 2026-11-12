@@ -136,6 +136,23 @@ def test_review_decisions_and_registry_memory():
         assert all("earlier review" in a["how"] for a in result2.accepted_variables)
 
 
+def test_variables_declined_in_the_review_are_not_flagged_again():
+    """Mickey, 2026-11-11: what the user just declined in the review isn't repeated in Things to check; what the
+    review didn't decide on still is. The values stay in new_variables.json."""
+    if not PDF.is_file():
+        print(f"SKIP: needs {PDF}"); return
+
+    def review(groups, unfound, registry):
+        return [VariableDecision(g.alias_name, g.kind, "ignore", "") for g in groups if g.name != "Foo"]
+
+    with tempfile.TemporaryDirectory() as tmp:
+        result = _run(Path(tmp), Path(tmp) / "registry.json", review=review)
+        flags = [f for f in result.paper_flags if f.kind == "new_variable"]
+        assert len(flags) == 1 and "'Foo'" in flags[0].message, [f.message for f in flags]
+        record = json.loads((result.run_dir / "new_variables.json").read_text())
+        assert {v["name"] for v in record["left_out"]} == {"RbCl", "Foo", "stirring rate"}
+
+
 def test_term_search_findings_and_not_found_terms():
     if not PDF.is_file():
         print(f"SKIP: needs {PDF}"); return

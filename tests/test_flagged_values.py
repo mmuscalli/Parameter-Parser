@@ -132,6 +132,38 @@ def test_the_flagged_values_window():
         key = item.data(Qt.ItemDataRole.UserRole)[1]
         item.setCheckState(Qt.CheckState.Checked)                  # ticked here = ticked in Things to check
         assert key in corr.load_checked(result.run_dir) and changes      # (the list is rebuilt after a tick)
+        assert cols[-1] == "source_notes"                          # always last: what the row is
+        assert not w.everywhere_list.isVisible() and w.everywhere_row.isVisibleTo(w)   # collapsed by default
+        # the image zooms
+        if w.image_path:
+            w.set_zoom(1.0)
+            first = w.image.pixmap().deviceIndependentSize().width()
+            w.zoom_by(1)
+            assert w.current_zoom() > 1.0 and w.image.pixmap().deviceIndependentSize().width() > first
+            w.set_zoom(None)
+            assert "fit width" in w.zoom_label.text()
+        # Review all: the every-row flags' values in the table; selecting one of them selects its values
+        before_rows = t.rowCount()
+        w.review_all_btn.setChecked(True)
+        assert t.rowCount() >= before_rows and t.rowCount() == len({fid for fid, _ in w.cell_flags})
+        w.everywhere_toggle.setChecked(True)
+        w.everywhere_list.setCurrentRow(0)
+        _flag, _key, _cols, every_cells = w.everywhere[0]
+        selected = {(fid, col) for fid, col, _v in w.selected_cells()}
+        assert selected == {c for c in every_cells if c[1] not in corr.FIXED_COLUMNS}
+        # several values changed at once (a bad value for any column changes nothing)
+        cells = [(row["full_id"], "initial_temperature_C", row["initial_temperature_C"]) for row in w.rows[:3]]
+        assert w.change_cells(cells, "not a number") and not corr.load(result.run_dir)
+        assert not w.change_cells(cells, "2.5", note="checked in Table 1")
+        saved = corr.load(result.run_dir)
+        assert all(saved[(fid, col)].value == "2.5" and saved[(fid, col)].note == "checked in Table 1"
+                   for fid, col, _v in cells)
+        w.revert_cells(cells)
+        assert not corr.load(result.run_dir)
+        w.review_all_btn.setChecked(False)
+        assert t.rowCount() == before_rows
+        r, c = next((r, c) for r in range(t.rowCount()) for c in range(t.columnCount())
+                    if w._cell_of(r, c) in w.cell_flags)
         # correcting a flagged value from here
         full_id, column = w._cell_of(r, c)
         if column not in corr.FIXED_COLUMNS and "_mM" in column:
