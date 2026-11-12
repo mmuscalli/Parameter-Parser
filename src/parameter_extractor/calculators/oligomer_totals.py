@@ -41,7 +41,7 @@ def fill_oligomer_totals(rows: List[ExtractedRow]):
     for row in rows:
         record = row_to_template_dict(row)
         oligos = {c: v for c, v in record.items() if c.startswith("sampled_") and is_oligonucleotide_column(c)
-                  and "_avg_" not in c and v not in (None, "")}
+                  and "_avg_" not in c and not re.search(r"_(?:log10|ln)_", c) and v not in (None, "")}
         if not oligos:
             continue
         parts = {c: v for c, v in oligos.items() if c.endswith("_%yield") and isinstance(v, (int, float))

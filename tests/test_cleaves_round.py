@@ -85,6 +85,52 @@ def test_scientific_notation_on_table_images():
     assert boxes == [(300, 200, 330, 220)]
 
 
+def test_log_valued_axes_get_their_own_column():
+    """Cleaves2008 Fig. 2 ('Log % yield'): plotted logarithms go in '<name>_log10_<unit>' as plotted (Mickey: their own
+    column; converting is left to the user) -- from the plan's `log_values`, the axis title, or the digitizer's box;
+    a unit multiplier becomes an offset; not counted as yields; known with the yield column; unit 'log10(%)'."""
+    from types import SimpleNamespace as N
+    from parameter_extractor.ingestion.figure_rows import build_figure_rows
+    from parameter_extractor.ingestion.flatten_to_template import log_base, row_to_template_dict, with_log
+    from parameter_extractor.ingestion.observations import observed_unit, unit_for_column
+    from parameter_extractor.registry import VariableRegistry
+    from parameter_extractor.schemas.figures import (AxisCalibration, AxisVariable, CalibrationPoint, DigitizedFigure,
+                                                     DigitizedPanel, DigitizedPoint, DigitizedSeries)
+    from parameter_extractor.schemas.methodology import empty_methodology
+    from parameter_extractor.schemas.paper_metadata import PaperMetadata
+    title = lambda label, **k: N(label=label, log_values=k.get("plan", False), log_values_set=k.get("user"))  # noqa
+    assert log_base(title("Log % yield or log % recovery")) == "log10" and log_base(title("ln k")) == "ln"
+    assert log_base(title("Yield (%) (log scale)")) == "" and log_base(title("% yield")) == ""
+    assert log_base(title("Q", plan=True)) == "log10" and log_base(title("Log % yield", user=False)) == ""
+    assert with_log("sampled_Gly-Gly_aq_%yield") == "sampled_Gly-Gly_aq_log10_%yield"
+    packs.activate("prebiotic_chemistry")
+    reg = VariableRegistry(None, pack="prebiotic_chemistry")
+    assert reg.is_known_column("sampled_Gly-Gly_aq_log10_%yield")
+    assert unit_for_column("sampled_Gly-Gly_aq_log10_%yield") == "%"           # conversions: the column's unit
+    assert observed_unit("sampled_Gly-Gly_aq_log10_%yield") == "log10(%)"      # the observations file says what it is
+    cal = lambda a, b, lo, hi: AxisCalibration(p1=CalibrationPoint(px=a[0], py=a[1], value=lo),  # noqa: E731
+                                               p2=CalibrationPoint(px=b[0], py=b[1], value=hi))
+    panel = DigitizedPanel(x_cal=cal((0, 100), (100, 100), 0, 10), y_cal=cal((0, 100), (0, 0), -3, 2),
+                           x=AxisVariable(label="time (h)", column="duration_hr"),
+                           y=AxisVariable(label="Log % yield", column="sampled_Gly-Gly_aq_%yield"))
+    conc = DigitizedPanel(x_cal=cal((0, 100), (100, 100), 0, 10), y_cal=cal((0, 100), (0, 0), -3, 2),
+                          x=AxisVariable(label="time (h)", column="duration_hr"),
+                          y=AxisVariable(label="Gly2 (M)", column="sampled_Gly-Gly_aq_mM", multiplier=1000,
+                                         log_values=True))
+    fig = DigitizedFigure(figure_id="Fig. 2", number=2, page=5, caption="c", render_scale=1.0, page_image="",
+                          panels=[panel, conc], series=[
+                              DigitizedSeries(label="gly2", points=[DigitizedPoint(px=20, py=20)]),
+                              DigitizedSeries(label="gly2 conc", panel=1, points=[DigitizedPoint(px=20, py=20)])])
+    meta = PaperMetadata(paper_id="p", paper_title="t", authors=["A"], year_published=2008, journal_published="j")
+    rows, problems, _ = build_figure_rows([fig], meta, empty_methodology("p"), "001", 1, 1, registry=reg)
+    a, b = (row_to_template_dict(r) for r in rows)
+    assert a.get("sampled_Gly-Gly_aq_log10_%yield") == 1.0 and "sampled_Gly-Gly_aq_%yield" not in a
+    assert b.get("sampled_Gly-Gly_aq_log10_mM") == 4.0                         # log10 of M + 3 = log10 of mM
+    from parameter_extractor.calculators.peptide_totals import fill_total_peptide_yield
+    fill_total_peptide_yield(rows)
+    assert "total_sampled_peptides_yield" not in row_to_template_dict(rows[0])
+
+
 def _window(tmp):
     from PySide6.QtWidgets import QApplication
     app = QApplication.instance() or QApplication([])

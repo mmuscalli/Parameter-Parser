@@ -166,6 +166,13 @@ def test_cancel_between_stages():
             pass  # ...and the run stops before the next stage starts
         else:
             raise AssertionError("expected RunCancelledError")
+        # steps already running finish in the background (Cancel doesn't wait for a request): let them write their
+        # files before the folder is removed -- deleting it under them failed the test now and then (2026-11-12)
+        import time
+        deadline = time.time() + 15
+        while time.time() < deadline and any(th.name.startswith("ThreadPoolExecutor") and th.is_alive()
+                                             for th in threading.enumerate()):
+            time.sleep(0.05)
 
 
 def test_refusal_and_truncation_become_named_errors():

@@ -96,6 +96,14 @@ def unit_slug_suffix(column: str) -> str:
     return ""
 
 
+def observed_unit(column: str) -> str:
+    """The unit written beside a value in the observations file: the column's, or 'log10(%)' for a column of
+    logarithms ('..._log10_%yield', a 'Log % yield' axis; 2026-11-12). Conversions keep using unit_for_column."""
+    m = re.search(r"_(log10|ln)(?=_|$)", column)
+    unit = unit_for_column(column)
+    return f"{m.group(1)}({unit})" if m and unit else (m.group(1) if m else unit)
+
+
 def unit_for_column(column: str) -> str:
     if column.startswith("analysis_"):            # instrument settings: the unit is the column's last slot
         from parameter_extractor.analysis_vocab import unit_for_column as analysis_unit
@@ -124,7 +132,7 @@ def rows_to_observations(rows: List[ExtractedRow]) -> List[Observation]:
             src = row.provenance.get(column)
             out.append(Observation(
                 full_id=row.full_id, set_id=row.set_id, sample_id=row.sample_id,
-                entry_number=row.entry_number, column=column, value=value, unit=unit_for_column(column),
+                entry_number=row.entry_number, column=column, value=value, unit=observed_unit(column),
                 origin=src.origin if src else ("pipeline" if column in _PIPELINE_COLUMNS else ""),
                 source=src.source if src else "", quote=src.quote if src else "",
                 page=src.page if src and src.page else "",

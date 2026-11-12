@@ -107,6 +107,14 @@ class AxisVariable(BaseModel):
                                                          "names): `column` is the column the category itself "
                                                          "goes in (e.g. 'solid_material_name'), and each series "
                                                          "gives its category as a condition in that column.")
+    # Mickey, 2026-11-12 (Cleaves2008 Fig. 2, 'Log % yield'): plotted values that are LOGARITHMS go in their own
+    # '<name>_log10_<unit>' column as plotted -- not into the yield column, not converted
+    log_values: bool = Field(default=False, description="True when the plotted values are LOGARITHMS of the "
+                                                        "quantity (axis titled 'Log % yield', 'log [Gly]', 'log k'); "
+                                                        "`column` is still the quantity's own column -- the app stores "
+                                                        "the logarithms in a column of their own. False for an axis "
+                                                        "that is only drawn on a log scale (ticks 1, 10, 100).")
+    log_values_set: SkipJsonSchema[Optional[bool]] = None   # the user's choice in the digitizer (None: as planned / title)
     # the user's rounding in the digitizer (values snap to this many decimals); not the model's
     decimals: SkipJsonSchema[Optional[int]] = None
     # ... and a value within this many pixels of a whole number becomes that whole number (0 = off): bars ending

@@ -171,6 +171,35 @@ def with_average(column: str) -> str:
     return _with_marker(column, "_avg")
 
 
+# an axis title saying its values are logarithms: 'Log % yield', 'log [Gly]', 'log10(k)', 'ln k' -- not 'yield (log scale)'
+_LOG_TITLE = re.compile(r"^\s*(?:log\s*10|log|lg)\b|\blog\s*10?\s*[\[(%]", re.IGNORECASE)
+_LN_TITLE = re.compile(r"^\s*ln\b|\bln\s*[\[(]")
+_LOG_SCALE = re.compile(r"\blog(?:arithmic)?\s+scale\b", re.IGNORECASE)
+
+
+def log_base(axis) -> str:
+    """'log10' / 'ln' when an axis's plotted values are logarithms (the user's digitizer choice, else the plan's
+    `log_values`, else its title), '' otherwise."""
+    label = getattr(axis, "label", "") or ""
+    chosen = getattr(axis, "log_values_set", None)
+    if chosen is False or (chosen is None and not getattr(axis, "log_values", False) and
+                           (_LOG_SCALE.search(label) or not (_LOG_TITLE.search(label) or _LN_TITLE.search(label)))):
+        return ""
+    return "ln" if _LN_TITLE.search(label) else "log10"
+
+
+def with_log(column: str, base: str = "log10") -> str:
+    """The column for the LOGARITHMS of what `column` holds: '_log10' (or '_ln') just before the unit
+    ('sampled_Gly-Gly_aq_%yield' -> 'sampled_Gly-Gly_aq_log10_%yield')."""
+    if not column or re.search(r"(?:^|_)(?:log10|ln)(?:_|$)", column):
+        return column
+    return _with_marker(column, "_" + base)
+
+
+def without_log(column: str) -> str:
+    return re.sub(r"_(?:log10|ln)(?=_|$)", "", column, count=1)
+
+
 def with_range(column: str, unit: str = "") -> str:
     """The column for a RANGE of what `column` holds (Mickey, 2026-10-31): '_range' just before the unit
     ('solid_material_mass_g' -> 'solid_material_mass_range_g'); the cell holds 'low:high'."""

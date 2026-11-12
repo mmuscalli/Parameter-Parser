@@ -18,11 +18,12 @@ hand in the digitizer) is a new variable: its values are held out of the CSV
 and returned as NewVariable records, like any other unaccepted variable.
 """
 from __future__ import annotations
+import math
 import re
 from typing import List, Optional, Tuple
 
 from parameter_extractor.ingestion.data_location import COLUMN as DATA_LOCATION, location
-from parameter_extractor.ingestion.flatten_to_template import with_average
+from parameter_extractor.ingestion.flatten_to_template import log_base, with_average, with_log
 from parameter_extractor.digitizing.calibration import is_categorical, pixel_to_data, pixel_to_y, rounded
 from parameter_extractor.ingestion.flatten_to_template import (
     FIELD_TO_TEMPLATE, UNRECOGNIZED_SUFFIX, resolve_template_column, set_row_value, current_column_name,
@@ -317,10 +318,25 @@ def build_figure_rows(
                     y_axis = y_axis.model_copy(update={"column": with_average(y_axis.column)})
                 if getattr(x_axis, "average", False) and x_axis.column:
                     x_axis = x_axis.model_copy(update={"column": with_average(x_axis.column)})
+                # plotted LOGARITHMS ('Log % yield', Cleaves2008 Fig. 2) go in their own '<name>_log10_<unit>' column,
+                # as plotted; a unit multiplier becomes an offset (log10 of mol dm-3 -> of mM: + 3)
+                offsets = {}
+                for name in ("x", "y"):
+                    ax = y_axis if name == "y" else x_axis
+                    base = log_base(ax)
+                    if base and ax.column:
+                        offsets[name] = (math.log10(ax.multiplier) if base == "log10" else math.log(ax.multiplier)) \
+                            if ax.multiplier > 0 else 0.0
+                        ax = ax.model_copy(update={"column": with_log(ax.column, base), "multiplier": 1.0})
+                        if name == "y":
+                            y_axis = ax
+                        else:
+                            x_axis = ax
                 # a category axis has no number: its value is the series' category (below)
                 errors = _error_bar(pt, y, to_data, y_axis)
                 for axis, value in ([(y_axis, y)] if categorical else [(x_axis, x), (y_axis, y)]):
-                    value = round(rounded(value, getattr(axis, "decimals", None)) * axis.multiplier, 6)
+                    offset = offsets.get("y" if axis is y_axis else "x", 0.0)
+                    value = round(rounded(value, getattr(axis, "decimals", None)) * axis.multiplier + offset, 6)
                     read = CellSource(origin=f"{fig.figure_id} (digitized)", confidence=DIGITIZED,
                                       source=f"{where}, point {sample_idx} (page {fig.page_label or fig.page}), read off axis "
                                              f"'{axis.label}'"

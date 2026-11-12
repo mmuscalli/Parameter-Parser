@@ -18,6 +18,7 @@ reports only some lengths, the total covers only those (the provenance says
 which).
 """
 from __future__ import annotations
+import re
 from typing import List
 
 from parameter_extractor.ingestion.flatten_to_template import row_to_template_dict, set_row_value
@@ -26,6 +27,7 @@ from parameter_extractor.schemas.common import CONFIDENCE_ORDER
 from parameter_extractor.schemas.row_schema import CellSource, ExtractedRow
 
 TOTAL_COLUMN = "total_sampled_peptides_yield"
+_LOG = re.compile(r"_(?:log10|ln)_")             # logarithms of a yield (a "Log % yield" axis) are not yields
 CHECK_TOLERANCE = 0.05          # percentage points: the papers' own rounding
 
 
@@ -41,7 +43,7 @@ def fill_total_peptide_yield(rows: List[ExtractedRow]):
     for row in rows:
         record = row_to_template_dict(row)
         parts = {c: v for c, v in record.items()
-                 if c.startswith("sampled_") and c.endswith("_%yield") and "_avg_" not in c and is_peptide_column(c)
+                 if c.startswith("sampled_") and c.endswith("_%yield") and "_avg_" not in c and not _LOG.search(c) and is_peptide_column(c)
                  and isinstance(v, (int, float))}
         if not parts:
             continue
@@ -49,7 +51,7 @@ def fill_total_peptide_yield(rows: List[ExtractedRow]):
         listed = " + ".join(f"{c.removeprefix('sampled_').removesuffix('_%yield').removesuffix('_aq')} {v:g}"
                             for c, v in parts.items())
         unquantified = [c.removeprefix("sampled_").removesuffix("_%yield").removesuffix("_aq") for c, v in record.items()
-                        if c.startswith("sampled_") and c.endswith("_%yield") and "_avg_" not in c and is_peptide_column(c)
+                        if c.startswith("sampled_") and c.endswith("_%yield") and "_avg_" not in c and not _LOG.search(c) and is_peptide_column(c)
                         and isinstance(v, str) and v]            # 'detected': not in the sum
         if unquantified:
             listed += f" (also detected without an amount, not counted: {', '.join(unquantified)})"

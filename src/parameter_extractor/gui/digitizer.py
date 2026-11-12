@@ -464,6 +464,14 @@ class DigitizerWidget(QWidget):
             h.addWidget(combo, 1)
             h.addWidget(QLabel("×"))
             h.addWidget(mult)
+            logv = QCheckBox("log values")
+            logv.setToolTip("The plotted values are logarithms (an axis titled 'Log % yield', 'log [Gly]'): they are "
+                            "stored as plotted, in a column of their own ('..._log10_...'), not in the column above. "
+                            "Not for an axis that is only drawn on a log scale (use 'log scale' above for that).")
+            logv.toggled.connect(lambda on, a=axis: self._on_log_values(a, on))
+            h.addWidget(logv)
+            self.log_value_boxes = getattr(self, "log_value_boxes", {})
+            self.log_value_boxes[axis] = logv
             self.var_widgets[axis] = (combo, mult)
             hint = _muted("")
             hint.setWordWrap(True)
@@ -729,6 +737,7 @@ class DigitizerWidget(QWidget):
                 if "columns" in parts:
                     b.column, b.store, b.multiplier = a.column, a.store, a.multiplier
                     b.new_column, b.average = a.new_column, a.average
+                    b.log_values, b.log_values_set = a.log_values, a.log_values_set
                 if "log" in parts:
                     getattr(p, f"{axis}_cal").log = getattr(src, f"{axis}_cal").log
             if "categories" in parts:
@@ -1088,6 +1097,8 @@ class DigitizerWidget(QWidget):
             combo, mult = self.var_widgets[axis]
             combo.setCurrentText(var.column or ("" if var.store else NONE_COLUMN))
             mult.setText(_fmt(var.multiplier))
+            from parameter_extractor.ingestion.flatten_to_template import log_base
+            self.log_value_boxes[axis].setChecked(bool(log_base(var)))
             self.cal_edits[(axis, "round")].setCurrentIndex(
                 next((i for i, (_, d, w) in enumerate(ROUND_CHOICES)
                       if d == var.decimals and w == getattr(var, "whole_within_px", 0.0)), 0))
@@ -1095,11 +1106,22 @@ class DigitizerWidget(QWidget):
         self.cal_edits[("x", "categories")].setChecked(bool(p.x.categorical))
         self._updating = False
 
+    def _on_log_values(self, axis: str, on: bool) -> None:
+        if self._updating:
+            return
+        getattr(self.panel, axis).log_values_set = bool(on)
+        self._update_column_hint(axis)
+        self.changed.emit()
+
     def _update_column_hint(self, axis: str) -> None:
+        from parameter_extractor.ingestion.flatten_to_template import log_base, with_log
         var: AxisVariable = getattr(self.panel, axis)
         hint = ""
+        base = log_base(var)
+        if base and var.column:
+            hint = f"Logarithms: stored as plotted in '{with_log(var.column, base)}'. "
         if var.column and var.column not in self.columns:
-            hint = "New variable: offered in the review at the end (accept it there)."
+            hint += "New variable: offered in the review at the end (accept it there)."
         elif not var.column and not (axis == "x" and var.categorical):
             from parameter_extractor.ingestion.figure_rows import axis_column_from_label
             hint = ("Not stored." if not var.store or not var.label else

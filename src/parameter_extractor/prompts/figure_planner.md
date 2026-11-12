@@ -28,7 +28,10 @@ Return a FigurePlan:
     (read them carefully from the image -- they place the calibration
     markers). `multiplier` converts axis values to the column's unit (e.g.
     an axis labelled "10^3 x Q" feeding a column for Q -> 0.001). Note log
-    axes as `scale: "log"`.
+    axes as `scale: "log"`. An axis whose plotted VALUES are logarithms
+    ("Log % yield", "log [Gly]", "log k"): `log_values` true, `column` the
+    quantity's own column (e.g. the % yield column), `multiplier` as for the
+    quantity itself -- the app keeps the logarithms in a column of their own.
   - `series`: one per distinguishable data set (marker, line style, or
     labelled point group), using the legend or caption to identify it. If a
     series is the same object or experiment as a set in the structure plan

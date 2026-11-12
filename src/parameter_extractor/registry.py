@@ -273,6 +273,11 @@ class VariableRegistry:
         m = re.fullmatch(r"(.+)_err_(?:plus|minus)", column)
         if m and self.is_known_column(m.group(1)):
             return True
+        # the logarithms of a known quantity ('<name>_log10_<unit>': a 'Log % yield' axis, 2026-11-12)
+        if re.search(r"_(?:log10|ln)(?:_|$)", column):
+            from parameter_extractor.ingestion.flatten_to_template import without_log
+            if (base := without_log(column)) != column and self.is_known_column(base):
+                return True
         # a range of a known quantity ('<name>_range_<unit>', 'low:high') is the same variable (2026-10-31)
         if "_range" in column:
             from parameter_extractor.ingestion.flatten_to_template import without_range
