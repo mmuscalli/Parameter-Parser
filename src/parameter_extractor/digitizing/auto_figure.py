@@ -27,14 +27,18 @@ AUTO_DECIMALS = 2
 
 # ---- the model's suggestions -> the figure's coordinate systems and series ------------------------------------
 
-def fill_concentrations(series: List[DigitizedSeries], found) -> None:
+def fill_concentrations(series: List[DigitizedSeries], found) -> List[str]:
     """Fill each series' species that have no concentration from the plan's list of
     concentrations found in the paper (converted to mM here, never by the model);
-    adds the species if the series doesn't list it yet."""
+    adds the species if the series doesn't list it yet. Returns what couldn't be used (not converted to mM) --
+    before 2026-11-12 those were dropped without a word (Cleaves2008's '10^-1 M')."""
     from parameter_extractor.units import to_column_unit
+    skipped = []
     for c in found:
         conv = to_column_unit(c.value, None, "mM")
         if conv is None:
+            skipped.append(f"{c.species} '{c.value}' ({', '.join(c.series) or 'every series'}): not a "
+                           f"concentration the app can put in mM -- enter it in the series' composition")
             continue
         labels = {l.strip().lower() for l in c.series}
         for s in series:
@@ -52,6 +56,7 @@ def fill_concentrations(series: List[DigitizedSeries], found) -> None:
             else:
                 s.initial_species.append(SpeciesAmount(name=c.species, concentration_mM=conv.value,
                                                        basis=c.basis, source=source))
+    return skipped
 
 
 def with_shared(own: list, shared: list) -> list:

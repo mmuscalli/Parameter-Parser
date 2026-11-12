@@ -125,3 +125,4 @@ current month's file (start `YYYY-MM.md` in a new month), with one line here.
 - One row per x value; a failed dataset build no longer hangs the run (2026-11-12, Mickey's Cleaves2008 Fig. 2)
 - Automatic points: diamonds with error bars, touching markers, letter-spaced tick numbers (2026-11-12, Mickey's Cleaves2008 Fig. 2)
 - Shared methods filled in; tables without a text layer read by text recognition (2026-11-12, Mickey's latest Cleaves2008 run)
+- Figure concentrations written as powers of ten; rows marked measured or calculated (2026-11-12, Mickey's Cleaves2008 run)

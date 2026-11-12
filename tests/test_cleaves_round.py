@@ -372,6 +372,34 @@ def test_table_images_without_text_are_read_by_text_recognition():
         assert locate(words.words, "300.0", "300°C")[0]
 
 
+def test_rows_say_whether_their_results_are_measured_or_calculated():
+    """result_basis per row (Mickey: Cleaves2008 Table 1 is a model's equilibrium values): 'measured' for sampled_
+    results, 'calculated' for calculated_ ones or a set described as calculated -- whose sampled_ values then move to
+    calculated_ columns (flagged); nothing on a row without results."""
+    from parameter_extractor.calculators.result_basis import apply_result_basis, says_calculated
+    from parameter_extractor.ingestion.flatten_to_template import row_to_template_dict
+    from parameter_extractor.schemas.row_schema import ExtractedRow
+    assert says_calculated("Calculated equilibrium peptide concentrations, 25/300 C")
+    assert says_calculated("Table 1 Calculated equilibrium concentrations (M)")
+    assert not says_calculated("Yields calculated from the HPLC peak areas")       # a measured yield, worked out
+    base = dict(set_type="Independent", paper_title="t", authors=[], year_published=2008, journal_published="j",
+                experiment_type="Batch", solution_type="Wet")
+    row = lambda sid, i, extra, **k: ExtractedRow(full_id=f"{sid}00{i}", set_id=sid, sample_id=f"00{i}",  # noqa
+                                                  entry_number=i, extra=extra, **base, **k)
+    rows = [row("001001", 1, {"sampled_Gly-Gly_aq_%yield": 2.0}),
+            row("001002", 1, {"calculated_Gly-Gly_aq_mM": 7e-11}),
+            row("001003", 1, {"sampled_Gly-Gly_aq_mM": 5e-11, "data_location": "Table. 1"}),
+            row("001004", 1, {"initial_Gly_aq_mM": 100.0})]
+    flags = apply_result_basis(rows, ["glycine 0.1 M, 20 min", "model", "Gly at 25 C"],
+                               {"Table. 1": "Table 1 Calculated equilibrium concentrations (M)"})
+    basis = [r.extra.get("result_basis") for r in rows]
+    assert basis == ["measured", "calculated", "calculated", None]
+    third = row_to_template_dict(rows[2])
+    assert third.get("calculated_Gly-Gly_aq_mM") == 5e-11 and "sampled_Gly-Gly_aq_mM" not in third   # moved
+    assert len(flags) == 1 and "moved to calculated_ columns" in flags[0].message and "001003001" in flags[0].message
+    assert rows[0].provenance["result_basis"].origin == "calculated"
+
+
 if __name__ == "__main__":
     for name, fn in list(globals().items()):
         if name.startswith("test_") and callable(fn):

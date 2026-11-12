@@ -1401,6 +1401,11 @@ def finish(
                     f"max_oligomer_length_nt for {len(o_lengths)} row(s) as the longest oligomer with a value"
                     if o_lengths else "") if x)
                 + ". Rows where the paper states them keep the stated values; hover a value to see what was used."))
+    if pack.uses("result_basis"):                # measured or calculated, per row (calculators/result_basis.py)
+        from parameter_extractor.calculators.result_basis import apply_result_basis
+        from parameter_extractor.ingestion.data_location import location
+        captions = {location(t.get("table_id", "")): t.get("caption", "") for t in (ex.tables or [])}
+        paper_flags += apply_result_basis(rows, [s.set_label for s in ex.structure.experiment_sets], captions)
     if config.fill_shared_values and pack.manifest.shared_columns:   # methods every experiment shares (2026-11-12)
         from parameter_extractor.calculators.shared_values import fill_shared
         from parameter_extractor.column_order import ColumnOrder

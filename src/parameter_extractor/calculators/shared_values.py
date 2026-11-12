@@ -19,7 +19,7 @@ from parameter_extractor.schemas.row_schema import CellSource, ExtractedRow
 from parameter_extractor.validation.plausibility_checks import Flag
 
 _RESULT = re.compile(r"^(?:total_sampled_|sampled_.+_(?:aq|gas|s)(?:_[a-z0-9]+)*_)")
-_NEVER = {"set_type", "full_id", "set_id", "sample_id", "entry_number", "data_location", "original_data_reference",
+_NEVER = {"set_type", "result_basis", "full_id", "set_id", "sample_id", "entry_number", "data_location", "original_data_reference",
           "source_notes", "extraction_confidence", "yield_below_threshold_note"}
 _COMPOUND = re.compile(r"^(?:initial|sampled|stock|calculated|added)_")
 

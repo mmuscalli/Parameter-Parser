@@ -38,6 +38,8 @@ CALCULATIONS = {
     "peptide_totals": ("Total peptide yield per row (the sum of the peptide yields).", "chemistry"),
     "oligomer_totals": ("Total nucleic-acid oligomer yield and the longest oligomer per row.", "chemistry"),
     "water_type": ("Solvent named as a water type ('water' -> distilled water, flagged).", ""),
+    "result_basis": ("Each row marked measured or calculated (result_basis): from its result columns and how its set "
+                     "is described.", "chemistry"),
     "ambient_conditions": ("'Ambient' temperature / pressure -> 25 °C / 1 bar.", ""),
     "atmospheric_start": ("A sealed batch experiment starts at 1 bar unless stated.", ""),
     "results_check": ("Flags a paper with no measured results (columns starting 'sampled_').", ""),
@@ -49,7 +51,7 @@ CALCULATIONS = {
 # the built-in step each calculation was written alongside: the editor lists those of the area's steps first and
 # the rest under "Other calculations" (2026-11-05)
 CALCULATION_STEP = {**{n: "chemistry" for n in ("normalize_species", "mixing", "molar_ratios", "amounts",
-                                                "peptide_totals", "oligomer_totals", "water_type", "ambient_conditions",
+                                                "peptide_totals", "oligomer_totals", "water_type", "result_basis", "ambient_conditions",
                                                 "atmospheric_start", "results_check")},
                     **{n: "fit_models" for n in ("row_labels", "exoplanet_masses", "reference_names",
                                                  "archive_validation")}}
@@ -62,6 +64,7 @@ CALCULATION_NEEDS = {
     "peptide_totals": "Peptide %yield columns (chemistry step).",
     "oligomer_totals": "Oligonucleotide %yield / length columns (chemistry step).",
     "water_type": "A solvent_name column.",
+    "result_basis": "Result columns (sampled_ / calculated_) from the chemistry step.",
     "ambient_conditions": "initial_temperature_C / sampled_temperature_C / initial_pressure_bar columns in a step.",
     "atmospheric_start": "experiment_type, vessel_sealed and initial_pressure_bar columns.",
     "results_check": "Result columns starting 'sampled_' or 'total_sampled_'.",

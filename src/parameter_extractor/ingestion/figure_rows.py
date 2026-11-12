@@ -217,6 +217,14 @@ def build_figure_rows(
 
     for fig in figures:
         fig_start, fig_vars_start, fig_set, fig_entry = len(rows), len(new_vars), set_idx, entry
+        # the suggestions' starting concentrations for series that list none (Cleaves2008 Fig. 2: '10^-1 M' wasn't
+        # read when the figure was digitized, so its series had no glycine) -- a series' own composition is kept
+        if fig.plan is not None and fig.plan.concentrations and any(not s.initial_species for s in fig.series):
+            from parameter_extractor.digitizing.auto_figure import fill_concentrations
+            bare = [s.model_copy(deep=True) if not s.initial_species else None for s in fig.series]
+            problems += [f"{fig.figure_id}: concentration {p}" for p in
+                         fill_concentrations([s for s in bare if s is not None], fig.plan.concentrations)]
+            fig = fig.model_copy(update={"series": [b if b is not None else s for b, s in zip(bare, fig.series)]})
         row_meta: Dict[str, tuple] = {}         # full_id -> (panel group, x value, x column, series label, point)
         for series in fig.series:
             if not series.points:

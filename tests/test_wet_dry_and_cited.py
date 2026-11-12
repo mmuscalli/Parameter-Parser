@@ -212,9 +212,13 @@ def test_standard_columns_file():
     cols = standard_columns()
     assert cols[cols.index("cycle_number"):cols.index("cycle_number") + 7] == ["cycle_number", "cycle_duration_hr", "wet_phase_temperature_C", "wet_phase_duration_hr",
                          "wet_phase_relative_humidity_pct", "dry_phase_temperature_C", "dry_phase_duration_hr"]
-    # the shared columns every pack gets come first (the metadata ones are in this pack's template)
-    assert cols[:6] == ["data_location", "paper_arxiv_id", "total_sampled_oligomers_yield", "max_oligomer_length_nt",
-                        "vessel_sealed", "initial_pressure_bar_err_plus"]
+    # the shared columns every pack gets come first (the metadata ones are in this pack's template), then the linked
+    # modules' columns, then the pack's own steps' (vessel_sealed and the uncertainties) -- which module columns
+    # there are is the modules' business, not this test's
+    assert cols[:2] == ["data_location", "paper_arxiv_id"]
+    assert all(cols.index(c) < cols.index("vessel_sealed") for c in ("total_sampled_oligomers_yield",
+                                                                     "max_oligomer_length_nt"))
+    assert cols.index("vessel_sealed") < cols.index("initial_pressure_bar_err_plus")
     assert "vessel_sealed" in cols and "initial_temperature_C_alt1_method" in cols and "solvent_name" not in cols     # template columns aren't
 
 

@@ -45,8 +45,8 @@ def test_every_value_has_provenance_and_csv_round_trips():
         assert result.csv_path.read_text() == (REPLAY_DIR / "eder1994_auto_extracted.csv").read_text(), pf.why_replay_differs()
         obs = list(csv.DictReader(open(result.observations_path)))
         # + a calculated total per row; - one per row since the 2 authors became one author_list (2026-10-22);
-        # + data_location on every row (2026-10-29)
-        assert len(obs) == 948 + 42 - 42 + 42 and all(o["origin"] for o in obs)
+        # + data_location on every row (2026-10-29); + result_basis on every row (2026-11-12)
+        assert len(obs) == 948 + 42 - 42 + 42 + 42 and all(o["origin"] for o in obs)
         totals = [o for o in obs if o["column"] == "total_sampled_peptides_yield"]
         assert all(o["origin"] == "calculated" for o in totals) and totals[0]["value"] == "2.834"
 

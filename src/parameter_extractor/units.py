@@ -186,6 +186,19 @@ _QUANTITY = re.compile(
 _APPROX = re.compile(r"^(?:~|∼|≈|ca\.?\s|about\s|approximately\s|approx\.?\s|roughly\s|nearly\s)\s*", re.IGNORECASE)
 
 
+_SUPERSCRIPTS = str.maketrans("⁰¹²³⁴⁵⁶⁷⁸⁹⁻⁺", "0123456789-+")
+
+
+def _explicit_powers(t: str) -> str:
+    """Powers of ten written out unambiguously, as '<n> × 10^<e>' (2026-11-12: Cleaves2008's '10^-1 M' was refused,
+    so Fig. 2's starting glycine never reached its rows): '10^-1 M', '10**-3 M', '10^(-2) M', '10⁻³ M', '1e-3 M',
+    '2.5E+2 mg'. A bare '10-1 M' stays refused (a lost superscript: it could be ten minus one)."""
+    t = re.sub(r"10\s*([⁻⁺]?[⁰¹²³⁴⁵⁶⁷⁸⁹]+)", lambda m: "10^" + m.group(1).translate(_SUPERSCRIPTS), t)
+    t = re.sub(r"^\s*10\s*(?:\^|\*\*)\s*\(?\s*([-−–+]?\s*\d+)\s*\)?", r"1 × 10^\1", t)
+    t = re.sub(r"(?<=[x×*·])\s*10\s*(?:\^|\*\*)\s*\(\s*([-−–+]?\s*\d+)\s*\)", r" 10^\1", t)
+    return re.sub(r"^\s*([-+]?\d+(?:\.\d+)?)[eE]([-+]?\d+)(?![\w.])", r"\1 × 10^\2", t)
+
+
 def parse_quantity(text: str, dimension: Optional[str] = None) -> Optional[Tuple[float, str]]:
     """'1 cm3' -> (1.0, 'mL'); '1 × 10-3 M' -> (0.001, 'M'). None for ranges ('1-4 h'),
     multiple quantities, or units not in the table. `dimension`: what the value should be ('length' reads
@@ -193,6 +206,7 @@ def parse_quantity(text: str, dimension: Optional[str] = None) -> Optional[Tuple
     if text is None:
         return None
     t = _APPROX.sub("", str(text).strip())         # '~7 GPa', 'about 100 ns': the stated (approximate) value
+    t = _explicit_powers(t)
     if re.search(rf"{_NUMBER}\s*(?:-|–|to)\s*{_NUMBER}", t) and not re.search(r"10\s*[-−–]\s*\d", t):
         return None                                      # a range: no single value
     m = _QUANTITY.match(t)
