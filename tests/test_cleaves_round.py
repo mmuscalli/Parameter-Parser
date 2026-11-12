@@ -346,7 +346,8 @@ def test_methods_the_experiments_share_are_filled_in():
     assert not rec["001001004"].get("vessel_material") and not rec["001001005"].get("vessel_material")
     assert rows[2].provenance["vessel_material"].confidence == "low"
     assert "assumed shared" in rows[2].provenance["vessel_material"].origin
-    assert len(flags) == 2 and all(f.kind == "assumed_shared" for f in flags)  # one per set of rows filled
+    assert sum(f.kind == "assumed_shared" for f in flags) == 2                # one per set of rows filled
+    assert [f.kind for f in flags if f.kind != "assumed_shared"] == ["method_differs"]   # the cuvettes differ
     assert any("vessel_material = 'Hastelloy'" in f.message and "001001002" in f.message for f in flags)
 
 
@@ -451,6 +452,54 @@ def test_figure_concentrations_per_panel_and_lost_superscripts():
     assert [row_to_template_dict(r)["initial_Gly_aq_mM"] for r in rows] == [100.0, 10.0]
     assert any("far outside the x axis range" in p and "DKP (B)" in p for p in problems)
     assert sum("read as 10^-1" in p for p in problems) == 1                   # reported once
+
+
+def test_fill_in_within_groups_related_columns_and_conflicts():
+    """The fill-in rules (Mickey, 2026-11-12): within an experiment set / figure when its rows agree; across the paper
+    when every row agrees, else a 'differs' flag and nothing filled; related columns (sampled = initial temperature)
+    when every row giving both has them equal -- never over a stated value, measured rows only."""
+    from parameter_extractor.calculators.shared_values import fill_in
+    from parameter_extractor.column_order import ColumnOrder
+    from parameter_extractor.ingestion.flatten_to_template import row_to_template_dict
+    from parameter_extractor.schemas.row_schema import ExtractedRow
+    packs.activate("prebiotic_chemistry")
+    base = dict(set_type="Independent", paper_title="t", authors=[], year_published=2008, journal_published="j",
+                experiment_type="Batch", solution_type="Wet")
+    row = lambda sid, i, extra, **k: ExtractedRow(full_id=f"{sid}00{i}", set_id=sid, sample_id=f"00{i}",  # noqa
+                                                  entry_number=i, extra={"sampled_Gly_aq_%yield": 1.0, **extra},
+                                                  **base, **k)
+    rows = [row("001001", 1, {"data_location": "Figure. 2", "flow_rate_mL_min": 2.0}, vessel_material="glass",
+                initial_temperature_C=100.0, sampled_temperature_C=100.0),
+            row("001001", 2, {"data_location": "Figure. 2"}, vessel_material="glass", initial_temperature_C=150.0,
+                sampled_temperature_C=150.0),
+            row("001001", 3, {"data_location": "Figure. 2"}, initial_temperature_C=200.0),       # states neither
+            row("001002", 1, {"data_location": "Table. 1", "flow_rate_mL_min": 5.0}, vessel_material="quartz",
+                initial_temperature_C=50.0),
+            row("001002", 2, {"data_location": "Table. 1"}, initial_temperature_C=60.0,
+                sampled_temperature_C=61.0)]                                                     # differs: kept
+    m = packs.current().manifest
+    flags = fill_in(rows, m.shared_columns, m.group_columns, m.column_pairs, ColumnOrder(packs.current()))
+    rec = [row_to_template_dict(r) for r in rows]
+    assert rec[2]["flow_rate_mL_min"] == 2.0 and rec[4]["flow_rate_mL_min"] == 5.0          # within each set
+    assert rec[2]["vessel_material"] == "glass" and rec[4]["vessel_material"] == "quartz"   # set, not the paper
+    assert rec[4]["sampled_temperature_C"] == 61.0                                         # stated: never replaced
+    # related columns: rows 1-2 give both and equal, row 5 gives both and differs -> the pair isn't trusted
+    assert rec[2].get("sampled_temperature_C") is None
+    rows[4].sampled_temperature_C = None
+    rows2 = [r.model_copy(deep=True) for r in rows]
+    rows2[4].sampled_temperature_C = None
+    fill_in(rows2, None, None, m.column_pairs, ColumnOrder(packs.current()))
+    rec2 = [row_to_template_dict(r) for r in rows2]
+    assert rec2[2]["sampled_temperature_C"] == 200.0 and rec2[4]["sampled_temperature_C"] == 60.0
+    assert "assumed shared (related column)" in rows2[2].provenance["sampled_temperature_C"].origin
+    assert any(f.kind == "assumed_shared" and "same experiment set or figure" in f.message for f in flags)
+    # across the paper, disagreeing rows: nothing filled, a 'differs' flag naming the rows without a value
+    rows3 = [row("001003", 1, {}, vessel_material="glass"), row("001004", 1, {}, vessel_material="quartz"),
+             row("001005", 1, {})]
+    flags3 = fill_in(rows3, m.shared_columns, None, (), ColumnOrder(packs.current()))
+    assert row_to_template_dict(rows3[2]).get("vessel_material") is None
+    assert any(f.kind == "method_differs" and "vessel_material" in f.message and "001005001" in f.message
+               for f in flags3)
 
 
 if __name__ == "__main__":

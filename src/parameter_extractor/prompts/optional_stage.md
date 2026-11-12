@@ -46,6 +46,13 @@ Rules:
 - Give `set` as the set's id from the structure plan ('S2'); use '' only when
   values apply to every {{SET_WORD}} set. If a value differs between sets,
   give it in each set's row.
+- A method or condition the paper states ONCE without naming particular
+  experiments -- in the Methods / Experimental section, or a caption that
+  covers every panel -- holds for all of them: give it once with set ''
+  rather than only for the set whose text repeats it. But give an
+  experiment its own value as soon as anything suggests it differs (a time
+  series' durations, a set run another way, another instrument or vessel
+  for one series): a set's own value always wins over the paper-wide one.
 {{EXTRA_RULES}}
 Return a {{SCHEMA_NAME}} object.
 

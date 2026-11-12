@@ -78,6 +78,7 @@ KIND_LABELS = {
     "archive_check": "Differs from the NASA Exoplanet Archive",
     "no_starting_composition": "Products without a starting composition",
     "assumed_shared": "Assumed the same as the other experiments",
+    "method_differs": "Differs between experiments (not filled)",
 }
 
 

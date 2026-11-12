@@ -1409,10 +1409,11 @@ def finish(
         from parameter_extractor.ingestion.data_location import location
         captions = {location(t.get("table_id", "")): t.get("caption", "") for t in (ex.tables or [])}
         paper_flags += apply_result_basis(rows, [s.set_label for s in ex.structure.experiment_sets], captions)
-    if config.fill_shared_values and pack.manifest.shared_columns:   # methods every experiment shares (2026-11-12)
-        from parameter_extractor.calculators.shared_values import fill_shared
+    m = pack.manifest                            # methods the experiments share (calculators/shared_values.py)
+    if config.fill_shared_values and (m.shared_columns or m.group_columns or m.column_pairs):
+        from parameter_extractor.calculators.shared_values import fill_in
         from parameter_extractor.column_order import ColumnOrder
-        paper_flags += fill_shared(rows, pack.manifest.shared_columns, ColumnOrder(pack))
+        paper_flags += fill_in(rows, m.shared_columns, m.group_columns, m.column_pairs, ColumnOrder(pack))
     if pack.manifest.formulas:                   # the research area's own calculations (formulas.py), after the review
         from parameter_extractor.formulas import apply_formulas, formula_flags
         paper_flags += formula_flags(apply_formulas(rows, pack.manifest.formulas))

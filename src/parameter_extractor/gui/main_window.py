@@ -546,10 +546,11 @@ class MainWindow(QMainWindow):
         self.shared_box = QCheckBox("Fill in methods the experiments share")
         self.shared_box.setChecked(True)
         self.shared_box.setToolTip(
-            "When every row with measured results that states a method value (analysis settings, vessel, solvent ...) "
-            "has the same one, the rows that don't state it get it too -- assumed, and listed under Things to check "
-            "(one entry per column). Done on this computer, no extra cost. Rows of calculated values or of data from "
-            "other papers are left alone.")
+            "Methods stated once are filled into the experiments that don't repeat them -- within an experiment set or "
+            "figure when its rows agree, across the paper when every row agrees (analysis, vessel, solvent ...), and "
+            "between related columns (e.g. the sampled temperature from the initial one when every row giving both has "
+            "them equal). Assumed, and listed under Things to check; never over a value the paper gives. Done on this "
+            "computer, no extra cost. Rows of calculated values or of data from other papers are left alone.")
         rv.addWidget(self.suggest_box)
         rv.addWidget(self.shared_box)
         rv.addWidget(self.auto_figures_box)
@@ -1825,6 +1826,7 @@ class MainWindow(QMainWindow):
         derived_flags = [f for f in result.paper_flags if f.kind == "derived_value"]
         composition_flags = [f for f in result.paper_flags if f.kind == "no_starting_composition"]
         shared_flags = [f for f in result.paper_flags if f.kind == "assumed_shared"]
+        differs_flags = [f for f in result.paper_flags if f.kind == "method_differs"]
         repeat_flags = [f for f in result.paper_flags if f.kind == "duplicate_removed"]
         fit_flags = [f for f in result.paper_flags if f.kind in ("fit_model", "multimodal", "other_estimates")]
         identity_flags = [f for f in result.paper_flags if f.kind == "identity_not_quoted"]
@@ -1844,7 +1846,7 @@ class MainWindow(QMainWindow):
                                                "paper_source", "pass_disagreement", "auto_digitized",
                                                "analysis", "scope", "reused_answer", "table_check",
                                                "table_not_found", "quote_unrelated", "no_starting_composition",
-                                               "assumed_shared")]
+                                               "assumed_shared", "method_differs")]
         if reuse_flags:
             add_group("Reused from an earlier run", reuse_flags)
         if table_flags:
@@ -1867,6 +1869,8 @@ class MainWindow(QMainWindow):
             add_group("Products without a starting composition", composition_flags)
         if shared_flags:
             add_group("Filled in from the other experiments (assumed shared)", shared_flags)
+        if differs_flags:
+            add_group("Differs between experiments (not filled in)", differs_flags)
         if archive_flags:
             add_group("Checked against the NASA Exoplanet Archive", archive_flags)
         if identity_flags:

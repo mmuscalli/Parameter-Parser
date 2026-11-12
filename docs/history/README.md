@@ -128,3 +128,4 @@ current month's file (start `YYYY-MM.md` in a new month), with one line here.
 - Figure concentrations written as powers of ten; rows marked measured or calculated (2026-11-12, Mickey's Cleaves2008 run)
 - Figure concentrations per panel; lost superscripts in captions (2026-11-12, Mickey's Cleaves2008 run 062611)
 - Table-image boxes per cell again; the pause before the review (2026-11-12, Mickey)
+- Methods stated once: filled within groups, across the paper and between related columns (2026-11-12, Mickey)
