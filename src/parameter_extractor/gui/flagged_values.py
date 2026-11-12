@@ -38,12 +38,15 @@ from PySide6.QtWidgets import (QAbstractItemView, QCheckBox, QDialog, QDialogBut
 
 from parameter_extractor import corrections as corr
 from parameter_extractor import flag_targets as ft
+from parameter_extractor.gui import themes
 
-FLAG_COLOR = QColor(255, 150, 70)          # a flagged value: obvious, readable in light and dark themes
-CHECKED_COLOR = QColor(230, 230, 230)      # a flagged value whose flags are all checked
-CORRECTED_COLOR = QColor(196, 222, 255)    # (as the main window's)
-MARK_PEN = QColor(255, 110, 0)             # a located value on the table image
-MARK_FILL = QColor(255, 214, 0, 90)
+# highlight colours: shared with gui/themes.py, which changes them in place for a theme
+FLAG_COLOR = themes.MARKS["flag"]          # a flagged value: obvious, readable in light and dark themes
+CHECKED_COLOR = themes.MARKS["flag_checked"]   # a flagged value whose flags are all checked
+CORRECTED_COLOR = themes.MARKS["corrected"]    # (as the main window's)
+MARK_PEN = themes.MARKS["mark_pen"]        # a located value on the table image
+MARK_FILL = themes.MARKS["mark_fill"]
+MARK_TEXT = themes.MARKS["mark_text"]
 ROW_ID_COLUMNS = ["full_id", "set_id", "sample_id"]
 LAST_COLUMN = "source_notes"               # always shown, last: a short description of the row
 ZOOM_STEPS = (0.25, 0.33, 0.5, 0.67, 0.8, 1.0, 1.25, 1.5, 2.0, 2.5, 3.0, 4.0)
@@ -230,12 +233,17 @@ class FlaggedValuesWindow(QDialog):
         self.everywhere_toggle.setArrowType(Qt.ArrowType.RightArrow)
         self.everywhere_toggle.setStyleSheet("QToolButton { border: none; font-weight: bold; }")
         self.everywhere_toggle.toggled.connect(self._toggle_everywhere)
-        self.review_all_btn = QPushButton("Review all", checkable=True)
-        self.review_all_btn.setToolTip("Put the values of these flags in the table too, highlighted like the others "
+        self.review_all_btn = QPushButton("All columns", checkable=True)
+        self.review_all_btn.setToolTip("Put the values of the flags on every row in the table too (their columns, "
+                                       "highlighted like the others); press again for the pared-down table "
                                        "(select a column's values there to change them together)")
         self.review_all_btn.toggled.connect(self._set_review_all)
         every.addWidget(self.everywhere_toggle)
         every.addWidget(self.review_all_btn)
+        self.mark_all_btn = QPushButton("Mark all flags checked", clicked=lambda: self.mark_all_checked())
+        self.mark_all_btn.setToolTip("Tick every flag in this window not checked yet (e.g. once the whole-paper "
+                                     "flags and the remaining values are confirmed); asks first")
+        every.addWidget(self.mark_all_btn)
         every.addStretch(1)
         self.everywhere_row = QWidget()
         self.everywhere_row.setLayout(every)
@@ -365,7 +373,9 @@ class FlaggedValuesWindow(QDialog):
             item.setCheckState(Qt.CheckState.Checked if key in self.checked else Qt.CheckState.Unchecked)
             self.everywhere_list.addItem(item)
         self.everywhere_list.blockSignals(False)
-        self.everywhere_row.setVisible(bool(self.everywhere))
+        for wdg in (self.everywhere_toggle, self.review_all_btn):     # (the row stays: Mark all flags checked)
+            wdg.setVisible(bool(self.everywhere))
+        self.mark_all_btn.setEnabled(bool(self.all_flag_keys() - self.checked))
         self.everywhere_list.setVisible(bool(self.everywhere) and self.everywhere_toggle.isChecked())
         n_open = sum(key not in self.checked for _f, key, _c, _cells in self.everywhere)
         self.everywhere_toggle.setText(f"On every row ({len(self.everywhere)}, {n_open} not checked yet)")
@@ -410,11 +420,11 @@ class FlaggedValuesWindow(QDialog):
                     item.setFlags(item.flags() & ~Qt.ItemFlag.ItemIsEditable)
                 if cell in self.corrected:
                     item.setBackground(QBrush(CORRECTED_COLOR))
-                    item.setForeground(QBrush(Qt.GlobalColor.black))
+                    item.setForeground(QBrush(MARK_TEXT))
                     item.setToolTip(f"Corrected (extracted: {self.corrected[cell].extracted or 'empty'})")
                 if cell in self.cell_flags:
                     item.setBackground(QBrush(FLAG_COLOR if self._open(cell) else CHECKED_COLOR))
-                    item.setForeground(QBrush(Qt.GlobalColor.black))
+                    item.setForeground(QBrush(MARK_TEXT))
                     font = item.font()
                     font.setBold(self._open(cell))
                     item.setFont(font)
@@ -720,7 +730,6 @@ class FlaggedValuesWindow(QDialog):
 
     def _set_review_all(self, on: bool) -> None:
         self.review_all = on
-        self.review_all_btn.setText("Back to the pared-down table" if on else "Review all")
         self._load()
 
     def _everywhere_selected(self, item) -> None:
@@ -811,6 +820,24 @@ class FlaggedValuesWindow(QDialog):
         self._load()
         self.on_changed()
 
+    def all_flag_keys(self) -> set:
+        """Every flag this window shows: on values, and on every row."""
+        return {k for fs in self.cell_flags.values() for _f, k in fs} | {k for _f, k, _c, _cells in self.everywhere}
+
+    def mark_all_checked(self, confirm: bool = True) -> int:
+        """Tick every flag of this window not checked yet. Returns how many were ticked."""
+        left = self.all_flag_keys() - self.checked
+        if not left:
+            QMessageBox.information(self, "Mark all flags checked", "Every flag here is checked already.")
+            return 0
+        if confirm and QMessageBox.question(
+                self, "Mark all flags checked",
+                f"Mark the {len(left)} flag(s) not checked yet as checked?\n\nThey stay listed (greyed) and in "
+                f"the files; untick any of them again at any time.") != QMessageBox.StandardButton.Yes:
+            return 0
+        self.tick_keys(left)
+        return len(left)
+
     def tick_keys(self, keys) -> None:
         self.checked |= set(keys)
         corr.save_checked(self.result.run_dir, self.checked)
@@ -827,6 +854,7 @@ class FlaggedValuesWindow(QDialog):
             self.checked.add(key)
         else:
             self.checked.discard(key)
+        self.mark_all_btn.setEnabled(bool(self.all_flag_keys() - self.checked))
         corr.save_checked(self.result.run_dir, self.checked)
         self.changed = True
         n_open = sum(k not in self.checked for _f, k, _c, _cells in self.everywhere)

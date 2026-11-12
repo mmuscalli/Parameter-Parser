@@ -23,6 +23,7 @@ from PySide6.QtWidgets import (QAbstractItemView, QCheckBox, QComboBox, QDialog,
                                QSplitter, QTableWidget, QTableWidgetItem, QTabWidget, QVBoxLayout,
                                QWidget)
 
+from parameter_extractor.gui import themes
 from parameter_extractor import local_models
 from parameter_extractor import model_profiles as mp
 from parameter_extractor.pricing import PRICES, PRICES_CHECKED
@@ -216,7 +217,7 @@ class ModelsWindow(QDialog):
         pv.addWidget(self.prices_table)
         ev.addWidget(self.prices_box)
         self.problems_label = QLabel(wordWrap=True)
-        self.problems_label.setStyleSheet("color: #c0392b;")
+        self.problems_label.setStyleSheet(f"color: {themes.css('error')};")
         ev.addWidget(self.problems_label)
         ev.addStretch(1)
         split.addWidget(scroll)

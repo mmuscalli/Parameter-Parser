@@ -119,3 +119,4 @@ current month's file (start `YYYY-MM.md` in a new month), with one line here.
 - Kinetics suggestions tidied; values boxed on table images (2026-11-12, Mickey)
 - Flagged values: the selected value alone; flags placed by the set they name; details panel reworked (2026-11-12, Mickey)
 - Buttons and menu items passing Qt's checked flag (2026-11-12, Mickey: File > Open a results folder… crashed)
+- Themes; Mark all flags checked (2026-11-12, Mickey)

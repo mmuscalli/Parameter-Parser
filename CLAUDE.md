@@ -61,7 +61,8 @@ Version: `parameter_extractor.__version__` (0.4.0, tag `v0.4.0`), the one place 
 - `gui/`: `main_window.py` (five numbered steps: data pack, papers, what to extract, options, run; results tabs),
   `multi_runs.py`, `digitizer.py` + `figure_dialog.py`, `variable_review.py`, `registry_dialog.py`,
   `pack_windows.py` / `packs_window.py` / `pack_assist.py`, `settings_dialog.py` (keys, folder, lookups),
-  `models_window.py` (Models menu: profiles and connections).
+  `models_window.py` (Models menu: profiles and connections), `themes.py` (Settings > Theme: palettes + the
+  shared highlight colours `MARKS`, changed in place; new colours go there, not into a window).
 - `model_profiles.py`: model profiles (a connection + a model per role + output cap, temperature, caching, steps at
   once, retries, prices) and connections (Anthropic API; Ollama / OpenAI-compatible servers, local or hosted) in
   `<app data>/model_profiles.json`; `apply(config, profile_id)` sets RunConfig (`profile_roles`, `temperature`,

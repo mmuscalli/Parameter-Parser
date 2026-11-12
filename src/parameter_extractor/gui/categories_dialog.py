@@ -20,6 +20,7 @@ from PySide6.QtWidgets import (QAbstractItemView, QStyledItemDelegate, QCheckBox
                                QMessageBox, QPushButton, QSpinBox, QTableWidget, QTableWidgetItem, QVBoxLayout,
                                QWidget)
 
+from parameter_extractor.gui import themes
 from parameter_extractor import packs, variable_categories as vc
 from parameter_extractor.gui.widgets import RowSeparatorDelegate, in_cell, style_rows
 from parameter_extractor.registry import STANDARD, VariableRegistry, areas
@@ -52,7 +53,7 @@ class CategoriesDialog(QDialog):
             "categories apply to every data pack; a data pack's own come first in its review.",
             wordWrap=True))
         warning = QLabel("⚠ " + WARNING, wordWrap=True)
-        warning.setStyleSheet("color: #8a5a00;")
+        warning.setStyleSheet(f"color: {themes.css('warning')};")
         layout.addWidget(warning)
         top = QHBoxLayout()
         top.addWidget(QLabel("Data pack:"))

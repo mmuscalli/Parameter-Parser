@@ -21,6 +21,9 @@ def main() -> int:
     app.setWindowIcon(QIcon(str(Path(__file__).parent / "resources" / "app.png")))
     from parameter_extractor.gui.error_log import install_excepthook
     install_excepthook()        # errors in the window itself are recorded and shown, not lost
+    from PySide6.QtCore import QSettings
+    from parameter_extractor.gui import themes
+    themes.apply(app, str(QSettings().value(themes.THEME_KEY, themes.DEFAULT)))   # Settings > Theme
 
     from parameter_extractor.gui.main_window import MainWindow  # after QApplication exists
     window = MainWindow()

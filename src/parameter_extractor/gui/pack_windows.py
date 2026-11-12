@@ -36,7 +36,8 @@ from parameter_extractor.pack_editing import (BUILTIN_STAGES, CALCULATION_NEEDS,
 from parameter_extractor.gui.widgets import RowSeparatorDelegate, in_cell, style_rows
 
 RULES_ROW_GAP = 13      # rules are long texts: more room between them and the lines (Mickey, 2026-11-06)
-LEVEL_COLORS = {"error": QColor(190, 40, 40), "warning": QColor(176, 110, 0), "note": QColor(110, 110, 110)}
+from parameter_extractor.gui import themes  # noqa: E402
+LEVEL_COLORS = {level: themes.MARKS[level] for level in ("error", "warning", "note")}   # follow the theme
 UNCERTAINTY_STYLES = [("<column>_err_plus / _err_minus", ["_err_plus", "_err_minus"], "_"),
                       ("<column>err1 / err2 / lim (Exoplanet Archive)", ["err1", "err2", "lim"], "")]
 P_COLUMN, P_UNIT, P_KIND, P_DESC, P_CHOICES, P_INTEGER, P_UNCERT = range(7)

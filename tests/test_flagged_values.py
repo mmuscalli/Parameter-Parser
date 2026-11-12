@@ -178,6 +178,7 @@ def test_the_flagged_values_window():
     from PySide6.QtWidgets import QApplication
     QCoreApplication.setOrganizationName("ParameterExtractorTests")
     app = QApplication.instance() or QApplication([])
+    from parameter_extractor.gui import flagged_values
     from parameter_extractor.gui.flagged_values import FlaggedValuesWindow
     with tempfile.TemporaryDirectory() as tmp:
         with patch.object(api_client, "_send", _replay_send):
@@ -253,6 +254,16 @@ def test_the_flagged_values_window():
             t.item(r, c).setText("1.5")
             app.processEvents()
             assert corr.load(result.run_dir)[(full_id, column)].value == "1.5"
+        # Mark all flags checked: every flag of the window ticked (after asking), the button then off
+        assert w.review_all_btn.text() == "All columns" and w.mark_all_btn.isEnabled()
+        with patch.object(flagged_values.QMessageBox, "question",
+                          lambda *a, **k: flagged_values.QMessageBox.StandardButton.No):
+            assert w.mark_all_checked() == 0                                 # declined: nothing ticked
+        with patch.object(flagged_values.QMessageBox, "question",
+                          lambda *a, **k: flagged_values.QMessageBox.StandardButton.Yes):
+            n = w.mark_all_checked()
+        assert n > 0 and w.all_flag_keys() <= corr.load_checked(result.run_dir) and not w.mark_all_btn.isEnabled()
+        assert not any(w._open(c) for c in w.cell_flags)
         w.close()
         app.processEvents()
 

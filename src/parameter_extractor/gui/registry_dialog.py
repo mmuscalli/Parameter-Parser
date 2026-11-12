@@ -32,8 +32,8 @@ from parameter_extractor.value_types import TYPES, column_type
 KIND_LABELS = {"species": "Species", "parameter": "Experimental parameter", "figure_axis": "Figure axis"}
 AUTOMATIC = "(automatic: placed by its name)"
 DEFAULT = "(default)"
-WARNING_COLOR = "#8a5a00"
-CHANGED_BRUSH = QBrush(QColor(176, 110, 0))
+from parameter_extractor.gui import themes  # noqa: E402
+CHANGED_COLOR = themes.MARKS["warning"]     # follows the theme (gui/themes.py)
 ROLE = Qt.ItemDataRole.UserRole           # on column 0: ("column" | "alias" | "builtin", area, key)
 EDITABLE_ROLE = Qt.ItemDataRole.UserRole + 1   # on column 0: the columns with a choice
 
@@ -297,7 +297,7 @@ class RegistryDialog(QDialog):
         w = QWidget()
         v = QVBoxLayout(w)
         warning = QLabel("⚠ " + BUILTIN_WARNING, wordWrap=True)
-        warning.setStyleSheet(f"color: {WARNING_COLOR};")
+        warning.setStyleSheet(f"color: {themes.css('warning')};")
         v.addWidget(warning)
         self.builtin_tree = _tree(["Column", "Source", "Category", "Data type", "Default"], self.B_DEFAULT)
         self.builtin_tree.setItemDelegate(ChoiceDelegate(self, self.builtin_tree))
@@ -415,7 +415,7 @@ class RegistryDialog(QDialog):
                     changed += 1
                     for c in (self.B_COLUMN, self.B_CATEGORY, self.B_TYPE):
                         item.setFont(c, bold)
-                        item.setForeground(c, CHANGED_BRUSH)
+                        item.setForeground(c, QBrush(CHANGED_COLOR))
                     item.setToolTip(self.B_COLUMN, "Changed from the default (shown on the right)")
             group.setExpanded(open_.get(area, False))
         for c, width in ((self.B_COLUMN, 330), (self.B_SOURCE, 90), (self.B_CATEGORY, 230), (self.B_TYPE, 140)):
@@ -446,7 +446,7 @@ class RegistryDialog(QDialog):
                 if c.active:
                     changed += 1
                     item.setFont(self.C_ACTIVE, bold)
-                    item.setForeground(self.C_ACTIVE, CHANGED_BRUSH)
+                    item.setForeground(self.C_ACTIVE, QBrush(CHANGED_COLOR))
             group.setExpanded(open_.get(pack_id, False))
         for col, width in ((self.C_NAME, 220), (self.C_ACTIVE, 240), (self.C_CID, 90), (self.C_SOURCE, 80)):
             t.setColumnWidth(col, width)

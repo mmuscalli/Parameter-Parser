@@ -21,7 +21,7 @@ from typing import List, Optional
 import html
 
 from PySide6.QtCore import QSettings, Qt, QThread, QTimer, QUrl
-from PySide6.QtGui import QAction, QBrush, QColor, QDesktopServices, QKeySequence
+from PySide6.QtGui import QAction, QActionGroup, QBrush, QColor, QDesktopServices, QKeySequence
 from PySide6.QtWidgets import (
     QAbstractItemView, QCheckBox, QComboBox, QFileDialog, QFormLayout, QGroupBox, QHBoxLayout,
     QHeaderView, QInputDialog, QLabel, QLineEdit, QMainWindow, QMessageBox, QPlainTextEdit, QProgressBar, QPushButton,
@@ -43,13 +43,16 @@ from parameter_extractor.registry import default_arxiv_cache_dir, default_pubche
 from parameter_extractor.pipeline import Extraction, finish, plan_figure, stage_label
 
 DEFAULT_OUTPUT_DIR = Path.home() / "Documents" / "Parameter Extractor"
-FLAGGED_ROW_COLOR = QColor(255, 243, 205)   # soft amber, readable in light and dark themes
-ARCHIVE_ROW_COLOR = QColor(212, 237, 218)   # soft green: the row (fit) the Exoplanet Archive took
-ARCHIVE_DIFF_COLOR = QColor(255, 196, 140)  # orange: a value that differs from the archive's
-CORRECTED_COLOR = QColor(196, 222, 255)     # light blue: a value you corrected (W2)
+# highlight colours: shared with gui/themes.py, which changes them in place for a theme
+from parameter_extractor.gui import themes  # noqa: E402
+FLAGGED_ROW_COLOR = themes.MARKS["flagged_row"]   # soft amber, readable in light and dark themes
+ARCHIVE_ROW_COLOR = themes.MARKS["archive_row"]   # soft green: the row (fit) the Exoplanet Archive took
+ARCHIVE_DIFF_COLOR = themes.MARKS["archive_diff"]  # orange: a value that differs from the archive's
+CORRECTED_COLOR = themes.MARKS["corrected"]       # light blue: a value you corrected (W2)
+MARK_TEXT = themes.MARKS["mark_text"]             # text on those
 SHOWN_ROLE = Qt.ItemDataRole.UserRole + 2   # a cell's value as shown (what a correction changes)
 FLAG_KEY_ROLE = Qt.ItemDataRole.UserRole + 1  # an entry of Things to check: its key (corrections.flag_key)
-GROUP_TINT = QColor(110, 140, 210, 28)       # every other block of columns (category), faint in either theme
+GROUP_TINT = themes.MARKS["group_tint"]      # every other block of columns (category), faint in either theme
 MAX_COLUMN_WIDTH = 260
 # Rows tab column order: identify the row, then the measured data, then the
 # paper-level details that repeat on every row (DOI, title, ...).
@@ -216,6 +219,19 @@ class MainWindow(QMainWindow):
         settings_menu.addSeparator()
         for action in (self.output_action, self.open_output_action, self.lookups_action):
             settings_menu.addAction(action)
+        settings_menu.addSeparator()
+        # Theme (gui/themes.py): the window's colours and the highlight colours
+        self.theme_menu = settings_menu.addMenu("Theme")
+        self.theme_menu.setToolTipsVisible(True)
+        self.theme_actions = QActionGroup(self)
+        self.theme_actions.setExclusive(True)
+        for theme in themes.THEMES.values():
+            action = QAction(theme.label, self, checkable=True, checked=theme.id == themes.current())
+            action.setToolTip(theme.description)
+            action.setData(theme.id)
+            action.triggered.connect(lambda _checked=False, t=theme.id: self._set_theme(t))
+            self.theme_actions.addAction(action)
+            self.theme_menu.addAction(action)
         settings_menu.setToolTipsVisible(True)
         # which models read a paper and where they run (model_profiles.py, 2026-11-11): the provider used to be
         # chosen in Settings; now every profile names its own connection
@@ -1634,16 +1650,16 @@ class MainWindow(QMainWindow):
                     tip = row[i]
                 if flags:
                     item.setBackground(QBrush(FLAGGED_ROW_COLOR))
-                    item.setForeground(QBrush(Qt.GlobalColor.black))
+                    item.setForeground(QBrush(MARK_TEXT))
                     tip = "\n".join(f.message for f in flags) + ("\n\n" + tip if tip else "")
                 if archive_note is not None and not (flags and c == 0):   # a flagged row keeps amber in its id cell
                     item.setBackground(QBrush(ARCHIVE_ROW_COLOR))
-                    item.setForeground(QBrush(Qt.GlobalColor.black))
+                    item.setForeground(QBrush(MARK_TEXT))
                 if archive_note is not None:
                     tip = archive_note + ("\n\n" + tip if tip else "")
                 if header[i] in cell_notes:             # this value differs from the archive's
                     item.setBackground(QBrush(ARCHIVE_DIFF_COLOR))
-                    item.setForeground(QBrush(Qt.GlobalColor.black))
+                    item.setForeground(QBrush(MARK_TEXT))
                     tip = cell_notes[header[i]] + ("\n\n" + tip if tip else "")
                     n_differ += 1
                 item.setData(SHOWN_ROLE, row[i])
@@ -1652,7 +1668,7 @@ class MainWindow(QMainWindow):
                 fix = corrected.get((row[id_col], header[i]))
                 if fix is not None:                     # W2: a value you corrected
                     item.setBackground(QBrush(CORRECTED_COLOR))
-                    item.setForeground(QBrush(Qt.GlobalColor.black))
+                    item.setForeground(QBrush(MARK_TEXT))
                     tip = _correction_tip(fix) + ("\n\n" + tip if tip else "")
                 if tip:
                     item.setToolTip(tip)
@@ -1740,7 +1756,7 @@ class MainWindow(QMainWindow):
                 child.setToolTip(0, f.message)
                 child.setToolTip(1, shown)
                 if not f.quote and (f.unverified_quote or f.table_image_quote):
-                    child.setForeground(1, QBrush(QColor("gray")))
+                    child.setForeground(1, QBrush(themes.MARKS["muted"]))
                 group.addChild(child)
             tree.addTopLevelItem(group)
             group.setExpanded(False)          # collapsed until the user opens a category
@@ -1824,6 +1840,16 @@ class MainWindow(QMainWindow):
         except Exception:
             registry = None
         FlaggedValuesWindow(result, registry, self, on_changed=self._refresh_results).exec()
+
+    def _set_theme(self, theme_id: str) -> None:
+        """Settings > Theme: applied at once and remembered; the shown results are refilled in the new colours."""
+        from PySide6.QtWidgets import QApplication
+        used = themes.apply(QApplication.instance(), theme_id)
+        QSettings().setValue(themes.THEME_KEY, used)
+        for action in self.theme_actions.actions():
+            action.setChecked(action.data() == used)
+        self._refresh_results()
+        self.update()
 
     def _refresh_results(self) -> None:
         """After corrections or ticks made elsewhere (the Flagged values window): both tabs again from the files."""
