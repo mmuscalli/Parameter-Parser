@@ -149,7 +149,9 @@ Search `docs/history/` for the details and the measurements behind each.
 - **Local models**: unvalidated, every run flagged. Servers and profiles in the Models window
   (`model_profiles.json`; the old `local_models.json` is brought over once as the connection "Local server"); a
   server's key is in the keychain (account `model-connection:<id>`, the migrated one keeps `local-model-server`).
-  A hosted server without prices shows its cost as unknown, a private one as $0. Enter the context
+  A hosted server without prices shows its cost as unknown, a private one as $0. Requests to servers put the paper
+  first and, on private servers, prime a checkpoint after it before each step (hybrid models like qwen3.8 only reuse
+  back to checkpoints: docs/local_model_notes.md issue 14). Enter the context
   length that fits on the GPU, not the model's reported maximum. `local_models.LOCAL_REQUIRED` makes fields local
   models skip (`txt`, `sample`, `mode`, `meth`) required for local servers only. Pain points and the checklist for a
   new model: `docs/local_model_notes.md`; test tool `scripts/check_local_model.py`.

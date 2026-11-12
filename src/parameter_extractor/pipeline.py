@@ -1158,6 +1158,7 @@ def finish(
     if config.is_local:                   # results from a model the app hasn't been validated with
         from parameter_extractor.local_models import flag_text
         paper_flags.append(Flag("local_model", flag_text(config)))
+        paper_flags += [Flag("local_model", m) for m in getattr(ctx, "server_flags", None) or []]   # E3: CPU spill
     paper_flags += _reuse_flags(ctx)
     paper_flags += stage_flags
     paper_flags += [Flag("assumed_default", m) for m in ex.ambient_notes]

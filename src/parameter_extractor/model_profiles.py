@@ -65,6 +65,7 @@ class ServerModel:
     vision: bool = False
     price_input: Optional[float] = None       # $ per million tokens (None: free on a local server, else unknown)
     price_output: Optional[float] = None
+    thinking: str = "model"                    # Ollama: "model" (as the model decides) or "off" (no reasoning first)
 
 
 @dataclass
@@ -202,7 +203,8 @@ class ModelStore:
             return
         conn = Connection(id="local", name="Local server", kind=local.kind, url=local.url,
                           timeout_sec=local.timeout_sec, parallel=local.parallel,
-                          models={n: ServerModel(context=m.context, vision=m.vision) for n, m in local.models.items()},
+                          models={n: ServerModel(context=m.context, vision=m.vision, thinking=m.thinking)
+                                  for n, m in local.models.items()},
                           key_account="local-model-server")       # gui.key_store.LOCAL_ACCOUNT: the key stays put
         self.connections["local"] = conn
         for name, roles in local.profiles.items():

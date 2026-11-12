@@ -638,6 +638,8 @@ def call_structured(
     shared = (paper_text is not None and ctx.paper is not None and ctx.config.prompt_caching
               and paper_text in user_content)
     _streamed.tool = None
+    # model servers (local_models.send): the paper's text, so the request can start with it (E1, 2026-11-11)
+    _streamed.paper_text = paper_text if paper_text and paper_text in (user_content or "") else None
     if on_paper and ctx.paper is not None and stage in ctx.paper.tools:
         # a step that reads the cached paper and adds a cached layer of its own (figure_planner, 2026-11-03):
         # the paper (cached by the extraction steps), then `cached_prefix` -- the same for every figure of the
@@ -739,6 +741,8 @@ def call_structured(
         "stop_reason": response.stop_reason,
         "message_id": response.id,
         "request_fingerprint": fingerprint,          # a later resume reuses this answer for the same request
+        **({"server_timing": response.server_timing}  # a model server's load / read / write seconds (local_models)
+           if getattr(response, "server_timing", None) else {}),
         "raw_response": json.loads(raw_text) if raw_text else None,
     }
     (run_dir / f"{name}.audit.json").write_text(json.dumps(audit, indent=2))

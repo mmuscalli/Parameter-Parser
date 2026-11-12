@@ -37,6 +37,7 @@ class FakeServer:
 
     def __init__(self, kind: str, delay: float = 0.0):
         self.kind, self.delay, self.requests, self.active, self.most_at_once = kind, delay, [], 0, 0
+        self.ps = []                     # what /api/ps reports as loaded (the spill check, E3)
         server = self
         lock = threading.Lock()
 
@@ -46,6 +47,7 @@ class FakeServer:
 
             def do_GET(self):
                 body = ({"models": [{"name": "fake:12b"}]} if self.path == "/api/tags"
+                        else {"models": server.ps} if self.path == "/api/ps"
                         else {"data": [{"id": "fake-model"}]})
                 self._send(json.dumps(body).encode())
 
@@ -92,17 +94,17 @@ class FakeServer:
         self.httpd.shutdown()
 
 
-def _local(server: FakeServer, model: str, vision: bool, parallel: int = 1) -> dict:
+def _local(server: FakeServer, model: str, vision: bool, parallel: int = 1, thinking: str = "model") -> dict:
     return local_models.LocalSettings(
         kind=server.kind, url=server.url, parallel=parallel, timeout_sec=30,
-        models={model: local_models.LocalModel(context=131072, vision=vision)},
+        models={model: local_models.LocalModel(context=131072, vision=vision, thinking=thinking)},
         profiles={"Local standard": {"structure_planner": model, "*": model, "figure_planner": model}}).to_dict()
 
 
-def _run(server, model, vision, out, parallel=1):
+def _run(server, model, vision, out, parallel=1, thinking="model"):
     from parameter_extractor.pipeline import run_pipeline
     cfg = RunConfig.from_settings(api_key="", output_dir=out, provider="local", model_profile="Local standard",
-                                  local=_local(server, model, vision, parallel), use_pubchem=False,
+                                  local=_local(server, model, vision, parallel, thinking), use_pubchem=False,
                                   registry_path=None)
     try:
         return run_pipeline(PDF, cfg)
@@ -129,8 +131,26 @@ def test_ollama_run_reproduces_the_reference():
             assert {"structure_planner", "chemistry", "experimental_conditions"} <= set(stages)
             chem = next(r for _, s, r in server.requests if s == "chemistry")
             assert chem["options"]["num_ctx"] == 131072 and chem["format"]["type"] == "object"
-            assert chem["messages"][1].get("images"), "a vision model gets the table images"
-            assert "JSON Schema" in chem["messages"][0]["content"]
+            assert chem["messages"][-1].get("images"), "a vision model gets the table images"
+            assert "JSON Schema" in chem["messages"][-1]["content"] and chem["keep_alive"] == "30m"
+            # E1 (2026-11-11): every step that reads the whole paper starts the same way -- the fixed system line, then
+            # the paper alone -- so the server can reuse what it read; the step's own part comes after
+            whole = [r for _, s, r in server.requests if s != "metadata" and not s.endswith("-priming")]
+            # each of them follows a priming request with the same opening (a checkpoint right after the paper)
+            order = [s for _, s, _ in server.requests]
+            for _, s, r in server.requests:
+                if s != "metadata" and not s.endswith("-priming"):
+                    i = order.index(s)
+                    assert order[i - 1] == f"{s}-priming", (s, order[i - 1])
+                    primer = server.requests[i - 1][2]
+                    assert primer["messages"] == r["messages"][:2] and primer["options"]["num_predict"] == 1
+                    assert "format" not in primer
+            assert len(whole) >= 4
+            starts = {json.dumps(r["messages"][:2]) for r in whole}
+            assert len(starts) == 1, "steps of one paper must share their opening"
+            assert whole[0]["messages"][1]["content"].startswith(local_models.PAPER_HEADING)
+            assert all(local_models.PAPER_IN_FIRST_MESSAGE in r["messages"][2]["content"] for r in whole)
+            assert all("images" not in r["messages"][1] for r in whole)        # images go with the step's part
             assert server.most_at_once == 1                     # one request at a time by default
     finally:
         server.close()
@@ -147,7 +167,7 @@ def test_openai_compatible_run_without_vision():
             assert result.csv_path.read_text() == (REF / "expected_extracted.csv").read_text(), pf.why_replay_differs()
             chem = next(r for _, s, r in server.requests if s == "chemistry")
             assert chem["response_format"]["type"] == "json_schema"
-            assert all(part["type"] == "text" for part in chem["messages"][1]["content"])   # images left out
+            assert all(part["type"] == "text" for part in chem["messages"][-1]["content"])  # images left out
             assert {p for p, _, _ in server.requests} == {"/v1/chat/completions"}
     finally:
         server.close()
@@ -261,6 +281,41 @@ def test_models_window_sets_up_a_local_run():
     finally:
         server.close()
         QSettings().clear()
+
+
+def test_thinking_off_spill_warning_and_calibration():
+    """E2: thinking off -> Ollama's think: false (not sent otherwise). E3: a model partly on the CPU (/api/ps size_vram
+    below size) is flagged once; the size estimate learns from what the server counted, never from a partial read."""
+    if not PDF.is_file():
+        print(f"SKIP: needs {PDF}")
+        return
+    server = FakeServer("ollama")
+    server.ps = [{"name": "fake:12b", "size": 20_000_000_000, "size_vram": 12_000_000_000}]
+    try:
+        with tempfile.TemporaryDirectory() as tmp:
+            result = _run(server, "fake:12b", vision=True, out=Path(tmp), thinking="off")
+            assert all(r.get("think") is False for _, _, r in server.requests)
+            spill = [f.message for f in result.paper_flags if f.kind == "local_model" and "CPU" in f.message]
+            assert len(spill) == 1 and "40%" in spill[0] and "131,072" in spill[0]
+            assert result.csv_path.read_text() == (REF / "expected_extracted.csv").read_text()
+            audit = json.loads((result.run_dir / "chemistry.audit.json").read_text())
+            assert "server_timing" in audit and "prompt_eval" in audit["server_timing"]
+            server.requests.clear()
+            server.ps = [{"name": "fake:12b", "size": 20_000_000_000, "size_vram": 20_000_000_000}]
+            result = _run(server, "fake:12b", vision=True, out=Path(tmp))
+            assert all("think" not in r for _, _, r in server.requests)           # default: as the model decides
+            assert not any("CPU" in f.message for f in result.paper_flags)
+    finally:
+        server.close()
+    from types import SimpleNamespace
+    ctx = SimpleNamespace(config=None)
+    local_models._calibrate(ctx, "m", 10_000, 12_000)            # a full read: 1.2 real tokens per estimated one
+    assert local_models._calibration(ctx, "m") == 1.2
+    local_models._calibrate(ctx, "m", 12_000, 2_000)             # a partial read (paper reused): not learned from
+    assert local_models._calibration(ctx, "m") == 1.2
+    local_models._calibrate(ctx, "m", 12_000, 9_000)             # lower than learned: the ratio never shrinks
+    assert local_models._calibration(ctx, "m") == 1.2
+    assert local_models.spill_of({"size": 10, "size_vram": 10}) == 0 and local_models.spill_of({}) == 0
 
 
 def test_text_values_a_local_model_must_give():

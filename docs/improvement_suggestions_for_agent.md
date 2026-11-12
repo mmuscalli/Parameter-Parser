@@ -107,9 +107,9 @@ paid Claude runs or the local server. Update Status as you go: `proposed` → `a
 
 | ID | Suggestion | Area | Effort | Live | Status |
 |---|---|---|---|---|---|
-| E1 | Local models: send the paper first, so the server reads it once per paper | Efficiency | M | local server | postponed |
-| E2 | Local models: a per-model setting for thinking | Efficiency | S | local server | postponed |
-| E3 | Local models: know the real context and use the room better | Efficiency | S–M | local server | postponed |
+| E1 | Local models: send the paper first, so the server reads it once per paper | Efficiency | M | local server | done, measured: kept (reading -40 to -55%; paper-first needed priming on hybrid models) |
+| E2 | Local models: a per-model setting for thinking | Efficiency | S | local server | done, measured: setting kept, default unchanged (thinking off loses values on qwen) |
+| E3 | Local models: know the real context and use the room better | Efficiency | S–M | local server | parts 1-2 done (spill flag checked live, calibrated estimate); part 3 postponed |
 | E4 | Paper queues in batch mode: shared batches, more papers in flight | Efficiency | M | Claude (small) | postponed |
 | W1 | Resume a failed or cancelled run; rebuild a dataset from saved answers | Workflow | M–L | no | done (c9733fa) |
 | W2 | Corrections and "checked" marks in the results window | Workflow | L | no | postponed |

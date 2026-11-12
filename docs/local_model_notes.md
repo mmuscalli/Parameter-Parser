@@ -21,6 +21,12 @@ comparison with the references are one tool, `scripts/check_local_model.py` (see
 | teng2023 (exoplanets) | qwen3.8:27b | 131072 | 41 rows; 1,984 archive matches, 168 differ | 37 min | planet `sample` left out (issue 9) |
 | teng2023 | qwen3.8:27b, + `sample` required | 131072 | 2,126 match, 21 differ, 0 missing | 34 min | modes as conflicts (issue 10) |
 | teng2023 | qwen3.8:27b, + `mode` / `meth` required | 131072 | 2,130 match, 18 differ (all uncertainties), 0 missing | 34 min | |
+| eder1994 | qwen3.8:27b, baseline with server timings (2026-11-11) | 131072 | 100% | 8.5 min | reading 179 s, writing 291 s |
+| eder1994 | qwen3.8:27b, paper first (E1) | 131072 | 100% | 6.8 min | no reuse: reading 177 s (issue 14) |
+| eder1994 | qwen3.8:27b, paper first + priming | 131072 | 99.8% (one calculated total) | 6.7 min | reading 107 s incl. priming |
+| teng2023 | qwen3.8:27b, paper first + priming | 131072 | 2,115 match, 26 differ, 2 missing (all uncertainties) | 33.5 min | reading ~6.5 min (was ~15); writing ~25 min |
+| eder1994 | qwen3.8:27b, priming, thinking off (E2) | 131072 | 99.5% (CaCl2 of set 001013: 3 cells) | 4.3 min | written 13.1K tokens (25.4K with thinking) |
+| teng2023 | qwen3.8:27b, priming, thinking off (E2) | 131072 | 1,847 match, 19 differ, 270 missing (every stellar uncertainty) | 26.0 min | written 78.6K tokens (103K with thinking) |
 
 For comparison, Claude Standard (Sonnet) reproduces eder1994's values except wording, for about $0.26 (the reference
 itself was made with it), and on teng2023 matches 2,132 archive values with 0 real differences and 27 not extracted,
@@ -77,6 +83,14 @@ With Claude the paper is sent once and read from the cache by every step. A loca
 for every step: teng2023's six requests each carried 82–87K tokens (about 3–4 minutes of reading each on the 3090,
 before any output). A whole paper took 34–37 minutes (eder1994: 4.5–7 minutes). The time scales with paper length
 times the number of steps.
+
+- **Done (E1, 2026-11-11):** requests to model servers start with the same opening -- a fixed system line, then the
+  paper alone -- and the step's instructions, images and answer format come after; Ollama keeps the model loaded
+  30 minutes (`keep_alive`); a paper queue on a server takes as many papers at once as the server takes requests.
+  Plus priming (issue 14). Each step's audit now has the server's own `server_timing` (load, reading, writing,
+  priming seconds), and `scripts/check_local_model.py` prints them.
+- **Result:** reading time down 40% (eder1994) to ~55% (teng2023). Whole-paper time: eder1994 8.5 -> 6.7 min,
+  teng2023 unchanged (33.5 min): writing ~100K tokens at ~70 tokens/s, one request at a time, is most of it.
 
 ### 6. One request at a time
 
@@ -137,6 +151,38 @@ precisely.
 
 A 12B model (gemma3:12b) got the rows and conditions roughly right but mislabelled table values (yields read as
 starting concentrations). About 27–31B is where the results became usable.
+
+### 14. Hybrid models only go back to checkpoints (why the paper-first layout alone didn't help)
+
+qwen3.8:27b is a hybrid model with recurrent layers (Ollama family "qwen35"). The server can't wind its memory back to
+an arbitrary point, only to saved checkpoints, which sit near the end of each request. With the paper first, the next
+step still couldn't return to "just after the paper" after a long step, and read the whole paper again (eder1994:
+reading unchanged, 177 s). Plain requests showed Ollama itself reuses fine (18 s -> 1 s for a repeated opening).
+
+- **Done:** before each step, inside the server's one-request slot, a priming request with only the opening (system
+  line + paper, a 1-token answer) leaves a checkpoint right after the paper; the step then reads only its own part
+  (conditions 35 -> 16 s, chemistry 42 -> 24 s, kinetics 32 -> 13 s). Priming again when the checkpoint is there
+  takes 0.1-1.2 s. Only on private servers (on a hosted service it would be billed as a full read).
+- **Side effect:** answers are no longer bit-for-bit identical between runs (resuming from a checkpoint is not the
+  same arithmetic as reading from the start); issue 8's determinism is weaker now.
+- **Watch for:** a model without recurrent layers wouldn't need the priming; it costs ~0.1 s a step there.
+
+### 15. Thinking (E2)
+
+Models > Connections has a "Thinking" setting per Ollama model (as the model decides / off -> `think: false`).
+qwen3.8:27b on eder1994 with it off: 4.3 instead of 6.7 minutes, half the text written, but the CaCl2 of Table 2's
+unlabelled block (set 001013) was missed -- the value that takes reasoning to place (99.5% instead of 99.8-100%).
+teng2023 with it off: 26.0 instead of 33.5 minutes, but every stellar uncertainty was left out (270 values: st_mass,
+st_rad, st_logg, st_met, st_lum err1/err2 on 27 rows) -- the optional `ep` / `em` fields, issue 1 again. **Keep
+thinking on for qwen3.8:27b** (the default). Making ep / em required for local models would risk invented uncertainties
+where a paper gives none; not done.
+
+### 16. CPU spill is now detected (E3)
+
+After a run's first request to each Ollama model the app asks /api/ps whether all of it is in GPU memory; if not, a
+note and a flag name the share on the CPU and say to lower the context length. Checked live: qwen3.8:27b at 262,144 ->
+69% on the GPU, flagged (31% on the CPU); at 131,072 -> 100%, no flag. The size estimate before sending now also
+learns from what the server counted (only from full reads; it never shrinks).
 
 ## Checklist for trying another model
 

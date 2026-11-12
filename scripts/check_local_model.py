@@ -56,12 +56,24 @@ def archive_totals(validation_json: Path) -> Counter:
     return c
 
 
+def _timing(run_dir: Path, stage: str) -> dict:
+    """The server's own timings of a step (load / prompt_eval = reading / eval = writing, seconds), from its audit."""
+    try:
+        return json.loads((run_dir / f"{stage}.audit.json").read_text()).get("server_timing") or {}
+    except (OSError, ValueError):
+        return {}
+
+
 def _steps(run_dir: Path) -> str:
     s = json.loads((run_dir / "run_summary.json").read_text())
-    lines = [f"  {'step':28} {'in':>8} {'out':>7} {'seconds':>8}"]
+    lines = [f"  {'step':28} {'in':>8} {'out':>7} {'seconds':>8} {'reading':>8} {'writing':>8} {'loading':>8} "
+             f"{'priming':>8}"]
     for u in s.get("usage", []):
+        t = _timing(run_dir, u["stage"])
+        extra = (f" {t.get('prompt_eval', 0):8.0f} {t.get('eval', 0):8.0f} {t.get('load', 0):8.1f}"
+                 + (f" {t['priming']:8.1f}" if t.get("priming") is not None else "") if t else "")
         lines.append(f"  {u['stage']:28} {u.get('input_tokens', 0):8,} {u.get('output_tokens', 0):7,} "
-                     f"{u.get('elapsed_sec', 0):8.0f}")
+                     f"{u.get('elapsed_sec', 0):8.0f}{extra}")
     lines.append(f"  {'total':28} {s.get('input_tokens', 0):8,} {s.get('output_tokens', 0):7,}")
     try:
         took = datetime.fromisoformat(s["finished"]) - datetime.fromisoformat(s["started"])
@@ -96,7 +108,8 @@ def compare(run_dir: Path) -> None:
         print(f"  ... and {len(missed) - 15} more columns")
 
 
-def run(paper: str, model: str, context: int, vision: bool, out: Path, url: str = None, kind: str = None) -> Path:
+def run(paper: str, model: str, context: int, vision: bool, out: Path, url: str = None, kind: str = None,
+        thinking: str = "model") -> Path:
     from parameter_extractor import local_models
     from parameter_extractor.config.run_config import RunConfig
     from parameter_extractor.pipeline import run_pipeline
@@ -105,7 +118,7 @@ def run(paper: str, model: str, context: int, vision: bool, out: Path, url: str 
     saved = local_models.load()
     local = {"kind": kind or saved.kind, "url": url or saved.url, "timeout_sec": saved.timeout_sec, "parallel": 1,
              "api_key": saved.api_key,
-             "models": {model: {"context": context, "vision": vision}},
+             "models": {model: {"context": context, "vision": vision, "thinking": thinking}},
              "profiles": {"check": {"structure_planner": model, "*": model, "figure_planner": model}}}
     info = PAPERS[paper]
     cfg = RunConfig.from_settings(output_dir=out, pack=info["pack"], online_checks=info["online_checks"],
@@ -116,7 +129,8 @@ def run(paper: str, model: str, context: int, vision: bool, out: Path, url: str 
     def progress(e):
         print(f"{time.time() - t0:7.0f} s  {getattr(e, 'stage', '')}: {getattr(e, 'message', '')}", flush=True)
 
-    print(f"{paper} on {model} (context {context:,}, images {'on' if vision else 'off'}) at {local['url']}")
+    print(f"{paper} on {model} (context {context:,}, images {'on' if vision else 'off'}, thinking {thinking}) "
+          f"at {local['url']}")
     if paper == "teng2023":
         snapshot = json.loads(ARCHIVE_SNAPSHOT.read_text())
         with patch.object(exoplanet_archive, "fetch_parameter_sets", lambda names, ref: snapshot):
@@ -134,6 +148,7 @@ def main() -> int:
     ap.add_argument("--context", type=int, default=131072, help="context length that fits on the GPU (not the "
                     "model's reported maximum: docs/local_model_notes.md, issue 3)")
     ap.add_argument("--no-vision", action="store_true", help="the model doesn't read images (table images left out)")
+    ap.add_argument("--no-thinking", action="store_true", help="Ollama: the model answers without reasoning first")
     ap.add_argument("--url", help="server address (default: the app's local model settings)")
     ap.add_argument("--kind", choices=["ollama", "openai"], help="server kind (default: the app's settings)")
     ap.add_argument("--out", type=Path, default=ROOT / "runs" / "local_models")
@@ -145,7 +160,8 @@ def main() -> int:
     if not a.model:
         ap.error("give a model name, or --score RUN_DIR")
     for paper in (list(PAPERS) if a.paper == "both" else [a.paper]):
-        compare(run(paper, a.model, a.context, not a.no_vision, a.out, a.url, a.kind))
+        compare(run(paper, a.model, a.context, not a.no_vision, a.out, a.url, a.kind,
+                    "off" if a.no_thinking else "model"))
     return 0
 
 

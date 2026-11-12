@@ -101,7 +101,10 @@ class PaperQueue:
             indent=2, ensure_ascii=False))
         self.on_change = on_change or (lambda paper: None)
         self.cancel_event = cancel_event or threading.Event()
-        self.parallel = parallel or (BATCH_PARALLEL if config.batch_mode else DIRECT_PARALLEL)
+        # a model server: as many papers at once as it takes requests (usually 1) -- papers taking turns would make
+        # each evict the other's prompt from the server's memory, so it reads every paper again for each step (E1)
+        server = int((config.local or {}).get("parallel") or 1) if config.is_local else 0
+        self.parallel = parallel or server or (BATCH_PARALLEL if config.batch_mode else DIRECT_PARALLEL)
         self._pool: Optional[ThreadPoolExecutor] = None
         self._reader: Optional[threading.Thread] = None
         self.reading_done = threading.Event()

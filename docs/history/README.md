@@ -109,3 +109,4 @@ current month's file (start `YYYY-MM.md` in a new month), with one line here.
 - Opening earlier runs; resume and rebuild (2026-11-11, Mickey: W3 then W1 of the review suggestions)
 - Models window: profiles and connections (2026-11-11, Mickey)
 - Built-in steps shown, read-only (2026-11-11, Mickey)
+- Local model server: paper first + priming, thinking setting, CPU spill (2026-11-11, Mickey: E1, E2, E3 parts 1-2)

@@ -45,6 +45,9 @@ HELP = {
     "retries": "How often a request is tried again when the API is busy or rate-limited (default 5).",
     "prices": "Price per million tokens for models the app's price table doesn't know, so the cost shown stays "
               f"right (the table was checked {PRICES_CHECKED}).",
+    "thinking": "Models like qwen3 and gemma4 reason before they answer (about 1,000 tokens a request): more time, "
+                "and less room left for the answer. Off: they answer directly (Ollama's think option). Whether the "
+                "results hold without it is a measurement, not a given.",
     "context": "Tokens the model holds at once (paper + instructions + answer). Enter what fits in the server's "
                "memory, not the model's reported maximum: a larger value moves the model partly onto the CPU and "
                "makes it several times slower.",
@@ -537,9 +540,9 @@ class ModelsWindow(QDialog):
         self.conn_status = _help_label("")
         rv.addWidget(self.conn_status)
         rv.addWidget(QLabel("<b>Models</b>"))
-        self.models_table = QTableWidget(0, 5)
+        self.models_table = QTableWidget(0, 6)
         self.models_table.setHorizontalHeaderLabels(["Model", "Context (tokens)", "Reads images",
-                                                     "Input $/M tokens", "Output $/M tokens"])
+                                                     "Input $/M tokens", "Output $/M tokens", "Thinking"])
         self.models_table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
         self.models_table.verticalHeader().setVisible(False)
         self.models_table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
@@ -631,7 +634,7 @@ class ModelsWindow(QDialog):
             if anthropic:
                 tiers = PRICES.get(name, [(None, None, None, None, None)])
                 for c, text in ((1, "200,000"), (2, "yes"), (3, f"${tiers[0][1]:g}" if tiers[0][1] is not None else "—"),
-                                (4, f"${tiers[0][2]:g}" if tiers[0][2] is not None else "—")):
+                                (4, f"${tiers[0][2]:g}" if tiers[0][2] is not None else "—"), (5, "—")):
                     cell = QTableWidgetItem(text)
                     cell.setFlags(cell.flags() & ~Qt.ItemFlag.ItemIsEditable)
                     t.setItem(r, c, cell)
@@ -657,6 +660,15 @@ class ModelsWindow(QDialog):
                     p.setValue(float(value))
                 p.valueChanged.connect(self._conn_edited)
                 t.setCellWidget(r, c, p)
+            think = QComboBox()
+            think.addItem("As the model decides", "model")
+            think.addItem("Off", "off")
+            think.setCurrentIndex(max(0, think.findData(getattr(spec, "thinking", "model"))))
+            think.setEnabled(conn.kind == "ollama")
+            think.setToolTip(HELP["thinking"] if conn.kind == "ollama" else
+                             "Only for Ollama: OpenAI-compatible servers have no standard switch for it.")
+            think.currentIndexChanged.connect(self._conn_edited)
+            t.setCellWidget(r, 5, think)
         t.resizeColumnsToContents()
         t.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
 
@@ -671,7 +683,8 @@ class ModelsWindow(QDialog):
                 return {}
             out[name] = mp.ServerModel(context=context.value(), vision=vision.findChild(QCheckBox).isChecked(),
                                        price_input=_price_of(t.cellWidget(r, 3)),
-                                       price_output=_price_of(t.cellWidget(r, 4)))
+                                       price_output=_price_of(t.cellWidget(r, 4)),
+                                       thinking=t.cellWidget(r, 5).currentData() or "model")
         return out
 
     def _commit_connection(self) -> None:
