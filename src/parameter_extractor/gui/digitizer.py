@@ -1442,7 +1442,7 @@ class DigitizerWidget(QWidget):
         gray = self._gray()
         x, y = centre_marker(gray, x, y)
         frame = next((f for f in self._frames() if f.contains(x, y)), None)
-        area = (frame.left, frame.top, frame.right, frame.bottom) if frame else self._figure_region()
+        area = (frame.left, frame.top, frame.right, frame.bottom) if frame else self._image.region()
         legends = find_boxes_inside(gray, frame) if frame else []
         existing = [(p.px, p.py) for s in self.fig.series for p in s.points]
         found = find_similar_points(gray, (x, y), area, existing=existing,

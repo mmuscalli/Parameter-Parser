@@ -280,7 +280,12 @@ class VariableRegistry:
                 return True
         # a species' stock-solution concentration goes with its starting concentration:
         # stock_X_aq_mM is known wherever initial_X_aq_mM is
-        return column.startswith("stock_") and self.is_known_column("initial_" + column.removeprefix("stock_"))
+        if column.startswith("stock_") and self.is_known_column("initial_" + column.removeprefix("stock_")):
+            return True
+        # a value the paper calculated (Mickey, 2026-11-12): known wherever the same measured or starting value is
+        rest = column.removeprefix("calculated_")
+        return column.startswith("calculated_") and (self.is_known_column("sampled_" + rest)
+                                                     or self.is_known_column("initial_" + rest))
 
     def is_template_column(self, column: str) -> bool:
         return column in self._template_set
@@ -495,13 +500,14 @@ class VariableRegistry:
         label = self.alias_labels.get(key, name)
         if kind == "species":
             parts = label.split(" ", 1)
-            if len(parts) == 2 and parts[0] in ("initial", "sampled", "stock"):
+            if len(parts) == 2 and parts[0] in ("initial", "sampled", "stock", "calculated"):
                 role, species = parts
                 recovered = species.endswith(" % recovered")
                 ratio = species.endswith(" ratio")
                 pct = species.endswith(" %")
                 species = species.removesuffix(" % recovered").removesuffix(" %").removesuffix(" ratio")
-                what = {"initial": "starting concentration", "stock": "stock solution, before mixing"}.get(
+                what = {"initial": "starting concentration", "stock": "stock solution, before mixing",
+                        "calculated": "calculated by the paper"}.get(
                     role, "measured, % recovered" if recovered else "measured, ratio" if ratio else
                     "measured, % yield" if pct else "measured")
                 return f"{species} ({what})"

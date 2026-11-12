@@ -134,7 +134,8 @@ def collect_new_variables(
             pubchem_title=s.pubchem_title, pubchem_synonyms=list(getattr(s, "pubchem_synonyms", []) or []),
             **_errors(s),
             # a stock solution's concentration is how the solution was prepared (Mickey, 2026-11-02)
-            category=categories.for_source("species", "stock" if s.concentration_basis == "stock" else s.role) or ""))
+            category=categories.for_source("species", "calculated" if getattr(s, "calculated", False) else
+                                            "stock" if s.concentration_basis == "stock" else s.role) or ""))
     for sol in chemistry.added_solutions:
         # the one variable for each solution volume (methodology repeats are dropped,
         # see ingestion/duplicates.py); the mixture calculations use the same records
@@ -415,7 +416,7 @@ def write_values(rows: List[ExtractedRow], column: str, values: List[NewVariable
 
 def action_is_species_column(column: str) -> bool:
     """A starting / measured / stock species column (its compound can get an active name)."""
-    return bool(re.match(r"(initial|sampled|stock)_", column or ""))
+    return bool(re.match(r"(initial|sampled|stock|calculated)_", column or ""))
 
 
 def apply_decisions(rows: List[ExtractedRow], groups: List[VariableGroup],

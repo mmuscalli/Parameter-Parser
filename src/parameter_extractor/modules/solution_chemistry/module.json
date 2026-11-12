@@ -53,6 +53,17 @@
       "sources": [
         "species:sampled"
       ]
+    },
+    {
+      "id": "calculated_values",
+      "table_order": 76,
+      "label": "Calculated by the Paper",
+      "value_type": "number",
+      "model_assigns": false,
+      "description": "concentrations and yields the paper calculated or modelled (equilibrium calculations, simulations, model predictions), not measured",
+      "sources": [
+        "species:calculated"
+      ]
     }
   ],
   "category_columns": {
@@ -64,6 +75,11 @@
     "products": {
       "patterns": [
         "^(?:total_)?sampled_.+_(?:aq|gas|s)(?:_avg|_range)*_"
+      ]
+    },
+    "calculated_values": {
+      "patterns": [
+        "^calculated_"
       ]
     }
   },

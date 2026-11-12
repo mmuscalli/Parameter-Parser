@@ -189,7 +189,7 @@ def check_row_quotes(rows, paper_text: str, image_tables: set = frozenset(),
     return missing
 
 
-def species_named_in(name: str, quote: str) -> bool:
+def species_named_in(name: str, quote: str, cache: Optional[dict] = None) -> bool:
     """Does the quote name this species -- its name, or for amino acids and peptides their
     residues as full names, three-letter or one-letter codes (Table 3's 'FF, FA, AF')? A quote
     that doesn't (Chen2007: 'Entry 1 ... Yield (%) 2' for a product drawn as a structure)
@@ -205,7 +205,14 @@ def species_named_in(name: str, quote: str) -> bool:
     words = re.findall(r"[\w\[\]()+'’,-]+", quote)
     for size in (4, 3, 2, 1):                                       # a phrase naming it: 'potassium ferricyanide'
         for i in range(len(words) - size + 1):
-            hit = match_species(" ".join(words[i:i + size]).strip(",()"), vocab=(base,))
+            phrase = " ".join(words[i:i + size]).strip(",()")
+            key = (phrase, base)
+            if cache is not None and key in cache:       # one check over many quotes repeats the same phrases
+                hit = cache[key]
+            else:
+                hit = match_species(phrase, vocab=(base,))
+                if cache is not None:
+                    cache[key] = hit
             if hit and hit[0] == base:
                 return True
     ion = re.match(r"(NH4|[A-Z][a-z]?)(?=[A-Z(\[]|\d*$)", base) if re.search(r"(Cl|Br|I|SO4|NO3)\d*$", base) else None
@@ -229,6 +236,7 @@ def unnamed_species(solutes, page_texts: Optional[List[str]] = None) -> list:
     quoted as bare numbers ('97.3 2.77 0.064') is named by its column header, on the same page."""
     paper = PaperText("\n".join(page_texts), page_texts) if page_texts else None
     named_on_page: dict = {}
+    phrases: dict = {}                    # (phrase, species) -> match: Cleaves2008 asked 7,000 times (0.6 s)
     out = []
     for s in solutes:
         if ((s.concentration_value is None and s.concentration_mM is None and not getattr(s, "detection", ""))
@@ -237,18 +245,18 @@ def unnamed_species(solutes, page_texts: Optional[List[str]] = None) -> list:
         if getattr(s, "identified_by", ""):
             out.append(s)
             continue
-        if species_named_in(s.name, s.quote):
+        if species_named_in(s.name, s.quote, phrases):
             continue
         # a table cell's quote is just '<row> <value>'; its column header (in the source: '..., column
         # Recovered Nicotinamide (%)') names it -- kim2017's quote '1 93.1' couldn't be placed on a page
         header = re.search(r"\bcolumn\s+(.+)$", s.source or "")
-        if header and species_named_in(s.name, header.group(1)):
+        if header and species_named_in(s.name, header.group(1), phrases):
             continue
         page = paper.page_of(s.quote) if paper and s.quote else None
         if page:
             key = (s.name, page)
             if key not in named_on_page:
-                named_on_page[key] = species_named_in(s.name, page_texts[page - 1])
+                named_on_page[key] = species_named_in(s.name, page_texts[page - 1], phrases)
             if named_on_page[key]:
                 continue
         out.append(s)

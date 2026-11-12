@@ -17,8 +17,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Dict, List, Optional
 
-ROLES = ("initial", "sampled", "stock")
-_COLUMN = re.compile(r"^(?P<role>initial|sampled|stock)_(?P<rest>.+)$")
+ROLES = ("initial", "sampled", "stock", "calculated")
+_COLUMN = re.compile(r"^(?P<role>initial|sampled|stock|calculated)_(?P<rest>.+)$")
 
 
 @dataclass

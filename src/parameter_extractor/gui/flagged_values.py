@@ -76,6 +76,7 @@ KIND_LABELS = {
     "multimodal": "Several modes reported",
     "other_estimates": "Other estimates reported",
     "archive_check": "Differs from the NASA Exoplanet Archive",
+    "no_starting_composition": "Products without a starting composition",
 }
 
 
@@ -206,10 +207,16 @@ class FlaggedValuesWindow(QDialog):
         self.result, self.registry, self.on_changed = result, registry, on_changed or (lambda: None)
         self.changed = False
         self._filling = False
+        self._undo: list = []                        # [(what, [(row, column, correction before)])]: Ctrl+Z
+        from PySide6.QtGui import QKeySequence, QShortcut
+        QShortcut(QKeySequence(QKeySequence.StandardKey.Undo), self, activated=self.undo)
 
         v = QVBoxLayout(self)
         self.summary = QLabel(wordWrap=True)
         v.addWidget(self.summary)
+        self.note_label = QLabel(wordWrap=True)      # what the last change / undo did
+        self.note_label.setStyleSheet("color: palette(link);")
+        v.addWidget(self.note_label)
         top = QHBoxLayout()
         self.all_columns_box = QCheckBox("Show all columns")
         self.all_columns_box.toggled.connect(lambda _on: self._fill_table())
@@ -580,28 +587,56 @@ class FlaggedValuesWindow(QDialog):
                         return t
         return None
 
+    def _saved_figure(self, text: str) -> Tuple[Optional[str], str]:
+        """(image, caption) of the first saved figure `text` names ('Fig. 2', 'Figure. 2')."""
+        for m in _PLACE.finditer(text or ""):
+            if m.group(1).lower().startswith("fig"):
+                for f in self.result.figures or []:
+                    if str(f.get("figure_id", "")).lower() == f"fig. {m.group(2)}".lower():
+                        image = f.get("annotated_image") or f.get("image")
+                        if image and Path(image).is_file():
+                            return image, f"{f['figure_id']} (as saved with the run)"
+        return None, ""
+
+    def _row_place(self, fid: str) -> Tuple[Optional[str], str, Optional[dict]]:
+        """The table or figure a ROW comes from (Mickey, 2026-11-12: any cell of a row shows it): its flagged
+        values' locations first, then the row's data_location ('Table. 1', 'Figure. 2') and source_notes."""
+        row = next((r for r in self.rows if r.get("full_id") == fid), {})
+        texts = [(self.cell_info.get(c) or {}).get("source", "") for c in self.cell_flags if c[0] == fid]
+        texts += [row.get("data_location", ""), row.get("source_notes", "")]
+        for text in texts:
+            table = self._saved_table(text)
+            if table is not None:
+                return table["image"], f"{table['table_id']} (as saved with the run; this row's source)", table
+            image, caption = self._saved_figure(text)
+            if image:
+                return image, caption.replace(")", "; this row's source)"), None
+        return None, "", None
+
     def _image_for(self, flag, cell=None) -> Tuple[Optional[str], str, Optional[dict]]:
-        """(image path, caption, tables.json entry) of the saved table the value's own location names, else the saved
-        table / figure the flag's location names, else the flag's page render."""
+        """(image path, caption, tables.json entry): the saved table the value's own location names; else the table
+        or figure its row comes from; else the saved table / figure the flag's location names; else the flag's page
+        render."""
         own = self._saved_table((self.cell_info.get(cell) or {}).get("source", "")) if cell else None
         if own is not None:
             return own["image"], f"{own['table_id']} (as saved with the run)", own
+        if cell:
+            found = self._row_place(cell[0])
+            if found[0]:
+                return found
         if flag is None:
             return None, "", None
         text = " ".join(x for x in (flag.source or "", flag.message or "") if x)
         m = _PLACE.search(text)
         if m:
-            kind, number = m.group(1).lower(), m.group(2)
-            if kind.startswith("table"):
+            if m.group(1).lower().startswith("table"):
                 t = self._saved_table(text)
                 if t is not None:
                     return t["image"], f"{t['table_id']} (as saved with the run)", t
             else:
-                for f in self.result.figures or []:
-                    if str(f.get("figure_id", "")).lower() == f"fig. {number}".lower():
-                        image = f.get("annotated_image") or f.get("image")
-                        if image and Path(image).is_file():
-                            return image, f"{f['figure_id']} (as saved with the run)", None
+                image, caption = self._saved_figure(text)
+                if image:
+                    return image, caption, None
         if flag.page:
             page = Path(self.result.run_dir) / "page_images" / f"page-{flag.page}.jpg"
             pieces = sorted(page.parent.glob(f"page-{flag.page}*.jpg")) if page.parent.is_dir() else []
@@ -627,7 +662,7 @@ class FlaggedValuesWindow(QDialog):
             self.image_path = path
             self._pixmap = QPixmap(path)
         self._image_entry = entry
-        self._boxes, note = self._marks(cell, entry)
+        self._boxes, note = self._marks(cell, entry) if entry is not None else self._figure_marks(cell, path)
         self.image_caption.setText(f"<b>{escape(caption)}</b>" + (f"<br><span style='color:gray'>{escape(note)}"
                                                                    f"</span>" if note else ""))
         self._render_image(scroll=True)
@@ -637,18 +672,45 @@ class FlaggedValuesWindow(QDialog):
         if cell is None or entry is None:
             return [], ""
         o = self.cell_info.get(cell) or {}
-        if self._saved_table(o.get("source", "")) is not entry:
+        own = self._saved_table(o.get("source", "")) is entry
+        row = next((r for r in self.rows if r.get("full_id") == cell[0]), {})
+        value = o.get("extracted_value") or o.get("value", "") or row.get(cell[1], "")
+        if not value:
             return [], ""
         words = self._words_of(entry)
         if words.problem:
-            return [], f"Not marked: {words.problem}."
+            return [], f"Not marked: {words.problem}." if own else ""
         from parameter_extractor.ingestion.table_locate import locate
-        boxes, how = locate(words.words, o.get("extracted_value") or o.get("value", ""), o.get("quote", ""))
+        # a value from elsewhere (another table, the text, a calculation) may still be printed here -- in the table or
+        # its caption -- but only the value itself is looked for, not its quote's numbers
+        boxes, how = locate(words.words, value, o.get("quote", "") if own else "")
         name = f"{cell[1]} of row {cell[0]}"
         if not boxes:
-            return [], f"{name}: not found in the table's text layer -- look for it by eye."
+            return [], (f"{name}: not found in the table's text layer -- look for it by eye." if own else "")
         return boxes, f"{name}: boxed where the table's text has {how}" + \
             (f" ({len(boxes)} places)" if len(boxes) > 1 else "") + "."
+
+    def _figure_marks(self, cell, path: str) -> Tuple[list, str]:
+        """A row digitized from a figure: its series' points boxed on the saved digitized image (the image is cut
+        from the page render: digitizing/annotate.crop_box gives where)."""
+        if cell is None or not str(path).endswith(".digitized.png"):
+            return [], ""
+        row = next((r for r in self.rows if r.get("full_id") == cell[0]), {})
+        m = re.search(r"series '(.+?)'(?:,|$| \()", row.get("source_notes", "") or "")
+        if not m:
+            return [], ""
+        try:
+            from parameter_extractor.digitizing.annotate import crop_box
+            from parameter_extractor.schemas.figures import DigitizedFigure
+            fig = DigitizedFigure.model_validate_json(Path(str(path).replace(".png", ".json")).read_text())
+        except Exception:                                  # an older or moved figure file: no marks, nothing breaks
+            return [], ""
+        series = next((s for s in fig.series if s.label == m.group(1)), None)
+        if series is None or not series.points:
+            return [], ""
+        x0, y0, _x1, _y1 = crop_box(fig, 10 ** 6, 10 ** 6)
+        boxes = [(p.px - x0 - 12, p.py - y0 - 12, p.px - x0 + 12, p.py - y0 + 12) for p in series.points]
+        return boxes, f"This row's series '{series.label}': its {len(boxes)} point(s) boxed."
 
     def _words_of(self, entry):
         from parameter_extractor.ingestion.table_locate import TableWords
@@ -771,6 +833,12 @@ class FlaggedValuesWindow(QDialog):
         if not cells:
             return
         menu = QMenu(self)
+        item = self.table.itemAt(pos)
+        here = item.data(Qt.ItemDataRole.UserRole) if item is not None else None
+        if here and here[1] not in corr.FIXED_COLUMNS:
+            shown = here[2] if len(here[2]) <= 30 else here[2][:30] + "…"
+            menu.addAction(f"Replace whole column with value ('{shown or 'empty'}')",
+                           lambda: self.replace_column(here[1], here[2]))
         menu.addAction(f"Change {len(cells)} selected value(s)…", self.change_selected)
         corrected = [c for c in cells if (c[0], c[1]) in self.corrected]
         if corrected:
@@ -780,7 +848,47 @@ class FlaggedValuesWindow(QDialog):
         if keys - self.checked:
             menu.addAction(f"Tick the flags of the selected value(s) ({len(keys - self.checked)})",
                            lambda: self.tick_keys(keys))
+        if self._undo:
+            menu.addSeparator()
+            menu.addAction(f"Undo: {self._undo[-1][0]}", self.undo)
         menu.exec(self.table.viewport().mapToGlobal(pos))
+
+    # ---- undo (Ctrl+Z): every change made in this window ---------------------------------------------------------
+    def _remember(self, label: str, cells) -> None:
+        """Before a change: how the cells are now (their corrections; None = as extracted)."""
+        self._undo.append((label, [(fid, col, self.corrected.get((fid, col))) for fid, col in cells]))
+
+    def undo(self) -> bool:
+        if not self._undo:
+            self.summary_note("Nothing to undo.")
+            return False
+        label, states = self._undo.pop()
+        corr.restore(self.result.run_dir, states)
+        self.changed = True
+        self._load()
+        self.on_changed()
+        self.summary_note(f"Undone: {label}.")
+        return True
+
+    def summary_note(self, text: str) -> None:
+        self.note_label.setText(text)
+
+    def replace_column(self, column: str, value: str) -> int:
+        """Give every row of the dataset this value in `column` (a value that holds for the whole paper); undo with
+        Ctrl+Z. Returns how many cells changed."""
+        cells = [(row.get("full_id", ""), column, row.get(column, "")) for row in self.rows
+                 if row.get(column, "") != value]
+        if not cells:
+            self.summary_note(f"Every row already has {column} = '{value}'.")
+            return 0
+        self._remember(f"replace {column} on {len(cells)} row(s)", [(f, c) for f, c, _b in cells])
+        corr.correct_many(self.result.run_dir, [(f, c, b, value) for f, c, b in cells],
+                          note="whole column replaced with one value")
+        self.changed = True
+        self._load()
+        self.on_changed()
+        self.summary_note(f"{column}: {len(cells)} value(s) replaced with '{value}' (Ctrl+Z undoes it).")
+        return len(cells)
 
     def change_selected(self) -> None:
         cells = self.selected_cells()
@@ -805,17 +913,17 @@ class FlaggedValuesWindow(QDialog):
             stored[column] = value
         if problems:
             return problems
-        for full_id, column, before in cells:
-            if stored[column] != before:
-                corr.correct(self.result.run_dir, full_id, column, before, stored[column], note=note or None)
+        todo = [(f, c, b, stored[c]) for f, c, b in cells if stored[c] != b]
+        self._remember(f"change {len(todo)} value(s)", [(f, c) for f, c, _b, _v in todo])
+        corr.correct_many(self.result.run_dir, todo, note=note or None)
         self.changed = True
         self._load()
         self.on_changed()
         return []
 
     def revert_cells(self, cells) -> None:
-        for full_id, column, _before in cells:
-            corr.revert(self.result.run_dir, full_id, column)
+        self._remember(f"revert {len(cells)} value(s)", [(f, c) for f, c, _b in cells])
+        corr.restore(self.result.run_dir, [(f, c, None) for f, c, _b in cells])
         self.changed = True
         self._load()
         self.on_changed()
@@ -882,6 +990,7 @@ class FlaggedValuesWindow(QDialog):
             QMessageBox.warning(self, "Not a valid value", f"{column}: {problem}. The value wasn't changed.")
             self._fill_table()
             return
+        self._remember(f"change {column} of row {full_id}", [(full_id, column)])
         corr.correct(self.result.run_dir, full_id, column, before, value)
         self.changed = True
         self._load()

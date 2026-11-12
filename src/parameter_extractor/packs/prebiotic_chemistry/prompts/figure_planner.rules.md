@@ -28,6 +28,11 @@
   where the Methods say the other experiments used no buffer.
 - Name each species as the paper does throughout: the vocabulary name, else the
   abbreviation the paper defines ("ImpA") -- the same name the chemistry uses.
+- Every series with products or yields needs its starting composition (the
+  starting compounds and their concentrations); a series label or legend
+  entry such as "gly2 (A, 0.1 M)" or a caption "starting from 0.1 M glycine"
+  gives it -- list it in `concentrations`. A curve the paper CALCULATED or
+  modelled (not measured points) says so in the series' notes.
 - Starting compositions: look in the caption, the passages about the figure,
   the structure plan AND the concentration passages from the rest of the
   paper below (starting concentrations are usually stated once, in the

@@ -120,3 +120,4 @@ current month's file (start `YYYY-MM.md` in a new month), with one line here.
 - Flagged values: the selected value alone; flags placed by the set they name; details panel reworked (2026-11-12, Mickey)
 - Buttons and menu items passing Qt's checked flag (2026-11-12, Mickey: File > Open a results folder… crashed)
 - Themes; Mark all flags checked (2026-11-12, Mickey)
+- Cleaves2008 round: calculated values, starting compositions, column replace + undo, row images, digitizer crash (2026-11-12, Mickey)

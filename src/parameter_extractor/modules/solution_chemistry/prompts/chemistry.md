@@ -140,6 +140,18 @@ For each species:
   runs was 4%") goes in `groups` with that set's `set`, NO `sample`, `avg`
   true: it's written on each row of the set. An average in the text for
   experiments that aren't in the plan is left out.
+- Calculated values: a value the paper CALCULATED or MODELLED rather than
+  measured -- a table of "calculated equilibrium concentrations", a
+  simulation, a thermodynamic or kinetic model's prediction -- gets `calc`
+  true (on the table column, or on the species); it goes in its own
+  'calculated_' column, apart from measured results. The inputs the paper
+  chose for the calculation (an assumed starting concentration) are ordinary
+  `initial` values without `calc`.
+- Starting composition: every set (and sample) with products or other results
+  needs its starting compounds and their concentrations -- give them wherever
+  the paper states them (Methods, captions, figure legends, a series label
+  such as "(A, 0.1 M)"), even when the results table itself doesn't repeat
+  them. Leave them out only when the paper gives none.
 - A value printed as a range ("5-10 mM", "0.1 to 0.5 M"): `v` the lower end,
   `hi` the upper end, `u` their unit (in a table, copy the cell as printed,
   e.g. "5-10") -- never one end alone or the midpoint.

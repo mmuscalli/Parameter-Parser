@@ -23,7 +23,7 @@ import html
 from PySide6.QtCore import QSettings, Qt, QThread, QTimer, QUrl
 from PySide6.QtGui import QAction, QActionGroup, QBrush, QColor, QDesktopServices, QKeySequence
 from PySide6.QtWidgets import (
-    QAbstractItemView, QCheckBox, QComboBox, QFileDialog, QFormLayout, QGroupBox, QHBoxLayout,
+    QAbstractItemView, QApplication, QCheckBox, QComboBox, QFileDialog, QFormLayout, QGroupBox, QHBoxLayout,
     QHeaderView, QInputDialog, QLabel, QLineEdit, QMainWindow, QMessageBox, QPlainTextEdit, QProgressBar, QPushButton,
     QFrame, QMenu, QScrollArea, QSplitter, QToolButton, QWidgetAction,
     QTableWidget, QTableWidgetItem, QTabWidget, QTextBrowser, QTreeWidget, QTreeWidgetItem,
@@ -85,6 +85,20 @@ def _correction_tip(fix) -> str:
     return (f"Corrected by you ({fix.time.replace('T', ' ')}): extracted value "
             + (repr(fix.extracted) if fix.extracted else "(empty)") + (f"\nNote: {fix.note}" if fix.note else "")
             + "\nRight-click to revert it or add a note.")
+
+
+def _with_normal_cursor(review):
+    """The review window opens while the busy cursor is up: the normal cursor for it."""
+    if review is None:
+        return None
+
+    def run(*args, **kwargs):
+        QApplication.setOverrideCursor(Qt.CursorShape.ArrowCursor)
+        try:
+            return review(*args, **kwargs)
+        finally:
+            QApplication.restoreOverrideCursor()
+    return run
 
 
 def _step(number: str, title: str, tip: str) -> QLabel:
@@ -1383,11 +1397,18 @@ class MainWindow(QMainWindow):
         if self._resume_old is not None:          # variables decided in the earlier run's review: decided again
             from parameter_extractor.resume import review_with_saved
             review = review_with_saved(self._resume_old, review)
+        # the dataset is built here, on the window's thread (the review of new variables opens in the middle of it):
+        # say so and show the busy cursor, rather than looking frozen for a few seconds (Mickey, 2026-11-12)
+        self.status.setText("Building the dataset (rows, calculations, checks)…")
+        QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)
+        QApplication.processEvents()
         try:
-            result = finish(extraction, digitized, skipped, review=review)
+            result = finish(extraction, digitized, skipped, review=_with_normal_cursor(review))
         except PipelineError as e:
             self._on_failed(str(e))
             return
+        finally:
+            QApplication.restoreOverrideCursor()
         self.progress.setValue(self.progress.maximum())
         n_flags = len(result.paper_flags) + sum(len(f) for f in result.row_flags.values())
         n_fig_rows = sum(f["points"] for f in result.figures)
@@ -1765,6 +1786,7 @@ class MainWindow(QMainWindow):
         new_var_flags = [f for f in result.paper_flags if f.kind == "new_variable"]
         archive_flags = [f for f in result.paper_flags if f.kind in ("archive_check", "archive_match")]
         derived_flags = [f for f in result.paper_flags if f.kind == "derived_value"]
+        composition_flags = [f for f in result.paper_flags if f.kind == "no_starting_composition"]
         repeat_flags = [f for f in result.paper_flags if f.kind == "duplicate_removed"]
         fit_flags = [f for f in result.paper_flags if f.kind in ("fit_model", "multimodal", "other_estimates")]
         identity_flags = [f for f in result.paper_flags if f.kind == "identity_not_quoted"]
@@ -1783,7 +1805,7 @@ class MainWindow(QMainWindow):
                                                "multimodal", "other_estimates", "identity_not_quoted",
                                                "paper_source", "pass_disagreement", "auto_digitized",
                                                "analysis", "scope", "reused_answer", "table_check",
-                                               "table_not_found", "quote_unrelated")]
+                                               "table_not_found", "quote_unrelated", "no_starting_composition")]
         if reuse_flags:
             add_group("Reused from an earlier run", reuse_flags)
         if table_flags:
@@ -1802,6 +1824,8 @@ class MainWindow(QMainWindow):
             add_group("New variables not added to the CSV", new_var_flags)
         if derived_flags:
             add_group("Calculated by the app (not stated in the paper)", derived_flags)
+        if composition_flags:
+            add_group("Products without a starting composition", composition_flags)
         if archive_flags:
             add_group("Checked against the NASA Exoplanet Archive", archive_flags)
         if identity_flags:
@@ -1843,7 +1867,6 @@ class MainWindow(QMainWindow):
 
     def _set_theme(self, theme_id: str) -> None:
         """Settings > Theme: applied at once and remembered; the shown results are refilled in the new colours."""
-        from PySide6.QtWidgets import QApplication
         used = themes.apply(QApplication.instance(), theme_id)
         QSettings().setValue(themes.THEME_KEY, used)
         for action in self.theme_actions.actions():

@@ -19,6 +19,11 @@ from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
 Box = Tuple[float, float, float, float]          # x0, y0, x1, y1 in the crop's pixels
+# scientific notation as printed or quoted: '3e-4', '1.2E+03', '3×10-4', '3 × 10^-4', '3x10−4', '3·10(-4)' (Cleaves2008,
+# 2026-11-12: quotes like '3×10-4 M 3e-4')
+_SCI = re.compile(r"(?<![\w.])([-−+]?\d+(?:\.\d+)?)\s*(?:[eE]\s*([-−+]?\d+)|[x×✕·*]\s*10\s*(?:\^|\*\*)?\s*\(?\s*([-−+–]?\s*\d+)\)?)")
+# a power of ten alone: '10-9 M', '10^-9'
+_POWER = re.compile(r"(?<![\w.])10\s*(?:\^|\*\*)\s*\(?([-−+–]?\d+)\)?|(?<![\w.])10([-−–]\d+)(?!\d)")
 _NUMBER = re.compile(r"(?<![A-Za-z\d.])[-−+]?\d+(?:\.\d+)?(?![\d])")
 _WORD_NUMBER = re.compile(r"^[(\[<>~≈±]*([-−+]?\d+(?:\.\d+)?)[)\]%,;:*a-z†‡§¶]{0,2}$")
 
@@ -30,13 +35,42 @@ class Word:
 
     @property
     def number(self) -> Optional[float]:
-        m = _WORD_NUMBER.match(self.text.strip())
+        text = self.text.strip()
+        sci, rest = sci_numbers(text)
+        if len(sci) == 1 and not re.sub(r"[\s()\[\]%,;:*]", "", rest):
+            return sci[0]
+        m = _WORD_NUMBER.match(text)
         return float(m.group(1).replace("−", "-")) if m else None
 
 
+def _exponent(text: str) -> int:
+    return int(re.sub(r"\s", "", text).replace("−", "-").replace("–", "-"))
+
+
+def sci_numbers(text: str) -> Tuple[List[float], str]:
+    """(the values written in scientific notation, the text with them blanked out)."""
+    values = []
+
+    def take(m):
+        mantissa = float(m.group(1).replace("−", "-"))
+        exp = m.group(2) or m.group(3)
+        values.append(mantissa * 10 ** _exponent(exp))
+        return " " * len(m.group(0))
+
+    text = _SCI.sub(take, text or "")
+
+    def power(m):
+        values.append(10.0 ** _exponent(m.group(1) or m.group(2)))
+        return " " * len(m.group(0))
+
+    return values, _POWER.sub(power, text)
+
+
 def numbers_in(text: str) -> List[float]:
-    """The numbers of a value or quote as printed -- not exponents or charges glued to a word ('dm-3', 'Ca2+')."""
-    out = []
+    """The numbers of a value or quote as printed -- not exponents or charges glued to a word ('dm-3', 'Ca2+');
+    scientific notation as one number ('3×10-4' = 0.0003)."""
+    sci, text = sci_numbers(text or "")
+    out = list(sci)
     for m in _NUMBER.finditer(text or ""):
         text = text or ""
         tail = text[m.end():m.end() + 1]
@@ -50,7 +84,40 @@ def numbers_in(text: str) -> List[float]:
 
 
 def _same(a: float, b: float) -> bool:
+    if a == b:
+        return True
+    if a and b and (abs(a) < 1e-3 or abs(b) < 1e-3 or abs(a) > 1e6):       # small / large: relative only
+        return abs(a - b) <= 1e-6 * max(abs(a), abs(b))
     return abs(a - b) <= 1e-9 * max(1.0, abs(a), abs(b))
+
+
+def joined_words(words: List["Word"]) -> List["Word"]:
+    """The words plus scientific notation split over two or three words of one line ('3×10' + a raised '−4',
+    '3' '×' '10−4'), joined into one word with their boxes merged. Words are on one line when their boxes overlap
+    vertically (a superscript sits a little higher)."""
+    out = list(words)
+
+    def right_of(w: "Word") -> Optional["Word"]:
+        height = w.box[3] - w.box[1]
+        nxt = [o for o in words if o is not w and o.box[0] >= w.box[2] - 1 and o.box[0] - w.box[2] <= height
+               and min(o.box[3], w.box[3]) - max(o.box[1], w.box[1]) > 0]
+        return min(nxt, key=lambda o: o.box[0]) if nxt else None
+
+    for w in words:
+        group = [w]
+        for _ in (2, 3):
+            n = right_of(group[-1])
+            if n is None:
+                break
+            group.append(n)
+            text = "".join(g.text for g in group)
+            if not re.search(r"10|[eE]", text):
+                continue
+            joined = Word(text, (min(g.box[0] for g in group), min(g.box[1] for g in group),
+                                 max(g.box[2] for g in group), max(g.box[3] for g in group)))
+            if joined.number is not None and (_SCI.search(text) or _POWER.search(text)):
+                out.append(joined)
+    return out
 
 
 class TableWords:
@@ -97,8 +164,13 @@ class TableWords:
             if box[2] < 0 or box[3] < 0 or box[0] > width or box[1] > height:
                 continue
             self.words.append(Word(w["text"], box))
+        caption_bottom = (entry["caption_box"][1] - entry["box"][1]) * scale if entry.get("caption_box") else 0
+        body_numbers = [w for w in self.words if w.box[1] > caption_bottom and w.number is not None]
         if not self.words:
             self.problem = "the PDF has no text layer on this table (an image): values aren't located"
+        elif len(body_numbers) < 3:
+            self.problem = ("the PDF has no text for this table's values (drawn as shapes or an image -- only its "
+                            "caption is text): values aren't located")
 
 
 def _find_crop(page, entry: dict, offset, scale: float, crop) -> Tuple[int, int]:
@@ -127,8 +199,9 @@ def locate(words: List[Word], value: str, quote: str = "") -> Tuple[List[Box], s
     """(boxes, how they were found) for one cell."""
     if not words:
         return [], ""
+    words = joined_words(words)
     value = (value or "").strip()
-    wanted = numbers_in(value) if re.fullmatch(r"[-−+]?\d+(?:\.\d+)?", value) else []
+    wanted = numbers_in(value) if re.fullmatch(r"[-−+]?\d+(?:\.\d+)?(?:[eE][-+]?\d+)?", value) else []
     if wanted:
         hits = [w for w in words if w.number is not None and any(_same(w.number, n) for n in wanted)]
         if hits:
@@ -160,9 +233,12 @@ def _near_each_other(words: List[Word], quoted: List[float]) -> List[Box]:
     span = max(w.box[2] for w in words) - min(w.box[0] for w in words)
 
     def close(a: Word, b: Word) -> bool:
-        return abs(a.box[1] - b.box[1]) <= 3.5 * line and abs(a.box[0] - b.box[0]) <= span / 3
+        dy = abs(a.box[1] - b.box[1])
+        return dy <= 0.6 * line or (dy <= 3.5 * line and abs(a.box[0] - b.box[0]) <= span / 3)   # same line: close
 
-    anchor = min(occ, key=lambda n: len(occ[n]))
+    # the rarest number; among equally rare ones the LAST in the quote -- a table cell's quote is '<row> <value>'
+    order = list(dict.fromkeys(quoted))
+    anchor = min(occ, key=lambda n: (len(occ[n]), -order.index(n)))
     scored = [(sum(any(close(a, o) for o in occ[n]) for n in occ if n != anchor), a) for a in occ[anchor]]
     top = max(s for s, _ in scored)
     if len(occ) > 1 and top == 0 and len(occ[anchor]) > 1:

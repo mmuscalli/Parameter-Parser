@@ -47,7 +47,7 @@ UNRECOGNIZED_SUFFIX = "__UNRECOGNIZED_COLUMN"
 # wrote amino acids and peptides without the phase and peptides as '<n>peptide_<AA>'; `current_column_name`
 # converts those (old datasets, saved digitizations, the registry).
 PHASE_CODES = {"aq": "aq", "gas": "gas", "solid": "s"}
-SPECIES_ROLES = ("initial", "sampled", "stock")
+SPECIES_ROLES = ("initial", "sampled", "stock", "calculated")   # calculated: by the paper, not measured
 SPECIES_MEASURES = ("rate_mM_hr", "mM", "%yield", "%recovered", "ratio")
 _LEGACY = re.compile(r"(?P<role>initial|sampled|stock)_(?P<body>.+?)_(?P<measure>rate_mM_hr|mM|%yield|%recovered|ratio)"
                      r"(?P<tail>_err_(?:plus|minus))?")
@@ -84,7 +84,7 @@ def current_column_name(column: str) -> str:
     return f"{m.group('role')}_{body}_{phase or 'aq'}{markers}_{m.group('measure')}{m.group('tail') or ''}"
 
 
-_COMPOUND = re.compile(r"(?P<role>initial|sampled|stock)_(?P<name>.+)_(?P<phase>aq|gas|s)(?P<markers>(?:_avg|_range)*)"
+_COMPOUND = re.compile(r"(?P<role>initial|sampled|stock|calculated)_(?P<name>.+)_(?P<phase>aq|gas|s)(?P<markers>(?:_avg|_range)*)"
                        r"_(?P<measure>rate_mM_hr|mM|%yield|%recovered|ratio)(?P<tail>_err_(?:plus|minus))?")
 
 
@@ -213,7 +213,7 @@ def species_alias_name(entry) -> str:
     matter ("initial RbCl" and "sampled RbCl %" are different variables), and so does an average."""
     avg = (" avg" if getattr(entry, "average", False) else "") + (" range" if is_range(entry) else "")
     if entry.role == "sampled" and is_percent(entry):
-        return f"sampled {entry.name}{avg} " + {"%yield": "%", "%recovered": "% recovered"}.get(
+        return f"{_column_role(entry)} {entry.name}{avg} " + {"%yield": "%", "%recovered": "% recovered"}.get(
             percent_suffix(entry), percent_suffix(entry))
     if is_percent(entry):
         return f"{_column_role(entry)} {entry.name}{avg} %"
@@ -226,6 +226,8 @@ def _column_role(entry) -> str:
     """Column prefix: initial / sampled, or stock for a stock-solution concentration
     (stock_<name>_aq_mM -- not a template column; known wherever the species'
     initial column is, see VariableRegistry.is_known_column)."""
+    if getattr(entry, "calculated", False):
+        return "calculated"                   # a value the paper calculated or modelled (2026-11-12)
     return "stock" if getattr(entry, "concentration_basis", "mixture") == "stock" else entry.role
 
 
@@ -247,10 +249,12 @@ def column_for_solute(entry, registry=None) -> Optional[str]:
     alias = registry.column_for("species", species_alias_name(entry))
     if alias:
         return alias
-    if entry.role == "sampled" and is_percent(entry) and _TOTAL_PEPTIDES.search(entry.name):
+    if entry.role == "sampled" and is_percent(entry) and _TOTAL_PEPTIDES.search(entry.name) \
+            and not getattr(entry, "calculated", False):
         return "total_sampled_peptides_yield"      # "Total Gly in peptides", "total peptide yield"
     if entry.role == "sampled" and (is_percent(entry) or getattr(entry, "detection", "") == DETECTED) \
-            and _TOTAL_OLIGOMERS.match(entry.name.strip()) and not getattr(entry, "average", False):
+            and _TOTAL_OLIGOMERS.match(entry.name.strip()) and not getattr(entry, "average", False) \
+            and not getattr(entry, "calculated", False):
         return TOTAL_OLIGOMERS_COLUMN               # "RNA oligomers" (caimi2025's oligomerization yield)
     if _column_role(entry) == "stock":         # follows wherever the starting concentration was mapped
         initial = registry.column_for("species", f"initial {entry.name}")
@@ -299,7 +303,7 @@ def _measure_of(entry) -> str:
 
 def _species_column_of(entry) -> str:
     """The column of an entry's value, without average / range markers."""
-    role = "sampled" if is_rate(entry) else _column_role(entry)
+    role = "sampled" if is_rate(entry) and not getattr(entry, "calculated", False) else _column_role(entry)
     return species_column(role, entry.name, getattr(entry, "phase", "aq"), _measure_of(entry))
 
 

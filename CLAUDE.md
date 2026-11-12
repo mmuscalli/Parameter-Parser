@@ -131,7 +131,8 @@ Search `docs/history/` for the details and the measurements behind each.
 - **Flags**: over-flag rather than under-flag; cut noise by grouping or rewording, never by dropping.
 - **Columns**: `PaperDataTemplate.xlsx` is frozen (never edited). The prebiotic pack uses its own trimmed copy
   (`template_vocab.json`, generated from the xlsx). One column format for every compound:
-  `<role>_<name>_<phase>_<measure>` (`initial_Gly_aq_mM`, `sampled_Gly-Gly_aq_%yield`, `sampled_(Gly)4_aq_mM`,
+  `<role>_<name>_<phase>_<measure>` (role initial / sampled / stock, or calculated for a value the paper calculated
+  or modelled; `initial_Gly_aq_mM`, `sampled_Gly-Gly_aq_%yield`, `sampled_(Gly)4_aq_mM`,
   `sampled_4mer_A_aq_mM`); old names convert (`flatten_to_template.current_column_name`). Analysis columns
   `analysis_<technique>_<setting>[_range][_<unit>]`. Ranges `low:high` in `_range_` columns; averages `_avg`.
   Dataset columns are ordered by variable category (`column_order.py`), all of a pack's columns written.

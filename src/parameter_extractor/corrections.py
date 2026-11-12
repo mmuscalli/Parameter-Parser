@@ -89,6 +89,43 @@ def correct(run_dir: Path, full_id: str, column: str, extracted: str, value: str
     return c
 
 
+def correct_many(run_dir: Path, items: List[Tuple[str, str, str, str]], note: Optional[str] = None) -> None:
+    """Several corrections at once -- (row, column, value shown before, new value) -- with each file written once
+    (the Flagged values window's "Change selected values" and "Replace whole column with value")."""
+    corrections = load(run_dir)
+    changes = []
+    for full_id, column, extracted, value in items:
+        if column in FIXED_COLUMNS:
+            raise ValueError(f"{column} identifies the row and can't be corrected")
+        old = corrections.get((full_id, column))
+        original = old.extracted if old else extracted
+        if str(value) == str(original):
+            if corrections.pop((full_id, column), None) is not None:
+                changes.append((old, False))
+            continue
+        c = Correction(full_id, column, original, str(value), datetime.now().isoformat(timespec="seconds"),
+                       note if note is not None else (old.note if old else ""))
+        corrections[(full_id, column)] = c
+        changes.append((c, True))
+    _save(run_dir, corrections)
+    _write_changes(Path(run_dir), changes)
+
+
+def restore(run_dir: Path, states: List[Tuple[str, str, Optional[Correction]]]) -> None:
+    """Put cells back as they were (undo): each (row, column, its correction then -- None = as extracted)."""
+    corrections = load(run_dir)
+    changes = []
+    for full_id, column, before in states:
+        now = corrections.pop((full_id, column), None)
+        if before is not None:
+            corrections[(full_id, column)] = before
+            changes.append((before, True))
+        elif now is not None:
+            changes.append((now, False))
+    _save(run_dir, corrections)
+    _write_changes(Path(run_dir), changes)
+
+
 def revert(run_dir: Path, full_id: str, column: str) -> None:
     corrections = load(run_dir)
     c = corrections.pop((full_id, column), None)
@@ -120,9 +157,8 @@ def carry_over(old_dir: Path, new_dir: Path) -> List[Correction]:
             kept[key] = c
     if kept:
         _save(new_dir, kept)
-        for c in kept.values():
-            _write_cell(Path(new_dir), c, corrected=True)
-            applied.append(c)
+        _write_cells(Path(new_dir), list(kept.values()), corrected=True)    # each file read and written once
+        applied += kept.values()
     marks = Path(old_dir) / CHECKED_FILE
     if marks.is_file():
         (Path(new_dir) / CHECKED_FILE).write_text(marks.read_text())
@@ -204,18 +240,36 @@ def _long(c: Correction, corrected: bool):
 
 
 def _write_cell(run_dir: Path, c: Correction, corrected: bool) -> None:
+    _write_cells(run_dir, [c], corrected)
+
+
+def _all(changes):
+    def change(header, rows):
+        for ch in changes:
+            header = ch(header, rows) or header
+        return header
+    return change
+
+
+def _write_cells(run_dir: Path, cs: List[Correction], corrected: bool) -> None:
+    _write_changes(run_dir, [(c, corrected) for c in cs])
+
+
+def _write_changes(run_dir: Path, changes: List[Tuple[Correction, bool]]) -> None:
+    """Corrections (True) and reverts (False) into the run's files (and a queue's combined files), each file read and
+    written once."""
     wide = _dataset_csv(run_dir)
-    if wide is None:
+    if wide is None or not changes:
         return
-    _rewrite(wide, _wide(c, corrected))
+    _rewrite(wide, _all([_wide(c, on) for c, on in changes]))
     long = wide.with_name(wide.name.replace("_extracted.csv", "_observations.csv"))
     if long.is_file():
-        _rewrite(long, _long(c, corrected))
+        _rewrite(long, _all([_long(c, on) for c, on in changes]))
     queue = run_dir.parent                                # a paper of a queue: the combined files too
     if (queue / "combined_extracted.csv").is_file():
-        _rewrite(queue / "combined_extracted.csv", _wide(c, corrected))
+        _rewrite(queue / "combined_extracted.csv", _all([_wide(c, on) for c, on in changes]))
         if (queue / "combined_observations.csv").is_file():
-            _rewrite(queue / "combined_observations.csv", _long(c, corrected))
+            _rewrite(queue / "combined_observations.csv", _all([_long(c, on) for c, on in changes]))
 
 
 # ---- checking a value against its column ----------------------------------------------------------------------------

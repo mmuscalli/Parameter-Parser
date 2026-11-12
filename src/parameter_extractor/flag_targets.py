@@ -28,7 +28,7 @@ NOT_ABOUT_VALUES = {"reused_answer", "paper_source", "cited_data", "scope", "loc
 PRIORITY = ["identity_not_quoted", "quote_unrelated", "assumed_value", "table_check", "conflicting_values", "out_of_range",
             "unit_conversion", "value_range", "table_not_found", "concentration_not_stated", "pass_disagreement",
             "multimodal", "other_estimates", "archive_check", "assumed_default", "derived_value", "low_confidence"]
-_COMPOUND = re.compile(r"^(initial|stock|sampled)_(.+?)_(aq|gas|s)_")
+_COMPOUND = re.compile(r"^(initial|stock|sampled|calculated)_(.+?)_(aq|gas|s)_")
 _LISTED = re.compile(r"^- (.+?), ([A-Za-z0-9_%+\-.()]+): read ([-+]?\d[\d.eE+-]*)")
 _ROW_IDS = {"entry_number", "full_id", "set_id", "sample_id"}
 
@@ -118,7 +118,7 @@ def _columns(flag, index: Index) -> List[str]:
         return named
     found = []
     for name, cols in index.compounds.items():
-        m = re.search(rf"(?:\b(initial|stock|sampled)\s+)?(?<![A-Za-z0-9_+-]){re.escape(name)}(?![A-Za-z0-9_+-])", text)
+        m = re.search(rf"(?:\b(initial|stock|sampled|calculated)\s+)?(?<![A-Za-z0-9_+-]){re.escape(name)}(?![A-Za-z0-9_+-])", text)
         if not m:
             continue
         role = m.group(1)
@@ -155,6 +155,10 @@ def located(flag, index: Index, row_id: str = "") -> Tuple[Set[Cell], bool]:
         return {(row_id, c) for c in columns}, True
     candidates = {(fid, c) for c in columns for fid in index.rows_with(c)}
     narrowed = False
+    # rows the message lists by id ('Rows: 001004001, 001004002'): those rows only
+    listed = set(re.findall(r"(?<!\d)\d{9,}(?!\d)", flag.message or "")) & {fid for fid, _c in candidates}
+    if listed:
+        candidates, narrowed = {cell for cell in candidates if cell[0] in listed}, True
     named = index.sets_named(flag.message or "")
     in_sets = {cell for cell in candidates if index.set_of.get(cell[0]) in named}
     if in_sets:

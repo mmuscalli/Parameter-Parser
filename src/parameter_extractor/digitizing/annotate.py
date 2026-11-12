@@ -20,6 +20,21 @@ SERIES_COLORS = ["#d62728", "#1f77b4", "#2ca02c", "#9467bd", "#ff7f0e", "#17becf
 CALIBRATION_COLOR = "#0050c8"
 
 
+def crop_box(fig: DigitizedFigure, width: int, height: int) -> list:
+    """Where fig-<N>.digitized.png sits on the page render: the detected figure area, widened to include every
+    point, padded (also read by the Flagged values window to box a row's points)."""
+    xs = [p.px for s in fig.series for p in s.points]
+    ys = [p.py for s in fig.series for p in s.points]
+    s = fig.render_scale
+    box = [v * s for v in fig.figure_bbox] if fig.figure_bbox else [min(xs, default=0), min(ys, default=0),
+                                                                     max(xs, default=width),
+                                                                     max(ys, default=height)]
+    if xs:
+        box = [min(box[0], min(xs)), min(box[1], min(ys)), max(box[2], max(xs)), max(box[3], max(ys))]
+    pad = 40
+    return [max(0, box[0] - pad), max(0, box[1] - pad), min(width, box[2] + pad), min(height, box[3] + pad)]
+
+
 def save_digitized(fig: DigitizedFigure, out_dir: Path) -> Tuple[Path, Path]:
     out_dir.mkdir(parents=True, exist_ok=True)
     record = fig.model_dump()
@@ -52,15 +67,7 @@ def save_digitized(fig: DigitizedFigure, out_dir: Path) -> Tuple[Path, Path]:
             xs.append(pt.px); ys.append(pt.py)
             draw.ellipse([pt.px - 7, pt.py - 7, pt.px + 7, pt.py + 7], outline=color, width=3)
 
-    # crop to the detected figure area, widened to include every mark
-    s = fig.render_scale
-    box = [v * s for v in fig.figure_bbox] if fig.figure_bbox else [min(xs, default=0), min(ys, default=0),
-                                                                     max(xs, default=img.width),
-                                                                     max(ys, default=img.height)]
-    if xs:
-        box = [min(box[0], min(xs)), min(box[1], min(ys)), max(box[2], max(xs)), max(box[3], max(ys))]
-    pad = 40
-    box = [max(0, box[0] - pad), max(0, box[1] - pad), min(img.width, box[2] + pad), min(img.height, box[3] + pad)]
+    box = crop_box(fig, img.width, img.height)
     crop = img.crop([int(v) for v in box])
     legend = ImageDraw.Draw(crop)
     for j, series in enumerate(fig.series):

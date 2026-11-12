@@ -153,6 +153,13 @@ class SoluteEntry(BaseModel):
     # "detected", 'not detected' as 0 (calculators/amounts.py)
     # what a sampled % means (Mickey, 2026-10-29): a product's yield, or how much of a starting material was
     # recovered -> sampled_<name>_%recovered
+    # values the PAPER calculated or modelled, not measured (Mickey, 2026-11-12: Cleaves2008's Table 1 'Calculated
+    # equilibrium concentrations' had gone into sampled_ columns) -> calculated_<name>_<phase>_<measure>
+    calculated: bool = Field(
+        default=False, alias="calc",
+        description="True when the paper CALCULATED or MODELLED this value instead of measuring it (a table of "
+                    "'calculated equilibrium concentrations', a simulation, a thermodynamic or kinetic model's "
+                    "prediction); leave out for measured values and for the inputs the paper chose.")
     average: bool = Field(
         default=False, alias="avg",
         description="True when the value is an AVERAGE over several runs or replicates (mean, avg., 'averaged "
@@ -190,7 +197,8 @@ class SoluteEntry(BaseModel):
         species name, or 'stock <name>' for a stock-solution concentration (both
         can exist for one species, in different columns)."""
         name = f"stock {self.name}" if self.concentration_basis == "stock" else self.name
-        return name + (" avg" if self.average else "") + (" range" if self.concentration_high else "")
+        return name + (" calc" if self.calculated else "") + (" avg" if self.average else "") + \
+            (" range" if self.concentration_high else "")
 
 
 class SoluteGroup(BaseModel):
@@ -266,6 +274,13 @@ class TableColumn(BaseModel):
     identified_by: str = Field(default="", alias="how",
                                description="Only when the header doesn't name the species: how you identified "
                                            "it, at most 15 words.")
+    # values the PAPER calculated or modelled, not measured (Mickey, 2026-11-12: Cleaves2008's Table 1 'Calculated
+    # equilibrium concentrations' had gone into sampled_ columns) -> calculated_<name>_<phase>_<measure>
+    calculated: bool = Field(
+        default=False, alias="calc",
+        description="True when the paper CALCULATED or MODELLED this value instead of measuring it (a table of "
+                    "'calculated equilibrium concentrations', a simulation, a thermodynamic or kinetic model's "
+                    "prediction); leave out for measured values and for the inputs the paper chose.")
     average: bool = Field(
         default=False, alias="avg",
         description="True when the value is an AVERAGE over several runs or replicates (mean, avg., 'averaged "
@@ -355,7 +370,7 @@ class TableResults(BaseModel):
                     quote=f"{row.label} {text}".strip(),
                     source=f"{self.source}, row {row.label}, column {col.label}",
                     confidence=self.confidence, identified_by=col.identified_by, measure=col.measure,
-                    average=col.average))
+                    average=col.average, calculated=col.calculated))
         return out
 
 

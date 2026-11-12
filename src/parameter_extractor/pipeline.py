@@ -1023,6 +1023,35 @@ NO_RESULTS_MESSAGE = (
 _SAMPLING_CONDITIONS = ("sampled_temperature_C", "sampled_pressure_bar", "sampled_pH")   # conditions, not results
 
 
+_PRODUCT_COLUMN = re.compile(r"^(?:total_(?:sampled|calculated)_|(?:sampled|calculated)_.+_(?:aq|gas|s)(?:_avg|_range)*_)")
+_STARTING_COLUMN = re.compile(r"^(?:initial|stock)_.+_(?:aq|gas|s)(?:_avg|_range)*_")
+
+
+def starting_composition_flags(rows) -> List[Flag]:
+    """Rows reporting products (or yields) with no starting compound at all (Mickey, 2026-11-12: Cleaves2008's Fig. 2
+    rows had peptide yields but no glycine concentration, though the series labels said '0.1 M'). One flag per data
+    location, naming the rows and their product columns; nothing is filled in."""
+    from parameter_extractor.ingestion.data_location import COLUMN as DATA_LOCATION
+    groups: Dict[str, list] = {}
+    for r in rows:
+        values = {**{c: v for c, v in r.species_mM.items()}, **r.extra}
+        products = [c for c, v in values.items() if v not in (None, "") and _PRODUCT_COLUMN.match(c)
+                    and not c.endswith(("_err_plus", "_err_minus"))]
+        if products and not any(v not in (None, "") and _STARTING_COLUMN.match(c) for c, v in values.items()):
+            where = str(r.extra.get(DATA_LOCATION, "") or "this paper").replace(". ", " ")
+            groups.setdefault(where, []).append((r.full_id, products))
+    flags = []
+    for where, items in groups.items():
+        columns = list(dict.fromkeys(c for _fid, cs in items for c in cs))
+        ids = [fid for fid, _cs in items]
+        flags.append(Flag("no_starting_composition",
+                          f"{where}: {len(ids)} row(s) report products or yields ({', '.join(columns[:5])}"
+                          f"{', ...' if len(columns) > 5 else ''}) but no starting composition -- no starting "
+                          f"compound concentration. The caption, a series label (e.g. '0.1 M') or the Methods may give "
+                          f"it; enter it if so. Rows: {', '.join(ids)}."))
+    return flags
+
+
 def _has_results(rows, new_vars) -> bool:
     """Any measured result: a row with a sampled value (template column, or one waiting in the
     review as a 'sampled ...' variable)."""
@@ -1381,6 +1410,7 @@ def finish(
         paper_flags += archive_flags(archive)
     row_flags = {r.full_id: f for r in rows if (f := check_row(r, **thresholds))}
     paper_flags += _range_flags(rows)
+    paper_flags += starting_composition_flags(rows)          # products but no starting compounds (2026-11-12)
     image_tables = image_table_numbers(ex.parsed.table_pages) if config.rasterize_table_pages else set()
     table_pages = table_page_numbers(ex.parsed.table_pages)
     paper_flags += _source_flags(ex.source)
