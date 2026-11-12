@@ -40,6 +40,8 @@
   "group_columns": {"categories": ["methodology"], "exclude": ["set_type"]},
   "_about_column_pairs": "Related columns: when at least two rows give both and they are equal in every one, a row giving one gets the other (e.g. a sampled temperature equal to the initial one) -- assumed and flagged.",
   "column_pairs": [],
+  "_about_label_columns": "The column a quantity in a row's own label (in the row plan, e.g. '150 C, 20 min') fills when the row has no column of that kind -- by unit kind: temperature, time, pressure, concentration (only the named compound's column), pH, ... Values contradicting their row's label are flagged either way.",
+  "label_columns": {},
 
   "_about_variable_categories": "Categories for variables the model suggests beyond the columns (shown in the review and used to place columns). Shared ones -- Metadata, Experimental Methodology, Other -- exist already. Fields: id, label, description (the model reads it), value_type (number / text / any), max_words, table_order (lower = further left), model_assigns (the model may put suggestions in it), patterns (regexes of column names placed in it). Can also be edited in the app (Variables > Variable categories).",
   "variable_categories": [

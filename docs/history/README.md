@@ -130,3 +130,4 @@ current month's file (start `YYYY-MM.md` in a new month), with one line here.
 - Table-image boxes per cell again; the pause before the review (2026-11-12, Mickey)
 - Methods stated once: filled within groups, across the paper and between related columns (2026-11-12, Mickey)
 - Values listed for several rows go to their rows (2026-11-12, Mickey's Cleaves2008 run 152430)
+- One rule for every quantity a row label states (2026-11-12, Mickey: no parameter-specific checks)

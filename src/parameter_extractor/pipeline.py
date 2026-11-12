@@ -1027,33 +1027,6 @@ _PRODUCT_COLUMN = re.compile(r"^(?:total_(?:sampled|calculated)_|(?:sampled|calc
 _STARTING_COLUMN = re.compile(r"^(?:initial|stock)_.+_(?:aq|gas|s)(?:_avg|_range)*_")
 
 
-_LABEL_TEMPERATURE = re.compile(r"(?<![\w.])(-?\d+(?:\.\d+)?)\s*(?:°\s*)?C\b")
-
-
-def label_temperature_flags(rows, structure) -> List[Flag]:
-    """A row whose own label in the row plan names a temperature ('150 C, 20 min') but whose initial_temperature_C
-    differs (Mickey, 2026-11-12: Cleaves2008's 100-250 C series all had 100 C) -- whatever filled it. One flag per set."""
-    plan = structure.experiment_sets if structure is not None else []
-    wrong: Dict[str, list] = {}
-    for r in rows:
-        n, k = r.set_id[-3:], r.sample_id
-        if not (n.isdigit() and k.isdigit()) or not 0 < int(n) <= len(plan):
-            continue
-        samples = plan[int(n) - 1].samples
-        if not 0 < int(k) <= len(samples):
-            continue
-        said = {float(x) for x in _LABEL_TEMPERATURE.findall(samples[int(k) - 1].sample_label or "")}
-        value = r.initial_temperature_C
-        if len(said) == 1 and value is not None and abs(value - next(iter(said))) > 0.5:
-            wrong.setdefault(plan[int(n) - 1].set_label, []).append(
-                (r.full_id, samples[int(k) - 1].sample_label, value))
-    return [Flag("conflicting_values",
-                 f"initial_temperature_C differs from the row's own label in set '{label}': "
-                 + "; ".join(f"{fid} '{lab}' has {val:g} °C" for fid, lab, val in items[:8])
-                 + (" ..." if len(items) > 8 else "") + ". Check the value against the paper.")
-            for label, items in wrong.items()]
-
-
 def starting_composition_flags(rows) -> List[Flag]:
     """Rows reporting products (or yields) with no starting compound at all (Mickey, 2026-11-12: Cleaves2008's Fig. 2
     rows had peptide yields but no glycine concentration, though the series labels said '0.1 M'). One flag per data
@@ -1436,7 +1409,11 @@ def finish(
         from parameter_extractor.ingestion.data_location import location
         captions = {location(t.get("table_id", "")): t.get("caption", "") for t in (ex.tables or [])}
         paper_flags += apply_result_basis(rows, [s.set_label for s in ex.structure.experiment_sets], captions)
-    m = pack.manifest                            # methods the experiments share (calculators/shared_values.py)
+    m = pack.manifest
+    if m.label_columns:                          # what a row's own label states, first (calculators/label_values.py)
+        from parameter_extractor.calculators.label_values import fill_from_labels
+        paper_flags += fill_from_labels(rows, ex.structure, m.label_columns, m.column_pairs)
+    # methods the experiments share (calculators/shared_values.py)
     if config.fill_shared_values and (m.shared_columns or m.group_columns or m.column_pairs):
         from parameter_extractor.calculators.shared_values import fill_in
         from parameter_extractor.column_order import ColumnOrder
@@ -1451,7 +1428,9 @@ def finish(
     row_flags = {r.full_id: f for r in rows if (f := check_row(r, **thresholds))}
     paper_flags += _range_flags(rows)
     paper_flags += starting_composition_flags(rows)          # products but no starting compounds (2026-11-12)
-    paper_flags += label_temperature_flags(rows, ex.structure)   # a temperature against the row's own label
+    from parameter_extractor.calculators.label_values import label_mismatches
+    paper_flags += label_mismatches(rows, ex.structure, pack.manifest.label_columns,   # against the rows' own labels
+                                    pack.manifest.column_pairs)
     image_tables = image_table_numbers(ex.parsed.table_pages) if config.rasterize_table_pages else set()
     table_pages = table_page_numbers(ex.parsed.table_pages)
     paper_flags += _source_flags(ex.source)

@@ -14,6 +14,7 @@
   "shared_columns": {"categories": ["analysis", "methodology"], "columns": ["reagent_suppliers", "pH_buffer"], "exclude": ["set_type"]},
   "group_columns": {"categories": ["analysis", "methodology", "conditions", "flow_reactor", "mineral_surfaces"], "columns": ["reagent_suppliers", "pH_buffer"], "exclude": ["set_type", "duration_hr", "cycle_number"]},
   "column_pairs": [["sampled_temperature_C", "initial_temperature_C"], ["sampled_pressure_bar", "initial_pressure_bar"], ["residence_time_hr", "duration_hr"]],
+  "label_columns": {"temperature": "initial_temperature_C", "time": "duration_hr", "pressure": "initial_pressure_bar", "pH": "initial_pH"},
   "variable_categories": [
     {"id": "starting_species", "table_order": 60, "label": "Starting Species", "sources": ["species:initial", "species"], "value_type": "number",
      "description": "species in the starting solution (reactants, salts, catalysts, buffers; stock and mixture concentrations) with no column of their own, in mM"},

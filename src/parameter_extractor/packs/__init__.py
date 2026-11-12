@@ -86,6 +86,8 @@ class PackManifest(BaseModel):
     # ... within a group of related rows (an experiment set, a figure / table), and related column pairs
     group_columns: dict = Field(default_factory=dict)
     column_pairs: List[List[str]] = Field(default_factory=list)
+    # the column a row label's quantity of each kind fills when the row has none (calculators/label_values.py)
+    label_columns: Dict[str, str] = Field(default_factory=dict)
     # shared modules the pack uses (parameter_extractor/modules/), linked in when the pack loads
     modules: List[str] = Field(default_factory=list)
     # the pack's changes to its modules' defaults (module_settings.py): {module id: {steps, parameters, ...}}

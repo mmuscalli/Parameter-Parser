@@ -506,7 +506,7 @@ def test_values_listed_for_a_set_go_to_the_rows_their_labels_name():
     """Cleaves2008 (2026-11-12): '99.9% ... from 100°C, 150°C, 200°C and 250°C' came back as four set-wide temperatures,
     so every row got 100 °C. Each value now goes to the row whose label names it (only when each matches exactly one
     row); a row whose label names another temperature than its value is flagged."""
-    from parameter_extractor.pipeline import label_temperature_flags
+    from parameter_extractor.calculators.label_values import label_mismatches
     from parameter_extractor.schemas.row_schema import ExtractedRow
     from parameter_extractor.schemas.structure_plan import StructurePlan
     from parameter_extractor.stages.optional import load_specs, optional_values
@@ -533,9 +533,59 @@ def test_values_listed_for_a_set_go_to_the_rows_their_labels_name():
                 experiment_type="Flowthrough", solution_type="Wet")
     rows = [ExtractedRow(full_id=f"00100100{k}", set_id="001001", sample_id=f"00{k}", entry_number=k,
                          initial_temperature_C=100.0, **base) for k in (1, 2, 3, 4)]
-    flags = label_temperature_flags(rows, plan)
-    assert len(flags) == 1 and "001001002 '150 C, 20 min' has 100" in flags[0].message
+    flags = label_mismatches(rows, plan)
+    assert len(flags) == 1 and "001001002 '150 C, 20 min' says 150 C, but initial_temperature_C = 100" \
+        in flags[0].message
     assert "001001001" not in flags[0].message
+
+
+def test_row_labels_checked_and_filled_for_every_kind_of_quantity():
+    """Mickey (2026-11-12): one rule for every quantity a row label states, not a temperature-only check. Read with the
+    unit table: temperature, time, pressure (any unit), pH, a concentration only with its compound named; two
+    quantities of one kind in a label are ambiguous and skipped. Gaps filled into the pack's label_columns."""
+    from parameter_extractor.calculators.label_values import fill_from_labels, label_mismatches, label_quantities
+    from parameter_extractor.ingestion.flatten_to_template import row_to_template_dict, set_row_value
+    from parameter_extractor.schemas.row_schema import ExtractedRow
+    from parameter_extractor.schemas.structure_plan import StructurePlan
+    packs.activate("prebiotic_chemistry")
+    kinds = lambda label: [(q.kind, q.name) for q in label_quantities(label)]  # noqa
+    assert kinds("0.1 M glycine, 20 min, 2400 psi") == [("concentration", "Gly"), ("time", ""), ("pressure", "")]
+    assert kinds("[Gly]0 = 3e-4 M") == [("concentration", "Gly")]
+    assert kinds("t = 15 min") == [("time", "")] and kinds("pH 7") == [("pH", "")]
+    assert kinds("25/300 C") == [] and kinds("100 °C and 200 °C") == [] and kinds("T series") == []
+    assert kinds("0.1 M") == [("concentration", "")]              # no compound named: matches no column
+    assert kinds("Gly 0.0875 M, 130 C, pH 9.8, 24 h wet-dry cycles") == [("temperature", ""), ("pH", "")]  # truman2024
+    plan = StructurePlan.model_validate({"paper_id": "p", "n_rows": 3, "experiment_sets": [{
+        "set_label": "2400 psi, 150 C", "set_type": "Independent", "varies": "time", "src": "Results",
+        "samples": [{"sample_label": "0.1 M glycine, 20 min"}, {"sample_label": "t = 40 min"},
+                    {"sample_label": "60 min, 0.1 M glycine"}]}]})
+    base = dict(set_type="Independent", paper_title="t", authors=[], year_published=2008, journal_published="j",
+                experiment_type="Flowthrough", solution_type="Wet")
+    rows = [ExtractedRow(full_id=f"00100100{k}", set_id="001001", sample_id=f"00{k}", entry_number=k, **base)
+            for k in (1, 2, 3)]
+    for r in rows:
+        set_row_value(r, "initial_Gly_aq_mM", 100.0)
+    set_row_value(rows[0], "duration_hr", 1 / 3)                 # agrees with '20 min'
+    set_row_value(rows[2], "initial_Gly_aq_mM", 10.0)            # '0.1 M glycine' = 100 mM: wrong
+    set_row_value(rows[1], "initial_temperature_C", 25.0)        # the set says 150 C: wrong
+    m = packs.current().manifest
+    set_row_value(rows[0], "quench_temperature_C", 4.0)          # another temperature: not the row's condition
+    flags = fill_from_labels(rows, plan, m.label_columns, m.column_pairs)
+    got = [row_to_template_dict(r) for r in rows]
+    assert abs(got[1]["duration_hr"] - 40 / 60) < 1e-6 and got[2]["duration_hr"] == 1.0
+    assert all(abs(g["initial_pressure_bar"] - 165.47) < 0.01 for g in got)   # psi -> bar
+    assert got[0]["initial_temperature_C"] == 150.0 and got[1]["initial_temperature_C"] == 25.0   # never over a value
+    assert rows[1].provenance["duration_hr"].origin == "row label"
+    assert len(flags) == 1 and flags[0].kind == "derived_value" and "001001002 duration_hr = 40 min" in flags[0].message
+    bad = label_mismatches(rows, plan, m.label_columns, m.column_pairs)
+    assert len(bad) == 1, bad
+    msg = bad[0].message
+    assert "001001003 '60 min, 0.1 M glycine' says 0.1 M, but initial_Gly_aq_mM = 10" in msg
+    assert "001001002 '2400 psi, 150 C' says 150 C, but initial_temperature_C = 25" in msg
+    assert "001001001" not in msg
+    # a row not in the plan (a digitized figure's) is left alone
+    other = ExtractedRow(full_id="001009001", set_id="001009", sample_id="001", entry_number=1, **base)
+    assert fill_from_labels([other], plan, m.label_columns) == [] and label_mismatches([other], plan) == []
 
 
 if __name__ == "__main__":
