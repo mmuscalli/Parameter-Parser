@@ -133,7 +133,7 @@ class FigureReviewDialog(QDialog):
         self.digitize_layout.setContentsMargins(0, 0, 0, 0)
         brow = QHBoxLayout()
         self.cancel_digitizing_btn = QPushButton("Skip this figure", clicked=self._skip_digitizing)
-        self.save_btn = QPushButton("Save figure data and continue", clicked=self._save)
+        self.save_btn = QPushButton("Save figure data and continue", clicked=lambda: self._save())
         brow.addWidget(self.cancel_digitizing_btn)
         brow.addStretch(1)
         brow.addWidget(self.save_btn)

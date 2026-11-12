@@ -78,7 +78,7 @@ class CategoriesDialog(QDialog):
         layout.addWidget(self.note)
 
         buttons = QHBoxLayout()
-        buttons.addWidget(QPushButton("Add category", clicked=self.add_category))
+        buttons.addWidget(QPushButton("Add category", clicked=lambda: self.add_category()))
         buttons.addWidget(QPushButton("Remove", clicked=self._remove_selected))
         buttons.addWidget(QPushButton("Reset to default", clicked=self._reset_selected))
         buttons.addStretch(1)

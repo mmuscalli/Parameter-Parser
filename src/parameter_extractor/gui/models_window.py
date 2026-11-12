@@ -126,7 +126,7 @@ class ModelsWindow(QDialog):
         self.new_menu = QMenu(self.new_btn)
         self.new_btn.setMenu(self.new_menu)
         self.new_menu.aboutToShow.connect(self._fill_new_menu)
-        self.duplicate_btn = QPushButton("Duplicate", clicked=self.duplicate_profile)
+        self.duplicate_btn = QPushButton("Duplicate", clicked=lambda: self.duplicate_profile())
         self.remove_btn = QPushButton("Remove", clicked=self.remove_profile)
         for b in (self.new_btn, self.duplicate_btn, self.remove_btn):
             row.addWidget(b)
@@ -548,7 +548,7 @@ class ModelsWindow(QDialog):
         self.models_table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
         rv.addWidget(self.models_table, 1)
         mrow = QHBoxLayout()
-        self.add_model_btn = QPushButton("Add a model by name…", clicked=self.add_model)
+        self.add_model_btn = QPushButton("Add a model by name…", clicked=lambda: self.add_model())
         self.remove_model_btn = QPushButton("Remove model", clicked=self.remove_model)
         mrow.addWidget(self.add_model_btn)
         mrow.addWidget(self.remove_model_btn)

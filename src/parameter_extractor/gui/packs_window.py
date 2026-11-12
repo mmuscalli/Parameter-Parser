@@ -124,7 +124,7 @@ class DataPacksWindow(QDialog):
         self.copy_btn = QPushButton("Copy…", clicked=self._copy)
         self.copy_btn.setToolTip("A new data pack of your own, starting as a copy of this one (how the app's own are "
                                  "changed).")
-        self.edit_btn = QPushButton("Edit…", clicked=self._edit)
+        self.edit_btn = QPushButton("Edit…", clicked=lambda: self._edit())
         self.edit_btn.setToolTip("Open the data pack's editor: its columns, steps, rules, formulas, modules and module "
                                  "settings. The app's own packs open read-only.")
         self.check_btn = QPushButton("Check…", clicked=lambda: self._edit("Check"))

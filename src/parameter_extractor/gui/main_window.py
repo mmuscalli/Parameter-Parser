@@ -188,7 +188,7 @@ class MainWindow(QMainWindow):
         file_menu.addAction(self.add_list_action)
         file_menu.addSeparator()
         # an earlier run shown in the results tabs (W3, 2026-11-11)
-        self.open_results_action = QAction("Open a results folder…", self, triggered=self._open_results_folder)
+        self.open_results_action = QAction("Open a results folder…", self, triggered=lambda: self._open_results_folder())
         file_menu.addAction(self.open_results_action)
         # W1: a stopped run asked again only for what's missing; a dataset rebuilt from saved answers
         self.resume_action = QAction("Resume a stopped run…", self, triggered=lambda: self.resume_run())
@@ -243,7 +243,7 @@ class MainWindow(QMainWindow):
         self.check_pack_action = QAction("Check data pack…", self, triggered=lambda: self.check_pack())
         self.remove_pack_action = QAction("Remove data pack…", self, triggered=lambda: self.remove_pack())
         self.packs_folder_action = QAction("Open data packs folder", self, triggered=self.open_packs_folder)
-        self.registry_action = QAction("Remembered from your reviews…", self, triggered=self.open_registry)
+        self.registry_action = QAction("Remembered from your reviews…", self, triggered=lambda: self.open_registry())
         self.registry_action.setToolTip("Columns you accepted, synonyms, compound names and your changes to pack "
                                         "columns, by data pack")
         self.categories_action = QAction("Variable categories…", self, triggered=self.open_categories)

@@ -137,7 +137,11 @@ def test_the_window_shows_an_opened_run():
         w = main_window.MainWindow()
         w.registry_path = Path(tmp) / "registry.json"
         assert w.open_results_action.isEnabled()
-        w._open_results_folder(result.run_dir)
+        # the way a user opens it: the File menu item (its `checked` flag must not reach the method as the folder --
+        # 2026-11-12, 'argument should be a str ... not bool')
+        from unittest.mock import patch
+        with patch.object(main_window.QFileDialog, "getExistingDirectory", lambda *a, **k: str(result.run_dir)):
+            w.open_results_action.trigger()
         app.processEvents()
         n_flags = len(result.paper_flags) + sum(len(f) for f in result.row_flags.values())
         assert w.rows_table.rowCount() == len(result.rows)
