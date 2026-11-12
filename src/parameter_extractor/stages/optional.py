@@ -313,7 +313,11 @@ class StageSpec(BaseModel):
                            EXTRA_RULES="".join(f"- {r}\n" for r in self.rules + self._field_rules() + (
                                [f"Give a row's `sample` as the sample's id from the structure plan ('S2.3') when its "
                                 f"values belong to one {self.units('sample')} only; leave `sample` out for values "
-                                f"of the whole set."]
+                                f"of the whole set.",
+                                f"Values the paper lists together for several {self.units('sample')}s ('99.9%, 99.1% "
+                                f"... from 100°C, 150°C, 200°C and 250°C, respectively') are one value per "
+                                f"{self.units('sample')}: give each as its own row with its `sample`, never the whole "
+                                f"list as values of the set."]
                                if self.per == "sample" else [])),
                            STRUCTURE_PLAN_JSON=plan_json, PAPER_TEXT=paper_text)
 
@@ -874,6 +878,46 @@ def _same_value(a, b, unit: str = "") -> bool:
     return str(a).strip().lower() == str(b).strip().lower()
 
 
+def _number_in(label: str, value) -> bool:
+    """Does a row label name this number ('100 C, 20 min' names 100; '1000' doesn't)?"""
+    if not isinstance(value, (int, float)):
+        return False
+    text = f"{value:g}"
+    return re.search(rf"(?<![\d.]){re.escape(text)}(?![\d]|\.\d)", label or "") is not None
+
+
+def rows_from_labels(spec: "StageSpec", items: list, structure: StructurePlan) -> list:
+    """Values a step gave for a whole set, several different ones for one parameter, when the set's rows each name one
+    of them (Mickey, 2026-11-12, Cleaves2008: '99.9%, ... from 100°C, 150°C, 200°C and 250°C' came back as four set-wide
+    temperatures with no row, so every row got the first, 100 °C; the rows are '100 C, 20 min', '150 C, 20 min' ...):
+    each value goes to the row whose label names it -- only when every value matches exactly one different row.
+    Otherwise the items are left as they are (the first is kept and the rest reported, as before)."""
+    if spec.per != "sample" or not items:
+        return items
+    samples = {s.set_label: [x.sample_label for x in s.samples] for s in structure.experiment_sets}
+    groups: Dict[Tuple[str, str], list] = {}
+    for i, v in enumerate(items):
+        if v.set_label and not (getattr(v, "sample_label", "") or "") and not getattr(v, "mode", "") \
+                and not getattr(v, "method", "") and v.basis != "assumed":
+            groups.setdefault((v.set_label, v.parameter), []).append(i)
+    out = list(items)
+    for (label, _parameter), idx in groups.items():
+        values = [items[i].value for i in idx]
+        rows = samples.get(label, [])
+        if len(idx) < 2 or len(set(values)) < 2 or not rows:
+            continue
+        matches = {i: [r for r in rows if _number_in(r, items[i].value)] for i in idx}
+        chosen = [m[0] for m in matches.values() if len(m) == 1]
+        if len(chosen) != len(idx) or len(set(chosen)) != len(chosen):
+            continue                                       # not one row each: leave it to the conflict report
+        for i in idx:
+            v = items[i]
+            note = (getattr(v, "note", "") or "")
+            out[i] = v.model_copy(update={"sample_label": matches[i][0],
+                                          "note": (note + "; " if note else "") + "row from its label"})
+    return out
+
+
 def optional_values(spec: StageSpec, result, structure: StructurePlan,
                     problems: Optional[List[str]] = None,
                     conflicts: Optional[List[StageConflict]] = None) -> Dict[Tuple[str, str, str], StageValue]:
@@ -885,9 +929,10 @@ def optional_values(spec: StageSpec, result, structure: StructurePlan,
     targets = spec.target_sets(structure)
     out: Dict[Tuple[str, str, str], StageValue] = {}
     owner: Dict[Tuple[str, str, str], Tuple[object, List[str]]] = {}   # (label, sample, parameter) -> (item, its columns)
+    items = rows_from_labels(spec, list(result.parameters) if result is not None else [], structure)
     modes: Dict[Tuple[str, str, str], list] = {}                       # same key -> [(mode text, columns)]
     alternatives: Dict[Tuple[str, str, str], list] = {}                # same key -> [(method, columns)]
-    for v in (result.parameters if result is not None else []):
+    for v in items:
         if v.basis == "assumed":
             continue
         columns, issues = stage_values(spec, v)

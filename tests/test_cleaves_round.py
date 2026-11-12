@@ -502,6 +502,42 @@ def test_fill_in_within_groups_related_columns_and_conflicts():
                for f in flags3)
 
 
+def test_values_listed_for_a_set_go_to_the_rows_their_labels_name():
+    """Cleaves2008 (2026-11-12): '99.9% ... from 100°C, 150°C, 200°C and 250°C' came back as four set-wide temperatures,
+    so every row got 100 °C. Each value now goes to the row whose label names it (only when each matches exactly one
+    row); a row whose label names another temperature than its value is flagged."""
+    from parameter_extractor.pipeline import label_temperature_flags
+    from parameter_extractor.schemas.row_schema import ExtractedRow
+    from parameter_extractor.schemas.structure_plan import StructurePlan
+    from parameter_extractor.stages.optional import load_specs, optional_values
+    packs.activate("prebiotic_chemistry")
+    spec = load_specs()["experimental_conditions"]
+    plan = StructurePlan.model_validate({"paper_id": "p", "n_rows": 4, "experiment_sets": [{
+        "set_label": "T series", "set_type": "Independent", "varies": "temperature", "src": "Results",
+        "samples": [{"sample_label": f"{t} C, 20 min"} for t in (100, 150, 200, 250)]}]})
+    _, Result = spec.models()
+    v = lambda t: {"col": "initial_temperature_C", "v": t, "u": "°C", "q": "from 100°C, 150°C, 200°C and 250°C",  # noqa
+                   "src": "Results", "c": "high"}
+    res = Result.model_validate({"rows": [{"set": "T series", "sample": "", "values": [v(t) for t in (100, 150, 200, 250)]}]})
+    got = {k[1]: x.value for k, x in optional_values(spec, res, plan).items() if k[2] == "initial_temperature_C"}
+    assert got == {"100 C, 20 min": 100.0, "150 C, 20 min": 150.0, "200 C, 20 min": 200.0, "250 C, 20 min": 250.0}
+    # not one row each (two labels name 100): left as before -- the first kept, a conflict reported
+    plan2 = plan.model_copy(deep=True)
+    plan2.experiment_sets[0].samples[1].sample_label = "100 C, 40 min"
+    conflicts = []
+    got2 = {k[1] for k, _x in optional_values(spec, res, plan2, conflicts=conflicts).items()
+            if k[2] == "initial_temperature_C"}
+    assert got2 == {""} and conflicts
+    # the check: a row's value against its own label
+    base = dict(set_type="Independent", paper_title="t", authors=[], year_published=2008, journal_published="j",
+                experiment_type="Flowthrough", solution_type="Wet")
+    rows = [ExtractedRow(full_id=f"00100100{k}", set_id="001001", sample_id=f"00{k}", entry_number=k,
+                         initial_temperature_C=100.0, **base) for k in (1, 2, 3, 4)]
+    flags = label_temperature_flags(rows, plan)
+    assert len(flags) == 1 and "001001002 '150 C, 20 min' has 100" in flags[0].message
+    assert "001001001" not in flags[0].message
+
+
 if __name__ == "__main__":
     for name, fn in list(globals().items()):
         if name.startswith("test_") and callable(fn):
