@@ -140,6 +140,11 @@ Each run writes `<results folder>/<paper name>_<date-time>/`:
 A queue writes one such folder per paper plus combined CSV files; a search for a few values writes one table for
 all papers.
 
+**Correcting and checking.** Double-click a value in *Extracted data* to correct it: it's checked against the
+column, saved with the run (`corrections.json`) and written into the CSV files at once (the observations file keeps the
+extracted value beside it); right-click to revert it or add a note. Tick entries in *Things to check* as you deal with
+them; the tab shows how many are left.
+
 **Earlier runs.** *File › Open a results folder…* shows a finished run (or one paper of a queue) in the result tabs
 again. *File › Resume a stopped run…* runs a run or queue that stopped part-way (network, credits, Cancel) again:
 steps already answered are reused at no cost and only the missing ones are asked. *File › Rebuild a run's dataset…*

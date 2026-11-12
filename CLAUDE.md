@@ -51,6 +51,8 @@ Version: `parameter_extractor.__version__` (0.3.0, tag `v0.3.0`), the one place 
 - Multi-paper: `paper_queue.py` (full extraction queue), `focused_search.py` (a few values across many papers).
   Earlier runs: `run_folder.py` (a run folder read back into a RunResult: File > Open a results folder…),
   `resume.py` (resume / rebuild from a run's or queue's saved answers into a NEW folder; CLI --resume / --rebuild).
+  `corrections.py` (the reviewer's corrections -> corrections.json + the dataset files; checked marks ->
+  flags_checked.json; carried over by rebuild / resume).
   Pack authoring: `pack_editing.py` (+ `check`), `pack_drafting.py`, `compound_setup.py`, `conventions.py`,
   `pack_modules.py`, `module_drafting.py`, `pack_overview.py`.
 - `gui/`: `main_window.py` (five numbered steps: data pack, papers, what to extract, options, run; results tabs),

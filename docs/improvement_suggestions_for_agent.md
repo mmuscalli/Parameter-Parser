@@ -112,7 +112,7 @@ paid Claude runs or the local server. Update Status as you go: `proposed` → `a
 | E3 | Local models: know the real context and use the room better | Efficiency | S–M | local server | parts 1-2 done (spill flag checked live, calibrated estimate); part 3 postponed |
 | E4 | Paper queues in batch mode: shared batches, more papers in flight | Efficiency | M | Claude (small) | postponed |
 | W1 | Resume a failed or cancelled run; rebuild a dataset from saved answers | Workflow | M–L | no | done (c9733fa) |
-| W2 | Corrections and "checked" marks in the results window | Workflow | L | no | postponed |
+| W2 | Corrections and "checked" marks in the results window | Workflow | L | no | done (corrections + checked marks; single cells) |
 | W3 | Open a previous run in the window | Workflow | S–M | no | done (5335f6b) |
 | W4 | Cost and time estimate before a run starts | Workflow | M | no | postponed |
 | W5 | Command line: scope flags; a notification when a long run ends | Workflow | S | no | postponed |

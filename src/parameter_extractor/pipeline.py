@@ -1416,6 +1416,13 @@ def finish(
     # every column of the dataset with its category (the dataset CSV keeps one header row)
     write_column_list(write_template_csv.header, order, ctx.run_dir / f"{ex.paper_id}_columns.csv")
 
+    carried = []
+    if getattr(config, "resume_from", None):        # W2: the earlier run's corrections and checked marks come along
+        from parameter_extractor import corrections as corr
+        carried = corr.carry_over(Path(config.resume_from), ctx.run_dir)
+        if carried:
+            ctx.note("assemble", f"{len(carried)} correction(s) of the earlier run applied again")
+
     gold_score = None
     if settings.USE_GOLD_STANDARD:  # OFF until the curated subset exists
         from parameter_extractor.validation.gold_standard_eval import load_gold_standard, score_paper
@@ -1430,7 +1437,8 @@ def finish(
                    normalization=[{"kind": n.kind, "change": n.message} for n in normalization],
                    figures=sorted(figure_summary, key=lambda f: f["figure_id"]),
                    tables=ex.tables,
-                   equations=[{"label": e.label, "page": e.page, "latex": e.latex} for e in ex.equations])
+                   equations=[{"label": e.label, "page": e.page, "latex": e.latex} for e in ex.equations],
+                   **({"corrections_carried_over": len(carried)} if carried else {}))
 
     return RunResult(paper_id=ex.paper_id, run_dir=ctx.run_dir, csv_path=csv_path, rows=rows,
                      paper_flags=paper_flags, row_flags=row_flags, usage=list(ctx.usage),

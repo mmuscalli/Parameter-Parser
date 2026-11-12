@@ -46,6 +46,9 @@ DEFAULT_OUTPUT_DIR = Path.home() / "Documents" / "Parameter Extractor"
 FLAGGED_ROW_COLOR = QColor(255, 243, 205)   # soft amber, readable in light and dark themes
 ARCHIVE_ROW_COLOR = QColor(212, 237, 218)   # soft green: the row (fit) the Exoplanet Archive took
 ARCHIVE_DIFF_COLOR = QColor(255, 196, 140)  # orange: a value that differs from the archive's
+CORRECTED_COLOR = QColor(196, 222, 255)     # light blue: a value you corrected (W2)
+SHOWN_ROLE = Qt.ItemDataRole.UserRole + 2   # a cell's value as shown (what a correction changes)
+FLAG_KEY_ROLE = Qt.ItemDataRole.UserRole + 1  # an entry of Things to check: its key (corrections.flag_key)
 GROUP_TINT = QColor(110, 140, 210, 28)       # every other block of columns (category), faint in either theme
 MAX_COLUMN_WIDTH = 260
 # Rows tab column order: identify the row, then the measured data, then the
@@ -72,6 +75,13 @@ GETTING_STARTED = (
     "and <i>Help › How data packs work…</i> explains steps, modules and calculations.</p>")
 START_TEXT = ("Start here: choose a data pack (1), add papers (2), tick what to extract (3), then press Extract data "
               "(5). Results appear below. New to the app? <a href='help'>Getting started</a>")
+
+
+def _correction_tip(fix) -> str:
+    """Hover text of a corrected value."""
+    return (f"Corrected by you ({fix.time.replace('T', ' ')}): extracted value "
+            + (repr(fix.extracted) if fix.extracted else "(empty)") + (f"\nNote: {fix.note}" if fix.note else "")
+            + "\nRight-click to revert it or add a note.")
 
 
 def _step(number: str, title: str, tip: str) -> QLabel:
@@ -715,7 +725,14 @@ class MainWindow(QMainWindow):
         self.rows_table = QTableWidget()
         from parameter_extractor.gui.widgets import ColumnGroupBand
         self.rows_band = ColumnGroupBand(self.rows_table)         # names each block of columns once
-        self.rows_table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
+        # W2: double-click a value to correct it (saved with the run; right-click to revert or add a note)
+        self.rows_table.setEditTriggers(QAbstractItemView.EditTrigger.DoubleClicked
+                                        | QAbstractItemView.EditTrigger.EditKeyPressed)
+        self.rows_table.itemChanged.connect(self._cell_edited)
+        self.rows_table.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+        self.rows_table.customContextMenuRequested.connect(self._rows_menu)
+        self._filling_rows = False
+        self._shown_result = None
         self.rows_table.setAlternatingRowColors(True)
         self.rows_legend = QLabel(wordWrap=True)
         self.rows_legend.setHidden(True)
@@ -728,21 +745,31 @@ class MainWindow(QMainWindow):
         rows_layout.addWidget(self.rows_legend)
         tabs.addTab(rows_page, "Extracted data")
         tabs.setTabToolTip(0, "The dataset: one row per sample, one column per value. Hover over a value to see where "
-                              "in the paper it came from.")
+                              "in the paper it came from. Double-click a value to correct it (saved with the run and "
+                              "in its files; right-click to revert it or add a note).")
 
         self.flags_tree = QTreeWidget()
         self.flags_tree.setHeaderLabels(["Issue", "Quote from the paper", "Where"])
+        self.flags_tree.itemChanged.connect(self._flag_checked)        # W2: tick an entry once you've dealt with it
+        self.unchecked_only_box = QCheckBox("Show only the entries not checked yet")
+        self.unchecked_only_box.toggled.connect(lambda _on: self._apply_flag_filter())
         self.flags_tree.header().setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
         self.flags_tree.currentItemChanged.connect(self._show_flag_details)
         self.flag_details = QTextBrowser(placeholderText="Select a flag to see the full "
                                                          "issue and the supporting quote.")
         flags_split = QSplitter(Qt.Orientation.Vertical)
-        flags_split.addWidget(self.flags_tree)
+        flags_top = QWidget()
+        ft = QVBoxLayout(flags_top)
+        ft.setContentsMargins(0, 0, 0, 0)
+        ft.addWidget(self.unchecked_only_box)
+        ft.addWidget(self.flags_tree, 1)
+        flags_split.addWidget(flags_top)
         flags_split.addWidget(self.flag_details)
         flags_split.setSizes([400, 160])
         tabs.addTab(flags_split, "Things to check")
         tabs.setTabToolTip(1, "Values worth a second look (uncertain, calculated, assumed, or disagreeing), and notes "
-                              "about the paper -- grouped by kind. Select one for the details and the quote.")
+                              "about the paper -- grouped by kind. Select one for the details and the quote; tick it "
+                              "once you've dealt with it (saved with the run).")
 
         # captured figures and labelled equations, at a glance (rich text: images + captions)
         self.figures_view = QTextBrowser(placeholderText="Figures found in the paper appear here.")
@@ -1520,11 +1547,18 @@ class MainWindow(QMainWindow):
         self.open_csv_btn.setEnabled(True)
         self.tabs.setEnabled(True)
         n_flags = len(result.paper_flags) + sum(len(f) for f in result.row_flags.values())
-        self.tabs.setTabText(1, f"Things to check ({n_flags})")
+        self._update_flags_title()
         self.tabs.setCurrentIndex(1 if n_flags else 0)
 
     def _fill_rows(self, result) -> None:
         """Shows the CSV exactly as saved, minus columns that are empty in every row."""
+        self._filling_rows = True
+        try:
+            self._fill_rows_now(result)
+        finally:
+            self._filling_rows = False
+
+    def _fill_rows_now(self, result) -> None:
         with open(result.csv_path, newline="") as f:
             reader = list(csv.reader(f))
         header, body = reader[0], reader[1:]
@@ -1566,6 +1600,9 @@ class MainWindow(QMainWindow):
                 tinted.add(c)
         self.rows_band.set_groups([tuple(g) for g in groups] if order else [])
         id_col = header.index("full_id")
+        self._shown_result = result
+        from parameter_extractor import corrections as corr
+        corrected = corr.load(result.run_dir) if result.run_dir else {}
         provenance = {r.full_id: r.provenance for r in result.rows}
         row_word = packs.row_word(run_pack) if run_pack else "row"
         adopted, differing = self._archive_marks(result.run_dir, row_word)
@@ -1601,6 +1638,14 @@ class MainWindow(QMainWindow):
                     item.setForeground(QBrush(Qt.GlobalColor.black))
                     tip = cell_notes[header[i]] + ("\n\n" + tip if tip else "")
                     n_differ += 1
+                item.setData(SHOWN_ROLE, row[i])
+                if header[i] in corr.FIXED_COLUMNS:
+                    item.setFlags(item.flags() & ~Qt.ItemFlag.ItemIsEditable)
+                fix = corrected.get((row[id_col], header[i]))
+                if fix is not None:                     # W2: a value you corrected
+                    item.setBackground(QBrush(CORRECTED_COLOR))
+                    item.setForeground(QBrush(Qt.GlobalColor.black))
+                    tip = _correction_tip(fix) + ("\n\n" + tip if tip else "")
                 if tip:
                     item.setToolTip(tip)
                 t.setItem(r, c, item)
@@ -1667,7 +1712,11 @@ class MainWindow(QMainWindow):
         tree.clear()
         self.flag_details.clear()
 
-        def add_group(title, flags):
+        from parameter_extractor import corrections as corr
+        checked = corr.load_checked(result.run_dir) if result.run_dir else set()
+        tree.blockSignals(True)
+
+        def add_group(title, flags, row_id=""):
             group = QTreeWidgetItem([f"{title} ({len(flags)})"])
             for f in flags:
                 shown = f.quote or (f"(from the table image) {f.table_image_quote}" if f.table_image_quote else
@@ -1676,6 +1725,10 @@ class MainWindow(QMainWindow):
                 where = ", ".join(x for x in (f.source or "", f"p. {f.page}" if f.page else "") if x)
                 child = QTreeWidgetItem([f.message, shown, where])
                 child.setData(0, Qt.ItemDataRole.UserRole, f)
+                key = corr.flag_key(f, row_id)              # W2: ticked once dealt with
+                child.setData(0, FLAG_KEY_ROLE, key)
+                child.setFlags(child.flags() | Qt.ItemFlag.ItemIsUserCheckable)
+                child.setCheckState(0, Qt.CheckState.Checked if key in checked else Qt.CheckState.Unchecked)
                 child.setToolTip(0, f.message)
                 child.setToolTip(1, shown)
                 if not f.quote and (f.unverified_quote or f.table_image_quote):
@@ -1739,11 +1792,124 @@ class MainWindow(QMainWindow):
         if other_paper_flags:
             add_group("Whole paper", other_paper_flags)
         for row_id, flags in result.row_flags.items():
-            add_group(f"Row {row_id}", flags)
+            add_group(f"Row {row_id}", flags, row_id)
         if not result.paper_flags and not result.row_flags:
             tree.addTopLevelItem(QTreeWidgetItem(["Nothing was flagged."]))
         tree.resizeColumnToContents(2)
         tree.setColumnWidth(1, 320)
+        tree.blockSignals(False)
+        self._apply_flag_filter()
+
+    # ---- W2: corrections and checked marks -------------------------------------------------------------------
+    def _flag_entries(self):
+        tree = self.flags_tree
+        for g in range(tree.topLevelItemCount()):
+            group = tree.topLevelItem(g)
+            for i in range(group.childCount()):
+                child = group.child(i)
+                if child.data(0, FLAG_KEY_ROLE):
+                    yield group, child
+
+    def _update_flags_title(self) -> None:
+        entries = [child for _g, child in self._flag_entries()]
+        left = sum(child.checkState(0) != Qt.CheckState.Checked for child in entries)
+        if entries and left < len(entries):
+            self.tabs.setTabText(1, f"Things to check ({left} of {len(entries)} left)")
+        else:
+            self.tabs.setTabText(1, f"Things to check ({len(entries)})")
+
+    def _apply_flag_filter(self) -> None:
+        only = self.unchecked_only_box.isChecked()
+        for group, child in self._flag_entries():
+            child.setHidden(only and child.checkState(0) == Qt.CheckState.Checked)
+        for g in range(self.flags_tree.topLevelItemCount()):
+            group = self.flags_tree.topLevelItem(g)
+            group.setHidden(only and group.childCount() > 0 and all(group.child(i).isHidden()
+                                                                    for i in range(group.childCount())))
+
+    def _flag_checked(self, item, column: int) -> None:
+        key = item.data(0, FLAG_KEY_ROLE) if item is not None else None
+        run_dir = getattr(self._shown_result, "run_dir", None)
+        if not key or column != 0 or not run_dir:
+            return
+        from parameter_extractor import corrections as corr
+        keys = corr.load_checked(run_dir)
+        keys.add(key) if item.checkState(0) == Qt.CheckState.Checked else keys.discard(key)
+        corr.save_checked(run_dir, keys)
+        self._update_flags_title()
+        self._apply_flag_filter()
+
+    def _cell_column(self, item) -> tuple:
+        """(full_id, column) of a cell of the Extracted data table."""
+        t = self.rows_table
+        header = [t.horizontalHeaderItem(c).data(Qt.ItemDataRole.UserRole) for c in range(t.columnCount())]
+        id_col = header.index("full_id") if "full_id" in header else -1
+        full_id = t.item(item.row(), id_col).text() if id_col >= 0 and t.item(item.row(), id_col) else ""
+        return full_id, header[item.column()]
+
+    def _cell_edited(self, item) -> None:
+        """A value typed into Extracted data: checked against its column, saved as a correction, files updated."""
+        if self._filling_rows or self._shown_result is None or not self._shown_result.run_dir:
+            return
+        from parameter_extractor import corrections as corr
+        from parameter_extractor.registry import VariableRegistry
+        full_id, column = self._cell_column(item)
+        before = item.data(SHOWN_ROLE) or ""
+        if not full_id or item.text() == before:
+            return
+        try:
+            registry = VariableRegistry(self.registry_path) if self.registry_path else None
+        except Exception:
+            registry = None
+        value, problem = corr.stored_value(column, item.text(), registry)
+        if problem:
+            QMessageBox.warning(self, "Not a valid value", f"{column}: {problem}. The value wasn't changed.")
+            self._set_cell_text(item, before)
+            return
+        try:
+            fix = corr.correct(self._shown_result.run_dir, full_id, column, before, value)
+        except (OSError, ValueError) as e:
+            QMessageBox.warning(self, "Not saved", str(e))
+            self._set_cell_text(item, before)
+            return
+        self._fill_rows(self._shown_result)
+        self.status.setText(f"Corrected {column} of row {full_id}: {value or '(empty)'}" if fix else
+                            f"{column} of row {full_id} is back to the extracted value.")
+
+    def _set_cell_text(self, item, text: str) -> None:
+        self._filling_rows = True
+        try:
+            item.setText(text)
+        finally:
+            self._filling_rows = False
+
+    def _rows_menu(self, pos) -> None:
+        item = self.rows_table.itemAt(pos)
+        run_dir = getattr(self._shown_result, "run_dir", None)
+        if item is None or not run_dir:
+            return
+        from parameter_extractor import corrections as corr
+        full_id, column = self._cell_column(item)
+        if column in corr.FIXED_COLUMNS:
+            return
+        fix = corr.load(run_dir).get((full_id, column))
+        menu = QMenu(self)
+        edit = menu.addAction("Correct this value… (or double-click it)")
+        revert = menu.addAction(f"Revert to the extracted value ({fix.extracted or 'empty'})") if fix else None
+        note = menu.addAction("Add or change the correction's note…") if fix else None
+        chosen = menu.exec(self.rows_table.viewport().mapToGlobal(pos))
+        if chosen is edit:
+            self.rows_table.editItem(item)
+        elif revert is not None and chosen is revert:
+            corr.revert(run_dir, full_id, column)
+            self._fill_rows(self._shown_result)
+            self.status.setText(f"{column} of row {full_id} is back to the extracted value.")
+        elif note is not None and chosen is note:
+            text, ok = QInputDialog.getText(self, "Note", f"Why {column} of row {full_id} was corrected:",
+                                            text=fix.note)
+            if ok:
+                corr.set_note(run_dir, full_id, column, text.strip())
+                self._fill_rows(self._shown_result)
 
     def _show_flag_details(self, item, _previous=None) -> None:
         flag = item.data(0, Qt.ItemDataRole.UserRole) if item else None
