@@ -24,11 +24,20 @@ is somewhere other than its set's `src` -- '' for a row of the set's table. Then
 `n_rows`, `excluded` (each at most 8 words) and `notes` (one sentence, or '').
 
 Guidance:
+{{#TEXT_ROWS}}
 - Rows come from results the paper reports: table rows, and results stated in
   the text or a caption together with the conditions they were obtained under.
   A result with too little context to describe its conditions gets no row
   (list it in `excluded`). Results shown only in figures get no rows here
   (figures are digitized separately); list them in `excluded`.
+{{/TEXT_ROWS}}
+{{^TEXT_ROWS}}
+- Rows come only from the paper's TABLES: one row per table row of results.
+  Results stated only in the running text or a caption get no rows -- list
+  them in `excluded`; the later steps still read the text for the conditions
+  and methods of the table rows. Results shown only in figures get no rows
+  here either (figures are digitized separately); list them in `excluded`.
+{{/TEXT_ROWS}}
 - `type`: "Time Series" when a set's rows are time points of one experiment,
   "Average" when the rows are averages over runs whose individual values aren't
   given, "Independent" otherwise.

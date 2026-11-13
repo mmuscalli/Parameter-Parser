@@ -11,8 +11,12 @@ Flagged values (Mickey, 2026-11-11): the review of a run's flagged values in one
 - Double-click a value to correct it, as in Extracted data (corrections.py); several values at once: select them
   (Shift / Cmd-click, or a column's header) and "Change selected values…" (also on right-click). The main window is
   refreshed after.
-- Flags about a column on every row are in a collapsed "On every row" list; "Add their columns to the table" puts
-  their values in the table too (Mickey, 2026-11-11). source_notes is always the last column (it says what the row is).
+- Flags about a column on every row, or about ONE value stated for several rows (one column, one value: a method
+  'for every experiment set'), are in a collapsed "Same value on several rows" list, checked once; "Add their columns
+  to the table" puts their values in the table too (Mickey, 2026-11-11 / 11-12). Flags that question each value on
+  its own (flag_targets.PER_VALUE) stay on their cells.
+- Minor notes (Flag.minor: 'medium' confidence, a clear majority of passes) only with "Show minor notes"; "Mark all
+  flags checked" includes them. Things to check lists every flag (Mickey, 2026-11-12: they clogged this window). source_notes is always the last column (it says what the row is).
 - The table / figure image zooms: buttons, Cmd + scroll, pinch. The SELECTED value alone decides what is shown (not
   the mouse: hovering had shown another value's table beside this one's flags -- Mickey, 2026-11-12); on a saved
   table it is boxed where the PDF's text layer has it (ingestion/table_locate.py; local, no model).
@@ -201,6 +205,19 @@ class ChangeValuesDialog(QDialog):
 _PLACE = re.compile(r"\b(Table|Fig\.?|Figure)\s*\.?\s*((?:S|[A-Z])?\d+[a-z]?|[IVXLC]+)\b", re.I)
 
 
+EVERYWHERE_TITLE = "Same value on several rows"
+
+
+def _one_value(flag, cells, values) -> bool:
+    """A flag about ONE value stated for several rows -- one column, one value on 2+ rows (solution_type 'Wet' for
+    every set): checked once, not on every row. Flags that question each value on its own stay on their cells."""
+    if flag.kind in ft.PER_VALUE or len({col for _fid, col in cells}) != 1:
+        return False
+    rows = {fid for fid, _col in cells}
+    found = {values.get(cell, "") for cell in cells}
+    return len(rows) >= 2 and len(found) == 1 and "" not in found
+
+
 class FlaggedValuesWindow(QDialog):
     def __init__(self, result, registry=None, parent=None, on_changed=None):
         super().__init__(parent)
@@ -227,8 +244,16 @@ class FlaggedValuesWindow(QDialog):
         self.change_btn = QPushButton("Change selected values…", clicked=self.change_selected)
         self.change_btn.setToolTip("Select several values (Shift / Cmd-click, or click a column's header), then "
                                    "give them one new value")
+        # notes rather than doubts (Flag.minor: 'medium' confidence, a clear majority of passes): hidden here until
+        # asked for -- still in Things to check (Mickey, 2026-11-12: they clogged this window)
+        self.minor_box = QCheckBox("Show minor notes")
+        self.minor_box.setToolTip("Also show the minor notes: values a step gave 'medium' confidence, and values the "
+                                  "passes disagreed on where most passes agreed. They are always listed under "
+                                  "Things to check.")
+        self.minor_box.toggled.connect(lambda _on: self._load())
         top.addWidget(self.all_columns_box)
         top.addWidget(self.open_only_box)
+        top.addWidget(self.minor_box)
         top.addStretch(1)
         top.addWidget(self.change_btn)
         v.addLayout(top)
@@ -364,10 +389,15 @@ class FlaggedValuesWindow(QDialog):
         self.cell_flags: Dict[Tuple[str, str], List[Tuple[object, str]]] = {}
         self.everywhere: List[Tuple[object, str, List[str]]] = []
         entries = [(f, "") for f in r.paper_flags] + [(f, rid) for rid, fs in r.row_flags.items() for f in fs]
+        values = {(row.get("full_id", ""), c): row.get(c, "") for row in self.rows for c in self.header}
+        self.hidden_minor = set()
         for flag, rid in entries:
             key = corr.flag_key(flag, rid)
+            if getattr(flag, "minor", False) and not self.minor_box.isChecked():
+                self.hidden_minor.add(key)
+                continue
             cells = ft.targets(flag, index, rid)
-            if len(all_rows) > 1 and {fid for fid, _ in cells} >= all_rows:
+            if len(all_rows) > 1 and ({fid for fid, _ in cells} >= all_rows or _one_value(flag, cells, values)):
                 self.everywhere.append((flag, key, sorted({col for _, col in cells}), cells))
                 if not self.review_all:
                     continue
@@ -388,7 +418,10 @@ class FlaggedValuesWindow(QDialog):
         self.mark_all_btn.setEnabled(bool(self.all_flag_keys() - self.checked))
         self.everywhere_list.setVisible(bool(self.everywhere) and self.everywhere_toggle.isChecked())
         n_open = sum(key not in self.checked for _f, key, _c, _cells in self.everywhere)
-        self.everywhere_toggle.setText(f"On every row ({len(self.everywhere)}, {n_open} not checked yet)")
+        self.everywhere_toggle.setText(f"{EVERYWHERE_TITLE} ({len(self.everywhere)}, {n_open} not checked yet)")
+        n_minor = len(self.hidden_minor - self.checked)
+        self.minor_box.setText(f"Show minor notes ({n_minor} not checked)" if n_minor or self.hidden_minor
+                               else "Show minor notes")
         self.corrected = corr.load(r.run_dir)
         self._fill_table()
 
@@ -933,8 +966,9 @@ class FlaggedValuesWindow(QDialog):
         self.on_changed()
 
     def all_flag_keys(self) -> set:
-        """Every flag this window shows: on values, and on every row."""
-        return {k for fs in self.cell_flags.values() for _f, k in fs} | {k for _f, k, _c, _cells in self.everywhere}
+        """Every flag of this window: on values, on several rows, and the minor notes (shown or not)."""
+        return ({k for fs in self.cell_flags.values() for _f, k in fs} | {k for _f, k, _c, _cells in self.everywhere}
+                | getattr(self, "hidden_minor", set()))
 
     def mark_all_checked(self, confirm: bool = True) -> int:
         """Tick every flag of this window not checked yet. Returns how many were ticked."""
@@ -970,7 +1004,7 @@ class FlaggedValuesWindow(QDialog):
         corr.save_checked(self.result.run_dir, self.checked)
         self.changed = True
         n_open = sum(k not in self.checked for _f, k, _c, _cells in self.everywhere)
-        self.everywhere_toggle.setText(f"On every row ({len(self.everywhere)}, {n_open} not checked yet)")
+        self.everywhere_toggle.setText(f"{EVERYWHERE_TITLE} ({len(self.everywhere)}, {n_open} not checked yet)")
         current = (self.table.currentRow(), self.table.currentColumn())
         self._fill_table()
         if 0 <= current[0] < self.table.rowCount():

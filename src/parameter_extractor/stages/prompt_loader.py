@@ -2,7 +2,24 @@ from pathlib import Path
 from parameter_extractor.config import settings
 
 
-def load_prompt(name: str, **placeholders: str) -> str:
+import re
+
+# {{#NAME}}...{{/NAME}}: kept when the option NAME is on; {{^NAME}}...{{/NAME}}: kept when it is off (2026-11-12, rows
+# from body text). Markers alone on their lines (a block) go with their line breaks; markers inside a line (inline)
+# leave the line as it is -- so a prompt with its options set reads exactly as if written without the markers.
+_BLOCK = re.compile(r"^\{\{([#^])(\w+)\}\}\n(.*?)^\{\{/\2\}\}\n", re.DOTALL | re.MULTILINE)
+_INLINE = re.compile(r"\{\{([#^])(\w+)\}\}(.*?)\{\{/\2\}\}", re.DOTALL)
+
+
+def apply_sections(text: str, sections: dict) -> str:
+    """Keep or drop a prompt's optional sections by `sections` ({name: on}); a name not given counts as off."""
+    def keep(m) -> str:
+        on = bool(sections.get(m.group(2)))
+        return m.group(3) if on == (m.group(1) == "#") else ""
+    return _INLINE.sub(keep, _BLOCK.sub(keep, text))
+
+
+def load_prompt(name: str, sections: dict = None, **placeholders: str) -> str:
     """Load the prompt <name>.md -- the active domain pack's version if it has one,
     else the app's prompts/ -- and substitute {{TOKEN}} placeholders.
 
@@ -15,6 +32,9 @@ def load_prompt(name: str, **placeholders: str) -> str:
     Plain string replace rather than str.format/Jinja: paper text routinely
     contains literal `{`/`}` (equations, references), which would break
     .format(); token replace sidesteps that entirely.
+
+    `sections` ({name: on}) keeps or drops the prompt's {{#name}} / {{^name}} sections (apply_sections) -- before
+    the paper text goes in, so a paper's own braces are never read as markers.
     """
     from parameter_extractor.packs import current
     pack = current()
@@ -28,6 +48,7 @@ def load_prompt(name: str, **placeholders: str) -> str:
                     **placeholders}
     if not placeholders["MODULE_RULES"]:
         text = text.replace("{{MODULE_RULES}}\n", "")
+    text = apply_sections(text, sections or {})
     for key, value in placeholders.items():
         text = text.replace("{{" + key + "}}", value)
     return text

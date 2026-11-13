@@ -10,6 +10,8 @@ strings so a front end can group, sort and highlight them; `message` alone is
 still a complete human-readable sentence.
 """
 from __future__ import annotations
+
+import re
 from dataclasses import asdict, dataclass
 from typing import Union, Dict, List, Literal, Optional
 
@@ -43,6 +45,10 @@ class Flag:
     table_image_quote: Optional[str] = None   # transcribed by the model from a table sent as an image
     model_note: Optional[str] = None          # the model's explanation (e.g. how a value was derived)
     page: Optional[Union[int, str]] = None   # 'S5': a page of the supplementary information                # page of the quote / table (validation/quotes.py)
+    # a note rather than a doubt (Mickey, 2026-11-12: the Flagged values window was clogged with them): set where the
+    # flag is made, from facts -- a step's 'medium' (not 'low') confidence; passes that disagreed but a majority
+    # agreed. Kept and listed in Things to check like any flag; the Flagged values window shows them on request.
+    minor: bool = False
 
     def __post_init__(self):
         from parameter_extractor.schemas.common import NOTE_MAX_CHARS, QUOTE_MAX_CHARS, QUOTE_SEPARATOR_SAFE, capped
@@ -91,8 +97,8 @@ def check_row(
         out_of_range("initial_pressure_bar is negative -- not physically possible.")
 
     for column, val in row.extra.items():            # every compound's % yield / % recovered
-        if (column.endswith(("_%yield", "_%recovered")) and isinstance(val, (int, float))
-                and not isinstance(val, bool) and not (0 <= val <= 100)):
+        if (column.endswith(("_%yield", "_%recovered")) and not re.search(r"_(?:log10|ln)_", column)
+                and isinstance(val, (int, float)) and not isinstance(val, bool) and not (0 <= val <= 100)):
             out_of_range(f"{column}={val} is outside 0-100%.")
 
     for name, conc in row.species_mM.items():
@@ -152,7 +158,7 @@ def check_extraction(
                 "low_confidence",
                 f"methodology.{field} = {f.value!r} has confidence '{f.confidence}' "
                 f"(applies to every row){_drop_suffix(f.confidence, drop_below)}.",
-                quote=f.quote or None, source=f.source or None))
+                quote=f.quote or None, source=f.source or None, minor=_medium(f.confidence)))
 
     def _is_text(spec, column: str) -> bool:
         """A text parameter of the step: its value is the text, never the placeholder number."""
@@ -190,7 +196,7 @@ def check_extraction(
             listed = "; ".join(f"{i[0].removeprefix('set ')} = {i[1]}" for i in items)
             message = f"{name} has confidence '{confidence}' in {len(items)} sets{how}: {listed}"
         flags.append(Flag("low_confidence", message + f"{_drop_suffix(confidence, drop_below)}.",
-                          **_joined(items)))
+                          minor=_medium(confidence), **_joined(items)))
 
     # starting species: no concentration in the paper is its own (always reported) problem;
     # otherwise one flag per species and confidence level
@@ -237,9 +243,14 @@ def check_extraction(
     for (variable, confidence), items in chem_groups.items():
         listed = "; ".join(f"{i[1]} ({i[0]})" for i in items)
         flags.append(Flag("low_confidence", f"initial {variable} = {listed} has confidence '{confidence}'"
-                          f"{_drop_suffix(confidence, drop_below)}.", **_joined(items)))
+                          f"{_drop_suffix(confidence, drop_below)}.", minor=_medium(confidence), **_joined(items)))
 
     return flags
+
+
+def _medium(confidence) -> bool:
+    """A step's 'medium' confidence: a note (Flag.minor); 'low' stays a doubt."""
+    return str(confidence or "").lower() == "medium"
 
 
 def _joined(items) -> dict:

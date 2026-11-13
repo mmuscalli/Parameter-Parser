@@ -25,6 +25,11 @@ NOT_ABOUT_VALUES = {"reused_answer", "paper_source", "cited_data", "scope", "loc
                     "duplicate_removed", "analysis", "fit_model", "lookup_unavailable", "archive_match",
                     "term_not_found", "figure_problem", "auto_digitized"}
 # which reason leads when flags are merged: the more specific / serious first
+# kinds that question each value on its own (a conflict, a range, an unread or unquoted value): always shown on their
+# cells. Other flags about ONE value stated for several rows (a method 'for every experiment set') are listed once in
+# the Flagged values window instead of on every row (gui/flagged_values.py).
+PER_VALUE = {"conflicting_values", "out_of_range", "identity_not_quoted", "quote_unrelated", "value_not_read",
+             "table_check", "unit_conversion"}
 PRIORITY = ["identity_not_quoted", "quote_unrelated", "assumed_value", "table_check", "conflicting_values", "out_of_range",
             "unit_conversion", "value_range", "table_not_found", "concentration_not_stated", "pass_disagreement",
             "multimodal", "other_estimates", "archive_check", "assumed_default", "assumed_shared", "method_differs", "derived_value",
@@ -80,6 +85,8 @@ class Index:
         # the row plan's set labels, in order (set n = rows whose set_id ends in n): flags name sets by label
         self.set_labels = [(_label_text(label), f"{n:03d}") for n, label in enumerate(set_labels, start=1)
                            if len(_label_text(label)) >= 6]
+        self.raw_set_labels = sorted({str(label) for label in set_labels if len(str(label).strip()) >= 6},
+                                     key=len, reverse=True)
         self.source: Dict[Cell, str] = {}
         self.quote: Dict[Cell, str] = {}
         cols = set(header)
@@ -117,6 +124,10 @@ def _columns(flag, index: Index) -> List[str]:
     named = [c for c in index.columns if re.search(rf"(?<![A-Za-z0-9_]){re.escape(c)}(?![A-Za-z0-9_])", text)]
     if named:
         return named
+    # a set label quoted in the message names its experiment, not the flag's subject (Riggi2023: 'Kaolinite was found by
+    # only some passes ... ImpA 15 mM with mineral' put the flag on every ImpA value too)
+    for label in getattr(index, "raw_set_labels", []):
+        text = re.sub(re.escape(label), " ", text, flags=re.IGNORECASE)
     found = []
     for name, cols in index.compounds.items():
         m = re.search(rf"(?:\b(initial|stock|sampled|calculated)\s+)?(?<![A-Za-z0-9_+-]){re.escape(name)}(?![A-Za-z0-9_+-])", text)

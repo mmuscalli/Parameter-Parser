@@ -193,6 +193,17 @@ def json_ready(model) -> dict:
 
 def disagreement_flags(notes: List[Disagreement]) -> List[str]:
     """One message per step and column/species: how many places the passes disagreed, with examples."""
+    return [message for message, _minor in disagreements(notes)]
+
+
+def majority(d: Disagreement) -> bool:
+    """More than half the passes gave the value kept (2 of 3): the vote was clear."""
+    return d.counts.get(d.winner, d.present_in if d.kind == "missing" else 0) * 2 > d.passes
+
+
+def disagreements(notes: List[Disagreement]):
+    """(message, minor) per step and column/species: how many places the passes disagreed, with examples; minor
+    (Flag.minor) when every place had a clear majority for the value kept."""
     grouped: Dict[Tuple[str, str, str], List[Disagreement]] = {}
     for d in notes:
         grouped.setdefault((d.step, d.what, d.kind), []).append(d)
@@ -207,5 +218,5 @@ def disagreement_flags(notes: List[Disagreement]) -> List[str]:
         head = (f"{step}: {what} differs between passes in {len(ds)} place(s) -- the most common value was kept"
                 if kind == "differ" else
                 f"{step}: {what} was found by only some of the {n} passes in {len(ds)} place(s) -- kept")
-        out.append(f"{head}. {examples}.")
+        out.append((f"{head}. {examples}.", all(majority(d) for d in ds)))
     return out

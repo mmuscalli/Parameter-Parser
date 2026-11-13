@@ -49,6 +49,7 @@ Guidance:
   the original reference as the paper's reference list states it (authors,
   year, journal, reference number). This matters: those values aren't this
   paper's measurements.
+{{#TEXT_ROWS}}
 - Plan rows for results given in the paper's TABLES. Results stated only in
   the running text or in a figure caption get rows too, but ONLY when the
   paper gives that experiment's conditions completely enough for a useful row:
@@ -63,7 +64,18 @@ Guidance:
   conditions in `excluded` with a short reason. Results that only exist as
   points in a figure are out of scope for this pass -- the user digitizes
   figures separately -- so list them in `excluded` as well.
-- Kinetics are results: a table (or a text result with complete conditions)
+{{/TEXT_ROWS}}
+{{^TEXT_ROWS}}
+- Plan rows ONLY for results given in the paper's TABLES. Results stated only
+  in the running text or in a figure caption get no rows, however complete
+  their conditions -- they are mostly passing remarks, and they often repeat
+  a table's data. List them in `excluded` with a short reason. (The later
+  steps still read the text for the conditions and methods of the table
+  rows.) Results that only exist as points in a figure are out of scope for
+  this pass -- the user digitizes figures separately -- so list them in
+  `excluded` as well.
+{{/TEXT_ROWS}}
+- Kinetics are results: a table{{#TEXT_ROWS}} (or a text result with complete conditions){{/TEXT_ROWS}}
   of reaction rates, rate constants, half-lives or activation energies
   measured for the paper's experiments gets rows like any other result --
   one per condition, or per time interval when the table gives rates per

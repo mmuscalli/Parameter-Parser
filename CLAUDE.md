@@ -129,7 +129,9 @@ Search `docs/history/` for the details and the measurements behind each.
   type) is written only after the user accepts it once (remembered in the registry). Vocabulary-defined columns
   (the pack's, its modules', analysis vocabulary) are written directly. Assumed values are flagged and offered,
   never included automatically, never remembered.
-- **Flags**: over-flag rather than under-flag; cut noise by grouping or rewording, never by dropping.
+- **Flags**: over-flag rather than under-flag; cut noise by grouping or rewording, never by dropping. The Flagged
+  values window shows `Flag.minor` notes ('medium' confidence, a majority vote) only on request and lists a flag
+  about one value on several rows once; Things to check lists every flag.
 - **Columns**: `PaperDataTemplate.xlsx` is frozen (never edited). The prebiotic pack uses its own trimmed copy
   (`template_vocab.json`, generated from the xlsx). One column format for every compound:
   `<role>_<name>_<phase>_<measure>` (role initial / sampled / stock, or calculated for a value the paper calculated
@@ -138,8 +140,9 @@ Search `docs/history/` for the details and the measurements behind each.
   `analysis_<technique>_<setting>[_range][_<unit>]`. Ranges `low:high` in `_range_` columns; averages `_avg`.
   Dataset columns are ordered by variable category (`column_order.py`), all of a pack's columns written.
 - **Rows**: set = an experiment condition / host star, sample = a time point / planet (pack words in `units`).
-  Rows come from tables, digitized figures, and text or captions that give complete conditions; a review's
-  reproduced data are rows marked with their source (`original_data_reference`, `cited_data` flags). Exoplanets:
+  Rows come from tables and digitized figures (2026-11-12; `RunConfig.rows_from_text` / Options / `--rows-from-text`
+  also makes rows from text or captions with complete conditions -- the row-plan prompts' {{#TEXT_ROWS}} sections);
+  a review's reproduced data are rows marked with their source (`original_data_reference`, `cited_data` flags). Exoplanets:
   one row per (planet, fit solution); every posterior mode and estimate by another method is kept.
 - **Units**: an explicit table (`units.py`, no pint), never guess: ranges, lost exponents ("10-4 M"), unknown units
   are refused and flagged. A plain "u" reads as µ where the µ form is known; lower-case "um" / "mm" / "nm" are read

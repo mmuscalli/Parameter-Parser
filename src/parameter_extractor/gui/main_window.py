@@ -551,7 +551,14 @@ class MainWindow(QMainWindow):
             "between related columns (e.g. the sampled temperature from the initial one when every row giving both has "
             "them equal). Assumed, and listed under Things to check; never over a value the paper gives. Done on this "
             "computer, no extra cost. Rows of calculated values or of data from other papers are left alone.")
+        self.text_rows_box = QCheckBox("Make rows from results in the body text too")
+        self.text_rows_box.setToolTip(
+            "Off (the default): rows come only from the paper's tables and the figures you digitize. On: a result "
+            "stated in the text or a caption also gets a row when the paper gives its conditions completely "
+            "(composition, temperature and duration). Text results are often passing remarks that repeat a table's "
+            "data, so they are left out unless you turn this on; they are listed as excluded in the run's notes.")
         rv.addWidget(self.suggest_box)
+        rv.addWidget(self.text_rows_box)
         rv.addWidget(self.shared_box)
         rv.addWidget(self.auto_figures_box)
 
@@ -617,7 +624,7 @@ class MainWindow(QMainWindow):
 
     def option_toggles(self) -> List[QCheckBox]:
         """The on/off run options, in the panel's order."""
-        return [self.batch_box, self.arxiv_box, self.si_box, self.suggest_box, self.shared_box, self.auto_figures_box,
+        return [self.batch_box, self.arxiv_box, self.si_box, self.suggest_box, self.text_rows_box, self.shared_box, self.auto_figures_box,
                 self.images_box, self.all_figures_box, self.equations_box]
 
     def _update_options_summary(self, *_args) -> None:
@@ -888,6 +895,7 @@ class MainWindow(QMainWindow):
         self.arxiv_box.setChecked(self._settings.value("prefer_arxiv", False, type=bool))
         self.suggest_box.setChecked(self._settings.value("suggest_new_variables", True, type=bool))
         self.shared_box.setChecked(self._settings.value("fill_shared_values", True, type=bool))
+        self.text_rows_box.setChecked(self._settings.value("rows_from_text", False, type=bool))
         self.si_box.setChecked(self._settings.value("include_supplements", True, type=bool))
         self.images_box.setChecked(self._settings.value("save_images", True, type=bool))
         self.all_figures_box.setChecked(self._settings.value("save_all_figure_images", False, type=bool))
@@ -959,6 +967,7 @@ class MainWindow(QMainWindow):
         self._settings.setValue("prefer_arxiv", self.arxiv_box.isChecked())
         self._settings.setValue("suggest_new_variables", self.suggest_box.isChecked())
         self._settings.setValue("fill_shared_values", self.shared_box.isChecked())
+        self._settings.setValue("rows_from_text", self.text_rows_box.isChecked())
         self._settings.setValue("include_supplements", self.si_box.isChecked())
         self._settings.setValue("save_images", self.images_box.isChecked())
         self._settings.setValue("save_all_figure_images", self.all_figures_box.isChecked())
@@ -1069,6 +1078,7 @@ class MainWindow(QMainWindow):
                          prefer_arxiv=self.arxiv_box.isChecked(), ads_token=self.ads_edit.text().strip(),
                          suggest_new_variables=self.suggest_box.isChecked(),
                          fill_shared_values=self.shared_box.isChecked(),
+                         rows_from_text=self.text_rows_box.isChecked(),
                          include_supplements=self.si_box.isChecked(),
                          save_images=self.images_box.isChecked(),
                          save_all_figure_images=self.images_box.isChecked() and self.all_figures_box.isChecked(),

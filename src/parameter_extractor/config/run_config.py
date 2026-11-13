@@ -110,6 +110,12 @@ class RunConfig:
     # fill the data pack's shared columns (analysis, methods) into measured rows that lack them, flagged as assumed
     # (calculators/shared_values.py, 2026-11-12)
     fill_shared_values: bool = True
+    # Rows from results stated in the body text or a caption (with complete conditions), not only tables and
+    # digitized figures (Mickey, 2026-11-12: off by default -- text results were mostly passing remarks, "experiments
+    # with X gave peptides up to length Y", making rows with little context that could repeat a table's data).
+    # Applies to row-plan prompts with a TEXT_ROWS section (the shared one, prebiotic's); exoplanets plans a row per
+    # planet and fit wherever it is reported.
+    rows_from_text: bool = False
     # Developer only (dev_features.py, never in public builds): write model requests to this folder for
     # answers from a Claude Code session instead of calling the API (handoff.py); no API key needed
     handoff_dir: Optional[Path] = None

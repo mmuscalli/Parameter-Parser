@@ -96,7 +96,7 @@ from parameter_extractor.schemas.analysis import AnalysisResult
 from parameter_extractor.stages.analysis import LABEL as ANALYSIS_LABEL, run_analysis
 from parameter_extractor.calculators import exoplanet_fits
 from parameter_extractor.calculators.water import normalize_water
-from parameter_extractor.voting import MAX_PASSES, disagreement_flags, vote_chemistry, vote_stage
+from parameter_extractor.voting import MAX_PASSES, disagreements, vote_chemistry, vote_stage
 from parameter_extractor.stages.triage import run_triage
 from parameter_extractor.validation.plausibility_checks import Flag, check_extraction, check_row, flags_to_json
 
@@ -702,7 +702,7 @@ def _step_instructions(pack, config: RunConfig, tools: dict, vocab: dict) -> dic
     out = {}
     for stage in tools:
         if stage == "structure_planner":
-            out[stage] = planner_stage.prompt_text(PAPER_ABOVE)
+            out[stage] = planner_stage.prompt_text(PAPER_ABOVE, config.rows_from_text)
         elif stage == "chemistry":
             out[stage] = chemistry_extractor.prompt_text(PAPER_ABOVE, PLAN_MARK, vocab["species_names"],
                                                          config.scopes.get("chemistry"), grids=config.table_grids)
@@ -1358,7 +1358,7 @@ def finish(
     from parameter_extractor.value_types import apply_column_types
     paper_flags += [Flag("unit_conversion", p) for p in apply_column_types(rows, registry.builtin_types())]
     held_out = [v for g in left_out for v in g.values]
-    paper_flags += [Flag("pass_disagreement", m) for m in disagreement_flags(ctx.vote_notes)]
+    paper_flags += [Flag("pass_disagreement", m, minor=minor) for m, minor in disagreements(ctx.vote_notes)]
     # what the user decided in the review ("Don't add", or values unticked) was just checked there: not flagged
     # again (Mickey, 2026-11-11; the values stay in new_variables.json). Variables nobody decided on -- runs
     # without a review (CLI, unattended queues) -- are still flagged.

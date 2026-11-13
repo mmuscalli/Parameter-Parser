@@ -132,3 +132,4 @@ current month's file (start `YYYY-MM.md` in a new month), with one line here.
 - Values listed for several rows go to their rows (2026-11-12, Mickey's Cleaves2008 run 152430)
 - One rule for every quantity a row label states (2026-11-12, Mickey: no parameter-specific checks)
 - Category axes, scroll-safe dropdowns, a lighter digitizer panel (2026-11-12, Mickey's Riggi2023 run)
+- Rows only from tables and figures again; a Flagged values window for what needs a look (2026-11-12, Mickey)

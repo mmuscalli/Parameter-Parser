@@ -176,6 +176,9 @@ def main() -> int:
     parser.add_argument("--auto-figures", action="store_true",
                         help="Digitize easy figures automatically: request suggestions for every figure and keep "
                              "the bar charts / scatter plots that parse cleanly (flagged for checking)")
+    parser.add_argument("--rows-from-text", action="store_true",
+                        help="Also make rows from results stated in the body text or a caption (with complete "
+                             "conditions); by default rows come only from tables and digitized figures")
     parser.add_argument("--no-suggestions", action="store_true",
                         help="Don't suggest new variables: no open-ended capture of conditions without a column "
                              "(new variables are listed in one flag and new_variables.json, never added)")
@@ -252,6 +255,7 @@ def main() -> int:
                  "prompt_caching": not args.no_cache,
                  "batch_mode": args.batch, "prefer_arxiv": args.arxiv,
                  "suggest_new_variables": not args.no_suggestions, "passes": args.passes,
+                 "rows_from_text": args.rows_from_text,
                  "include_supplements": not args.no_si,
                  "save_images": not args.no_images, "save_all_figure_images": args.all_figure_images,
                  "auto_digitize_figures": args.auto_figures, "table_check": not args.no_table_check,

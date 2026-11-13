@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import csv
 import json
+import re
 from dataclasses import dataclass, field, fields
 from pathlib import Path
 from typing import Dict, List, Optional
@@ -64,7 +65,24 @@ def _json(path: Path, notes: List[str], what: str, default):
 
 def _flag(d: dict) -> Flag:
     known = {f.name for f in fields(Flag)}
-    return Flag(**{k: v for k, v in d.items() if k in known})
+    flag = Flag(**{k: v for k, v in d.items() if k in known})
+    if "minor" not in d:                       # saved before Flag.minor (2026-11-12): read from the wording
+        flag.minor = legacy_minor(flag)
+    return flag
+
+
+_VOTES = re.compile(r"\((\d+) of (\d+);|found by (\d+) of (\d+) passes")
+
+
+def legacy_minor(flag: Flag) -> bool:
+    """Flag.minor for a flag saved before the field existed: 'medium' confidence; a vote whose listed examples
+    all had a majority (and none left unlisted)."""
+    if flag.kind == "low_confidence":
+        return "has confidence 'medium'" in flag.message
+    if flag.kind == "pass_disagreement":
+        votes = [(int(a or c), int(b or d)) for a, b, c, d in _VOTES.findall(flag.message)]
+        return bool(votes) and "more)" not in flag.message and all(k * 2 > n for k, n in votes)
+    return False
 
 
 def _page(v: str):
