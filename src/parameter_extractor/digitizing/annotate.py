@@ -12,7 +12,7 @@ from typing import Tuple
 
 from PIL import Image, ImageDraw
 
-from parameter_extractor.digitizing.calibration import try_pixel_to_data
+from parameter_extractor.digitizing.calibration import read_values
 from parameter_extractor.schemas.figures import DigitizedFigure
 
 SERIES_COLORS = ["#d62728", "#1f77b4", "#2ca02c", "#9467bd", "#ff7f0e", "#17becf",
@@ -41,7 +41,7 @@ def save_digitized(fig: DigitizedFigure, out_dir: Path) -> Tuple[Path, Path]:
     for s_rec, series in zip(record["series"], fig.series):
         panel = fig.panels[series.panel]
         for p_rec, pt in zip(s_rec["points"], series.points):
-            xy = try_pixel_to_data(panel, pt.px, pt.py)
+            xy = read_values(panel, pt.px, pt.py)
             p_rec["x_axis_value"], p_rec["y_axis_value"] = xy if xy else (None, None)
     json_path = out_dir / f"fig-{fig.tag}.digitized.json"
     json_path.write_text(json.dumps(record, indent=2, ensure_ascii=False))

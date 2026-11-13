@@ -21,7 +21,7 @@ from PySide6.QtGui import QPixmap
 from PySide6.QtWidgets import (QDialog, QHBoxLayout, QLabel, QMessageBox, QPushButton, QScrollArea,
                                QStackedWidget, QVBoxLayout, QWidget)
 
-from parameter_extractor.digitizing.calibration import try_pixel_to_data
+from parameter_extractor.digitizing.calibration import read_values
 from parameter_extractor.schemas.figures import DigitizedFigure, FigureCandidate, FigurePlan
 from parameter_extractor.gui.digitizer import DigitizerWidget
 
@@ -313,7 +313,7 @@ class FigureReviewDialog(QDialog):
             if not s.points:
                 continue
             panel = fig.panels[s.panel]
-            if try_pixel_to_data(panel, s.points[0].px, s.points[0].py) is None:
+            if read_values(panel, s.points[0].px, s.points[0].py) is None:
                 issues.append(f"'{s.label}': its axes ('{panel.name}') aren't fully calibrated.")
             elif not (panel.x.column or panel.y.column or s.y_column):
                 issues.append(f"'{s.label}': neither axis of '{panel.name}' is assigned to a column.")

@@ -131,3 +131,4 @@ current month's file (start `YYYY-MM.md` in a new month), with one line here.
 - Methods stated once: filled within groups, across the paper and between related columns (2026-11-12, Mickey)
 - Values listed for several rows go to their rows (2026-11-12, Mickey's Cleaves2008 run 152430)
 - One rule for every quantity a row label states (2026-11-12, Mickey: no parameter-specific checks)
+- Category axes, scroll-safe dropdowns, a lighter digitizer panel (2026-11-12, Mickey's Riggi2023 run)

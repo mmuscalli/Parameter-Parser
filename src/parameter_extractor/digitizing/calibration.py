@@ -135,3 +135,15 @@ def try_pixel_to_data(panel: DigitizedPanel, px: float, py: float) -> Optional[T
         return pixel_to_data(panel, px, py)
     except CalibrationError:
         return None
+
+
+def read_values(panel: DigitizedPanel, px: float, py: float) -> Optional[Tuple[Optional[float], float]]:
+    """(x, y) at a pixel -- x None on a category axis, which needs no x calibration -- or None if the axes the
+    panel uses aren't calibrated. Every reader of clicked points goes through this (Riggi2023, 2026-11-12: the save
+    check asked for an x calibration on a bar chart)."""
+    if is_categorical(panel):
+        try:
+            return None, pixel_to_y(panel, px, py)
+        except CalibrationError:
+            return None
+    return try_pixel_to_data(panel, px, py)

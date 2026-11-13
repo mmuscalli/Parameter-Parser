@@ -4,7 +4,8 @@ import html
 
 from PySide6.QtCore import QEvent, QObject, QRect, QSize, Qt, QTimer
 from PySide6.QtGui import QColor, QPainter, QPalette, QPen
-from PySide6.QtWidgets import (QAbstractItemView, QDialog, QDialogButtonBox, QLabel, QLineEdit, QPlainTextEdit, QStyle,
+from PySide6.QtWidgets import (QAbstractItemView, QAbstractScrollArea, QAbstractSpinBox, QApplication, QComboBox, QDialog, QDialogButtonBox,
+                               QLabel, QLineEdit, QPlainTextEdit, QStyle,
                                QStyledItemDelegate, QTableWidget,
                                QToolTip, QVBoxLayout, QWidget)
 
@@ -170,6 +171,42 @@ def in_cell(widget: QWidget) -> QWidget:
     v.setContentsMargins(2, ROW_GAP, 2, ROW_GAP)
     v.addWidget(widget, alignment=Qt.AlignmentFlag.AlignVCenter)
     return holder
+
+
+class WheelGuard(QObject):
+    """App-wide: a dropdown or number box changes with the scroll wheel only after the user clicked it, until it loses
+    focus. Otherwise the wheel scrolls the nearest scroll area behind it, so scrolling a page past one no longer
+    changes its value (Mickey, 2026-11-12: the Model dropdown and the digitizer's coordinate system changed while
+    scrolling past). Keyboard focus alone (a window giving its first field focus) doesn't count."""
+
+    FIELDS = (QComboBox, QAbstractSpinBox)
+
+    def eventFilter(self, obj, event):
+        kind = event.type()
+        if kind == QEvent.Type.MouseButtonPress and isinstance(obj, self.FIELDS):
+            obj._wheel_armed = True
+            obj.setFocus(Qt.FocusReason.MouseFocusReason)   # a click gives focus on macOS too
+        elif kind == QEvent.Type.FocusOut and isinstance(obj, self.FIELDS):
+            obj._wheel_armed = False
+        elif kind == QEvent.Type.Wheel and isinstance(obj, self.FIELDS) \
+                and not (getattr(obj, "_wheel_armed", False) and obj.hasFocus()):
+            area = obj.parentWidget()
+            while area is not None and not isinstance(area, QAbstractScrollArea):
+                area = area.parentWidget()
+            if area is not None:            # Qt doesn't pass a re-sent wheel event up itself
+                QApplication.sendEvent(area.viewport(), event)
+            return True
+        return False
+
+
+def install_wheel_guard(app: QApplication) -> WheelGuard:
+    """Install WheelGuard on the application (once; kept on the app so it lives as long)."""
+    guard = getattr(app, "_wheel_guard", None)
+    if guard is None:
+        guard = WheelGuard(app)
+        app.installEventFilter(guard)
+        app._wheel_guard = guard
+    return guard
 
 
 class _RefitOnShow(QObject):

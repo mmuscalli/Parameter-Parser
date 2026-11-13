@@ -21,6 +21,8 @@ def main() -> int:
     app.setWindowIcon(QIcon(str(Path(__file__).parent / "resources" / "app.png")))
     from parameter_extractor.gui.error_log import install_excepthook
     install_excepthook()        # errors in the window itself are recorded and shown, not lost
+    from parameter_extractor.gui.widgets import install_wheel_guard
+    install_wheel_guard(app)    # scrolling past a dropdown doesn't change it
     from PySide6.QtCore import QSettings
     from parameter_extractor.gui import themes
     themes.apply(app, str(QSettings().value(themes.THEME_KEY, themes.DEFAULT)))   # Settings > Theme

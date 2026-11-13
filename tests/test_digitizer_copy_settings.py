@@ -37,7 +37,8 @@ def test_copy_rounding_and_columns_to_every_panel():
     assert fig.panels[1].y.column is None and fig.panels[1].y.decimals == 0
     w.undo()                                                             # rounding and the snapped point back
     assert fig.panels[1].y.decimals is None and abs(fig.series[0].points[0].py - 34.0) < 1e-6
-    assert [w.tabs.tabText(i) for i in range(w.tabs.count())] == ["Axes", "Series", "Points"]
+    assert [w.tabs.tabText(i) for i in range(w.tabs.count())] == ["Axes", "Series", "Points", "Figure"]
+    assert w.copy_settings_btn.isVisibleTo(w)                           # several coordinate systems: offered
     assert not w.suggestion_label.isVisibleTo(w)                        # hidden until there is a note
     w.suggestion_label.setText("Suggestions applied")
     assert w.suggestion_label.isVisibleTo(w)

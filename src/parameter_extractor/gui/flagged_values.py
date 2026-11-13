@@ -11,8 +11,8 @@ Flagged values (Mickey, 2026-11-11): the review of a run's flagged values in one
 - Double-click a value to correct it, as in Extracted data (corrections.py); several values at once: select them
   (Shift / Cmd-click, or a column's header) and "Change selected values…" (also on right-click). The main window is
   refreshed after.
-- Flags about a column on every row are in a collapsed "On every row" list; "Review all" puts their values in the
-  table too (Mickey, 2026-11-11). source_notes is always the last column (it says what the row is).
+- Flags about a column on every row are in a collapsed "On every row" list; "Add their columns to the table" puts
+  their values in the table too (Mickey, 2026-11-11). source_notes is always the last column (it says what the row is).
 - The table / figure image zooms: buttons, Cmd + scroll, pinch. The SELECTED value alone decides what is shown (not
   the mouse: hovering had shown another value's table beside this one's flags -- Mickey, 2026-11-12); on a saved
   table it is boxed where the PDF's text layer has it (ingestion/table_locate.py; local, no model).
@@ -234,7 +234,7 @@ class FlaggedValuesWindow(QDialog):
         v.addLayout(top)
         # flags about a column on every row (e.g. a method's confidence 'for every experiment set'): listed once, in
         # a collapsed list, not as highlights -- they would mark every row and the table would no longer be pared
-        # down. "Review all" puts their values in the table too.
+        # down. "Add their columns to the table" puts their values in the table too.
         self.review_all = False
         every = QHBoxLayout()
         self.everywhere_toggle = QToolButton(checkable=True, checked=False)
@@ -242,10 +242,11 @@ class FlaggedValuesWindow(QDialog):
         self.everywhere_toggle.setArrowType(Qt.ArrowType.RightArrow)
         self.everywhere_toggle.setStyleSheet("QToolButton { border: none; font-weight: bold; }")
         self.everywhere_toggle.toggled.connect(self._toggle_everywhere)
-        self.review_all_btn = QPushButton("All columns", checkable=True)
-        self.review_all_btn.setToolTip("Put the values of the flags on every row in the table too (their columns, "
-                                       "highlighted like the others); press again for the pared-down table "
-                                       "(select a column's values there to change them together)")
+        # named for what it does to the flags beside it -- not "All columns", which read like "Show all columns"
+        self.review_all_btn = QPushButton(self.REVIEW_ALL_OFF, checkable=True)
+        self.review_all_btn.setToolTip("Add the columns these flags are about to the table, highlighted like the "
+                                       "others, so their values can be checked and changed together; press again "
+                                       "to remove them")
         self.review_all_btn.toggled.connect(self._set_review_all)
         every.addWidget(self.everywhere_toggle)
         every.addWidget(self.review_all_btn)
@@ -790,12 +791,15 @@ class FlaggedValuesWindow(QDialog):
         self.everywhere_toggle.setArrowType(Qt.ArrowType.DownArrow if on else Qt.ArrowType.RightArrow)
         self.everywhere_list.setVisible(on and bool(self.everywhere))
 
+    REVIEW_ALL_OFF, REVIEW_ALL_ON = "Add their columns to the table", "Remove their columns from the table"
+
     def _set_review_all(self, on: bool) -> None:
         self.review_all = on
+        self.review_all_btn.setText(self.REVIEW_ALL_ON if on else self.REVIEW_ALL_OFF)
         self._load()
 
     def _everywhere_selected(self, item) -> None:
-        """A flag on every row: its details; in Review all, its values selected in the table (to change together)."""
+        """A flag on every row: its details; with their columns added, its values selected in the table (to change together)."""
         self._cell_html = ""
         self._show_flag(item)
         data = item.data(Qt.ItemDataRole.UserRole) if item is not None else None

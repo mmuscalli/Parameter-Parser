@@ -117,6 +117,13 @@ def test_digitizer_loads_suggested_columns_and_rounds_points():
         assert y_combo.currentText() == "max_linear_oligomer_length_avg_nt"            # loaded, with its average
         assert "New variable" in w.var_hints["y"].text()
         assert w.cal_edits[("x", "categories")].isChecked() and "Categories" in w.var_hints["x"].text()
+        # one coordinate system: nothing to copy to or read against; a category axis needs no x markers
+        assert not w.copy_settings_btn.isVisibleTo(w) and not w.series_panel_combo.isVisibleTo(w)
+        assert all(not w.cal_edits[("x", k)][1].isEnabled() and w.cal_edits[("x", k)][1].placeholderText()
+                   == "not needed" for k in (1, 2))
+        w.cal_edits[("x", "categories")].setChecked(False)
+        assert w.cal_edits[("x", 1)][1].placeholderText() == "value" and w.cal_edits[("x", "log")].isEnabled()
+        w.cal_edits[("x", "categories")].setChecked(True)
         fig.panels[0].y_cal = _cal((0, 100, 0), (0, 0, 6))
         w.cal_edits[("y", "round")].setCurrentIndex(1)                                   # whole numbers
         w.add_point(50, 100 - 100 * 2.9 / 6)
@@ -125,6 +132,32 @@ def test_digitizer_loads_suggested_columns_and_rounds_points():
         y_combo.setCurrentText("(none -- not stored)")
         assert fig.panels[0].y.store is False and fig.panels[0].y.column is None
         w.close()
+
+
+def test_category_axis_needs_no_x_calibration_anywhere():
+    """Riggi2023 (2026-11-12): with 'Categories on the x axis' ticked and one stray X marker, saving warned the axes
+    weren't calibrated and left the bars out. Every reader of clicked points (the save check, the saved JSON, the rows)
+    reads a category axis by y alone."""
+    from parameter_extractor.digitizing.annotate import save_digitized
+    from parameter_extractor.digitizing.calibration import read_values
+    from PIL import Image
+    panel = DigitizedPanel(name="main", y_cal=_cal((0, 100, 0), (0, 0, 6)),
+                           x=AxisVariable(label="mineral", column="solid_material_name", categorical=True),
+                           y=AxisVariable(label="length", column="max_peptide_length"))
+    panel.x_cal.p1 = CalibrationPoint(px=10, py=100, value=None)              # a marker placed, no value typed
+    assert read_values(panel, 50, 50) == (None, 3.0)
+    with tempfile.TemporaryDirectory() as tmp:
+        page = Path(tmp) / "page.png"
+        Image.new("RGB", (120, 120), "white").save(page)
+        fig = DigitizedFigure(figure_id="Fig. 3", number=3, page=8, caption="c", render_scale=1.0,
+                              page_image=str(page), panels=[panel],
+                              series=[DigitizedSeries(label="halite", points=[DigitizedPoint(px=50, py=50)])])
+        import json
+        record = json.loads(save_digitized(fig, Path(tmp) / "out")[0].read_text())
+        assert record["series"][0]["points"][0]["y_axis_value"] == 3.0
+    # an uncalibrated y axis is still refused
+    panel.y_cal = AxisCalibration()
+    assert read_values(panel, 50, 50) is None
 
 
 if __name__ == "__main__":

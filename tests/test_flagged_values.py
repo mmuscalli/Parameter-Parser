@@ -221,6 +221,7 @@ def test_the_flagged_values_window():
         # Review all: the every-row flags' values in the table; selecting one of them selects its values
         before_rows = t.rowCount()
         w.review_all_btn.setChecked(True)
+        assert w.review_all_btn.text() == "Remove their columns from the table"
         assert t.rowCount() >= before_rows and t.rowCount() == len({fid for fid, _ in w.cell_flags})
         w.everywhere_toggle.setChecked(True)
         w.everywhere_list.setCurrentRow(0)
@@ -255,7 +256,7 @@ def test_the_flagged_values_window():
             app.processEvents()
             assert corr.load(result.run_dir)[(full_id, column)].value == "1.5"
         # Mark all flags checked: every flag of the window ticked (after asking), the button then off
-        assert w.review_all_btn.text() == "All columns" and w.mark_all_btn.isEnabled()
+        assert w.review_all_btn.text() == "Add their columns to the table" and w.mark_all_btn.isEnabled()
         with patch.object(flagged_values.QMessageBox, "question",
                           lambda *a, **k: flagged_values.QMessageBox.StandardButton.No):
             assert w.mark_all_checked() == 0                                 # declined: nothing ticked

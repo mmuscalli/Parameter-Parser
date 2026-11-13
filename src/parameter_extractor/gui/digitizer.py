@@ -62,25 +62,29 @@ from parameter_extractor.digitizing.auto_figure import (FigureImage, apply_plan 
                                                         with_shared as _with_shared)
 from parameter_extractor.gui.widgets import ExpandingLineEdit
 from parameter_extractor.digitizing.calibration import (
-    CalibrationError, is_categorical, pixel_to_y, snap, try_pixel_to_data)
+    CalibrationError, is_categorical, pixel_to_y, read_values, snap, try_pixel_to_data)
 from parameter_extractor.schemas.figures import (
     AxisCalibration, AxisVariable, CalibrationPoint, DigitizedFigure, DigitizedPanel,
     DigitizedPoint, DigitizedSeries, FigurePlan, SeriesCondition, SpeciesAmount,
 )
 
-MODES = [("pan", "Pan / zoom", "Drag to move around; scroll to zoom."),
-         ("x", "Set X axis", "Click two well-separated points on the x axis (e.g. two labelled "
-                             "ticks), then type their values below. The dashed guide through the two "
-                             "points should lie on the printed axis."),
-         ("y", "Set Y axis", "Click two well-separated points on the y axis, then type their values below. "
-                             "The dashed guide through the two points should lie on the printed axis."),
-         ("points", "Add points", "Click each data point of the selected series. Drag to adjust; "
-                                  "right-click to remove; Shift+click adds a point on top of an "
-                                  "existing one; Ctrl+Z undoes."),
-         ("delete", "Delete points", "Click a point of the selected series to remove it."),
-         ("errors", "Error bars", "Click the top and then the bottom of a point's error bar: the selected series' "
-                                  "point nearest in x gets it (a click above the point sets the upper end, below the "
-                                  "lower). Right-click near a point removes its error bar; Ctrl+Z undoes.")]
+# (key, button, one-line hint under the tools, full explanation in the button's tooltip)
+MODES = [("pan", "Pan", "Drag to move; scroll or pinch to zoom.", "Drag to move around; scroll to zoom."),
+         ("x", "X axis", "Click two labelled ticks on the x axis, then type their values (Axes tab).",
+          "Click two well-separated points on the x axis (e.g. two labelled ticks), then type their values in the "
+          "Axes tab. The dashed guide through the two points should lie on the printed axis."),
+         ("y", "Y axis", "Click two labelled ticks on the y axis, then type their values (Axes tab).",
+          "Click two well-separated points on the y axis, then type their values in the Axes tab. The dashed guide "
+          "through the two points should lie on the printed axis."),
+         ("points", "Add points", "Click each point of the selected series. Drag to adjust; right-click removes.",
+          "Click each data point of the selected series. Drag to adjust; right-click to remove; Shift+click adds a "
+          "point on top of an existing one; Ctrl+Z undoes."),
+         ("delete", "Delete", "Click a point of the selected series to remove it.",
+          "Click a point of the selected series to remove it."),
+         ("errors", "Error bars", "Click the top, then the bottom, of a point's error bar.",
+          "Click the top and then the bottom of a point's error bar: the selected series' point nearest in x gets it "
+          "(a click above the point sets the upper end, below the lower). Right-click near a point removes its error "
+          "bar; Ctrl+Z undoes.")]
 NONE_COLUMN = "(none -- not stored)"
 # (label, decimals, snap to a whole number within this many pixels)
 ROUND_CHOICES = [("exact", None, 0.0), ("whole numbers", 0, 0.0), ("1 decimal", 1, 0.0), ("2 decimals", 2, 0.0),
@@ -129,14 +133,21 @@ def _titled_row(title: str, add, remove, what: str) -> QHBoxLayout:
     return row
 
 
-def read_values(panel: DigitizedPanel, px: float, py: float) -> Optional[Tuple[Optional[float], float]]:
-    """(x, y) at a pixel -- x None on a category axis -- or None if the axes aren't calibrated."""
-    if is_categorical(panel):
-        try:
-            return None, pixel_to_y(panel, px, py)
-        except CalibrationError:
-            return None
-    return try_pixel_to_data(panel, px, py)
+def _expander(title: str):
+    """(toggle button, body widget): a section closed until its arrow is clicked."""
+    button = QToolButton(text=title, checkable=True, checked=False)
+    button.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
+    button.setArrowType(Qt.ArrowType.RightArrow)
+    button.setStyleSheet("QToolButton { border: none; font-weight: 600; }")
+    body = QWidget(visible=False)
+
+    def toggle(on: bool) -> None:
+        body.setVisible(on)
+        button.setArrowType(Qt.ArrowType.DownArrow if on else Qt.ArrowType.RightArrow)
+    button.toggled.connect(toggle)
+    return button, body
+
+
 FIXED_CONDITION_ROWS = 2     # temperature and pH head the Conditions table
 
 
@@ -305,6 +316,7 @@ class DigitizerWidget(QWidget):
 
         right = QWidget()
         rv = QVBoxLayout(right)
+        rv.setSpacing(8)
         # suggestions (and warnings like "may duplicate a table") go first, where they're seen; hidden when empty
         self.suggestion_label = _NoteLabel()
         self.suggestion_label.setStyleSheet("background: palette(alternate-base); padding: 6px; border-radius: 4px;")
@@ -318,6 +330,7 @@ class DigitizerWidget(QWidget):
         self.tabs.addTab(self._build_axes_box(), "Axes")
         self.tabs.addTab(self._build_series_box(), "Series")
         self.tabs.addTab(self._build_points_box(), "Points")
+        self.tabs.addTab(self._build_figure_box(), "Figure")
         rv.addWidget(self.tabs, 1)
         scroll = QScrollArea(widgetResizable=True)
         scroll.setWidget(right)
@@ -352,212 +365,190 @@ class DigitizerWidget(QWidget):
                                        (x1 - x0 + 2 * pad) * s, (bottom - top + 2 * pad) * s))
 
     # ---- layout --------------------------------------------------------------
+    # (Mickey, 2026-11-12: less to read at once. Short labels on the controls, the explanations in their tooltips;
+    # settings only shown where they apply -- one coordinate system has no 'Read against' or 'Copy to all'; the
+    # figure-wide settings and the automatic helpers' switches together on a Figure tab.)
 
     def _build_modes(self) -> QWidget:
-        box = QGroupBox("Tool")
+        """The tools, in one row, with a one-line hint for the current one (the full text in its tooltip)."""
+        box = QWidget()
         v = QVBoxLayout(box)
-        v.setSpacing(4)
-        grid = QGridLayout()
-        grid.setSpacing(4)
+        v.setContentsMargins(0, 0, 0, 0)
+        v.setSpacing(3)
+        row = QHBoxLayout()
+        row.setSpacing(3)
         self.mode_group = QButtonGroup(self)
         self.mode_buttons = {}
-        for i, (key, label, hint) in enumerate(MODES):
+        for key, label, short, hint in MODES:
             b = QToolButton(text=label, checkable=True)
             b.setToolTip(hint)
             b.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
             b.clicked.connect(lambda _=False, k=key: self.set_mode(k))
             self.mode_group.addButton(b)
             self.mode_buttons[key] = b
-            grid.addWidget(b, i // 3, i % 3)
-        v.addLayout(grid)
-        self.mode_hint = QLabel(wordWrap=True)
-        self.mode_hint.setStyleSheet("color: palette(placeholder-text);")
+            row.addWidget(b)
+        v.addLayout(row)
+        self.mode_hint = _muted("")
+        self.mode_hint.setWordWrap(True)
         v.addWidget(self.mode_hint)
+        v.addSpacing(4)
         return box
 
     def _build_axes_box(self) -> QWidget:
-        """Axes tab: which coordinate system, its calibration, columns and rounding, the automatic helpers, and
-        the figure-wide 'Data reproduced from'."""
+        """Axes tab: the coordinate system (renamed in its own box), its calibration and its columns."""
         page = QWidget()
         v = QVBoxLayout(page)
         v.setSpacing(6)
 
         prow = QHBoxLayout()
-        self.panel_combo = QComboBox()
-        self.panel_combo.setToolTip("Each panel of the figure, or a second y axis, is its own coordinate system "
-                                    "with its own calibration and columns.")
+        self.panel_combo = QComboBox(editable=True)
+        self.panel_combo.setInsertPolicy(QComboBox.InsertPolicy.NoInsert)
+        self.panel_combo.setToolTip("Each panel of the figure, or a second y axis, is its own coordinate system with "
+                                    "its own calibration and columns. Type in the box to rename the current one "
+                                    "(e.g. the panel letter).")
         self.panel_combo.currentIndexChanged.connect(self._on_panel_selected)
-        add_panel = QPushButton("Add", clicked=self._add_panel)
-        add_panel.setToolTip("Add a coordinate system: for a second panel or a second y-axis.")
-        self.panel_name = QLineEdit(placeholderText="name")
-        self.panel_name.setToolTip("The coordinate system's name (e.g. the panel letter).")
+        self.panel_name = self.panel_combo.lineEdit()
         self.panel_name.editingFinished.connect(self._on_panel_name)
-        prow.addWidget(QLabel("Coordinate system:"))
-        prow.addWidget(self.panel_combo, 1)
-        prow.addWidget(add_panel)
-        v.addLayout(prow)
-        nrow = QHBoxLayout()
-        nrow.addWidget(QLabel("Name:"))
-        nrow.addWidget(self.panel_name, 1)
-        v.addLayout(nrow)
-
-        # calibration: the two markers per axis, as a grid
-        v.addWidget(_section("Calibration", "Use the Set X axis / Set Y axis tools to place two markers on each "
-                                            "axis, then type the value printed there."))
-        grid = QGridLayout()
-        grid.setHorizontalSpacing(8)
-        for c, text in enumerate(("", "Marker 1", "Marker 2", "")):
-            if text:
-                grid.addWidget(_muted(text), 0, c)
-        self.cal_edits = {}
-        for r, axis in enumerate(("x", "y"), start=1):
-            grid.addWidget(QLabel(f"{axis.upper()} axis"), r, 0)
-            for k in (1, 2):
-                cell = QHBoxLayout()
-                status = QLabel()
-                status.setMinimumWidth(30)
-                edit = QLineEdit(placeholderText="value")
-                edit.setMinimumWidth(70)
-                edit.editingFinished.connect(lambda a=axis, kk=k: self._on_cal_value(a, kk))
-                self.cal_edits[(axis, k)] = (status, edit)
-                cell.addWidget(status)
-                cell.addWidget(edit, 1)
-                grid.addLayout(cell, r, k)
-            log = QCheckBox("log scale")
-            log.toggled.connect(lambda on, a=axis: self._on_log(a, on))
-            self.cal_edits[(axis, "log")] = log
-            grid.addWidget(log, r, 3)
-        grid.setColumnStretch(1, 1)
-        grid.setColumnStretch(2, 1)
-        v.addLayout(grid)
-        categories = QCheckBox("Categories on the x axis (bar chart)")
-        categories.setToolTip("No x calibration; each series' category goes in the X column (e.g. "
-                              "solid_material_name), from its condition for that column or else its name.")
-        categories.toggled.connect(self._on_categories)
-        self.cal_edits[("x", "categories")] = categories
-        v.addWidget(categories)
-
-        # where the values go
-        v.addWidget(_section("Columns", "Which dataset column each axis's values go in. The multiplier converts "
-                                        "the axis's unit: axis value x multiplier = stored value."))
-        form = QFormLayout()
-        form.setFieldGrowthPolicy(QFormLayout.FieldGrowthPolicy.AllNonFixedFieldsGrow)
-        self.var_widgets, self.var_hints = {}, {}
-        for axis in ("x", "y"):
-            combo = QComboBox(editable=True)
-            combo.addItems([NONE_COLUMN] + self.columns)
-            combo.lineEdit().setPlaceholderText("choose a column, or type a new name")
-            combo.setSizeAdjustPolicy(QComboBox.SizeAdjustPolicy.AdjustToMinimumContentsLengthWithIcon)
-            combo.setMinimumContentsLength(16)
-            completer = QCompleter(self.columns, combo)
-            completer.setFilterMode(Qt.MatchFlag.MatchContains)
-            completer.setCaseSensitivity(Qt.CaseSensitivity.CaseInsensitive)
-            combo.setCompleter(completer)
-            combo.currentTextChanged.connect(lambda _t, a=axis: self._on_variable(a))
-            mult = QLineEdit("1")
-            mult.setMaximumWidth(60)
-            mult.setToolTip("Axis value x multiplier = value stored in the column")
-            mult.editingFinished.connect(lambda a=axis: self._on_variable(a))
-            row = QWidget()
-            h = QHBoxLayout(row)
-            h.setContentsMargins(0, 0, 0, 0)
-            h.addWidget(combo, 1)
-            h.addWidget(QLabel("×"))
-            h.addWidget(mult)
-            logv = QCheckBox("log values")
-            logv.setToolTip("The plotted values are logarithms (an axis titled 'Log % yield', 'log [Gly]'): they are "
-                            "stored as plotted, in a column of their own ('..._log10_...'), not in the column above. "
-                            "Not for an axis that is only drawn on a log scale (use 'log scale' above for that).")
-            logv.toggled.connect(lambda on, a=axis: self._on_log_values(a, on))
-            h.addWidget(logv)
-            self.log_value_boxes = getattr(self, "log_value_boxes", {})
-            self.log_value_boxes[axis] = logv
-            self.var_widgets[axis] = (combo, mult)
-            hint = _muted("")
-            hint.setWordWrap(True)
-            self.var_hints[axis] = hint
-            form.addRow(f"{axis.upper()} column:", row)
-            form.addRow("", hint)
-
-        # rounding: per axis, plus copying any of these settings to every coordinate system
-        rrow = QWidget()
-        rh = QHBoxLayout(rrow)
-        rh.setContentsMargins(0, 0, 0, 0)
-        for axis in ("x", "y"):
-            rounding = QComboBox()
-            rounding.setSizeAdjustPolicy(QComboBox.SizeAdjustPolicy.AdjustToMinimumContentsLengthWithIcon)
-            rounding.setMinimumContentsLength(8)
-            for text, _, _ in ROUND_CHOICES:
-                rounding.addItem(text)
-            rounding.setToolTip(f"Round {axis} values: points snap to this precision when placed or dragged (e.g. "
-                                f"whole numbers for an oligomer length), and the stored values are rounded. "
-                                f"'whole ±3 px' snaps to a whole number when the point is within 3 pixels of one.")
-            rounding.currentIndexChanged.connect(lambda i, a=axis: self._on_rounding(a, i))
-            self.cal_edits[(axis, "round")] = rounding
-            rh.addWidget(QLabel(f"{axis.upper()}:"))
-            rh.addWidget(rounding, 1)
-        form.addRow("Rounding:", rrow)
-        v.addLayout(form)
-
-        self.copy_settings_btn = QPushButton("Use in every coordinate system  ")
+        add_panel = QToolButton(text="+", clicked=self._add_panel)
+        add_panel.setToolTip("Add a coordinate system: for a second panel or a second y axis.")
+        self.copy_settings_btn = QPushButton("Copy to all")
         self.copy_settings_btn.setToolTip("Copy this coordinate system's settings to all the others (e.g. one "
                                           "rounding for every panel of a multi-panel bar chart). Ctrl+Z undoes.")
         menu = QMenu(self.copy_settings_btn)
         for label, what in COPY_CHOICES:
             menu.addAction(label, lambda w=what: self.apply_to_all_panels(w))
         self.copy_settings_btn.setMenu(menu)
-        crow = QHBoxLayout()
-        crow.addWidget(self.copy_settings_btn)
-        crow.addStretch(1)
-        v.addLayout(crow)
+        prow.addWidget(QLabel("Coordinate system:"))
+        prow.addWidget(self.panel_combo, 1)
+        prow.addWidget(add_panel)
+        prow.addWidget(self.copy_settings_btn)
+        v.addLayout(prow)
 
-        # optional automation: place the calibration markers from the axis numbers
-        v.addWidget(_section("Automatic calibration"))
-        self.auto_axes_btn = QPushButton("Calibrate current", clicked=self.auto_calibrate)
-        self.auto_axes_btn.setToolTip("Finds the plot's frame and its tick numbers and places X1/X2 and Y1/Y2 on "
-                                      "the outermost numbered ticks. Zoom to the panel first if the figure has "
-                                      "several. Check the markers afterwards.")
-        self.auto_axes_all_btn = QPushButton("Calibrate all", clicked=lambda: self.auto_calibrate_all())
+        # calibration: the two markers per axis, and how the axis is drawn, as one grid
+        v.addWidget(_section("Calibration", "Use the X axis / Y axis tools to place two markers on each axis (two "
+                                            "labelled ticks far apart), then type the value printed at each."))
+        grid = QGridLayout()
+        grid.setHorizontalSpacing(8)
+        grid.setVerticalSpacing(4)
+        for c, text in ((1, "Marker 1"), (2, "Marker 2"), (3, "Axis")):
+            grid.addWidget(_muted(text), 0, c)
+        self.cal_edits = {}
+        for r, axis in enumerate(("x", "y"), start=1):
+            grid.addWidget(QLabel(axis.upper()), r, 0)
+            for k in (1, 2):
+                cell = QHBoxLayout()
+                status = QLabel()
+                status.setMinimumWidth(30)
+                edit = QLineEdit(placeholderText="value")
+                edit.setMinimumWidth(60)
+                edit.editingFinished.connect(lambda a=axis, kk=k: self._on_cal_value(a, kk))
+                self.cal_edits[(axis, k)] = (status, edit)
+                cell.addWidget(status)
+                cell.addWidget(edit, 1)
+                grid.addLayout(cell, r, k)
+            kind = QHBoxLayout()
+            log = QCheckBox("log")
+            log.setToolTip("The axis is drawn on a logarithmic scale (tick values 1, 10, 100, ...).")
+            log.toggled.connect(lambda on, a=axis: self._on_log(a, on))
+            self.cal_edits[(axis, "log")] = log
+            kind.addWidget(log)
+            if axis == "x":
+                categories = QCheckBox("categories")
+                categories.setToolTip("Bars of categories on the x axis: no x calibration; each series' category "
+                                      "goes in the X column (e.g. solid_material_name), from its condition for that "
+                                      "column or else its name.")
+                categories.toggled.connect(self._on_categories)
+                self.cal_edits[("x", "categories")] = categories
+                kind.addWidget(categories)
+            kind.addStretch(1)
+            grid.addLayout(kind, r, 3)
+        grid.setColumnStretch(1, 1)
+        grid.setColumnStretch(2, 1)
+        v.addLayout(grid)
+
+        arow = QHBoxLayout()
+        arow.addWidget(_muted("Auto-calibrate:"))
+        self.auto_axes_btn = QPushButton("This one", clicked=self.auto_calibrate)
+        self.auto_axes_btn.setToolTip("Current coordinate system: finds the plot's frame and its tick numbers and "
+                                      "places X1/X2 and Y1/Y2 on the outermost numbered ticks. Zoom to the panel "
+                                      "first if the figure has several. Check the markers afterwards.")
+        self.auto_axes_all_btn = QPushButton("All", clicked=lambda: self.auto_calibrate_all())
         self.auto_axes_all_btn.setToolTip("Every coordinate system that has no markers yet (clear the markers first "
                                           "to redo one).")
         self.clear_axes_btn = QPushButton("Clear markers", clicked=self.clear_axis_markers)
         self.clear_axes_btn.setToolTip("Removes X1/X2 and Y1/Y2 and their values in every coordinate system "
                                        "(Ctrl+Z puts them back). Columns, log scales and points are kept.")
-        arow = QHBoxLayout()
         for b in (self.auto_axes_btn, self.auto_axes_all_btn, self.clear_axes_btn):
             arow.addWidget(b)
         arow.addStretch(1)
         v.addLayout(arow)
-        self.auto_axes_btn.setToolTip("Current coordinate system: " + self.auto_axes_btn.toolTip())
-        self.auto_axes_box = QCheckBox("Calibrate automatically when suggestions arrive")
-        self.auto_axes_box.setChecked(QSettings().value("digitizer/auto_axes", False, type=bool))   # off by default
-        self.auto_axes_box.toggled.connect(lambda on: QSettings().setValue("digitizer/auto_axes", on))
-        v.addWidget(self.auto_axes_box)
-        self.auto_status = _muted("")
-        self.auto_status.setWordWrap(True)
+        self.auto_status = _NoteLabel()
+        self.auto_status.setStyleSheet("color: palette(placeholder-text);")
         v.addWidget(self.auto_status)
 
-        v.addWidget(_section("Whole figure"))
-        self.source_edit = ExpandingLineEdit(
-            "Data reproduced from", hint="If the figure reproduces another publication's data, its original "
-                                         "reference. The rows will say so, and a warning is added.")
-        self.source_edit.setPlaceholderText("leave empty if this paper measured it")
-        self.source_edit.setText(self.fig.data_source)
-        self.source_edit.editingFinished.connect(
-            lambda: setattr(self.fig, "data_source", self.source_edit.text().strip()))
-        sform = QFormLayout()
-        sform.setFieldGrowthPolicy(QFormLayout.FieldGrowthPolicy.AllNonFixedFieldsGrow)
-        sform.addRow("Data reproduced from:", self.source_edit)
-        v.addLayout(sform)
-        self.rows_by_x_box = QCheckBox("One row per x value: the series are columns of the same experiment")
-        self.rows_by_x_box.setToolTip(
-            "For a figure where each x value is its own experiment and the series are the quantities measured in it "
-            "(e.g. product yields at each temperature): the points of a coordinate system at the same x become one "
-            "row, each series in its own column (set each series' 'Read against' column). Off: one row per point, "
-            "each series its own experiment set.")
-        self.rows_by_x_box.setChecked(bool(self.fig.rows_by_x))
-        self.rows_by_x_box.toggled.connect(lambda on: setattr(self.fig, "rows_by_x", bool(on)))
-        v.addWidget(self.rows_by_x_box)
+        # where the values go: column, unit multiplier and rounding per axis, as one grid
+        v.addWidget(_section("Columns", "Which dataset column each axis's values go in. × converts the axis's unit "
+                                        "(axis value × multiplier = stored value). Rounding snaps points to that "
+                                        "precision when placed or dragged, and rounds the stored values."))
+        cgrid = QGridLayout()
+        cgrid.setHorizontalSpacing(6)
+        cgrid.setVerticalSpacing(2)
+        for c, text in ((1, "Column"), (2, "×"), (3, "Rounding")):
+            cgrid.addWidget(_muted(text), 0, c)
+        self.var_widgets, self.var_hints, self.log_value_boxes = {}, {}, {}
+        for i, axis in enumerate(("x", "y")):
+            r = 1 + 2 * i
+            combo = QComboBox(editable=True)
+            combo.addItems([NONE_COLUMN] + self.columns)
+            combo.lineEdit().setPlaceholderText("choose a column, or type a new name")
+            combo.setSizeAdjustPolicy(QComboBox.SizeAdjustPolicy.AdjustToMinimumContentsLengthWithIcon)
+            combo.setMinimumContentsLength(14)
+            completer = QCompleter(self.columns, combo)
+            completer.setFilterMode(Qt.MatchFlag.MatchContains)
+            completer.setCaseSensitivity(Qt.CaseSensitivity.CaseInsensitive)
+            combo.setCompleter(completer)
+            combo.currentTextChanged.connect(lambda _t, a=axis: self._on_variable(a))
+            mult = QLineEdit("1")
+            mult.setMaximumWidth(50)
+            mult.setToolTip("Axis value × multiplier = value stored in the column")
+            mult.editingFinished.connect(lambda a=axis: self._on_variable(a))
+            rounding = QComboBox()
+            rounding.setSizeAdjustPolicy(QComboBox.SizeAdjustPolicy.AdjustToMinimumContentsLengthWithIcon)
+            rounding.setMinimumContentsLength(7)
+            for text, _, _ in ROUND_CHOICES:
+                rounding.addItem(text)
+            rounding.setToolTip(f"Round {axis} values: points snap to this precision when placed or dragged (e.g. "
+                                f"whole numbers for an oligomer length), and the stored values are rounded. "
+                                f"'whole ±3 px' snaps to a whole number when the point is within 3 pixels of one.")
+            rounding.currentIndexChanged.connect(lambda idx, a=axis: self._on_rounding(a, idx))
+            self.cal_edits[(axis, "round")] = rounding
+            cgrid.addWidget(QLabel(axis.upper()), r, 0)
+            cgrid.addWidget(combo, r, 1)
+            cgrid.addWidget(mult, r, 2)
+            cgrid.addWidget(rounding, r, 3)
+            hint = _NoteLabel()                   # shown only when it has something to say
+            hint.setStyleSheet("color: palette(placeholder-text);")
+            self.var_hints[axis] = hint
+            cgrid.addWidget(hint, r + 1, 1, 1, 3)
+            self.var_widgets[axis] = (combo, mult)
+        cgrid.setColumnStretch(1, 1)
+        v.addLayout(cgrid)
+
+        # rarely needed: axes that plot logarithms
+        more_btn, more = _expander("Logarithm axes")
+        lrow = QHBoxLayout(more)
+        lrow.setContentsMargins(12, 0, 0, 0)
+        for axis in ("x", "y"):
+            logv = QCheckBox(f"{axis.upper()} values are logarithms")
+            logv.setToolTip("The plotted values are logarithms (an axis titled 'Log % yield', 'log [Gly]'): they are "
+                            "stored as plotted, in a column of their own ('..._log10_...'), not in the column above. "
+                            "Not for an axis that is only drawn on a log scale (use 'log' above for that).")
+            logv.toggled.connect(lambda on, a=axis: self._on_log_values(a, on))
+            self.log_value_boxes[axis] = logv
+            lrow.addWidget(logv)
+        lrow.addStretch(1)
+        v.addWidget(more_btn)
+        v.addWidget(more)
         v.addStretch(1)
         return page
 
@@ -566,43 +557,50 @@ class DigitizerWidget(QWidget):
         page = QWidget()
         v = QVBoxLayout(page)
         v.setSpacing(6)
+        head = QHBoxLayout()
+        head.addWidget(_section("Series", "Double-click a series to rename it. Tab / Shift+Tab (here or on the "
+                                          "figure) selects the next / previous series."))
+        head.addStretch(1)
+        self.isolate_box = QCheckBox("Show only this one")
+        self.isolate_box.setToolTip("Hide the other series' points (useful where points overlap). "
+                                    "Only the selected series is ever editable.")
+        self.isolate_box.toggled.connect(lambda _on: self.redraw())
+        head.addWidget(self.isolate_box)
+        for text, slot, tip in (("+", lambda: self.add_series(), "Add a series"),
+                                ("−", self._remove_series, "Remove the selected series")):
+            b = QToolButton(text=text, clicked=slot)
+            b.setToolTip(tip)
+            head.addWidget(b)
+        v.addLayout(head)
         self.series_list = QListWidget()
-        self.series_list.setMaximumHeight(130)
+        self.series_list.setMaximumHeight(110)
         self.series_list.currentRowChanged.connect(self._on_series_selected)
         self.series_list.itemChanged.connect(self._on_series_renamed)
         self.series_list.installEventFilter(self)
         self.series_list.setToolTip("Double-click to rename. Tab / Shift+Tab (here or on the figure) selects the "
                                     "next / previous series.")
         v.addWidget(self.series_list)
-        row = QHBoxLayout()
-        row.addWidget(QPushButton("Add series", clicked=lambda: self.add_series()))
-        row.addWidget(QPushButton("Remove", clicked=self._remove_series))
-        row.addStretch(1)
-        self.isolate_box = QCheckBox("Show only this series")
-        self.isolate_box.setToolTip("Hide the other series' points (useful where points overlap). "
-                                    "Only the selected series is ever editable.")
-        self.isolate_box.toggled.connect(lambda _on: self.redraw())
-        row.addWidget(self.isolate_box)
-        v.addLayout(row)
 
         details = QFormLayout()
         details.setFieldGrowthPolicy(QFormLayout.FieldGrowthPolicy.AllNonFixedFieldsGrow)
         self.series_panel_combo = QComboBox()
         self.series_panel_combo.setToolTip("The coordinate system this series' points are read against.")
         self.series_panel_combo.currentIndexChanged.connect(self._on_series_panel)
-        details.addRow("Read against:", self.series_panel_combo)
+        self.series_panel_label = QLabel("Read against:")
+        details.addRow(self.series_panel_label, self.series_panel_combo)
         self.notes_edit = ExpandingLineEdit("Series notes", hint="Notes about this series; they end up in "
                                                                   "each row's source_notes.")
+        self.notes_edit.setPlaceholderText("notes for this series' rows")
         self.notes_edit.editingFinished.connect(self._on_conditions_edited)
         details.addRow("Notes:", self.notes_edit)
         v.addLayout(details)
 
         self.conditions_table = QTableWidget(0, 2)
-        self.conditions_table.setHorizontalHeaderLabels(["Column", "Value as printed (with unit)"])
+        self.conditions_table.setHorizontalHeaderLabels(["Column", "Value (with unit)"])
         self.conditions_table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
         self.conditions_table.verticalHeader().setVisible(False)
         self.conditions_table.setItemDelegateForColumn(0, _ColumnDelegate(self.columns, self))
-        self.conditions_table.setMaximumHeight(150)
+        self.conditions_table.setMaximumHeight(140)
         self.conditions_table.setToolTip("Temperature and pH, then any other condition (pressure, flow rate, "
                                          "volume, gas, ...). Each goes into its column on every row of this "
                                          "series, converted to the column's unit (e.g. '22.2 MPa' -> 222 in "
@@ -618,18 +616,16 @@ class DigitizerWidget(QWidget):
         self.species_table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
         self.species_table.horizontalHeader().setSectionResizeMode(2, QHeaderView.ResizeMode.Stretch)
         self.species_table.verticalHeader().setVisible(False)
-        self.species_table.setMaximumHeight(140)
+        self.species_table.setMaximumHeight(130)
+        self.species_table.setToolTip("The series' starting concentrations (e.g. from the caption: '100 mM "
+                                      "glycine'), in mM.")
         self.species_table.itemChanged.connect(self._on_species_edited)
-        v.addLayout(_titled_row("Initial composition (mM)", self._add_species_row, self._remove_species_row,
+        v.addLayout(_titled_row("Starting composition (mM)", self._add_species_row, self._remove_species_row,
                                 "species"))
         v.addWidget(self.species_table)
 
         # rarely needed settings, out of the way until opened
-        self.more_btn = QToolButton(text="Additional options", checkable=True, checked=False)
-        self.more_btn.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
-        self.more_btn.setArrowType(Qt.ArrowType.RightArrow)
-        self.more_btn.setStyleSheet("QToolButton { border: none; font-weight: 600; }")
-        self.more_options = QWidget(visible=False)
+        self.more_btn, self.more_options = _expander("Additional options")
         more = QFormLayout(self.more_options)
         more.setContentsMargins(12, 0, 0, 0)
         self.series_y_edit = QLineEdit(placeholderText="(the y axis's column)")
@@ -642,11 +638,6 @@ class DigitizerWidget(QWidget):
                                       "series. Leave empty to use the axis column.")
         self.series_y_edit.editingFinished.connect(self._on_conditions_edited)
         more.addRow("y values go in:", self.series_y_edit)
-
-        def toggle(on: bool) -> None:
-            self.more_options.setVisible(on)
-            self.more_btn.setArrowType(Qt.ArrowType.DownArrow if on else Qt.ArrowType.RightArrow)
-        self.more_btn.toggled.connect(toggle)
         v.addWidget(self.more_btn)
         v.addWidget(self.more_options)
         v.addStretch(1)
@@ -672,35 +663,23 @@ class DigitizerWidget(QWidget):
                              "triangles, diamonds), in the plot and adds them to the series that have no points yet "
                              "-- by bar order, or by matching each kind of marker to the series' marker description "
                              "('open circles'). Works on clean plots; markers drawn as lines (+, x) and markers on "
-                             "lines as thick as themselves are missed. Check every point; Ctrl+Z removes them all."))
-        self.auto_points_btn = QPushButton("Find in current", clicked=lambda: self.auto_find_points())
+                             "lines as thick as themselves are missed. Check every point; Ctrl+Z removes them all. "
+                             "Error bars too, if that's on in the Figure tab."))
+        prow = QHBoxLayout()
+        self.auto_points_btn = QPushButton("This coordinate system", clicked=lambda: self.auto_find_points())
         self.auto_points_btn.setToolTip("Bar tops / marker centres in the current coordinate system's plot (every "
                                         "panel drawn in the same frame, e.g. a second y axis, too).")
-        self.auto_points_all_btn = QPushButton("Find in all", clicked=lambda: self.auto_find_points(
+        self.auto_points_all_btn = QPushButton("All", clicked=lambda: self.auto_find_points(
             list(range(len(self.fig.panels))), use_view=False))
         self.auto_points_all_btn.setToolTip("The same in every coordinate system.")
-        prow = QHBoxLayout()
         prow.addWidget(self.auto_points_btn)
         prow.addWidget(self.auto_points_all_btn)
         prow.addStretch(1)
         v.addLayout(prow)
-        self.auto_errors_box = QCheckBox("Also find error bars")
-        self.auto_errors_box.setChecked(QSettings().value("digitizer/auto_errors", True, type=bool))
-        self.auto_errors_box.toggled.connect(lambda on: QSettings().setValue("digitizer/auto_errors", on))
-        self.auto_errors_box.setToolTip("With the points: a thin vertical line from a marker (or a bar's top) "
-                                        "ending in a short cap is taken as its error bar. Check them; the 'Error "
-                                        "bars' tool sets or corrects one by hand.")
-        v.addWidget(self.auto_errors_box)
-        self.auto_points_box = QCheckBox("Find points automatically when suggestions arrive")
-        self.auto_points_box.setChecked(QSettings().value("digitizer/auto_points", False, type=bool))  # off
-        self.auto_points_box.toggled.connect(lambda on: QSettings().setValue("digitizer/auto_points", on))
-        self.auto_points_box.setToolTip("After the suggestions are applied (and the axes calibrated, if that's "
-                                        "on): every coordinate system's points, as with the button.")
-        v.addWidget(self.auto_points_box)
 
         # optional automation: find the other markers that look like one example
         frow = QHBoxLayout()
-        self.find_points_btn = QPushButton("Find similar points…", clicked=self._start_find_points)
+        self.find_points_btn = QPushButton("Like an example…", clicked=self._start_find_points)
         self.find_points_btn.setToolTip("Then click one marker of this series: markers that look the same are "
                                         "added to it (one undo step). Check them; right-click removes one.")
         self.similarity_spin = QDoubleSpinBox(minimum=0.4, maximum=0.99, singleStep=0.05, decimals=2)
@@ -710,22 +689,72 @@ class DigitizerWidget(QWidget):
                                         "other series' markers are picked up.")
         self.similarity_spin.valueChanged.connect(lambda val: QSettings().setValue("digitizer/similarity", val))
         frow.addWidget(self.find_points_btn)
-        frow.addWidget(QLabel("similarity:"))
+        frow.addWidget(_muted("similarity"))
         frow.addWidget(self.similarity_spin)
         frow.addStretch(1)
-        v.addWidget(_section("From an example marker"))
         v.addLayout(frow)
-        self.points_status = _muted("")
-        self.points_status.setWordWrap(True)
+        self.points_status = _NoteLabel()
+        self.points_status.setStyleSheet("color: palette(placeholder-text);")
         v.addWidget(self.points_status)
 
-        v.addWidget(_section("Points (values as read off the axes)"))
+        v.addWidget(_section("Points", "The selected series' points, as read off the axes (before the multiplier "
+                                       "and rounding to columns)."))
         self.points_table = QTableWidget(0, 2)
         self.points_table.setHorizontalHeaderLabels(["x", "y"])
         self.points_table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
         self.points_table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
+        self.points_table.verticalHeader().setVisible(False)
         self.points_table.setMinimumHeight(160)
         v.addWidget(self.points_table, 1)
+        return page
+
+    def _build_figure_box(self) -> QWidget:
+        """Figure tab: settings for the whole figure, and which automatic helpers run when suggestions arrive."""
+        page = QWidget()
+        v = QVBoxLayout(page)
+        v.setSpacing(6)
+        v.addWidget(_section("This figure"))
+        self.source_edit = ExpandingLineEdit(
+            "Data reproduced from", hint="If the figure reproduces another publication's data, its original "
+                                         "reference. The rows will say so, and a warning is added.")
+        self.source_edit.setPlaceholderText("leave empty if this paper measured it")
+        self.source_edit.setText(self.fig.data_source)
+        self.source_edit.editingFinished.connect(
+            lambda: setattr(self.fig, "data_source", self.source_edit.text().strip()))
+        sform = QFormLayout()
+        sform.setFieldGrowthPolicy(QFormLayout.FieldGrowthPolicy.AllNonFixedFieldsGrow)
+        sform.addRow("Data reproduced from:", self.source_edit)
+        v.addLayout(sform)
+        self.rows_by_x_box = QCheckBox("One row per x value (the series are columns of one experiment)")
+        self.rows_by_x_box.setToolTip(
+            "For a figure where each x value is its own experiment and the series are the quantities measured in it "
+            "(e.g. product yields at each temperature): the points of a coordinate system at the same x become one "
+            "row, each series in its own column (set each series' 'y values go in' column). Off: one row per point, "
+            "each series its own experiment set.")
+        self.rows_by_x_box.setChecked(bool(self.fig.rows_by_x))
+        self.rows_by_x_box.toggled.connect(lambda on: setattr(self.fig, "rows_by_x", bool(on)))
+        v.addWidget(self.rows_by_x_box)
+
+        v.addWidget(_section("Automatic helpers", "What runs by itself. Remembered for the next figures."))
+        self.auto_axes_box = QCheckBox("Calibrate the axes when suggestions arrive")
+        self.auto_axes_box.setToolTip("Places the axis markers on the outermost numbered ticks, as 'Auto-calibrate' "
+                                      "on the Axes tab. Check them afterwards.")
+        self.auto_axes_box.setChecked(QSettings().value("digitizer/auto_axes", False, type=bool))   # off by default
+        self.auto_axes_box.toggled.connect(lambda on: QSettings().setValue("digitizer/auto_axes", on))
+        self.auto_points_box = QCheckBox("Find the points when suggestions arrive")
+        self.auto_points_box.setChecked(QSettings().value("digitizer/auto_points", False, type=bool))  # off
+        self.auto_points_box.toggled.connect(lambda on: QSettings().setValue("digitizer/auto_points", on))
+        self.auto_points_box.setToolTip("After the suggestions are applied (and the axes calibrated, if that's "
+                                        "on): every coordinate system's points, as 'Find points automatically'.")
+        self.auto_errors_box = QCheckBox("Find error bars whenever points are found")
+        self.auto_errors_box.setChecked(QSettings().value("digitizer/auto_errors", True, type=bool))
+        self.auto_errors_box.toggled.connect(lambda on: QSettings().setValue("digitizer/auto_errors", on))
+        self.auto_errors_box.setToolTip("Whenever points are found automatically: a thin vertical line from a marker "
+                                        "(or a bar's top) ending in a short cap is taken as its error bar. Check "
+                                        "them; the 'Error bars' tool sets or corrects one by hand.")
+        for box in (self.auto_axes_box, self.auto_points_box, self.auto_errors_box):
+            v.addWidget(box)
+        v.addStretch(1)
         return page
 
     def apply_to_all_panels(self, what: str) -> int:
@@ -771,7 +800,7 @@ class DigitizerWidget(QWidget):
     def set_mode(self, mode: str) -> None:
         self.canvas.set_mode(mode)
         self.mode_buttons[mode].setChecked(True)
-        self.mode_hint.setText(dict((k, h) for k, _, h in MODES)[mode])
+        self.mode_hint.setText(next(short for k, _, short, _h in MODES if k == mode))
 
     @property
     def panel(self) -> DigitizedPanel:
@@ -1066,6 +1095,10 @@ class DigitizerWidget(QWidget):
         self.panel_combo.setCurrentIndex(self.panel_idx)
         if self.series:
             self.series_panel_combo.setCurrentIndex(self.series.panel)
+        several = len(self.fig.panels) > 1           # only then is there anything to copy to or read against
+        self.copy_settings_btn.setVisible(several)
+        self.series_panel_combo.setVisible(several)
+        self.series_panel_label.setVisible(several)
         self._updating = False
         self._refresh_calibration()
 
@@ -1113,7 +1146,18 @@ class DigitizerWidget(QWidget):
                       if d == var.decimals and w == getattr(var, "whole_within_px", 0.0)), 0))
             self._update_column_hint(axis)
         self.cal_edits[("x", "categories")].setChecked(bool(p.x.categorical))
+        self._show_x_calibration()
         self._updating = False
+
+    def _show_x_calibration(self) -> None:
+        """A category axis needs no x markers: their boxes say so instead of waiting for values."""
+        categorical = bool(self.panel.x.categorical)
+        for k in (1, 2):
+            status, edit = self.cal_edits[("x", k)]
+            edit.setPlaceholderText("not needed" if categorical else "value")
+            if categorical:
+                edit.setEnabled(False)
+        self.cal_edits[("x", "log")].setEnabled(not categorical)
 
     def _on_log_values(self, axis: str, on: bool) -> None:
         if self._updating:
@@ -1138,6 +1182,8 @@ class DigitizerWidget(QWidget):
                     f"'{var.new_column or axis_column_from_label(var.label, var.average)}' -- or choose one.")
         if axis == "x" and var.categorical:
             hint = (hint + " " if hint else "") + "Categories: each series' category goes in this column."
+        if hint == "Not stored.":                 # the combo already says '(none -- not stored)'
+            hint = ""
         self.var_hints[axis].setText(hint)
 
     def _on_rounding(self, axis: str, index: int) -> None:
@@ -1156,7 +1202,7 @@ class DigitizerWidget(QWidget):
         if self._updating:
             return
         self.panel.x.categorical = on
-        self._update_column_hint("x")
+        self._refresh_calibration()
         self.redraw()
 
     def _on_cal_value(self, axis: str, k: int) -> None:
