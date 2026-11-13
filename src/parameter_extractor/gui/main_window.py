@@ -56,26 +56,6 @@ GROUP_TINT = themes.MARKS["group_tint"]      # every other block of columns (cat
 MAX_COLUMN_WIDTH = 260
 # Rows tab column order: identify the row, then the measured data, then the
 # paper-level details that repeat on every row (DOI, title, ...).
-GETTING_STARTED = (
-    "<h3>Extracting data from papers</h3>"
-    "<p><b>Once:</b> enter your Anthropic API key in <i>Settings</i> (it is kept in the system keychain) and choose "
-    "where results are saved.</p>"
-    "<ol>"
-    "<li><b>Data pack</b> -- what to extract. Pick the pack for your field. To make your own, use <i>New…</i>: start from "
-    "a template, copy an existing pack, or let the app draft one from a few sample papers.</li>"
-    "<li><b>Papers</b> -- add PDFs (or drop them on the window), type an arXiv ID or DOI, or add a list.</li>"
-    "<li><b>What to extract</b> -- everything ticked gives the full dataset. Untick steps or values you don't need: "
-    "fewer values means a cheaper, quicker search.</li>"
-    "<li><b>Options</b> -- the AI model (cost vs. accuracy) and extras. Hover over any option for an explanation.</li>"
-    "<li><b>Run</b> -- press <i>Extract data</i>. You may be asked to choose figures to digitize, and at the end to "
-    "review values the pack has no column for yet.</li>"
-    "</ol>"
-    "<p><b>Results</b> appear in the tabs at the bottom and are saved as CSV files in the results folder. "
-    "<i>Things to check</i> lists values worth a second look. Hover over a value in <i>Extracted data</i> to see "
-    "where in the paper it came from.</p>"
-    "<p><b>Cost</b>: each paper gets a few requests to the AI model -- planning the rows, reading its details, and one "
-    "per extraction step the data pack uses. <i>Data Packs › All data packs and modules…</i> lists them for each pack, "
-    "and <i>Help › How data packs work…</i> explains steps, modules and calculations.</p>")
 START_TEXT = ("Start here: choose a data pack (1), add papers (2), tick what to extract (3), then press Extract data "
               "(5). Results appear below. New to the app? <a href='help'>Getting started</a>")
 
@@ -449,12 +429,9 @@ class MainWindow(QMainWindow):
             self.open_packs_window()
 
     def show_getting_started(self) -> None:
-        """The workflow in a few lines (Help menu; also offered on first launch)."""
-        box = QMessageBox(self)
-        box.setWindowTitle("Getting started")
-        box.setTextFormat(Qt.TextFormat.RichText)
-        box.setText(GETTING_STARTED)
-        box.exec()
+        """The workflow, step by step (Help menu; also offered on first launch): gui/help_window.py."""
+        from parameter_extractor.gui.help_window import GettingStartedDialog
+        GettingStartedDialog(self).exec()
 
     def _edit_current_pack(self) -> None:
         """The editor for the pack chosen above (the menu's Edit… asks which one)."""

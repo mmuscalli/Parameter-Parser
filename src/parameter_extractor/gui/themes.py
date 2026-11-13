@@ -124,8 +124,77 @@ ORCHID = Theme(
         "muted": "#65546E",
     })
 
+# Enchanted Night: from Mickey's palette (coolors.co: pink lilac FAA6FF, purple 7353BA, deep indigo 2F195F, near
+# black 0F1020, pale pink EFC3F5) -- a dark theme. Near-black fields under an indigo-black window, pale pink text, indigo
+# buttons, purple selection, lilac links and flags.
+ENCHANTED_NIGHT = Theme(
+    "enchanted_night", "Enchanted Night",
+    "Near black, indigo, purple, lilac and pale pink -- a dark theme.",
+    palette={
+        "Window": "#17142D", "WindowText": "#F3D6F7",
+        "Base": "#0F1020", "AlternateBase": "#191731", "Text": "#EFC3F5",
+        "Button": "#2F195F", "ButtonText": "#F3D6F7",
+        "Highlight": "#7353BA", "HighlightedText": "#FFFFFF",
+        "ToolTipBase": "#EFC3F5", "ToolTipText": "#0F1020",
+        "Link": "#FAA6FF", "LinkVisited": "#D9A6F2",
+        "PlaceholderText": "#A894C2", "BrightText": "#FFFFFF",
+        "Light": "#45307F", "Midlight": "#3A2670", "Mid": "#221642", "Dark": "#0A0B17", "Shadow": "#050510",
+        "Accent": "#FAA6FF",
+    },
+    marks={
+        "flagged_row": "#E4BCF0",    # pale lilac
+        "archive_row": "#B9D9CB",    # pale green
+        "archive_diff": "#F2B38A",   # apricot
+        "corrected": "#A9C8F0",      # light blue (corrections stay blue in every theme)
+        "flag": "#FAA6FF",           # pink lilac
+        "flag_checked": "#B9AFC4",   # greyed lilac
+        "group_tint": "#22FAA6FF",   # lilac, faint (#AARRGGBB)
+        "mark_text": "#0F1020",
+        "mark_pen": "#7353BA",       # purple on the white table images
+        "mark_fill": "#5AFAA6FF",
+        "error": "#FF93A8",
+        "warning": "#F2C46D",
+        "note": "#A894C2",
+        "muted": "#A894C2",
+    })
+
+# Forest Whispers: from Mickey's palette (coolors.co: sage B5CA8D, leaf green 8BB174, grey teal 426B69, navy 222E50,
+# dark teal 2A4849) -- a muted dark theme. Dark teal window, deeper teal fields, pale sage text, grey-teal buttons,
+# navy selection, sage links and flags.
+FOREST_WHISPERS = Theme(
+    "forest_whispers", "Forest Whispers",
+    "Dark teal, grey teal, navy, leaf green and sage -- a muted dark theme.",
+    palette={
+        "Window": "#2A4849", "WindowText": "#E6EED8",
+        "Base": "#203738", "AlternateBase": "#264042", "Text": "#E4EDD5",
+        "Button": "#426B69", "ButtonText": "#F1F5E8",
+        "Highlight": "#222E50", "HighlightedText": "#E6EED8",
+        "ToolTipBase": "#B5CA8D", "ToolTipText": "#222E50",
+        "Link": "#C2D69C", "LinkVisited": "#A9C78F",
+        "PlaceholderText": "#A9BDA0", "BrightText": "#FFFFFF",
+        "Light": "#527F7C", "Midlight": "#4A7572", "Mid": "#1D3132", "Dark": "#162627", "Shadow": "#0D1718",
+        "Accent": "#8BB174",
+    },
+    marks={
+        "flagged_row": "#D9E5BC",    # pale sage
+        "archive_row": "#BFD9D0",    # pale teal
+        "archive_diff": "#E8B98C",   # apricot
+        "corrected": "#B3CBEB",      # light blue (corrections stay blue in every theme)
+        "flag": "#B5CA8D",           # sage
+        "flag_checked": "#A6B3AA",   # greyed sage
+        "group_tint": "#228BB174",   # leaf green, faint (#AARRGGBB)
+        "mark_text": "#14201F",
+        "mark_pen": "#3D7A2C",       # leaf green, darkened, on the white table images
+        "mark_fill": "#5A8BB174",
+        "error": "#F4A6A6",
+        "warning": "#E9CC80",
+        "note": "#B4C6AB",
+        "muted": "#B4C6AB",
+    })
+
 THEMES: Dict[str, Theme] = {t.id: t for t in (Theme(DEFAULT, "Default", "The app's usual look (follows macOS light "
-                                                                         "or dark)."), ART_DECO, ORCHID)}
+                                                                         "or dark)."), ART_DECO, ORCHID,
+                                                ENCHANTED_NIGHT, FOREST_WHISPERS)}
 
 _original_style: Optional[str] = None
 _current = DEFAULT

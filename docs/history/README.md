@@ -134,3 +134,4 @@ current month's file (start `YYYY-MM.md` in a new month), with one line here.
 - Category axes, scroll-safe dropdowns, a lighter digitizer panel (2026-11-12, Mickey's Riggi2023 run)
 - Rows only from tables and figures again; a Flagged values window for what needs a look (2026-11-12, Mickey)
 - Option groups that open, roomier steps, an Orchid theme (2026-11-12, Mickey)
+- Two more themes; a new Getting started window (2026-11-12, Mickey)
