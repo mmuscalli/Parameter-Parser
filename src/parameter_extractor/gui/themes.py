@@ -89,8 +89,43 @@ ART_DECO = Theme(
         "muted": "#A99F8B",
     })
 
+# Orchid: from Mickey's palette (coolors.co: pale lavender E8D7F1, mauve D3BCCC, orchid A167A5, deep purple 4A306D,
+# dark navy 0E273C) -- a light theme. Lavender window, near-white fields, navy text (14:1); mauve buttons; deep purple
+# for selection and links; orchid tints for flags. Flags stay obvious against lavender (a stronger orchid), corrections
+# stay blue, and problem colours are darkened to read on lavender.
+ORCHID = Theme(
+    "orchid", "Orchid",
+    "Lavender, mauve, orchid, deep purple and navy -- a light theme.",
+    palette={
+        "Window": "#E8D7F1", "WindowText": "#0E273C",
+        "Base": "#F7F0FA", "AlternateBase": "#EFE3F4", "Text": "#0E273C",
+        "Button": "#D3BCCC", "ButtonText": "#0E273C",
+        "Highlight": "#4A306D", "HighlightedText": "#F7F0FA",
+        "ToolTipBase": "#0E273C", "ToolTipText": "#E8D7F1",
+        "Link": "#4A306D", "LinkVisited": "#7A3F80",
+        "PlaceholderText": "#65546E", "BrightText": "#FFFFFF",
+        "Light": "#FBF7FD", "Midlight": "#F1E6F5", "Mid": "#BFA6BA", "Dark": "#8E7491", "Shadow": "#4A306D",
+        "Accent": "#A167A5",
+    },
+    marks={
+        "flagged_row": "#E6BEDD",    # orchid tint: stands out from the lavender
+        "archive_row": "#CDE3D8",    # pale green-grey
+        "archive_diff": "#E9B48C",   # apricot
+        "corrected": "#B9D3EE",      # light blue (corrections stay blue in every theme)
+        "flag": "#C58ACA",           # orchid, lifted
+        "flag_checked": "#D3BCCC",   # mauve
+        "group_tint": "#1E4A306D",   # deep purple, faint (#AARRGGBB)
+        "mark_text": "#0E273C",
+        "mark_pen": "#8E3F96",       # orchid, darkened, on the white table images
+        "mark_fill": "#50A167A5",
+        "error": "#A12A4A",
+        "warning": "#7A4E00",
+        "note": "#5E4E66",
+        "muted": "#65546E",
+    })
+
 THEMES: Dict[str, Theme] = {t.id: t for t in (Theme(DEFAULT, "Default", "The app's usual look (follows macOS light "
-                                                                         "or dark)."), ART_DECO)}
+                                                                         "or dark)."), ART_DECO, ORCHID)}
 
 _original_style: Optional[str] = None
 _current = DEFAULT

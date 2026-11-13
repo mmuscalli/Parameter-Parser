@@ -514,7 +514,10 @@ class MainWindow(QMainWindow):
         self._batch_tip = self.batch_box.toolTip()
         v.addWidget(self.batch_box)
 
-        v.addWidget(self._section("Paper text"))
+        # the groups of options, closed until opened (Mickey, 2026-11-12)
+        from parameter_extractor.gui.widgets import CollapsibleSection
+        self.paper_text_section = CollapsibleSection("Paper text")
+        v.addWidget(self.paper_text_section)
         self.arxiv_box = QCheckBox("Read the arXiv version when there is one")
         self.arxiv_box.setToolTip("If the paper is on arXiv, read arXiv's text instead of the PDF: cheaper (less text "
                                   "to read) and exact table values. It is the preprint, which can differ from the "
@@ -525,14 +528,15 @@ class MainWindow(QMainWindow):
         self.si_box.setToolTip("Put the supplementary PDF in the same folder as the paper, named like the paper plus "
                                "'_SI' (e.g. smith2020.pdf and smith2020_SI.pdf). It is read with the paper; its pages "
                                "are cited as S1, S2, ...")
-        v.addWidget(self.arxiv_box)
-        v.addWidget(self.si_box)
+        self.paper_text_section.body.addWidget(self.arxiv_box)
+        self.paper_text_section.body.addWidget(self.si_box)
 
         self.review_widget = QWidget()            # not used by a focused search: hidden then
         rv = QVBoxLayout(self.review_widget)
         rv.setContentsMargins(0, 0, 0, 0)
         rv.setSpacing(4)
-        rv.addWidget(self._section("While reading"))
+        self.reading_section = CollapsibleSection("While reading")
+        rv.addWidget(self.reading_section)
         self.suggest_box = QCheckBox("Suggest values the data pack has no column for")
         self.suggest_box.setChecked(True)
         self.suggest_box.setToolTip("Also note conditions and compounds the dataset has no column for yet (e.g. a "
@@ -557,12 +561,11 @@ class MainWindow(QMainWindow):
             "stated in the text or a caption also gets a row when the paper gives its conditions completely "
             "(composition, temperature and duration). Text results are often passing remarks that repeat a table's "
             "data, so they are left out unless you turn this on; they are listed as excluded in the run's notes.")
-        rv.addWidget(self.suggest_box)
-        rv.addWidget(self.text_rows_box)
-        rv.addWidget(self.shared_box)
-        rv.addWidget(self.auto_figures_box)
+        for box in (self.suggest_box, self.text_rows_box, self.shared_box, self.auto_figures_box):
+            self.reading_section.body.addWidget(box)
 
-        rv.addWidget(self._section("Saved with the results"))
+        self.saved_section = CollapsibleSection("Saved with the results")
+        rv.addWidget(self.saved_section)
         self.images_box = QCheckBox("Images of the tables and digitized figures")
         self.images_box.setChecked(True)
         self.images_box.setToolTip("Keep a crop of every table (the Tables tab) and the images of the figures you "
@@ -576,7 +579,7 @@ class MainWindow(QMainWindow):
                                       "tab as images. Ticked, they're also written out as LaTeX (about 2 cents for a "
                                       "dozen equations).")
         for box in (self.images_box, self.all_figures_box, self.equations_box):
-            rv.addWidget(box)
+            self.saved_section.body.addWidget(box)
         v.addWidget(self.review_widget)
 
         # only with several papers (a full extraction runs them as a queue)

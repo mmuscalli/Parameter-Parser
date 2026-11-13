@@ -17,10 +17,22 @@ from __future__ import annotations
 from typing import Dict, List, Optional
 
 from PySide6.QtCore import QSettings, Qt, Signal
-from PySide6.QtWidgets import (QHBoxLayout, QHeaderView, QLabel, QLineEdit, QPushButton, QTreeWidget,
+from PySide6.QtWidgets import (QHBoxLayout, QHeaderView, QLabel, QLineEdit, QPushButton, QStyledItemDelegate,
+                               QTreeWidget,
                                QTreeWidgetItem, QVBoxLayout, QWidget)
 
 STAGE_ROLE = Qt.ItemDataRole.UserRole          # on a group: the stage name; on a parameter: its column
+
+
+class _StepSpacing(QStyledItemDelegate):
+    """Top-level rows (the steps) a little taller than the values inside them (Mickey, 2026-11-12)."""
+    EXTRA = 8
+
+    def sizeHint(self, option, index):
+        size = super().sizeHint(option, index)
+        if not index.parent().isValid():
+            size.setHeight(size.height() + self.EXTRA)
+        return size
 
 
 class ParameterPanel(QWidget):
@@ -44,6 +56,7 @@ class ParameterPanel(QWidget):
         layout.addLayout(top)
         self.tree = QTreeWidget()
         self.tree.setHeaderLabels(["Step / value", "What it is"])
+        self.tree.setItemDelegate(_StepSpacing(self.tree))
         self.tree.header().setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
         self.tree.itemChanged.connect(self._item_changed)
         layout.addWidget(self.tree, 1)

@@ -6,7 +6,7 @@ from PySide6.QtCore import QEvent, QObject, QRect, QSize, Qt, QTimer
 from PySide6.QtGui import QColor, QPainter, QPalette, QPen
 from PySide6.QtWidgets import (QAbstractItemView, QAbstractScrollArea, QAbstractSpinBox, QApplication, QComboBox, QDialog, QDialogButtonBox,
                                QLabel, QLineEdit, QPlainTextEdit, QStyle,
-                               QStyledItemDelegate, QTableWidget,
+                               QStyledItemDelegate, QTableWidget, QToolButton,
                                QToolTip, QVBoxLayout, QWidget)
 
 
@@ -171,6 +171,38 @@ def in_cell(widget: QWidget) -> QWidget:
     v.setContentsMargins(2, ROW_GAP, 2, ROW_GAP)
     v.addWidget(widget, alignment=Qt.AlignmentFlag.AlignVCenter)
     return holder
+
+
+class CollapsibleSection(QWidget):
+    """A titled group of settings, closed until its title is clicked (Mickey, 2026-11-12: the run options). Add the
+    settings to `body` (a QVBoxLayout)."""
+
+    def __init__(self, title: str, expanded: bool = False, parent=None):
+        super().__init__(parent)
+        v = QVBoxLayout(self)
+        v.setContentsMargins(0, 0, 0, 0)
+        v.setSpacing(2)
+        self.toggle = QToolButton(text=title, checkable=True, checked=expanded)
+        self.toggle.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
+        self.toggle.setArrowType(Qt.ArrowType.DownArrow if expanded else Qt.ArrowType.RightArrow)
+        self.toggle.setFont(QApplication.font())       # a heading's size, not a tool button's small text (macOS)
+        self.toggle.setStyleSheet("QToolButton { border: none; font-weight: 600; padding-top: 6px; }")
+        self.toggle.toggled.connect(self.set_expanded)
+        v.addWidget(self.toggle)
+        self.content = QWidget(visible=expanded)
+        self.body = QVBoxLayout(self.content)
+        self.body.setContentsMargins(18, 0, 0, 2)
+        self.body.setSpacing(4)
+        v.addWidget(self.content)
+
+    def set_expanded(self, on: bool) -> None:
+        self.content.setVisible(on)
+        self.toggle.setArrowType(Qt.ArrowType.DownArrow if on else Qt.ArrowType.RightArrow)
+        if self.toggle.isChecked() != on:
+            self.toggle.setChecked(on)
+
+    def is_expanded(self) -> bool:
+        return self.toggle.isChecked()
 
 
 class WheelGuard(QObject):
