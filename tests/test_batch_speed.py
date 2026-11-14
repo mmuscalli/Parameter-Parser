@@ -68,6 +68,49 @@ def test_batch_mode_sends_every_step_at_once():
     assert step_workers(batch) == BATCH_STEP_WORKERS >= 16
 
 
+def test_figure_suggestions_are_requested_together():
+    """2026-11-14: an unattended run's figure suggestions went one after another (each a ~2 min batch wait; a 56-paper
+    queue would have needed ~9 h). Now every figure of a paper at once -- results still in figure order -- and the
+    queue does its papers' figures at once too."""
+    import threading
+    from types import SimpleNamespace
+    from parameter_extractor import pipeline
+    from parameter_extractor.digitizing import auto_figure
+    running, peak, lock = [0], [0], threading.Lock()
+
+    def slow_plan(ex, fig):
+        with lock:
+            running[0] += 1
+            peak[0] = max(peak[0], running[0])
+        time.sleep(0.2)
+        with lock:
+            running[0] -= 1
+        return fig.figure_id
+
+    def fake_auto(figure, plan):
+        easy = plan != "Fig. 3"
+        return SimpleNamespace(easy=easy, figure=plan, reasons=[] if easy else ["no axes"])
+
+    figs = [SimpleNamespace(figure_id=f"Fig. {i}", supplement=False) for i in range(1, 7)]
+    figs.append(SimpleNamespace(figure_id="Fig. S1", supplement=True))
+    ex = SimpleNamespace(figures=figs, auto_figure_notes=[],
+                         ctx=SimpleNamespace(config=RunConfig.from_settings(api_key="x", batch_mode=True)))
+    with patch.object(pipeline, "plan_figure", slow_plan), patch.object(auto_figure, "auto_digitize", fake_auto), \
+            patch.object(auto_figure, "figure_for", lambda f: f):
+        start = time.time()
+        digitized, skipped = pipeline.auto_digitize_figures(ex)
+        took = time.time() - start
+    assert peak[0] == 6 and took < 0.6, (peak[0], took)                       # all six together, not 1.2 s
+    assert digitized == ["Fig. 1", "Fig. 2", "Fig. 4", "Fig. 5", "Fig. 6"]   # figure order kept
+    assert skipped == ["Fig. S1", "Fig. 3"] and ex.auto_figure_notes == ["Fig. 3: no axes"]
+    ex.ctx.config = RunConfig.from_settings(api_key="x")                      # direct: the profile's cap
+    ex.ctx.config.max_parallel_stages, peak[0], ex.auto_figure_notes = 2, 0, []
+    with patch.object(pipeline, "plan_figure", slow_plan), patch.object(auto_figure, "auto_digitize", fake_auto), \
+            patch.object(auto_figure, "figure_for", lambda f: f):
+        pipeline.auto_digitize_figures(ex)
+    assert peak[0] == 2
+
+
 def test_requests_from_many_threads_share_a_batch():
     batches = FakeBatches(lambda params: {"n": params["messages"][0]["content"]})
     client = SimpleNamespace(messages=SimpleNamespace(batches=batches))

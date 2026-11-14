@@ -296,16 +296,21 @@ def run_queue(items: Sequence[PaperItem], config: RunConfig, on_change=None, can
                        digitize_by_hand=False, resume_from=resume_from, rebuild=rebuild)
     queue.start()
     queue.wait()
-    for paper in queue.papers:
-        if paper.status == "extracted":
-            if paper.digitized:                                         # from the run being resumed
-                pass
-            elif config.auto_digitize_figures and paper.figures:      # the easy figures, from their suggestions
-                from parameter_extractor.pipeline import auto_digitize_figures
-                paper.digitized, paper.skipped = auto_digitize_figures(paper.extraction)
-            else:
-                paper.skipped = [f.figure_id for f in paper.figures]
-            paper.figures_reviewed = True
-            queue.finish_paper(paper)
+    extracted = [p for p in queue.papers if p.status == "extracted"]
+    # the easy figures, from their suggestions: every paper's at once (2026-11-14: paper after paper, each figure a
+    # batch wait, a 56-paper queue would have needed ~9 h for its figures); as many papers as the queue runs at once
+    wanted = [p for p in extracted if not p.digitized and config.auto_digitize_figures and p.figures]
+    if wanted:
+        from concurrent.futures import ThreadPoolExecutor
+        from parameter_extractor.pipeline import auto_digitize_figures
+        with ThreadPoolExecutor(max_workers=max(1, min(len(wanted), queue.parallel)),
+                                thread_name_prefix="paper-figures") as pool:
+            for paper, found in zip(wanted, pool.map(lambda p: auto_digitize_figures(p.extraction), wanted)):
+                paper.digitized, paper.skipped = found
+    for paper in extracted:
+        if not paper.digitized and not (config.auto_digitize_figures and paper.figures):
+            paper.skipped = [f.figure_id for f in paper.figures]
+        paper.figures_reviewed = True
+        queue.finish_paper(paper)
     queue.write_combined()
     return queue

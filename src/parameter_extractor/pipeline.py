@@ -1665,18 +1665,25 @@ def auto_digitize_figures(ex: "Extraction") -> Tuple[List[DigitizedFigure], List
     the paper itself (not the supplement's), kept when they parse cleanly (digitizing/auto_figure.py). Returns
     (digitized, skipped figure ids); why the others weren't is in ex.auto_figure_notes."""
     from parameter_extractor.digitizing.auto_figure import auto_digitize, figure_for
-    digitized, skipped = [], []
-    for fig in ex.figures:
-        if fig.supplement:
-            skipped.append(fig.figure_id)
-            continue
+    figures = [fig for fig in ex.figures if not fig.supplement]
+
+    def one(fig):
         try:
-            result = auto_digitize(figure_for(fig), plan_figure(ex, fig))
+            return auto_digitize(figure_for(fig), plan_figure(ex, fig)), None
         except Exception as e:                       # one figure never stops the paper
-            ex.auto_figure_notes.append(f"{fig.figure_id}: automatic digitizing failed ({e})")
+            return None, e
+
+    # every figure's suggestions requested at once (2026-11-14: one after another, each a batch wait of ~2 min,
+    # Alargov2002's 7 figures took 14 min); the profile's 'steps at once' for direct requests. Kept in figure order.
+    workers = max(1, min(len(figures), step_workers(ex.ctx.config))) if figures else 1
+    with ThreadPoolExecutor(max_workers=workers, thread_name_prefix="figure") as pool:
+        outcomes = list(pool.map(one, figures))
+    digitized, skipped = [], [fig.figure_id for fig in ex.figures if fig.supplement]
+    for fig, (result, error) in zip(figures, outcomes):
+        if error is not None:
+            ex.auto_figure_notes.append(f"{fig.figure_id}: automatic digitizing failed ({error})")
             skipped.append(fig.figure_id)
-            continue
-        if result.easy:
+        elif result.easy:
             digitized.append(result.figure)
         else:
             ex.auto_figure_notes.append(f"{fig.figure_id}: " + "; ".join(result.reasons))
