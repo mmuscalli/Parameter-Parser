@@ -42,7 +42,8 @@ HELP = {
     "prompt_caching": "The paper is sent once and the other steps read it at a tenth of the price. Turning it off makes "
                       "every step pay for the whole paper (useful only for measurements).",
     "parallel_steps": "How many of a paper's steps are sent at the same time (default 6). Lower it if your API key "
-                      "hits its per-minute limit. A model server's own limit (Connections) still applies.",
+                      "hits its per-minute limit. A model server's own limit (Connections) still applies. In batch "
+                      "mode every step is sent at once (they only wait in Anthropic's queue).",
     "retries": "How often a request is tried again when the API is busy or rate-limited (default 5).",
     "prices": "Price per million tokens for models the app's price table doesn't know, so the cost shown stays "
               f"right (the table was checked {PRICES_CHECKED}).",

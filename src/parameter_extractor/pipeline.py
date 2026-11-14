@@ -508,8 +508,7 @@ def extract_steps(ex: "Extraction") -> "Extraction":
     convert_equations = bool(config.equations_to_latex and equations)
     if convert_equations:
         ctx.total_steps += 1            # optional (RunConfig.equations_to_latex), one small call
-    pool = ThreadPoolExecutor(max_workers=max(1, getattr(config, "max_parallel_stages", 0)
-                                              or settings.MAX_PARALLEL_STAGES), thread_name_prefix="stage")
+    pool = ThreadPoolExecutor(max_workers=step_workers(config), thread_name_prefix="stage")
     try:
         # metadata needs only page 1: it runs while the experiment structure is planned
         if source.record is not None:          # read from arXiv: its record has the metadata
@@ -599,6 +598,21 @@ def extract_steps(ex: "Extraction") -> "Extraction":
         raise
     pool.shutdown(wait=False)
     return ex
+
+
+# In batch mode every step after the row plan is sent at once (Mickey, 2026-11-14: the data pack modules raised the
+# number of steps a paper can trigger; with the profile's 6 at a time, a 7th step waited for a free slot -- a third
+# queue wait of 2-5 minutes). A batched step only waits in Anthropic's queue, so the cap that keeps direct requests
+# under the API's rate limits does nothing for it. Measured 2026-11-12 (Riggi2023, eder1994): every step submitted
+# together came back after one wait, however many there were.
+BATCH_STEP_WORKERS = 32
+
+
+def step_workers(config) -> int:
+    """How many of a paper's steps run at once: the profile's 'steps at once' for direct requests, all of them
+    (up to BATCH_STEP_WORKERS) in batch mode."""
+    direct = max(1, getattr(config, "max_parallel_stages", 0) or settings.MAX_PARALLEL_STAGES)
+    return max(direct, BATCH_STEP_WORKERS) if getattr(config, "batch_mode", False) else direct
 
 
 def _source_flags(source) -> List[Flag]:

@@ -56,6 +56,18 @@ class FakeBatches:
         pass
 
 
+def test_batch_mode_sends_every_step_at_once():
+    """2026-11-14: a paper's steps after the row plan all go out together in batch mode -- with the profile's 6 at a
+    time, a 7th triggered step waited for a free slot, a third queue wait. Direct requests keep the profile's cap."""
+    from parameter_extractor.pipeline import BATCH_STEP_WORKERS, step_workers
+    direct = RunConfig.from_settings(api_key="x")
+    assert step_workers(direct) == direct.max_parallel_stages == 6
+    direct.max_parallel_stages = 3
+    assert step_workers(direct) == 3
+    batch = RunConfig.from_settings(api_key="x", batch_mode=True)
+    assert step_workers(batch) == BATCH_STEP_WORKERS >= 16
+
+
 def test_requests_from_many_threads_share_a_batch():
     batches = FakeBatches(lambda params: {"n": params["messages"][0]["content"]})
     client = SimpleNamespace(messages=SimpleNamespace(batches=batches))
