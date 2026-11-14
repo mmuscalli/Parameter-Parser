@@ -555,6 +555,7 @@ def write_pack(proposal: PackProposal, pack_id: str, label: str, description: st
     draft.columns = columns
     draft.species = []
     draft.rules["structure_planner"] = items_to_rules([r for r in proposal.row_rules if r.strip()])
+    fill_in_settings(draft, modules or [])
     draft.save()
     by_column["__tidied__"] = tidied                 # read by draft_pack for the report
     by_column["__left_to_modules__"] = left
@@ -642,6 +643,44 @@ def write_report(result: DraftResult, by_column: Dict[str, ProposedParameter], a
     if result.proposal.notes:
         lines += ["## Notes", "", result.proposal.notes, ""]
     return "\n".join(lines)
+
+
+# The fill-in settings a drafted pack gets for the app's standard columns (Mickey, 2026-11-14: the pack drafting study
+# found drafted packs got only the template's empty ones -- duration filled on ~25% fewer rows than the curated pack).
+# Derived from the columns the draft and its modules have, so a pack gets exactly the settings its columns support.
+LABEL_KINDS = {"temperature": "initial_temperature_C", "time": "duration_hr", "pressure": "initial_pressure_bar",
+               "pH": "initial_pH"}
+COLUMN_PAIRS = [("sampled_temperature_C", "initial_temperature_C"), ("sampled_pressure_bar", "initial_pressure_bar"),
+                ("residence_time_hr", "duration_hr")]
+
+
+def fill_in_settings(draft, module_ids: Sequence[str] = ()) -> dict:
+    """Set the draft's label_columns (a row label's '150 C, 20 min' read into the standard condition columns),
+    column_pairs (related columns filled from each other when every row giving both agrees) and the general
+    post-processing calculations its columns support -- 'ambient' conditions, the sealed-vessel start pressure, the
+    no-results check. Settings already in the draft are kept. Returns what was added (for tests and the report)."""
+    m = draft.manifest
+    columns = set(draft.all_columns())
+    added = {}
+    labels = {kind: col for kind, col in LABEL_KINDS.items() if col in columns}
+    if labels and not m.get("label_columns"):
+        m["label_columns"] = added["label_columns"] = labels
+    pairs = [list(p) for p in COLUMN_PAIRS if set(p) <= columns]
+    if pairs and not m.get("column_pairs"):
+        m["column_pairs"] = added["column_pairs"] = pairs
+    wanted = []
+    if columns & {"initial_temperature_C", "sampled_temperature_C", "initial_pressure_bar"}:
+        wanted.append("ambient_conditions")
+    if {"experiment_type", "vessel_sealed", "initial_pressure_bar"} <= columns:
+        wanted.append("atmospheric_start")
+    if "solution_chemistry" in module_ids or "chemistry" in (m.get("builtin_stages") or []):
+        wanted.append("results_check")             # its result columns are the chemistry step's sampled_ ones
+    post = list(m.get("postprocess") or [])
+    new = [c for c in wanted if c not in post]
+    if new:
+        m["postprocess"] = post + new
+        added["postprocess"] = new
+    return added
 
 
 def check_new_id(pack_id: str, label: str) -> None:

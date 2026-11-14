@@ -208,6 +208,37 @@ def _numbers_in(words, figure_bbox, offset):
     return out
 
 
+MIN_TICKS = 4                # fewer tick numbers from the text layer: the figure is probably an image -- read it
+
+
+def recognized_ticks(img, figure_bbox, render_scale: float):
+    """(tick numbers, text boxes) read by text recognition from the figure's region of the rendered page, in
+    rendered-page pixels -- for figures embedded as images, whose axis numbers aren't in the PDF's text layer (the
+    pack study, 2026-11-14: 33 line plots with markers left for want of calibration). ([], []) without macOS Vision."""
+    import tempfile
+    from parameter_extractor.ingestion import table_ocr
+    if not table_ocr.available():
+        return [], []
+    x0, top, x1, bottom = (v * render_scale for v in figure_bbox)
+    pad = 0.04 * max(x1 - x0, bottom - top)               # axis numbers sit just outside the plot's box
+    box = (max(0, int(x0 - pad)), max(0, int(top - pad)), min(img.width, int(x1 + pad)), min(img.height, int(bottom + pad)))
+    if box[2] - box[0] < 20 or box[3] - box[1] < 20:
+        return [], []
+    with tempfile.TemporaryDirectory() as tmp:
+        path = Path(tmp) / "figure.png"
+        img.crop(box).save(path)
+        words = table_ocr.words(path)
+    ticks, boxes = [], []
+    for w in words:
+        wx0, wy0, wx1, wy1 = w.box[0] + box[0], w.box[1] + box[1], w.box[2] + box[0], w.box[3] + box[1]
+        boxes.append((round(wx0, 1), round(wy0, 1), round(wx1, 1), round(wy1, 1)))
+        text = w.text.strip().rstrip(".,;")
+        if _NUMBER.fullmatch(text):
+            ticks.append(((wx0 + wx1) / 2, (wy0 + wy1) / 2,
+                          float(text.replace(",", ".").replace("−", "-").replace("–", "-"))))
+    return ticks, boxes
+
+
 def find_figures(pdf_path: str, out_dir: Path, render_scale: float = RENDER_SCALE, supplement: bool = False,
                  page_offset: int = 0) -> List[FigureCandidate]:
     """Detect figures and render their pages (and a figure+caption crop each)
@@ -253,15 +284,20 @@ def find_figures(pdf_path: str, out_dir: Path, render_scale: float = RENDER_SCAL
             crop_box = [round(v * render_scale) for v in (fx0, ftop, max(fx1, cx1), cbottom + 2)]
             crop_path = out_dir / f"fig-{s}{number}.png"
             img.crop(crop_box).save(crop_path)
+            ticks = [((x0 + x1) / 2 * render_scale, (t + b) / 2 * render_scale, v)
+                     for (x0, t, x1, b), v in _numbers_in(c.get("numbers", []), figure_bbox, offset)]
+            text_boxes = [tuple(round(v * render_scale, 1) for v in to_render_box([w["x0"], w["top"], w["x1"],
+                                                                                  w["bottom"]], offset))
+                          for w in c.get("words", [])]
+            if len(ticks) < MIN_TICKS:              # an image figure: its numbers by text recognition
+                read_ticks, read_boxes = recognized_ticks(img, figure_bbox, render_scale)
+                if len(read_ticks) > len(ticks):
+                    ticks, text_boxes = read_ticks, text_boxes + read_boxes
             candidates.append(FigureCandidate(
                 figure_id=f"Fig. {s}{number}", number=number, page=page_no + page_offset, caption=c["caption"],
                 supplement=supplement, page_label=f"S{page_no}" if supplement else "", prefix=s,
                 figure_bbox=figure_bbox, caption_bbox=caption_bbox,
-                tick_numbers=[((x0 + x1) / 2 * render_scale, (t + b) / 2 * render_scale, v)
-                              for (x0, t, x1, b), v in _numbers_in(c.get("numbers", []), figure_bbox, offset)],
-                text_boxes=[tuple(round(v * render_scale, 1) for v in to_render_box([w["x0"], w["top"], w["x1"],
-                                                                                    w["bottom"]], offset))
-                            for w in c.get("words", [])],
+                tick_numbers=ticks, text_boxes=text_boxes,
                 page_image=str(out_dir / f"page-{sp}{page_no}.png"), crop_image=str(crop_path),
                 render_scale=render_scale))
     finally:

@@ -182,8 +182,8 @@ def _parse(pdf_path: Path, run_dir: Path) -> ParsedPaper:
         raise PdfNotReadableError(f"Couldn't read '{pdf_path.name}' as a PDF.")
     if not parsed.has_text_layer:
         raise PdfNotReadableError(
-            f"'{pdf_path.name}' has no text layer -- it looks like a scanned image. Text "
-            f"recognition (OCR) isn't supported yet.")
+            f"'{pdf_path.name}' has no text layer -- it looks like a scanned image, and text recognition "
+            f"found no text in it (it's only available on macOS).")
     return parsed
 
 
@@ -1448,6 +1448,11 @@ def finish(
     image_tables = image_table_numbers(ex.parsed.table_pages) if config.rasterize_table_pages else set()
     table_pages = table_page_numbers(ex.parsed.table_pages)
     paper_flags += _source_flags(ex.source)
+    if getattr(ex.parsed, "ocr_pages", None):      # scanned pages read by text recognition (ingestion/page_ocr.py)
+        paper_flags.append(Flag("paper_source", f"Page(s) {', '.join(map(str, ex.parsed.ocr_pages))} are scanned "
+                                                f"images: their text was read by text recognition, which can misread "
+                                                f"numbers, units and symbols (° , µ, ±). Check the values against the "
+                                                f"page."))
     for si in ex.parsed.supplements:
         paper_flags.append(Flag("paper_source", f"Supplementary information read with the paper: "
                                                 f"{Path(si['file']).name} ({si['pages']} pages). Its pages are "

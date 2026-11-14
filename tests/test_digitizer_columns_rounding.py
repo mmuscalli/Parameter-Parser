@@ -160,6 +160,24 @@ def test_category_axis_needs_no_x_calibration_anywhere():
     assert read_values(panel, 50, 50) is None
 
 
+def test_rounding_on_a_log_axis_keeps_small_values():
+    """Imai1998 Fig. 3 (2026-11-14): on a 0.001-10 mM log axis, 2 decimals rounded 0.003 to 0.00 and log10(0) stopped
+    the figure ('math domain error'). On a log axis the decimals are read as significant figures (decimals + 1), and a
+    value that would still round to 0 keeps its exact value."""
+    import math
+    from parameter_extractor.digitizing.calibration import pixel_to_data, rounded, snap
+    assert rounded(0.00312, 2, log=True) == 0.00312 and rounded(1534.0, 2, log=True) == 1530.0
+    assert rounded(0.003, 0, log=True) == 0.003 and rounded(3.456, 2) == 3.46
+    panel = DigitizedPanel(x_cal=_cal((0, 100, 0), (100, 100, 50)),
+                           y_cal=AxisCalibration(p1=CalibrationPoint(px=0, py=100, value=0.001),
+                                                 p2=CalibrationPoint(px=0, py=0, value=10.0), log=True))
+    panel.y.decimals = 2
+    py = 100 - 100 * (math.log10(0.0031) + 3) / 4               # a point at 0.0031 mM
+    x, y = snap(panel, 20, py)                                   # no math domain error
+    _, value = pixel_to_data(panel, x, y)
+    assert abs(value - 0.0031) < 1e-6, value
+
+
 if __name__ == "__main__":
     for name, fn in list(globals().items()):
         if name.startswith("test_") and callable(fn):

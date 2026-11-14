@@ -4,7 +4,8 @@ DigitizedFigure, its axes calibrated (auto_axes.py), its bar tops / markers foun
 (auto_detect.py), error bars included -- the same steps the digitizer's buttons run (gui/digitizer.py calls these).
 
 `auto_digitize` does all of it and says whether the figure was EASY: only then may it go into the dataset without
-the user opening it ("Digitize easy figures automatically"). Easy means: a numeric data plot of bars or markers,
+the user opening it ("Digitize easy figures automatically"). Easy means: a numeric data plot of bars or markers
+(a line plot counts when every series has markers -- 2026-11-14),
 not a duplicate of a table, every coordinate system's axes calibrated (y always; x unless categories), every series
 given points, every point found assigned to a series, and no series left ambiguous. Anything else is reported with
 its reason, and the figure is left for the user.
@@ -315,7 +316,8 @@ def find_points(fig: DigitizedFigure, image: FigureImage, panels: Sequence[int],
             continue
         plot = fig.plan.plot_kind if fig.plan else ""
         kind = ("bars" if plot == "bar" or any(fig.panels[i].x.categorical for i in group)
-                else "markers" if plot in ("scatter", "scatter_with_fit") else "auto")
+                else "markers" if plot in ("scatter", "scatter_with_fit", "line") else "auto")
+        # (a line plot's points are its markers: guessing took its connecting lines for bars -- 2026-11-14)
         box = (frame.left, frame.top, frame.right, frame.bottom)
         found, used = detect_points(image.rgb, box, kind,
                                     exclude=find_boxes_inside(image.gray, frame) + list(fig.text_boxes),
@@ -382,6 +384,16 @@ class AutoResult:
     summary: str
 
 
+def markers_on_every_series(plan: FigurePlan) -> bool:
+    """A line plot whose every series is drawn with a marker shape the detector finds ('filled circles', 'open
+    squares'): its points are the markers, and the connecting lines are opened away like other thin lines (Mickey,
+    2026-11-14: 66 line plots of the pack study were left out). A series drawn only as a line ('dashed line', or no
+    marker named) has no points to find."""
+    from parameter_extractor.digitizing.auto_detect import describe
+    series = [s for p in plan.panels for s in p.series]
+    return bool(series) and all(describe(s.marker or "").get("shape") not in (None, "stroke") for s in series)
+
+
 def auto_digitize(fig: DigitizedFigure, plan: Optional[FigurePlan]) -> AutoResult:
     """Suggestions applied, axes calibrated, points (and error bars) found; `easy` says whether the result may go
     into the dataset without the user checking it in the editor (see the module docstring)."""
@@ -392,9 +404,12 @@ def auto_digitize(fig: DigitizedFigure, plan: Optional[FigurePlan]) -> AutoResul
         reasons.append("not a numeric data plot")
     if plan.duplicates_tabulated_data:
         reasons.append("may repeat a table's data")
-    if plan.plot_kind not in ("bar", "scatter", "scatter_with_fit"):
-        reasons.append(f"a {plan.plot_kind or 'kind of'} plot (only bar charts and scatter plots are parsed "
-                       f"automatically)")
+    if plan.plot_kind == "line" and not markers_on_every_series(plan):
+        reasons.append("a line plot without markers on every series (only the markers of a line plot can be "
+                       "found automatically)")
+    elif plan.plot_kind not in ("bar", "scatter", "scatter_with_fit", "line"):
+        reasons.append(f"a {plan.plot_kind or 'kind of'} plot (only bar charts, scatter plots and line plots with "
+                       f"markers are parsed automatically)")
     if reasons or not apply_plan(fig, plan):
         return AutoResult(fig, False, reasons or ["the suggestions have no coordinate systems"], "")
     for panel in fig.panels:                 # whole numbers when within a few pixels, else 2 decimals

@@ -42,55 +42,104 @@ Runs: `~/Documents/Parameter Extractor/pack_study_20261114/` (local, not in the 
   the curated pack's shape: one conditions step, one outcomes step and the modules.
 - About 30% of each run's cost was figure suggestions ($3.9-4.9 per pack), which gave 6-7 figures in all (below).
 
-## Results (43 papers with hand data and a text layer)
+## Results
+
+### Scoring (revised 2026-11-14, Mickey's review)
+
+The first scoring compared five quantities against every hand value. That included calculated and internal columns
+(`total_sampled_peptides_yield`, even the `is_max_peptide_yield` flag), and values Mickey digitized from figures by
+hand, which an unattended run can't read. The revised scoring (`evaluate_v2.py`):
+
+- **Scope:** only what the app is meant to extract.
+  - Metadata: title, year, journal, DOI.
+  - Methodology: experiment and solution type, solvent, vessel, analysis, headspace gas, solid material and mass,
+    initial temperature, pressure (flowthrough rows only: batch pressures in the hand data are calculated), duration,
+    reported pH, volumes, flow rate, cycles.
+  - Solution and solid chemistry: inputs (every `initial_` constituent, mM) and outputs (product concentrations and
+    % yields).
+  - Left out: internal columns (flags, filters, ids) and calculated ones (ion speciation, pKa, computed pH, totals,
+    ratios, total monomers).
+- **Printed values only:** the hand data doesn't record where a value came from. A hand value counts for recall only
+  when the paper's text prints it with a unit of its quantity right after it, in any common unit (25 °C or 298 K;
+  2 h or 120 min; 100 mM or 0.1 M; 12 %). Values not printed came from figures or calculations: they're counted
+  separately and left out of recall. Precision is still against all hand values.
+- **Text fields** (titles, names) are matched on their words, recall only. A column the pack doesn't have is "not in
+  pack", not a miss: `experiment_type`, `solution_type` and `vessel_material` are this dataset's own conventions,
+  which a drafted pack has no reason to invent.
+- **Two views:** all 45 papers with hand data and a text layer, and the 34 that got rows in every pack (the other 11
+  report their results in figures; see below).
+
+Most of the hand outputs are not printed: of about 4,260 distinct product values, 121 are printed with a unit (62
+yields, 59 concentrations). The rest came from figures and calculations. The unit check also drops some printed
+values whose unit the PDF's text layer garbles (a degree sign read as '8'), which shrinks the sample without favouring
+any pack.
+
+### Recall / precision, papers with rows (34)
 
 | | Pack 5 | Pack 25 | Pack 56 | Curated |
 |---|---|---|---|---|
-| **Mean recall, all papers** | 0.48 | 0.48 | 0.50 | **0.57** |
-| Mean recall, papers with rows (34) | 0.61 | 0.61 | 0.63 | **0.73** |
-| Temperature recall / precision | 0.64 / 0.76 | 0.64 / 0.79 | 0.64 / 0.79 | **0.76 / 0.93** |
-| Duration recall / precision | 0.37 / 0.80 | 0.38 / 0.77 | 0.36 / 0.76 | **0.51** / 0.79 |
-| pH recall / precision | 0.49 / 0.85 | 0.44 / 0.81 | 0.47 / 0.87 | 0.46 / 0.83 |
-| Starting amino acid recall / precision | 0.58 / 0.81 | 0.54 / 0.77 | 0.58 / 0.81 | 0.60 / 0.81 |
-| Yield recall / precision | 0.36 / 0.83 | 0.38 / 0.72 | 0.44 / 0.75 | **0.51 / 0.84** |
-| Rows (all 56 papers) | 860 | 1105 | 910 | 886 |
-| Flags per row | 2.4 | 1.8 | 2.0 | 2.2 |
+| **Overall, mean recall per paper** | 0.65 | 0.62 | **0.71** | **0.72** |
+| Overall, pooled recall / precision | 0.60 / 0.84 | 0.58 / 0.80 | 0.65 / 0.81 | 0.68 / 0.86 |
+| Metadata (136 values) | 0.92 / 0.96 | 0.92 / 0.96 | 0.95 / 0.97 | 0.92 / 0.96 |
+| Methodology (494) | 0.53 / 0.76 | 0.46 / 0.74 | 0.57 / 0.78 | 0.63 / 0.80 |
+| - temperature (24) | 1.00 | 1.00 | 1.00 | 1.00 |
+| - duration (104) | 0.39 | 0.39 | 0.39 | **0.57** |
+| - pH (107) | 0.47 | 0.42 | 0.49 | 0.47 |
+| - volumes (19) | 0.63 | 0.63 | 0.68 | 0.68 |
+| - solvent (34) | 0.91 | 0.94 | 0.82 | 0.97 |
+| - solid material (27) | 0.30 | 0.30 | **0.81** | 0.22 |
+| - experiment type / solution type / vessel | not in pack | not in pack | not in pack | 0.97 / 0.83 / 0.59 |
+| Chemistry inputs, mM (61) | 0.67 / 0.81 | 0.79 / 0.75 | 0.80 / 0.73 | 0.82 / 0.74 |
+| Chemistry outputs (102) | 0.44 / 0.88 | 0.45 / 0.82 | 0.47 / 0.82 | 0.54 / 0.90 |
+| - product % yields (59) | 0.73 | 0.73 | 0.76 | **0.88** |
+| - product concentrations (43) | 0.05 | 0.07 | 0.07 | 0.07 |
 
-Row counts within 2× of the hand data: 56-58% of papers in every pack (71-74% of papers that got any rows).
+All 45 papers (11 of them with no rows in any pack): mean recall per paper 0.49 / 0.47 / 0.53 / 0.54.
 
-**Papers inside vs outside the drafting sample** (mean recall):
+Product concentrations score low in every pack, including the curated one: most of the few printed ones are probably
+coincidences of the check (the hand concentrations were mostly calculated from yields), so this row says little.
+
+**Papers inside vs outside the drafting sample** (mean recall per paper, papers with rows):
 
 | | Pack 5 | Pack 25 | Pack 56 | Curated |
 |---|---|---|---|---|
-| Pack 5's 5 papers | 0.52 | 0.47 | 0.52 | 0.55 |
-| The other 38 | 0.48 | 0.48 | 0.50 | 0.58 |
-| Pack 25's 23 papers (with hand data) | 0.46 | 0.45 | 0.51 | 0.56 |
-| The other 20 | 0.50 | 0.50 | 0.49 | 0.59 |
+| Pack 5's papers | 0.64 | 0.51 | 0.64 | 0.68 |
+| The others | 0.65 | 0.64 | 0.71 | 0.72 |
+| Pack 25's papers | 0.59 | 0.56 | 0.66 | 0.68 |
+| The others | 0.73 | 0.71 | 0.77 | 0.76 |
 
-Per-paper rows and recall for every pack: `per_paper_wide.csv`.
+Every pack, the curated one included, scores lower on Pack 25's sample than on the rest: those papers are harder.
+Relative to the other packs, being in the sample gave Pack 25 no advantage.
+
+Per-paper data: `per_paper_v2.csv` (revised), `per_paper_wide.csv` (rows per pack and the first scoring).
+
+### First scoring (superseded)
+
+Against every hand value of five quantities: mean recall 0.48 / 0.48 / 0.50 / 0.57 for Packs 5 / 25 / 56 and the
+curated pack. It understated every pack, and the drafted ones most: calculated and internal columns counted, and
+figure-derived hand values counted as misses.
 
 ## What it shows
 
 **Effect of the number of sample papers**
-- **Small, and mostly on yields.** Yield recall rises 0.36 → 0.38 → 0.44 from 5 to 25 to 56 papers. Mean recall
-  barely moves (0.48 → 0.48 → 0.50).
-- **No paper is better extracted for having been in the sample.** Pack 25 scores 0.45 on its own 23 papers and 0.50
-  on the rest; Pack 5's in-sample difference (0.52 against 0.48) rests on 5 papers.
-- **Five papers already give the core of the pack.** Temperature, duration, pH and the starting composition come from
-  the shared modules and the chemistry step, which even Pack 5 links. More papers add compounds (47 → 298), more
-  outcome columns and the kinetics and flow-reactor modules. The yield gain comes from those.
-- **More papers isn't monotonic in every way.** Pack 25 makes the most rows (1105; Kitadai2017 alone gives 175 against
-  3 or 0 elsewhere) and has the lowest yield precision (0.72). Its extra steps (thermodynamics, surface adsorption)
-  look like the cause.
+- **Pack 56 nearly matches the curated pack** on what it extracts (0.71 against 0.72 mean recall per paper, papers
+  with rows). Packs 5 and 25 trail it by 6-9 points, mostly in methodology (pH, solid material) and yields.
+- **The gain isn't steady with sample size:** Pack 25 scores below Pack 5 overall (0.62 against 0.65). Its extra
+  steps (thermodynamics, surface adsorption) and over-split rows cost it. The contents of the sample matter as much
+  as its size.
+- **No paper is better extracted for having been in the sample** (table above).
+- **Five papers already give the core of the pack.** Temperature, starting composition and metadata come from the
+  shared modules and the chemistry step, which even Pack 5 links. More papers add compounds (47 → 298), outcome
+  columns, the kinetics and flow-reactor modules, and a solid-material column (Pack 56: 0.81 recall on solid
+  materials against 0.22-0.30 for the others).
 
 **Drafted packs against the curated one**
-- **The curated pack is ahead by about 0.08-0.10 in recall,** most of it in duration (0.51 against about 0.37),
-  temperature (0.76 against 0.64) and yields. Precision is similar except for temperature (0.93 against about 0.78).
-- **Part of that gap is settings drafting never writes.** The drafted packs get only the template's fill-in settings:
-  - no `column_pairs` or `label_columns`;
-  - no post-processing (`ambient_conditions`, `atmospheric_start`, `results_check`).
-  `duration_hr` is filled on 602-661 rows in the drafted runs against 827 in the curated run, and temperature
-  recall is identical in all three drafted packs (0.64). That points to the shared mechanism, not the sample size.
+- **The curated pack's lead is mostly duration (0.57 against 0.39) and product yields (0.88 against 0.73-0.76).**
+- **Part of that gap is settings drafting never wrote:** the drafted packs got only the template's fill-in settings,
+  with no `column_pairs`, `label_columns` or post-processing. `duration_hr` was filled on 602-661 rows in the drafted
+  runs against 827 in the curated run. (Fixed after this study: drafting now writes them.)
+- **Drafted packs don't have this dataset's own classification columns** (experiment type, solution type, vessel).
+  That's expected: they're conventions of this dataset, not something the papers name.
 
 **The pack matters less than the paper's format**
 - **Row structure is set by the paper, not the pack:** a paper usually gets exactly the same number of rows in all
@@ -127,16 +176,37 @@ Rabinowitz1978 25 against 10.
   - A resumed queue's `papers.csv` and summary show only the cost spent after resuming ($3.6-4.5 per pack against
     $14-17 actually spent).
 
-## Suggestions (not built; for Mickey to decide)
+## Follow-up (2026-11-14, Mickey's answers)
 
-1. **Drafting writes the fill-in settings** for the conventional columns it creates: `label_columns` for
-   temperature, time, pressure and pH; `column_pairs` such as sampled/initial temperature; and the general
-   post-processing steps. This would close part of the gap to the curated pack at no cost per paper.
-2. **Read line plots with markers automatically**, like scatter plots: 66 of the figures here. They're the main way
-   these papers report time courses, and most of the nine papers with no rows are this kind.
-3. **Reconsider automatic figure suggestions for unattended queues:** about 30% of the cost here for 3% of figures
-   read. Suggestion 2 changes this balance.
-4. **Text recognition for scanned PDFs** (macOS Vision, as already used for table images): 3 of 56 papers here.
-5. **For drafting itself:** 5-10 sample papers give most of the benefit. If more are used, the draft would be
-   improved by checking its own steps against the shared modules (Packs 5 and 25 duplicated the mineral-surfaces
-   module with their own surface steps).
+1. **Drafting writes the fill-in settings** for the standard columns a drafted pack has (`pack_drafting.fill_in_settings`):
+   - `label_columns` for temperature, time, pressure and pH;
+   - the related-column pairs whose two columns exist;
+   - post-processing: 'ambient' conditions when there's a temperature or pressure column, the sealed-vessel start
+     pressure when its columns exist, and the no-results check with the chemistry step.
+
+   The three study packs were drafted before this change and don't have them.
+2. **Line plots with markers are read automatically** when every series names a marker shape the finder knows. Their
+   points are found as markers (the plot kind decides; guessing had taken connecting lines for bars).
+   - Replayed offline on the curated run's 66 line plots (saved suggestions, no cost):
+     - 28 have no markers on every series, and stay with the user;
+     - of the 38 with markers, 3 are now read automatically.
+   - The rest fail on calibration (no plot frame found; too few tick numbers read from low-quality images) or have
+     series that can't be told apart (four series all 'open circles joined by line'). These correctly go to the
+     editor.
+3. **Automatic figure suggestions in unattended queues:** left as they are. Mickey: the user digitizes most plots by
+   hand, helped by the automatic detection where it works.
+4. **Text recognition for scanned pages** (`ingestion/page_ocr.py`, macOS Vision):
+   - A page with almost no text over an image is read. Inoue1993's only text was a watermark, so this is decided page
+     by page.
+   - Lines are put back in reading order: two columns; pieces of one printed line joined; a raised decimal point
+     ('0•28') read as a point.
+   - Pages read this way are flagged in the results.
+   - All three study scans now give text: Flores1973 3 pages, Inoue1993 5, Rabinowitz1969 2, about 2 s each.
+   - Image figures with fewer than 4 tick numbers in the text layer get theirs read from the image too, which helps
+     both automatic calibration and the digitizer's Auto-calibrate. Imai1998 Fig. 3 now calibrates (0.001-10 mM, log).
+   - Not done: finding figures on fully scanned pages (figures are found by their 'Fig. N' captions in the text
+     layer).
+5. **The "math domain error"** was a real bug. On Imai1998's log-scale axis (0.001-10 mM), automatic rounding to 2
+   decimals turned 0.003 mM into 0.00, and log10(0) stopped the figure; the digitizer's rounding by hand had the same
+   flaw. On a log axis the decimals now mean significant figures (decimals + 1), and a value that would still round
+   to 0 keeps its exact value (`calibration.rounded`, used for snapping points and for stored values).

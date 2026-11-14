@@ -137,3 +137,4 @@ current month's file (start `YYYY-MM.md` in a new month), with one line here.
 - Two more themes; a new Getting started window (2026-11-12, Mickey)
 - Batch mode: every step at once (2026-11-14, Mickey: more requests since the modules -- do batch waits add up?)
 - Drafted packs from 5 / 25 / 56 papers vs the curated pack; figure suggestions in parallel (2026-11-14, Mickey)
+- Study follow-up: fair scoring, drafting fill-in settings, line plots, scanned pages, log-axis rounding (2026-11-14, Mickey)

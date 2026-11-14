@@ -80,6 +80,8 @@ class ParsedPaper:
     # supplementary information read with the paper (ingestion/supplements.py): its pages follow the
     # paper's -- [{"file": path, "offset": pages before it, "pages": n}]; shown as S1, S2, ...
     supplements: List[dict] = field(default_factory=list)
+    # scanned pages whose text was read by text recognition (ingestion/page_ocr.py), 1-indexed
+    ocr_pages: List[int] = field(default_factory=list)
 
     def page_label(self, page) -> object:
         """A page as shown to the user: the paper's own number, or 'S<n>' for a supplement's page."""
@@ -396,7 +398,8 @@ def parse_pdf(pdf_path: str, paper_id: Optional[str] = None) -> ParsedPaper:
         with open_plumber(path) as doc:
             page_count = len(doc.pages)
             char_count = sum(len(p.chars) for p in doc.pages)
-            img_count = sum(len(p.images) for p in doc.pages)
+            page_images = [len(p.images) for p in doc.pages]
+            img_count = sum(page_images)
             extracted, rotations = [], {}
             for i, p in enumerate(doc.pages if char_count else []):
                 angle = _rotation(p)
@@ -411,10 +414,24 @@ def parse_pdf(pdf_path: str, paper_id: Optional[str] = None) -> ParsedPaper:
         raise PdfNotReadableError(f"Couldn't read '{path.name}' as a PDF ({type(e).__name__}: {e}).") from None
 
     if not char_count:
+        page_texts, tightened = [""] * page_count, []
+    # scanned pages (no text layer, or only a watermark, over a page image): read by text recognition (page_ocr.py)
+    ocr_pages: List[int] = []
+    from parameter_extractor.ingestion import page_ocr
+    scanned = [n for n, (t, k) in enumerate(zip(page_texts, page_images), start=1) if page_ocr.needs_ocr(t, k)]
+    if scanned and page_ocr.available():
+        try:
+            for n, text in page_ocr.recognize_pages(str(path), scanned, rotations).items():
+                page_texts[n - 1] = _clean(text)
+                ocr_pages.append(n)
+        except Exception as e:             # recognition failing leaves the page as it was
+            warnings.append(f"Text recognition failed on the scanned page(s): {e}")
+    if ocr_pages:
+        warnings.append(f"Page(s) {ocr_pages} are scanned images: their text was read by text recognition.")
+    if not any(t.strip() for t in page_texts):
         warnings.append(
-            "No text layer detected -- this looks like a scanned PDF. OCR is needed "
-            "before any text-based stage can run. Not implemented in this prototype."
-        )
+            "No text layer detected -- this looks like a scanned PDF, and text recognition "
+            + ("found no text." if page_ocr.available() else "is only available on macOS."))
         return ParsedPaper(
             paper_id=paper_id, source_pdf=str(path), page_count=page_count,
             has_text_layer=False, text="", page_texts=[], embedded_image_count=img_count,
@@ -445,7 +462,7 @@ def parse_pdf(pdf_path: str, paper_id: Optional[str] = None) -> ParsedPaper:
         paper_id=paper_id, source_pdf=str(path), page_count=page_count,
         has_text_layer=True, text="\f".join(page_texts), page_texts=page_texts,
         embedded_image_count=img_count, table_pages=table_pages, warnings=warnings,
-        page_rotations=rotations,
+        page_rotations=rotations, ocr_pages=ocr_pages,
     )
 
 

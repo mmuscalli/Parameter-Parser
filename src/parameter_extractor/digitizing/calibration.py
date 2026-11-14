@@ -84,8 +84,20 @@ def is_categorical(panel: DigitizedPanel) -> bool:
     return bool(getattr(panel.x, "categorical", False)) or (not panel.x.column and not panel.x_cal.complete())
 
 
-def rounded(value: float, decimals: Optional[int]) -> float:
-    return value if decimals is None else round(value, decimals)
+def rounded(value: float, decimals: Optional[int], log: bool = False) -> float:
+    """A value rounded to an axis's precision. On a log axis, whose values span decades, `decimals` places would
+    turn small values into 0 (Imai1998 Fig. 3: 0.003 mM on a 0.001-10 mM axis rounded to 0.00, and log10(0) stopped
+    the figure -- 2026-11-14): there it means decimals + 1 significant figures, and a value that would still round
+    to 0 or below keeps its exact value."""
+    if decimals is None:
+        return value
+    if log:
+        if value <= 0:
+            return value
+        digits = decimals + 1 - int(math.floor(math.log10(abs(value)))) - 1
+        out = round(value, digits)
+        return out if out > 0 else value
+    return round(value, decimals)
 
 
 def _snapped_fraction(t: float, cal: AxisCalibration, decimals: Optional[int], whole_px: float,
@@ -97,7 +109,8 @@ def _snapped_fraction(t: float, cal: AxisCalibration, decimals: Optional[int], w
         t_whole = _fraction_of(round(value), cal.p1.value, cal.p2.value, cal.log)
         if abs(t_whole - t) * length <= whole_px:
             return t_whole
-    return t if decimals is None else _fraction_of(round(value, decimals), cal.p1.value, cal.p2.value, cal.log)
+    return t if decimals is None else _fraction_of(rounded(value, decimals, cal.log), cal.p1.value, cal.p2.value,
+                                                   cal.log)
 
 
 def snap(panel: DigitizedPanel, px: float, py: float) -> Tuple[float, float]:

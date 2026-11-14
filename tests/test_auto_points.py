@@ -93,6 +93,37 @@ def test_markers_on_lines_sorted_by_description():
         assert max(min(np.hypot(f.x - x, f.y - y) for f in got) for x, y in truth[name]) < 2.0, name
 
 
+def test_line_plots_with_markers_are_read_automatically():
+    """2026-11-14 (pack study: 66 line plots left out): a line plot counts as easy when every series has a marker
+    the detector finds -- its points are the markers, the lines between them are opened away (test above). A series
+    drawn only as a line, or with no marker named, sends the figure to the editor with the reason."""
+    from parameter_extractor.digitizing.auto_figure import auto_digitize, markers_on_every_series
+    from parameter_extractor.schemas.figures import (AxisVariable, DigitizedFigure, FigurePlan, PlannedPanel,
+                                                     PlannedSeries)
+
+    def plan(*markers):
+        return FigurePlan(figure_id="Fig. 1", is_data_plot=True, plot_kind="line", duplicates_tabulated_data=False,
+                          panels=[PlannedPanel(name="main", x=AxisVariable(label="t", column="duration_hr"),
+                                               y=AxisVariable(label="yield", column=None),
+                                               series=[PlannedSeries(label=f"s{i}", marker=m)
+                                                       for i, m in enumerate(markers)])])
+    assert markers_on_every_series(plan("filled circles", "open squares", "▲"))
+    assert not markers_on_every_series(plan("filled circles", "dashed line"))
+    assert not markers_on_every_series(plan("filled circles", None))
+    with tempfile.TemporaryDirectory() as tmp:
+        page = Path(tmp) / "p.png"
+        Image.new("RGB", (200, 200), "white").save(page)
+        fig = DigitizedFigure(figure_id="Fig. 1", number=1, page=1, caption="c", render_scale=1.0,
+                              page_image=str(page))
+        lines_only = auto_digitize(fig, plan("solid line", "dashed line"))
+        assert not lines_only.easy and "without markers" in lines_only.reasons[0]
+        fig2 = DigitizedFigure(figure_id="Fig. 1", number=1, page=1, caption="c", render_scale=1.0,
+                               page_image=str(page))
+        with_markers = auto_digitize(fig2, plan("filled circles"))       # gets past the kind check to calibration
+        assert not any("line plot" in r or "only bar charts" in r for r in with_markers.reasons), \
+            with_markers.reasons
+
+
 def test_shapes_and_descriptions():
     assert describe("open diamond") == {"filled": False, "shape": "diamond"}
     assert describe("filled red triangles") == {"filled": True, "shape": "triangle", "color": (220, 30, 30)}

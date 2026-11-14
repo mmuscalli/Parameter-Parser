@@ -110,6 +110,11 @@ def test_draft_writes_a_working_pack():
         manifest = json.loads((folder / "pack.json").read_text())
         assert manifest["units"] == {"set": "reaction condition", "sample": "time point"}
         assert manifest["formulas"] == [] and not manifest.get("is_template")
+        # fill-in settings for the standard columns it has (2026-11-14: drafted packs had none -- the pack study)
+        assert manifest["label_columns"] == {"temperature": "initial_temperature_C", "time": "duration_hr",
+                                             "pH": "initial_pH"}                  # no pressure column here
+        assert "column_pairs" not in manifest or manifest["column_pairs"] == []   # no related pair present
+        assert manifest["postprocess"] == ["ambient_conditions"]                  # modules off: no chemistry step
         assert [c["id"] for c in manifest["variable_categories"]] == ["conditions", "metadata_area", "results"]
         cc = manifest["category_columns"]
         assert cc["methodology"]["columns"] == ["set_type"] and "duration_hr" in cc["conditions"]["columns"]

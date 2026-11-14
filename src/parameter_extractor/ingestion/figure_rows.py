@@ -368,7 +368,9 @@ def build_figure_rows(
                 x_stored = None
                 for axis, value in ([(y_axis, y)] if categorical else [(x_axis, x), (y_axis, y)]):
                     offset = offsets.get("y" if axis is y_axis else "x", 0.0)
-                    value = round(rounded(value, getattr(axis, "decimals", None)) * axis.multiplier + offset, 6)
+                    log_axis = (panel.y_cal if axis is y_axis else panel.x_cal).log
+                    value = round(rounded(value, getattr(axis, "decimals", None), log_axis) * axis.multiplier
+                                  + offset, 6)
                     if axis is x_axis:
                         x_stored = value
                     read = CellSource(origin=f"{fig.figure_id} (digitized)", confidence=DIGITIZED,
