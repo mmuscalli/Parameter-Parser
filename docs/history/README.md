@@ -139,3 +139,4 @@ current month's file (start `YYYY-MM.md` in a new month), with one line here.
 - Drafted packs from 5 / 25 / 56 papers vs the curated pack; figure suggestions in parallel (2026-11-14, Mickey)
 - Study follow-up: fair scoring, drafting fill-in settings, line plots, scanned pages, log-axis rounding (2026-11-14, Mickey)
 - Study packs updated, scanned papers rerun; PaperDataTemplate audit (2026-11-14, Mickey)
+- PaperDataTemplate audit v2: author list, Nooner1977, Huber1998 gases, four added papers (2026-11-14, Mickey)
