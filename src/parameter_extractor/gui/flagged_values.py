@@ -83,6 +83,8 @@ KIND_LABELS = {
     "no_starting_composition": "Products without a starting composition",
     "assumed_shared": "Assumed the same as the other experiments",
     "method_differs": "Differs between experiments (not filled)",
+    "set_gap": "Missing on some rows of its set",
+    "for_solution": "Given for a starting solution",
 }
 
 

@@ -144,6 +144,9 @@ Search `docs/history/` for the details and the measurements behind each.
   also makes rows from text or captions with complete conditions -- the row-plan prompts' {{#TEXT_ROWS}} sections);
   a review's reproduced data are rows marked with their source (`original_data_reference`, `cited_data` flags). Exoplanets:
   one row per (planet, fit solution); every posterior mode and estimate by another method is kept.
+  Every chemistry dataset has `set_independent_variable` / `set_independent_value` (what a set varies, from the
+  rows; calculators/set_variables.py); a condition given for a starting solution reaches every row with that
+  composition, figure rows too (`for`, calculators/keyed_conditions.py).
 - **Units**: an explicit table (`units.py`, no pint), never guess: ranges, lost exponents ("10-4 M"), unknown units
   are refused and flagged. A plain "u" reads as µ where the µ form is known; lower-case "um" / "mm" / "nm" are read
   as molar or metre by the column they go into. Astronomy has its own table ("m" is molar in chemistry).

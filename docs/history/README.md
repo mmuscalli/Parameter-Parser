@@ -143,3 +143,4 @@ current month's file (start `YYYY-MM.md` in a new month), with one line here.
 - PaperDataTemplate v3: analysis techniques and instruments (2026-11-15, Mickey)
 - Study re-measured with corrected hand data; number-as-text and arXiv-cache fixes (2026-11-17, Mickey)
 - Duration and pH gaps: scoring revised, row-planning duration rule, prebiotic pH descriptions (2026-11-17, Mickey)
+- Set notation (set_independent_variable / value, set_gap flags) and conditions for a starting solution (2026-11-17, Mickey)

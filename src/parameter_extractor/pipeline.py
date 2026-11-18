@@ -1427,11 +1427,20 @@ def finish(
     if m.label_columns:                          # what a row's own label states, first (calculators/label_values.py)
         from parameter_extractor.calculators.label_values import fill_from_labels
         paper_flags += fill_from_labels(rows, ex.structure, m.label_columns, m.column_pairs)
+    # conditions the paper gives for a starting solution, on every row with that composition, figure rows too
+    # (calculators/keyed_conditions.py, 2026-11-17)
+    from parameter_extractor.calculators.keyed_conditions import apply_keyed_conditions
+    paper_flags += apply_keyed_conditions(rows, ex.optional_list, registry)
     # methods the experiments share (calculators/shared_values.py)
     if config.fill_shared_values and (m.shared_columns or m.group_columns or m.column_pairs):
         from parameter_extractor.calculators.shared_values import fill_in
         from parameter_extractor.column_order import ColumnOrder
         paper_flags += fill_in(rows, m.shared_columns, m.group_columns, m.column_pairs, ColumnOrder(pack))
+    # what each set varies (set_independent_variable / _value) and compounds missing on some rows of a set
+    # (calculators/set_variables.py, 2026-11-17)
+    from parameter_extractor.calculators.set_variables import add_set_variables, set_gap_flags
+    add_set_variables(rows)
+    paper_flags += set_gap_flags(rows)
     if pack.manifest.formulas:                   # the research area's own calculations (formulas.py), after the review
         from parameter_extractor.formulas import apply_formulas, formula_flags
         paper_flags += formula_flags(apply_formulas(rows, pack.manifest.formulas))

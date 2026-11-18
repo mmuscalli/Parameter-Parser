@@ -171,12 +171,13 @@ def test_full_run_fills_results():
         assert "sampled_Gly-Gly_aq_%yield" in headers and "full_id" in headers
         assert w.flags_tree.topLevelItemCount() >= 1
         # identifiers, then the categories' blocks: metadata ... starting species, then products (column_order.py)
-        assert headers[:4] == ["entry_number", "full_id", "set_id", "sample_id"]
+        assert headers[:6] == ["entry_number", "full_id", "set_id", "sample_id", "set_independent_variable",
+                               "set_independent_value"]                    # what each set varies (2026-11-17)
         assert headers.index("paper_title") < headers.index("experiment_type") < headers.index("duration_hr") \
             < headers.index("initial_NaCl_aq_mM") < headers.index("sampled_Gly-Gly_aq_%yield") < headers.index("source_notes")
         bands = {label: (first, last) for label, first, last in w.rows_band.groups}
-        assert list(bands)[:3] == ["Row", "Metadata", "Experimental Methodology"] and bands["Row"] == (0, 3)
-        assert header_items[4].text() == "paper_title" and "Metadata" in header_items[4].toolTip()
+        assert list(bands)[:3] == ["Row", "Metadata", "Experimental Methodology"] and bands["Row"] == (0, 5)
+        assert header_items[6].text() == "paper_title" and "Metadata" in header_items[6].toolTip()
         tip = w.rows_table.item(0, headers.index("sampled_Gly-Gly_aq_%yield")).toolTip()
         assert tip.startswith("From: chemistry (high confidence)") and "Table 1" in tip, tip
         groups = [w.flags_tree.topLevelItem(i) for i in range(w.flags_tree.topLevelItemCount())]

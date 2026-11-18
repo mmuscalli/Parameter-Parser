@@ -681,6 +681,8 @@ def row_to_template_dict(row: ExtractedRow) -> dict:
     return out
 
 
+# What each set varies (calculators/set_variables.py), next to the row ids.
+SET_COLUMNS = ["set_independent_variable", "set_independent_value"]
 # Not template columns: our provenance, always last (the optional one only when filled).
 PROVENANCE_COLUMNS = ["yield_below_threshold_note", "source_notes", "extraction_confidence"]
 OPTIONAL_PROVENANCE_COLUMNS = ["original_data_reference"]
@@ -699,7 +701,11 @@ def ordered_columns(present: set, column_categories: Optional[dict] = None, regi
     extras = sorted(c for c in present
                     if c not in _template_set() and c not in provenance and c not in standard)
     optional = [c for c in OPTIONAL_PROVENANCE_COLUMNS if c in present]
-    columns = template_columns() + standard + extras + PROVENANCE_COLUMNS + optional
+    # what each set varies (calculators/set_variables.py): in every dataset with starting conditions, empty or not, so
+    # every paper's CSV has the same Row block (not in datasets without any, e.g. exoplanets)
+    has_conditions = any(c.startswith("initial_") or c == "duration_hr" for c in present)
+    row_columns = [c for c in SET_COLUMNS if has_conditions and c not in standard and c not in extras]
+    columns = template_columns() + row_columns + standard + extras + PROVENANCE_COLUMNS + optional
     return ColumnOrder(chosen=column_categories, registry=registry).ordered(columns)
 
 

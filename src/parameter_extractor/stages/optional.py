@@ -118,6 +118,11 @@ class StageSpec(BaseModel):
     # style (pl_orbinclmode1, st_rotpalt1method), "_" gives initial_temperature_C_alt1_method
     suffix_separator: str = ""
     open_ended_hint: str = ""
+    # values the paper gives for a STARTING SOLUTION rather than a set of rows (a table of 'starting pH' per starting
+    # material, mitsuzawa2004): an answer row may name `for` that solution's compounds and amounts instead of a set;
+    # the app applies its values to every row -- table, text or digitized figure -- with that starting composition
+    # (calculators/keyed_conditions.py). Off by default: the field is only sent to steps that set it.
+    by_starting_solution: bool = False
     # a text column for the time system of the epochs, filled from the printed unit of any
     # Julian-date parameter ('BJD_TDB - 2450000' -> 'BJD_TDB'): exoplanets' pl_tsystemref
     time_system_column: str = ""        # what kinds of other parameters to look for (prompt)
@@ -394,13 +399,23 @@ class _CompactResult(BaseModel):
 
     @property
     def parameters(self) -> list:
+        """The values for sets and samples (keyed_parameters: those for a starting solution, kept apart so that
+        no path takes them for paper-wide values)."""
         out = list(self.legacy_parameters)
         for row in self.rows:
+            if getattr(row, "for_solution", ""):
+                continue
             labels = {"set_label": row.set_label}
             if "sample_label" in type(row).model_fields:
                 labels["sample_label"] = row.sample_label
             out += [v.model_copy(update=labels) for v in row.values]
         return out + list(self._grid_items)
+
+    @property
+    def keyed_parameters(self) -> list:
+        """[(starting solution as printed, value)] for the rows naming `for` a starting solution."""
+        return [(row.for_solution, v) for row in self.rows if getattr(row, "for_solution", "")
+                for v in row.values]
 
 
 @lru_cache(maxsize=None)
@@ -449,6 +464,13 @@ def _models(spec_json: str, categories: Tuple[str, ...] = ()) -> Tuple[type, typ
     sample_field = {} if spec.per == "set" else {"sample_label": (str, Field(
         default="", alias="sample", description=f"Exact structure-plan sample_label if these values are for one "
                                                 f"{spec.units('sample')} only; leave out for the whole set."))}
+    if spec.by_starting_solution:
+        sample_field["for_solution"] = (str, Field(default="", alias="for", description=(
+            "Only for values the paper gives for a starting solution rather than for a set (a table or text "
+            "listing a condition per starting material): that solution's starting compounds and amounts as "
+            "printed, separated by ';', e.g. 'glycine 100 mM' or 'glycine 100 mM; diglycine 3.7 mM' -- with "
+            "set ''. The app applies these values to every row with that starting composition, figure rows too. "
+            "'' otherwise.")))
     Row = create_model(
         f"{name}Row",
         __config__=ConfigDict(populate_by_name=True, json_schema_extra=_required(["set", "values"])),
