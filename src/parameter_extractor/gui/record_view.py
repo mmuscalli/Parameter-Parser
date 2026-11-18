@@ -243,7 +243,10 @@ class RecordView(QWidget):
 
     def _node_item(self, node, n: int) -> QTreeWidgetItem:
         word = _cap(self._word(node))
-        text = f"{word} {n}" + (f": {node.label}" if node.label else "")
+        if node.label and node.label.lower().startswith(word.lower()):
+            text = node.label                         # it names itself ('Run 13'): no 'Run 1: Run 13'
+        else:
+            text = f"{word} {n}" + (f": {node.label}" if node.label else "")
         if node.children:
             k = len(self._rows_under(node))
             text += f"  ({k} {plural(self._words[-1], k)})"

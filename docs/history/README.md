@@ -152,3 +152,4 @@ current month's file (start `YYYY-MM.md` in a new month), with one line here.
 - Branch levels-and-facets, step 1: a paper's data as a tree of levels and facets; nested JSON record (2026-11-18, Mickey)
 - Branch levels-and-facets, step 2: the results by experiment set; a Structure tab for data packs (2026-11-18, Mickey)
 - Branch levels-and-facets, step 3: fill settings per kind of value; assumed values held once on their set; older runs in the sets tab (2026-11-18, Mickey)
+- Branch levels-and-facets, step 4: runs within a set, measured on 12 papers + a control + Huber1998 ($1.92) (2026-11-18, Mickey)

@@ -148,6 +148,30 @@ def test_the_results_tab_says_what_was_assumed():
         assert "Assumed" in view.source.toPlainText()
 
 
+def test_the_results_tab_shows_runs():
+    """Step 4: a set holding several runs shows them between the set and its samples, each by its own name."""
+    from PySide6.QtWidgets import QApplication
+    QApplication.instance() or QApplication([])
+    from parameter_extractor.gui.record_view import RecordView
+    packs.activate("prebiotic_chemistry")
+    obs = [_obs(f"00100100{i}", 81.0, source=f"row {i}") for i in (1, 2, 3, 4)]
+    runs = {"001001001": "Run 13", "001001002": "Run 13", "001001003": "Run 14", "001001004": "Run 14"}
+    facets = record_tree.Facets(ColumnOrder(), record_tree.levels(runs=True))
+    with tempfile.TemporaryDirectory() as tmp:
+        path = Path(tmp) / "x_record.json"
+        path.write_text(json.dumps(record_tree.to_json(record_tree.build(obs, facets, None, runs), facets,
+                                                       {"data_pack": "prebiotic_chemistry"})))
+        view = RecordView()
+        view.show_result(SimpleNamespace(record_path=path, row_flags={}, run_dir=None, pack="prebiotic_chemistry"))
+        s1 = view.tree.topLevelItem(0).child(0)
+        assert s1.text(0).startswith("Experiment set 1") and "(4 samples)" in s1.text(0)
+        assert [s1.child(i).text(0) for i in range(s1.childCount())] == ["Run 13  (2 samples)", "Run 14  (2 samples)"]
+        assert s1.child(0).child(1).text(0).startswith("Sample 2")
+        view.tree.setCurrentItem(s1.child(0).child(0))
+        texts = [view.values.topLevelItem(i).text(3) for i in range(view.values.topLevelItemCount())]
+        assert "this sample" in texts
+
+
 if __name__ == "__main__":
     for name, fn in list(globals().items()):
         if name.startswith("test_") and callable(fn):

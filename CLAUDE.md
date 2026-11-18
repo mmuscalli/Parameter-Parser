@@ -75,8 +75,8 @@ Version: `parameter_extractor.__version__` (0.5.0, tag `v0.5.0`), the one place 
   (tests/test_record_tree.py). Step 2: `gui/record_view.py` (results by set; corrections there),
   `gui/structure_page.py` (pack editor: level words, each kind of value's level; `category_levels`),
   `column_labels.py` (names in words). Step 3: fill settings per kind of value (`fill`, `category_fill`,
-  `fill_columns`; `shared_values.selectors`; older packs keep shared_columns / group_columns). Next: a Run level in the row
-  plan (docs/history 2026-11-18).
+  `fill_columns`; `shared_values.selectors`; older packs keep shared_columns / group_columns). Step 4: an optional `run` per sample in the
+  row plan (prebiotic prompt) -> a run level in the record; measured 2026-11-18 (docs/history).
 - `estimate.py`: cost and time before a run (under the Run button, `--estimate-only`), from `estimate_data.json`
   (rebuild it with `scripts/build_estimate_data.py` after many new runs; check with `scripts/check_estimates.py`).
 
