@@ -130,10 +130,44 @@ class StageSpec(BaseModel):
     # appended to open_ended_hint -- e.g. analysis details go to `other` only when the analysis step is off
     hint_by_stage: Dict[str, Dict[str, str]] = Field(default_factory=dict)
 
+    @property
+    def has_starting_conditions(self) -> bool:
+        """The step records experimental starting conditions (initial_* columns): an experiment's step in any pack --
+        built-in, drafted or a user's own -- and not, e.g., the exoplanet pack's fits."""
+        return any(p.column.startswith("initial_") for p in self.parameters)
+
     def _field_rules(self) -> List[str]:
         rules = []
         if self.has_text:
             rules.append("Text parameters: put the text in `txt` (exactly as printed) and 0 in `v`.")
+        # experiment conditions in ANY pack (2026-11-17: fixed first in the prebiotic pack, measured there: 11 -> 51 of
+        # 56 printed pH values; moved here so drafted and users' packs get them too)
+        if self.has_starting_conditions and self.per == "sample":
+            rules.append("A condition a table gives row by row (pH, temperature, pressure, time, volume ...) goes on "
+                         "each sample's own row, one value per row -- never a set-wide range, a set-wide value or "
+                         "'see sample' in its place. That includes a condition among a results table's columns (a "
+                         "pH column next to the yields): give it on every row too.")
+        names = {p.column for p in self.parameters}
+        starting = sorted(c for c in names if c.startswith("initial_") and not re.search(r"_(?:aq|gas|s)_", c))
+        if starting:
+            paired = [c for c in starting if "sampled_" + c[8:] in names]
+            rules.append(f"{', '.join(starting[:4])}: the value set or measured BEFORE the reaction (a table column "
+                         f"of starting values, e.g. 'starting pH'). A value measured AFTER it or when the sample was "
+                         f"taken (a 'final pH' column, or the quantity among a results table's columns) is not a "
+                         f"starting value" + (f": it goes in {', '.join('sampled_' + c[8:] for c in paired)}"
+                                              if paired else "") + ". When the paper doesn't say which it is, give it "
+                         f"as the starting value with `n` saying so -- never leave it out.")
+        if self.has_starting_conditions and self.has_text and any(p.kind != "text" for p in self.parameters):
+            rules.append("A number that has its own parameter goes in that parameter even when a text parameter also "
+                         "mentions it (a buffer described as 'pH 9.1': give the pH parameter 9.1 too).")
+        if self.by_starting_solution:
+            rules.append("A condition the paper gives for a STARTING SOLUTION rather than for a set (a table or "
+                         "sentence listing e.g. the starting pH or volume per starting material, while the results "
+                         "are in other tables or figures): one row with set '' and `for` naming that solution's "
+                         "starting compounds by their full names with their amounts ('glycine 100 mM; diglycine "
+                         "3.7 mM'), one row per solution. The app puts it on every row that starts with that "
+                         "solution, figure rows too. Not for a table that gives the value for each run or row (that goes on each "
+                         "row), and not for a set that already has the value.")
         if self.modes:
             rules.append("Record EVERY value the paper reports for a parameter. If the posterior is bi- or "
                          "multimodal and the paper gives a value per mode (e.g. an inclination for prograde "
@@ -610,7 +644,13 @@ def load_specs(pack=None) -> Dict[str, StageSpec]:
     pack = pack or current()
     own_manifest = getattr(pack, "own_manifest", None)
     settings = json.dumps(getattr(own_manifest, "module_settings", {}) or {}, sort_keys=True)
-    return dict(_pack_specs(str(pack.folder), tuple(pack.module_ids()), settings))
+    specs = dict(_pack_specs(str(pack.folder), tuple(pack.module_ids()), settings))
+    if pack.uses("chemistry"):
+        # values for a starting solution need the rows' starting compounds to match them (calculators/keyed_conditions):
+        # on for every experiment step of a pack with the chemistry step -- built-in, drafted or a user's own
+        specs = {n: (s.model_copy(update={"by_starting_solution": True})
+                     if s.has_starting_conditions and not s.by_starting_solution else s) for n, s in specs.items()}
+    return specs
 
 
 @lru_cache(maxsize=None)

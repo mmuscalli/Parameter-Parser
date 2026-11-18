@@ -84,6 +84,30 @@ def test_steps_without_the_option_send_no_for_field():
     assert '"for"' not in schema and '"for"' in json.dumps(spec.models()[1].model_json_schema())
 
 
+def test_the_experiment_rules_reach_any_pack_not_only_the_curated_one():
+    """2026-11-17 (Mickey: no fixes that only one pack gets): the per-row, starting-value, number-in-text and
+    starting-solution rules come from what a step HAS (initial_* conditions; a pack with the chemistry step), so a
+    drafted or a user's own pack gets them like the prebiotic pack; steps without starting conditions (exoplanets,
+    module steps) get none of them and their requests don't change."""
+    from parameter_extractor.stages.optional import StageSpec, load_specs
+    drafted = StageSpec.model_validate({
+        "name": "conditions", "label": "Conditions", "intro": "Extract the conditions.", "per": "sample",
+        "parameters": [{"column": "initial_pH"}, {"column": "initial_temperature_C", "unit": "°C"},
+                       {"column": "buffer", "kind": "text"}]})
+    rules = " ".join(drafted._field_rules())
+    assert "row by row" in rules and "BEFORE the reaction" in rules and "a buffer described as 'pH 9.1'" in rules
+    assert "STARTING SOLUTION" not in rules                     # only with the option (set when the pack has chemistry)
+    on = drafted.model_copy(update={"by_starting_solution": True})
+    assert "STARTING SOLUTION" in " ".join(on._field_rules())
+    packs.activate("prebiotic_chemistry")
+    conditions = load_specs()["experimental_conditions"]
+    assert conditions.by_starting_solution and "row by row" in " ".join(conditions._field_rules())
+    packs.activate("exoplanets")
+    for spec in load_specs().values():
+        text = " ".join(spec._field_rules())
+        assert not spec.by_starting_solution and "row by row" not in text and "BEFORE the reaction" not in text
+
+
 if __name__ == "__main__":
     for name, fn in list(globals().items()):
         if name.startswith("test_") and callable(fn):
