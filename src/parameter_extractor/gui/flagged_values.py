@@ -86,6 +86,7 @@ KIND_LABELS = {
     "set_gap": "Missing on some rows of its set",
     "for_solution": "Given for a starting solution",
     "plan_mismatch": "Rows lack what their row plan says varies",
+    "paper_summary": "One row for the whole paper",
 }
 
 

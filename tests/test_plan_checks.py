@@ -65,6 +65,68 @@ def test_ranges_and_single_values_are_not_flagged_when_rows_have_the_value():
                                LABELS) == []
 
 
+def test_a_step_answer_without_the_per_row_condition_is_read_again():
+    """stages/repair.py: before rows are built, a set whose plan says pH differs per run but whose conditions answer
+    gives no per-run pH gets ONE follow-up request -- only those sets (plan ids) and that column -- and its per-row
+    values join the answer. Nothing is asked when the answer has them."""
+    from types import SimpleNamespace
+    from unittest.mock import patch
+    from parameter_extractor import packs
+    from parameter_extractor.stages import optional, repair
+    packs.activate("prebiotic_chemistry")
+    spec = optional.load_specs()["experimental_conditions"]
+    _Item, Result = spec.models()
+    plan = StructurePlan.model_validate({"experiment_sets": [
+        {"set_label": "Table 1 block", "set_type": "Independent", "varying_condition_summary": "H2S vs CH3SH; pH per run",
+         "source_table_or_section": "Table 1", "samples": [{"sample_label": f"Run {i}"} for i in (1, 2, 3)]},
+        {"set_label": "Other block", "set_type": "Independent", "varying_condition_summary": "T = 50 C",
+         "source_table_or_section": "Table 2", "samples": [{"sample_label": "A"}, {"sample_label": "B"}]}],
+        "n_rows": 5})
+    value = lambda col, v: {"col": col, "v": v, "u": "", "q": "q", "src": "Table 1", "c": "high"}   # noqa: E731
+    answer = Result.model_validate({"rows": [{"set": "", "values": [value("initial_temperature_C", 100)]}],
+                                    "notes": "pH per run not entered"})
+    found = repair.incomplete(plan, [(spec, answer)], packs.current().manifest.label_columns)
+    assert [(s.name, sets, cols) for s, sets, cols in found] == [("experimental_conditions", ["S1"], ["initial_pH"])]
+    narrowed = repair.repair_spec(spec, ["S1"], ["initial_pH"])
+    assert narrowed.name == "experimental_conditions_repair" and [p.column for p in narrowed.parameters] == \
+        ["initial_pH"] and "S1" in narrowed.rules[-1] and not narrowed.open_ended
+    _I2, R2 = narrowed.models()
+    again = R2.model_validate({"rows": [{"set": "Table 1 block", "sample": f"Run {i}", "values": [value("initial_pH", ph)]}
+                                        for i, ph in ((1, 7.5), (2, 8.5), (3, 8.8))], "notes": ""})
+    ex = SimpleNamespace(structure=plan, optional={spec.name: (spec, answer)})
+    ex.optional_list = [(spec, answer)]
+    ctx = SimpleNamespace(total_steps=0, note=lambda *a: None)
+    with patch.object(optional, "run_optional_stage", lambda *a, **k: again) as _:
+        notes = repair.repair_steps(ctx, ex, "text", None, packs.current().manifest.label_columns)
+    assert "3 value(s) added" in notes[0]
+    values = optional.optional_values(spec, answer, plan)
+    assert {k[1]: v.value for k, v in values.items() if k[2] == "initial_pH"} == {"Run 1": 7.5, "Run 2": 8.5,
+                                                                                 "Run 3": 8.8}
+    assert repair.incomplete(plan, [(spec, answer)], packs.current().manifest.label_columns) == []   # complete now
+
+
+def test_a_failed_repair_is_a_note_not_a_failed_run():
+    from types import SimpleNamespace
+    from unittest.mock import patch
+    from parameter_extractor import packs
+    from parameter_extractor.stages import optional, repair
+    packs.activate("prebiotic_chemistry")
+    spec = optional.load_specs()["experimental_conditions"]
+    _Item, Result = spec.models()
+    plan = StructurePlan.model_validate({"experiment_sets": [
+        {"set_label": "B", "set_type": "Independent", "varying_condition_summary": "pH per run",
+         "source_table_or_section": "Table 1", "samples": [{"sample_label": "1"}, {"sample_label": "2"}]}], "n_rows": 2})
+    answer = Result.model_validate({"rows": [], "notes": ""})
+    ex = SimpleNamespace(structure=plan, optional={spec.name: (spec, answer)}, optional_list=[(spec, answer)])
+
+    def fail(*a, **k):
+        raise RuntimeError("no saved answer")
+    with patch.object(optional, "run_optional_stage", fail):
+        notes = repair.repair_steps(SimpleNamespace(total_steps=0, note=lambda *a: None), ex, "t", None,
+                                    packs.current().manifest.label_columns)
+    assert "failed" in notes[0] and answer.rows == []
+
+
 if __name__ == "__main__":
     for name, fn in list(globals().items()):
         if name.startswith("test_") and callable(fn):

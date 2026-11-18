@@ -200,11 +200,19 @@ def test_a_figures_only_paper_skips_its_steps_when_no_figures_are_digitized():
             stages.append(api_client._streamed.stage)
             return replay(ctx, **kw)
         with patch.object(api_client, "_send", send):
-            result = run_pipeline(EDER, RunConfig(api_key="replay", output_dir=Path(tmp) / "out", registry_path=None))
+            result = run_pipeline(EDER, RunConfig(api_key="replay", output_dir=Path(tmp) / "out", registry_path=None,
+                                                  paper_summary=False))
         packs.activate("prebiotic_chemistry")
         assert sorted(stages) == ["metadata", "structure_planner"], stages
         flags = json.loads((result.run_dir / "plausibility_flags.json").read_text())["paper_level"]
         assert any(f["kind"] == "no_results" and "digitize" in f["message"] for f in flags)
+        # by default (2026-11-17) the steps read the whole paper and the paper gets one 'Paper summary' row
+        stages.clear()
+        with patch.object(api_client, "_send", send):
+            result = run_pipeline(EDER, RunConfig(api_key="replay", output_dir=Path(tmp) / "out2", registry_path=None))
+        packs.activate("prebiotic_chemistry")
+        assert "chemistry" in stages and "experimental_conditions" in stages, stages
+        assert len(result.rows) == 1 and result.rows[0].set_type == "Paper summary"
 
 
 def test_range_and_average_markers_go_before_any_unit():

@@ -534,6 +534,10 @@ def extract_steps(ex: "Extraction") -> "Extraction":
         # (Mickey, 2026-11-03: they cost a full run); a search for the user's own terms still runs
         kind = getattr(ex.structure, "paper_kind", "experimental")
         skip = not ex.structure.experiment_sets and (kind != "experimental" or ex.no_figure_rows)
+        if skip and kind == "experimental" and config.paper_summary and _summary_steps_available(config):
+            skip = False                          # no rows: the steps read the whole paper for a 'Paper summary' row
+            ctx.note("summary", "No rows from tables or text, and no figures are digitized in this run: the steps read "
+                                "the whole paper for one 'Paper summary' row")
         if skip:
             ex.skipped_kind = kind if kind != "experimental" else "figures-only paper"
             ctx.total_steps -= pack.uses("methodology") + _chemistry_on(pack, config) + len(always_on)
@@ -581,6 +585,10 @@ def extract_steps(ex: "Extraction") -> "Extraction":
         ex.fit_models = results.get("fit_models")
         ex.analysis = results.get("analysis")
         ex.optional = {spec.name: (spec, results[spec.name]) for spec in specs}
+        if config.repair_tables and not skip:     # a table read incompletely: read again (stages/repair.py)
+            from parameter_extractor.stages.repair import repair_steps
+            for note in repair_steps(ctx, ex, text, table_images, pack.manifest.label_columns):
+                ctx.note("repair", note)
         ex.grid_problems = list(getattr(ex.chemistry, "grid_problems", []) or []) + [
             p for spec in specs for p in (getattr(results[spec.name], "_grid_problems", None) or [])]
         if pack.uses("ambient_conditions"):     # 'ambient temperature' -> 25 °C, 'ambient pressure' -> 1 bar
@@ -692,6 +700,42 @@ def _paper_wide_methodology(ex: "Extraction"):
                 setattr(view, field, Extracted(value=v.value, status="found", quote=v.quote, source=v.source,
                                                confidence=v.confidence))
     return view
+
+
+def _summary_steps_available(config: RunConfig) -> bool:
+    """The steps may run for a paper summary: always in a new run; in a rebuild only when the earlier run made them
+    (a rebuild never asks -- runs from before 2026-11-17 skipped the steps of papers without rows)."""
+    old = getattr(config, "resume_from", None)
+    if not getattr(config, "rebuild", False) or not old:
+        return True
+    return any(f.name not in ("structure_planner.output.json", "metadata.output.json")
+               for f in Path(old).glob("*.output.json"))
+
+
+SUMMARY_SET = "Paper summary"
+SUMMARY_MESSAGE = ("No rows from the paper's tables or digitized figures: one 'Paper summary' row holds the values the "
+                   "paper states for all its experiments (conditions, starting compounds, and any results given "
+                   "without a particular experiment). Values that differ between experiments aren't in it -- digitize "
+                   "the figures (or turn on rows from text) for one row per experiment.")
+
+
+def _summary_plan(structure):
+    """A plan of one set, one row, for a paper without rows: the steps' values for the whole paper (set '') go on it.
+    Built without validation: 'Paper summary' isn't a set type the row planner offers (its answer format unchanged)."""
+    from parameter_extractor.schemas.structure_plan import PlannedSample, PlannedSet, StructurePlan
+    sample = PlannedSample.model_construct(sample_label="values stated for all experiments", duration_hr=None,
+                                           duration_hr_high=None, source="")
+    pset = PlannedSet.model_construct(set_label=SUMMARY_SET, set_type=SUMMARY_SET, varying_condition_summary=
+                                      "the values the paper states for all its experiments (no table or figure rows)",
+                                      source_table_or_section="the paper's text", data_source="", samples=[sample])
+    return structure.model_copy(update={"experiment_sets": [pset], "total_planned_rows": 1})
+
+
+def _has_content(row) -> bool:
+    """A row with a condition, a starting compound or a result -- not only the paper's metadata."""
+    from parameter_extractor.ingestion.flatten_to_template import row_to_template_dict
+    return any(v not in (None, "") and (c.startswith(("initial_", "sampled_", "stock_", "total_sampled_"))
+                                        or c == "duration_hr") for c, v in row_to_template_dict(row).items())
 
 
 def _chemistry_on(pack, config: RunConfig) -> bool:
@@ -1262,6 +1306,17 @@ def finish(
                                    "series": len([s for s in fig.series if s.points]),
                                    "points": n_points, "annotated_image": annotated[fig.figure_id]})
     paper_flags += [Flag("figure_problem", f"Not digitized automatically -- {note}") for note in ex.auto_figure_notes]
+    # no rows from tables or figures: one 'Paper summary' row of the values stated for the whole paper (2026-11-17)
+    if not rows and config.paper_summary and not ex.skipped_kind and \
+            getattr(ex.structure, "paper_kind", "experimental") == "experimental":
+        plan = _summary_plan(ex.structure)
+        summary = build_rows(ex.metadata, plan, ex.methodology, ex.chemistry, config.paper_prefix,
+                             drop_below=config.confidence_drop_below, registry=registry, optional=ex.optional_list)
+        if summary and any(_has_content(r) for r in summary):
+            ex.structure = plan
+            rows = summary
+            paper_flags += _pack_postprocess(pack, rows, ex, config)
+            paper_flags.append(Flag("paper_summary", SUMMARY_MESSAGE))
     done = {f["figure_id"] for f in figure_summary}
     for fig in ex.figures:
         if fig.figure_id not in done:

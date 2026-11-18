@@ -72,14 +72,14 @@ def test_conditions_spec():
     assert v == 3 and isinstance(v, int)                                            # a count, not 3.0
 
 
-def _run(tmp, structure=None, digitized=()):
+def _run(tmp, structure=None, digitized=(), **config):
     def send(ctx, **kw):
         resp = _replay_send(ctx, **kw)
         if structure is not None and kw["response_model"] is StructurePlan:
             resp.parsed_output = structure
         return resp
     with patch.object(api_client, "_send", send):
-        ex = pipeline.extract(PDF, RunConfig.from_settings(api_key="x", output_dir=Path(tmp)))
+        ex = pipeline.extract(PDF, RunConfig.from_settings(api_key="x", output_dir=Path(tmp), **config))
         return ex, pipeline.finish(ex, list(digitized))
 
 
@@ -111,12 +111,19 @@ def test_no_results_flag_and_figure_rows_without_sets():
     empty = StructurePlan.model_validate_json((REPLAY_DIR / "structure_planner.output.json").read_text())
     empty.experiment_sets, empty.total_planned_rows = [], 0
     with tempfile.TemporaryDirectory() as tmp:
-        ex, result = _run(tmp, empty)
+        ex, result = _run(tmp, empty, paper_summary=False)
         assert result.rows == []
         flags = [f for f in result.paper_flags if f.kind == "no_results"]
         assert len(flags) == 1 and "tables" in flags[0].message and "digitize" in flags[0].message
         view = pipeline._paper_wide_methodology(ex)                   # what a digitized figure would get
         assert view.experiment_type.value == "Batch" and view.experiment_type.status == "found"
+    # by default (2026-11-17) such a paper still gets ONE 'Paper summary' row of what it states for all experiments
+    with tempfile.TemporaryDirectory() as tmp:
+        _ex, result = _run(tmp, empty)
+        assert len(result.rows) == 1 and result.rows[0].set_type == "Paper summary"
+        row = result.rows[0]
+        assert row.experiment_type == "Batch"
+        assert [f for f in result.paper_flags if f.kind == "paper_summary"]
 
 
 if __name__ == "__main__":

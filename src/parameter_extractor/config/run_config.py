@@ -87,6 +87,12 @@ class RunConfig:
     # OFF by default (measured 2026-11-07, eval/table_grids_2026-11-07.md): on the reference papers it saved no money
     # -- the compact table formats had already removed most of the per-cell output, and the grids add input.
     table_grids: bool = False
+    # a table read incompletely -- the row plan says a condition differs per row, the step gave none -- is read again
+    # with one small request for just those sets and columns (stages/repair.py, 2026-11-17); only when it happens
+    repair_tables: bool = True
+    # an experimental paper with no rows (no tables; figures not digitized or declined) still gets one 'Paper summary'
+    # row of the values it states for all its experiments: its steps run on the whole paper (pipeline, 2026-11-17)
+    paper_summary: bool = True
     # every step's static instructions in the cached system prompt, before the paper (api_client.PaperContext,
     # 2026-11-07): a queue's later papers read them -- and the tool list -- from the cache instead of paying again.
     # None = automatic: on in paper queues (5 papers: -17% total, -32% input), off for a single paper (+6%: the
