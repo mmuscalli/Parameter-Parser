@@ -100,6 +100,8 @@ def test_replay_reproduces_committed_csv():
 
         committed = (REPLAY_DIR / "eder1994_auto_extracted.csv").read_text()
         assert result.csv_path.read_text() == committed, pf.why_replay_differs()
+        from record_check import json_reproduces_csv
+        assert json_reproduces_csv(result)   # the nested record too
         assert len(result.rows) == 42
 
         # metadata runs alongside the structure step, then conditions and chemistry together;

@@ -1,5 +1,6 @@
 {
   "id": "kinetics",
+  "level": "set",
   "label": "Kinetics",
   "version": 1,
   "description": "Rate constants, half-lives and activation energies the paper reports (a step that runs only for papers that mention them).",

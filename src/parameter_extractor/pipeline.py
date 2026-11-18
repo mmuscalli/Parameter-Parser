@@ -112,6 +112,7 @@ class RunResult:
     usage: List[StageUsage]
     flags_path: Optional[Path] = None   # None when nothing was flagged
     observations_path: Optional[Path] = None   # long format: one value per line, with provenance
+    record_path: Optional[Path] = None         # nested: paper > sets > rows, values by facet (record_tree.py)
     gold_standard_score: Optional[dict] = None
     figures: List[dict] = field(default_factory=list)   # [{figure_id, status, series, points, image, ...}]
     equations: List[EquationCandidate] = field(default_factory=list)   # labelled equations found
@@ -1137,6 +1138,23 @@ def _write_equations(ctx: RunContext, equations: List[EquationCandidate]) -> Non
             json.dumps([e.model_dump() for e in equations], indent=2, ensure_ascii=False))
 
 
+def _write_record(ctx, ex: "Extraction", observations, order, renames: dict) -> Optional[Path]:
+    """<paper>_record.json (record_tree.py): the observations as a tree of the pack's levels, values grouped by
+    facet. A failure is a note, never a failed run (the CSVs are written already)."""
+    from parameter_extractor import __version__, record_tree
+    path = ctx.run_dir / f"{ex.paper_id}_record.json"
+    about = {"paper": ex.paper_id, "read_from": ex.source.label if ex.source else str(ex.pdf_path),
+             "data_pack": packs.current().id, "app_version": __version__}
+    if renames:
+        about["column_names"] = renames                 # columns written under a compound's chosen name
+    try:
+        record_tree.write(observations, path, order, record_tree.plan_labels(ex.structure, observations), about)
+    except Exception as e:                               # noqa: BLE001
+        ctx.note("assemble", f"The nested record (JSON) wasn't written: {type(e).__name__}: {e}")
+        return None
+    return path
+
+
 def plan_figure(extraction: Extraction, figure: FigureCandidate) -> FigurePlan:
     """Suggestions for digitizing one figure (axis columns, series, conditions).
     One API call; safe to run on a background thread. If the experiment
@@ -1562,6 +1580,8 @@ def finish(
     write_template_csv(observations_to_records(observations), csv_path, column_categories=chosen, registry=registry)
     # every column of the dataset with its category (the dataset CSV keeps one header row)
     write_column_list(write_template_csv.header, order, ctx.run_dir / f"{ex.paper_id}_columns.csv")
+    # the same data as a tree of levels and facets, for JSON-based data platforms (record_tree.py)
+    record_path = _write_record(ctx, ex, observations, order, renames_for({o.column for o in observations}, registry))
 
     # flags about exactly the same values become one entry (Mickey, 2026-11-11: BaCl2 of eder1994 flagged twice --
     # identity inferred, and medium confidence): the strongest reason leads, the others listed under it (flag_targets)
@@ -1603,7 +1623,7 @@ def finish(
                    equations=[{"label": e.label, "page": e.page, "latex": e.latex} for e in ex.equations],
                    **({"corrections_carried_over": len(carried)} if carried else {}))
 
-    return RunResult(paper_id=ex.paper_id, run_dir=ctx.run_dir, csv_path=csv_path, rows=rows,
+    return RunResult(paper_id=ex.paper_id, run_dir=ctx.run_dir, csv_path=csv_path, rows=rows, record_path=record_path,
                      paper_flags=paper_flags, row_flags=row_flags, usage=list(ctx.usage),
                      flags_path=flags_path, gold_standard_score=gold_score,
                      observations_path=observations_path,

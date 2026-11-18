@@ -70,6 +70,10 @@ Version: `parameter_extractor.__version__` (0.5.0, tag `v0.5.0`), the one place 
 - `step_info.py`: what a built-in step (chemistry, analysis, fit_models) reads, records, fills and is told for a pack
   (read-only pages in the pack editor's Steps tab and on module pages). Update its `DOCS` when a step's columns change.
 - `diagnostics.py`: `--self-check` (free; verifies an install or a built app).
+- `record_tree.py` (branch `levels-and-facets` only, step 1): the run's observations as a tree of the pack's levels
+  (`levels`, category `level`), values grouped by facet -> `<paper>_record.json`; flattens back to the same CSVs
+  (tests/test_record_tree.py). Later steps (tree view, inheritance replacing shared/group columns, a Run level
+  in the row plan) are planned in docs/history 2026-11-18.
 - `estimate.py`: cost and time before a run (under the Run button, `--estimate-only`), from `estimate_data.json`
   (rebuild it with `scripts/build_estimate_data.py` after many new runs; check with `scripts/check_estimates.py`).
 

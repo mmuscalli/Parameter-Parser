@@ -1,5 +1,6 @@
 {
   "id": "flow_reactor",
+  "level": "set",
   "label": "Hydrothermal flow reactor",
   "description": "Records the settings of continuous flow reactors for hydrothermal and supercritical-water experiments. Applies to flow-reactor studies of amino acid and peptide stability.",
   "covers": "Residence time, flow rate, quench temperature, injection volume and the reactor type.",

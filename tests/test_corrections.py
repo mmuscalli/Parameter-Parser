@@ -40,6 +40,17 @@ def _line(path: Path, full_id: str, column: str) -> dict:
         return next((r for r in csv.DictReader(f) if r["full_id"] == full_id and r["column"] == column), {})
 
 
+def _record_values(path: Path) -> dict:
+    """{(row, column): value with its provenance} from the nested record, every row with what its set and paper hold."""
+    from parameter_extractor import record_tree
+    data = json.loads(path.read_text())
+    out = {}
+    for row, values in record_tree._rows(record_tree.from_json(data), {}):
+        for column, payload in values.items():
+            out[(row.id, column)] = payload
+    return out
+
+
 def _an_empty_column(result) -> str:
     """A column the dataset has for the paper's rows but left empty in the first row."""
     with open(result.csv_path, newline="", encoding="utf-8") as f:
@@ -55,6 +66,7 @@ def test_a_correction_updates_the_files_and_reverts():
         run, fid = result.run_dir, result.rows[0].full_id
         obs = result.observations_path
         extracted = _cell(result.csv_path, fid, "initial_temperature_C")
+        before_any = _record_values(run / f"{result.paper_id}_record.json")
         value, problem = corr.stored_value("initial_temperature_C", "363.15 K")     # a unit converts
         assert not problem and value == "90.0"
         assert corr.stored_value("initial_temperature_C", "hot")[1]                 # not a number: refused
@@ -64,6 +76,13 @@ def test_a_correction_updates_the_files_and_reverts():
         assert line["value"] == "90.0" and line["extracted_value"] == extracted and line["corrected"].startswith("yes")
         saved = corr.load(run)[(fid, "initial_temperature_C")]
         assert saved.extracted == extracted and saved.note == "Methods, p. 2"
+        record = run / f"{result.paper_id}_record.json"
+        original = _record_values(record)
+        changed = _record_values(record)
+        assert changed[(fid, "initial_temperature_C")]["value"] == 90.0          # a number in the record
+        assert changed[(fid, "initial_temperature_C")]["extracted_value"] == extracted
+        others = {k: v for k, v in changed.items() if k != (fid, "initial_temperature_C")}
+        assert others == {k: v for k, v in original.items() if k in others}      # only that row changed
         corr.correct(run, fid, "initial_temperature_C", "90.0", "95.0")                  # a second change keeps the
         assert corr.load(run)[(fid, "initial_temperature_C")].extracted == extracted   # value as extracted
         empty = _an_empty_column(result)                                             # a value the extraction missed
@@ -75,6 +94,8 @@ def test_a_correction_updates_the_files_and_reverts():
         assert not corr.load(run) and not (run / corr.CORRECTIONS_FILE).exists()
         assert _cell(result.csv_path, fid, "initial_temperature_C") == extracted
         assert _line(obs, fid, "initial_temperature_C")["value"] == extracted
+        back = _record_values(record)                                                  # every change undone
+        assert back == before_any, [k for k in back if back[k] != before_any.get(k)]
         try:
             corr.correct(run, fid, "full_id", fid, "x")
             raise AssertionError("row ids can't be corrected")
@@ -90,10 +111,19 @@ def test_a_queue_papers_correction_reaches_the_combined_files():
         result = _run(queue)
         shutil.copy(result.csv_path, queue / "combined_extracted.csv")
         shutil.copy(result.observations_path, queue / "combined_observations.csv")
+        from parameter_extractor import record_tree
+        (queue / "combined_record.json").write_text(json.dumps(record_tree.combine([json.loads(
+            result.record_path.read_text())])))
         fid = result.rows[1].full_id
         corr.correct(result.run_dir, fid, "duration_hr", _cell(result.csv_path, fid, "duration_hr"), "7")
         assert _cell(queue / "combined_extracted.csv", fid, "duration_hr") == "7"
         assert _line(queue / "combined_observations.csv", fid, "duration_hr")["value"] == "7"
+        combined = json.loads((queue / "combined_record.json").read_text())
+        single = dict(combined, paper=combined["papers"][0]["paper"])
+        tmp_record = queue / "one.json"
+        tmp_record.write_text(json.dumps(single))
+        assert _record_values(tmp_record)[(fid, "duration_hr")]["value"] == 7
+        assert _record_values(result.run_dir / f"{result.paper_id}_record.json")[(fid, "duration_hr")]["value"] == 7
 
 
 def test_a_rebuild_keeps_corrections_and_checked_marks():

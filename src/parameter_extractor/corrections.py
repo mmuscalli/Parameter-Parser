@@ -265,11 +265,80 @@ def _write_changes(run_dir: Path, changes: List[Tuple[Correction, bool]]) -> Non
     long = wide.with_name(wide.name.replace("_extracted.csv", "_observations.csv"))
     if long.is_file():
         _rewrite(long, _all([_long(c, on) for c, on in changes]))
+    record = wide.with_name(wide.name.replace("_extracted.csv", "_record.json"))
+    if record.is_file():
+        _write_record(record, changes)
     queue = run_dir.parent                                # a paper of a queue: the combined files too
+    if (queue / "combined_record.json").is_file():
+        _write_record(queue / "combined_record.json", changes)
     if (queue / "combined_extracted.csv").is_file():
         _rewrite(queue / "combined_extracted.csv", _all([_wide(c, on) for c, on in changes]))
         if (queue / "combined_observations.csv").is_file():
             _rewrite(queue / "combined_observations.csv", _all([_long(c, on) for c, on in changes]))
+
+
+def _write_record(path: Path, changes: List[Tuple[Correction, bool]]) -> None:
+    """The nested record (record_tree.py; a queue's combined one: each of its papers) with the corrections: the value
+    of the corrected row only -- one its set or paper held for several rows is handed down to each first -- with the
+    extracted value and the reviewer's note beside it, as in the observations file."""
+    import json
+    from parameter_extractor import record_tree
+    from parameter_extractor.ingestion.observations import unit_for_column
+    data = json.loads(path.read_text(encoding="utf-8"))
+    papers = data["papers"] if "papers" in data else [data]
+    for paper_json in papers:
+        levels = {"levels": data.get("levels", paper_json.get("levels"))}
+        tree = record_tree.from_json({**levels, "paper": paper_json["paper"]})
+        changed = False
+        for c, corrected in changes:
+            path_nodes = record_tree.node_path(tree, c.full_id)
+            if not path_nodes:
+                continue
+            held = next((n.values[c.column] for n in reversed(path_nodes) if c.column in n.values), None)
+            if corrected:
+                payload = dict(held) if held else {**{k: "" for k in record_tree.PAYLOAD}, "confidence": None,
+                                                   "unit": unit_for_column(c.column), "origin": "corrected"}
+                payload["value"] = _typed(c.value, held["value"] if held else None)
+                payload[EXTRACTED_COLUMN] = c.extracted
+                payload[CORRECTED_COLUMN] = "yes" + (f": {c.note}" if c.note else "")
+            elif held is None or (not c.extracted and held.get("origin") == "corrected"):
+                payload = None
+            else:
+                payload = {k: v for k, v in held.items() if k not in (EXTRACTED_COLUMN, CORRECTED_COLUMN)}
+                payload["value"] = _typed(c.extracted, held["value"])
+            changed |= record_tree.set_value(tree, c.full_id, c.column, payload)
+        if changed:
+            facets = _record_facets(data, paper_json)
+            paper_json["paper"] = record_tree.node_json(tree, facets)
+    path.write_text(json.dumps(data, indent=1, ensure_ascii=False) + "\n", encoding="utf-8")
+
+
+def _typed(text: str, like):
+    """A value typed or read as text, as the record holds values: a number where the value it replaces was one (or,
+    for a new value, where it reads as one)."""
+    if isinstance(like, str) and like:
+        return text
+    try:
+        number = float(text)
+    except (TypeError, ValueError):
+        return text
+    return int(number) if isinstance(like, int) and not isinstance(like, bool) and number.is_integer() else number
+
+
+def _record_facets(data: dict, paper_json: dict):
+    """The facet of each column as the record names it (its header), for writing a changed tree back."""
+    from parameter_extractor import record_tree
+    levels = [record_tree.Level(lv["id"], lv["label"]) for lv in data.get("levels", paper_json.get("levels", []))]
+    of = {}
+
+    def walk(node):
+        for facet, values in node.get("facets", {}).items():
+            for column in values:
+                of[column] = facet
+        for child in node.get("children", []):
+            walk(child)
+    walk(paper_json["paper"])
+    return record_tree.KnownFacets(levels, of, [f["id"] for f in data.get("facets", paper_json.get("facets", []))])
 
 
 # ---- checking a value against its column ----------------------------------------------------------------------------

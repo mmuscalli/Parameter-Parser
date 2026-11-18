@@ -42,6 +42,8 @@ def test_nielsen2019_replay_reproduces_reference():
             result = run_pipeline(PDF, RunConfig.from_settings(api_key="replay", output_dir=Path(tmp),
                                                                pack="exoplanets", online_checks=True))
             assert result.csv_path.read_text() == (REF / "nielsen2019_extracted.csv").read_text()
+            from record_check import json_reproduces_csv
+            assert json_reproduces_csv(result)   # the nested record too
             assert result.observations_path.read_text() == (REF / "nielsen2019_observations.csv").read_text()
             report = json.loads((result.run_dir / "archive_validation.json").read_text())
             assert report == json.loads((REF / "archive_validation.json").read_text())

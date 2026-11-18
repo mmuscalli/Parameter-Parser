@@ -43,6 +43,8 @@ def test_every_value_has_provenance_and_csv_round_trips():
     with tempfile.TemporaryDirectory() as tmp, patch.object(api_client, "_send", _replay_send):
         result = run_pipeline(PDF, RunConfig.from_settings(api_key="x", output_dir=Path(tmp)))
         assert result.csv_path.read_text() == (REPLAY_DIR / "eder1994_auto_extracted.csv").read_text(), pf.why_replay_differs()
+        from record_check import json_reproduces_csv
+        assert json_reproduces_csv(result)   # the nested record too
         obs = list(csv.DictReader(open(result.observations_path)))
         # + a calculated total per row; - one per row since the 2 authors became one author_list (2026-10-22);
         # + data_location on every row (2026-10-29); + result_basis on every row (2026-11-12);

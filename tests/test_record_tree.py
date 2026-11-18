@@ -1,0 +1,167 @@
+"""
+A paper's data as a tree of levels and facets (record_tree.py, branch levels-and-facets step 1): values sit as high as
+their facet allows when every row under a node agrees (value AND provenance), and flattening gives back exactly what
+the tree was built from. Gate: for every reference run, the tree reproduces its expected dataset CSV and observations
+CSV byte for byte, and the JSON written beside them reproduces the dataset CSV byte for byte (and the same
+observations; JSON keeps no order within a row). No API calls.
+
+Run with: python tests/test_record_tree.py
+"""
+import _isolation  # noqa: F401,E402 -- first: the user's own data never reaches a test (tests/_isolation.py)
+import json
+import sys
+import tempfile
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT / "tests"))
+sys.path.insert(0, str(ROOT / "src"))
+
+from parameter_extractor import packs, record_tree  # noqa: E402
+from parameter_extractor.column_order import ColumnOrder  # noqa: E402
+from parameter_extractor.ingestion.observations import Observation  # noqa: E402
+
+
+def _obs(full_id, column, value, **kw):
+    return Observation(full_id=full_id, set_id=full_id[:6], sample_id=full_id[6:], entry_number=int(full_id[6:]),
+                       column=column, value=value, **kw)
+
+
+def _facets():
+    packs.activate("prebiotic_chemistry")
+    order = ColumnOrder()
+    return record_tree.Facets(order, record_tree.levels()), order
+
+
+def test_values_sit_as_high_as_their_facet_allows_and_their_rows_agree():
+    facets, order = _facets()
+    meta = dict(origin="metadata", source="title page")
+    obs = []
+    for fid, yld in (("001001001", 2.5), ("001001002", 3.0), ("001002001", 1.0)):
+        obs += [_obs(fid, "paper_title", "A paper", **meta),
+                _obs(fid, "initial_temperature_C", 81.0 if fid < "001002" else 90.0, origin="structure", source="T1"),
+                _obs(fid, "sampled_Gly-Gly_aq_%yield", 2.0, origin="chemistry", source=f"row {fid}"),
+                _obs(fid, "vessel_material", "glass", origin="methodology", source="Methods")]
+    obs.append(_obs("001001002", "initial_pH", 7.0, origin="structure", source="T1"))       # one row only
+    paper = record_tree.build(obs, facets)
+    s1, s2 = paper.children
+    assert paper.id == "001" and set(paper.values) == {"paper_title"}           # metadata: up to the paper
+    assert "initial_temperature_C" in s1.values and "initial_temperature_C" in s2.values   # differs between sets
+    assert "vessel_material" in s1.values and "vessel_material" not in paper.values   # methodology: at most the set
+    # same value, different provenance: stays on each row; a measured product never goes above its row
+    assert all("sampled_Gly-Gly_aq_%yield" in r.values for r in s1.children)
+    assert "initial_pH" in s1.children[1].values and "initial_pH" not in s1.values      # not every row has it
+    # each row keeps its own order of values: flattening gives back the very list
+    by_row = {}
+    for o in obs:
+        by_row.setdefault(o.full_id, []).append(o)
+    assert record_tree.flatten(paper) == [o for fid in by_row for o in by_row[fid]]
+
+
+def test_a_number_and_its_text_are_not_one_value():
+    facets, _ = _facets()
+    obs = [_obs("001001001", "initial_temperature_C", 81.0), _obs("001001002", "initial_temperature_C", 81)]
+    paper = record_tree.build(obs, facets)
+    assert not paper.children[0].values and record_tree.flatten(paper) == obs
+
+
+def test_the_json_round_trip_and_its_shape():
+    facets, order = _facets()
+    obs = [_obs("001001001", "paper_title", "T", origin="metadata"), _obs("001001001", "initial_pH", 7.0, unit="pH"),
+           _obs("001001002", "paper_title", "T", origin="metadata"), _obs("001001002", "initial_pH", 8.0, unit="pH",
+                                                                          quote="pH 8", page=3, confidence="high")]
+    data = record_tree.to_json(record_tree.build(obs, facets, {"001001": "Table 1 block", "001001002": "run 2"}),
+                               facets)
+    json.dumps(data)                                                              # plain JSON
+    assert data["format"] == record_tree.FORMAT and [lv["id"] for lv in data["levels"]] == ["paper", "set", "sample"]
+    assert {f["id"]: f["level"] for f in data["facets"]}["metadata"] == "paper"
+    p = data["paper"]
+    assert p["facets"] == {"metadata": {"paper_title": {"value": "T", "origin": "metadata"}}}
+    row2 = p["children"][0]["children"][1]
+    assert p["children"][0]["label"] == "Table 1 block" and row2["label"] == "run 2"
+    assert row2["facets"]["conditions"]["initial_pH"] == {"value": 8.0, "unit": "pH", "page": 3, "quote": "pH 8",
+                                                         "confidence": "high"}
+    back = record_tree.flatten(record_tree.from_json(json.loads(json.dumps(data))), order)
+    assert sorted(map(repr, back)) == sorted(map(repr, obs))
+
+
+def test_a_correction_changes_only_its_row():
+    facets, _ = _facets()
+    obs = [_obs(f"00100100{i}", "initial_temperature_C", 81.0, source="T1") for i in (1, 2, 3)]
+    paper = record_tree.build(obs, facets)
+    assert "initial_temperature_C" in paper.children[0].values
+    assert record_tree.set_value(paper, "001001002", "initial_temperature_C", dict(obs[0].model_dump(
+        include=set(record_tree.PAYLOAD)), value=85.0))
+    values = [o.value for o in record_tree.flatten(paper)]
+    assert values == [81.0, 85.0, 81.0]
+    assert record_tree.set_value(paper, "001001003", "initial_temperature_C", None)
+    assert [o.full_id for o in record_tree.flatten(paper)] == ["001001001", "001001002"]
+    assert not record_tree.set_value(paper, "009009009", "x", None)
+
+
+def test_levels_and_their_limit():
+    assert record_tree.check_levels([{"id": "paper", "label": "paper"}, {"id": "set", "label": "set"},
+                                     {"id": "run", "label": "run"}, {"id": "obs", "label": "observation"}]) == []
+    five = [{"id": f"l{i}", "label": f"level {i}"} for i in range(5)]
+    assert any("at most 4" in p for p in record_tree.check_levels(five))
+    assert record_tree.check_levels(five, limit=5) == []                         # the pack's level_limit
+    assert record_tree.check_levels([{"id": "paper", "label": "paper"}])
+    packs.activate("exoplanets")
+    assert [lv.label for lv in record_tree.levels()][1:] == [packs.current().manifest.units["set"],
+                                                             packs.current().manifest.units["sample"]]
+    packs.activate("prebiotic_chemistry")
+
+
+def test_every_reference_run_is_reproduced_by_its_tree_and_its_json():
+    from parameter_extractor.compound_names import renames_for
+    from parameter_extractor.ingestion.flatten_to_template import write_template_csv
+    from parameter_extractor.ingestion.observations import (observations_to_records, rows_to_observations,
+                                                            write_observations_csv)
+    from test_reference_runs import REFERENCES, replay_reference
+    refs = sorted(p for p in REFERENCES.iterdir() if (p / "reference.json").is_file())
+    assert refs
+    for ref in refs:
+        with tempfile.TemporaryDirectory() as tmp:
+            result = replay_reference(ref, Path(tmp) / "run")
+            assert result is not None, f"{ref.name}: its PDF isn't on this computer"
+            packs.activate(result.pack or json.loads((ref / "reference.json").read_text())["pack"])
+            chosen = {a["column"]: a.get("category", "") for a in result.accepted_variables}
+            order = ColumnOrder(chosen=chosen)
+            observations = rows_to_observations(result.rows)
+            facets = record_tree.Facets(order, record_tree.levels())
+            flat = record_tree.flatten(record_tree.build(observations, facets))
+            assert flat == observations, ref.name
+            wide, long = Path(tmp) / "wide.csv", Path(tmp) / "long.csv"
+            write_template_csv(observations_to_records(flat), wide, column_categories=chosen)
+            write_observations_csv(flat, long, order, renames=renames_for({o.column for o in flat}, None))
+            assert wide.read_text() == (ref / "expected_extracted.csv").read_text(), ref.name
+            assert long.read_text() == (ref / "expected_observations.csv").read_text(), ref.name
+            # the JSON the run wrote
+            data = json.loads(result.record_path.read_text())
+            back = record_tree.flatten(record_tree.from_json(data), order)
+            assert sorted(map(repr, back)) == sorted(map(repr, observations)), ref.name
+            write_template_csv(observations_to_records(back), wide, column_categories=chosen)
+            assert wide.read_text() == (ref / "expected_extracted.csv").read_text(), ref.name
+            rows = sum(1 for _ in _leaves(data["paper"]))
+            print(f"  {ref.name}: {len(observations)} values, {rows} rows; "
+                  f"{len(observations) - _stored(data['paper'])} copies saved by the tree")
+            packs.activate("prebiotic_chemistry")
+
+
+def _leaves(node):
+    if not node.get("children"):
+        yield node
+    for c in node.get("children", []):
+        yield from _leaves(c)
+
+
+def _stored(node):
+    return sum(len(v) for v in node.get("facets", {}).values()) + sum(_stored(c) for c in node.get("children", []))
+
+
+if __name__ == "__main__":
+    for name, fn in list(globals().items()):
+        if name.startswith("test_") and callable(fn):
+            fn()
+            print(f"PASS: {name}")
+    print("All record tree tests passed.")

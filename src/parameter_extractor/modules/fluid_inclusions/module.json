@@ -1,5 +1,6 @@
 {
   "id": "fluid_inclusions",
+  "level": "set",
   "label": "Fluid inclusions",
   "description": "Records fluid-inclusion measurements and the mineral hosts of impact-related hydrothermal deposits. Applies to studies of hydrothermal activity in impact craters.",
   "covers": "Homogenization temperature, final ice melting temperature, salinity, inclusion size, degree of fill, inclusion composition and host mineral.",

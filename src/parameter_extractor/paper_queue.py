@@ -269,6 +269,13 @@ class PaperQueue:
                     for i, path in enumerate(observations):
                         lines = Path(path).read_text(encoding="utf-8").splitlines(keepends=True)
                         f.writelines(lines if i == 0 else lines[1:])
+            records = [p.result.record_path for p in finished if getattr(p.result, "record_path", None)
+                       and Path(p.result.record_path).is_file()]
+            if records:                               # every paper's nested record in one (record_tree.py)
+                from parameter_extractor import record_tree
+                out["record"] = self.out_dir / "combined_record.json"
+                combined = record_tree.combine([json.loads(Path(r).read_text(encoding="utf-8")) for r in records])
+                out["record"].write_text(json.dumps(combined, indent=1, ensure_ascii=False) + "\n", encoding="utf-8")
         out["papers_csv"] = self.out_dir / "papers.csv"
         with open(out["papers_csv"], "w", newline="", encoding="utf-8") as f:
             w = csv.writer(f)

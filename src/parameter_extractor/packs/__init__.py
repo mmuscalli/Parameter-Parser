@@ -67,6 +67,10 @@ class PackManifest(BaseModel):
     builtin_stages: List[str] = Field(default_factory=list)
     postprocess: List[str] = Field(default_factory=list)
     units: Dict[str, str] = Field(default_factory=lambda: {"set": "set", "sample": "sample"})
+    # what contains what, top (the paper) to bottom (the dataset's row): [{id, label}] (record_tree.py); empty = the
+    # paper, then `units`' set and sample. At most record_tree.MAX_LEVELS unless level_limit says more.
+    levels: List[dict] = Field(default_factory=list)
+    level_limit: int = 0
     # send the paper text with long runs of layout spaces collapsed (-20% tokens; tables go
     # as images anyway)
     compact_text: bool = False

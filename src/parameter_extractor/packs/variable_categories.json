@@ -3,6 +3,7 @@
   "categories": [
     {
       "id": "metadata",
+      "level": "paper",
       "label": "Metadata",
       "description": "about the study or its materials rather than one experiment's conditions: chemical suppliers and purities, sample or material origin, data or code availability",
       "value_type": "text",
@@ -21,6 +22,7 @@
     },
     {
       "id": "methodology",
+      "level": "set",
       "label": "Experimental Methodology",
       "description": "how the experiment was set up and run, in words: apparatus, heating or mixing method, sealing, atmosphere handling, sterilisation, sampling procedure",
       "value_type": "any",

@@ -52,10 +52,13 @@ def test_check_finds_problems():
         spec["parameters"].append({"column": "mass_g", "unit": "g"})                # no description
         spec["trigger"] = {}                                                        # never runs
         d.manifest["category_columns"]["nowhere"] = {"columns": ["temperature_C"]}
+        d.manifest["levels"] = [{"id": f"l{i}", "label": f"level {i}"} for i in range(5)]     # one too many
+        d.manifest.setdefault("variable_categories", []).append({"id": "lost", "label": "Lost", "level": "run"})
         messages = [str(p) for p in check(d)]
         expect = ["'temperature_C' is listed twice", "unknown calculation 'no_such_step'",
                   "'mixing' works on the results of the 'chemistry' step", "named in °C but the parameter's unit is bar",
-                  "'mass_g' has no description", "it never runs", "isn't a category"]
+                  "'mass_g' has no description", "it never runs", "isn't a category", "at most 4",
+                  "sits at level 'run', which the data pack doesn't have"]
         for e in expect:
             assert any(e in m for m in messages), (e, messages)
         empty = PackDraft.load(pack.folder)

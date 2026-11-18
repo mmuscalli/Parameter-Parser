@@ -8,6 +8,7 @@ Run with: python tests/test_paper_queue.py
 """
 import _isolation  # noqa: F401,E402 -- first: the user's own data never reaches a test (tests/_isolation.py)
 import csv
+import json
 import sys
 import tempfile
 import threading
@@ -65,6 +66,8 @@ def test_queue_reads_extracts_and_combines():
         papers = list(csv.DictReader(open(out["papers_csv"])))
         assert [p["status"] for p in papers] == ["finished", "failed", "finished"]
         assert out["observations"].read_text().count("full_id,") == 1          # one header
+        record = json.loads(out["record"].read_text())                       # every paper's nested record in one
+        assert [p["paper"]["id"] for p in record["papers"]] == ["001", "003"] and record["levels"][0]["id"] == "paper"
 
 
 def test_queue_without_a_person_and_cancelling():

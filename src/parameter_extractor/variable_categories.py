@@ -42,6 +42,8 @@ class VariableCategory(BaseModel):
     columns: List[str] = Field(default_factory=list)
     patterns: List[str] = Field(default_factory=list)
     table_order: int = 500
+    # the highest level of the pack's tree its values may sit at (record_tree.py: 'paper', 'set', ...); '' = the row
+    level: str = ""
 
     @property
     def assignable(self) -> bool:

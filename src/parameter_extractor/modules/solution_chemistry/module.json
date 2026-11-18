@@ -33,6 +33,7 @@
   "variable_categories": [
     {
       "id": "starting_compounds",
+      "level": "set",
       "table_order": 60,
       "label": "Starting Compounds",
       "value_type": "number",

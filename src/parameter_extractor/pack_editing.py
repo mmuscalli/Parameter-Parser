@@ -445,6 +445,16 @@ def check(draft: PackDraft) -> List[Problem]:
         elif CALCULATIONS[calc][1] and CALCULATIONS[calc][1] not in steps:
             add("warning", "Calculations", f"'{calc}' works on the results of the '{CALCULATIONS[calc][1]}' step, "
                                            f"which this data pack doesn't use: it will do nothing.")
+    # levels and the level of each category (record_tree.py: the nested record)
+    from parameter_extractor import record_tree
+    declared = m.get("levels") or []
+    for message in record_tree.check_levels(declared, int(m.get("level_limit") or 0)) if declared else []:
+        add("error", "Levels", message)
+    level_ids = [str(lv.get("id", "")) for lv in declared] or ["paper", "set", "sample"]
+    for cat in m.get("variable_categories", []):
+        if cat.get("level") and cat["level"] not in level_ids:
+            add("error", "Categories", f"category '{cat.get('id', '')}' sits at level '{cat['level']}', which the data "
+                                       f"pack doesn't have (levels: {', '.join(level_ids)}).")
     for key in ("standard_columns", "species_cids"):
         if m.get(key) and not (draft.folder / m[key]).is_file():
             add("error", "pack.json", f"{key} names '{m[key]}', which isn't in the folder.")

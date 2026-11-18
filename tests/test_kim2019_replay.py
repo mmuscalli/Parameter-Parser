@@ -38,6 +38,8 @@ def test_kim2019_replay_reproduces_reference():
     with tempfile.TemporaryDirectory() as tmp, patch.object(api_client, "_send", make_replay(REF)):
         result = run_pipeline(PDF, RunConfig.from_settings(api_key="replay", output_dir=Path(tmp)))
         assert result.csv_path.read_text() == (REF / "kim2019_extracted.csv").read_text(), pf.why_replay_differs()
+        from record_check import json_reproduces_csv
+        assert json_reproduces_csv(result)   # the nested record too
         assert result.observations_path.read_text() == (REF / "kim2019_observations.csv").read_text(), pf.why_replay_differs()
 
         rows = list(csv.DictReader(open(result.csv_path)))

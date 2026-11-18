@@ -186,6 +186,8 @@ def load_result(run_dir: Path):
                        paper_flags=paper_flags, row_flags=row_flags, usage=usage,
                        flags_path=run_dir / "plausibility_flags.json" if flags else None,
                        observations_path=observations if observations.is_file() else None,
+                       record_path=record if (record := csv_path.with_name(
+                           csv_path.name.replace("_extracted.csv", "_record.json"))).is_file() else None,
                        figures=figures, tables=tables, equations=equations, new_variables=left_out,
                        accepted_variables=variables.get("accepted", []),
                        unfound_terms=summary.get("unfound_terms", []),
