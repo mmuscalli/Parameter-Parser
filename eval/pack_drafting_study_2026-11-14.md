@@ -210,3 +210,46 @@ Rabinowitz1978 25 against 10.
    decimals turned 0.003 mM into 0.00, and log10(0) stopped the figure; the digitizer's rounding by hand had the same
    flaw. On a log axis the decimals now mean significant figures (decimals + 1), and a value that would still round
    to 0 keeps its exact value (`calibration.rounded`, used for snapping points and for stored values).
+
+## Re-measured (2026-11-17, Mickey: items 1 and 2 of the next steps)
+
+**Method.** The four queues (and the scanned papers' reruns) were rebuilt from their saved answers: free, no requests,
+current code and the study packs with their fill-in settings. Scored with `evaluate_v3.py` against the corrected hand
+dataset (`PaperDataTemplate_Nov15_2026.csv`). Mickey's rules:
+- the hand dataset is a reference gathered by another method, not ground truth (slips, figures not digitized);
+- new columns (parameters the hand dataset has no column for) don't count against accuracy: counted, not scored;
+- rounding and digitizing differ: every comparison has a 'match' tier (within rounding) and a 'close' tier (10 %).
+
+Measures: recall of the printed hand values (as v2); agreement of the run's values in columns both datasets fill for
+the paper (hand names brought to the app's names); new values. Each run is scored as written and 'reviewed' (plus the
+values an unattended run holds back for review: compounds and variables outside the pack's vocabulary,
+new_variables.json, as if accepted).
+
+**Mean recall per paper, papers with rows (37):**
+
+| | Pack 5 | Pack 25 | Pack 56 | Curated |
+|---|---|---|---|---|
+| Old runs, old hand data (v3 rules) | 0.666 | 0.613 | 0.711 | 0.721 |
+| Old runs, corrected hand data | 0.690 | 0.646 | 0.735 | 0.737 |
+| Rebuilt, corrected hand data | 0.699 | 0.648 | 0.736 | 0.737 |
+| Rebuilt + held-back values accepted | 0.731 | 0.662 | 0.751 | 0.741 |
+
+- The corrected hand data accounts for 2-3 points; the rebuild (fill-in settings, pH fix below) under 1; the review
+  step 1-3 (most for chemistry: Pack 5 inputs 0.70 -> 0.92, outputs % 0.73 -> 0.86).
+- Agreement on shared columns (match / close): methodology 0.78-0.86 / 0.85-0.88, chemistry in 0.85-0.88 /
+  0.87-0.89, chemistry out 0.88-0.91 / 0.90-0.93.
+- Fill-in settings barely moved duration (drafted 0.42 -> 0.43-0.44; curated 0.59). Same `duration_hr` column, but
+  drafted packs fill it on 622-709 rows against 827: a real gap, next to look into. pH recall is low in every pack
+  (0.42-0.54 of 107 printed values), outputs in mM 0.05-0.07 (most hand mM are back-calculated from yields).
+
+**Item 2, 'too many rows', is not over-splitting.** The extra rows are real rows without values in an unattended run:
+- Islam2003 (22 vs 5): Table 3's 5 rows match the hand data value for value; 17 rows from Figs 2 and 7, not digitized.
+- Huber1998 (46 vs 10): Table 1 has 46 runs (Phe 12, L-Tyr 12, DL-Tyr 12, Gly 10); the hand data took the 10 Gly runs.
+  The Phe / Tyr products, initial Tyr, FeS and NiS (90 values) were extracted and held back for review.
+- Rabinowitz1978 (25 vs 10): 8 rows reproduce Table 2, cited from Wieker (1960) (polyphosphates, no peptides), marked
+  with `original_data_reference`.
+per_paper_v3.csv has, per paper: rows with a product value, figure rows still empty, cited rows, other empty rows.
+
+**Fixed on the way:** a number parameter answered in its text field with value 0 was written as 0 (Huber1998: pH
+'7.5-9.9 (varies by run, see sample)' -> pH 0.0 on 12 rows); and 'not on arXiv' was never cached by the table check,
+so every run and rebuild asked arXiv again for every paper, 3 s apart (a 56-paper rebuild crawled).

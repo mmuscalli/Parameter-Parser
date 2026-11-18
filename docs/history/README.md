@@ -141,3 +141,4 @@ current month's file (start `YYYY-MM.md` in a new month), with one line here.
 - Study packs updated, scanned papers rerun; PaperDataTemplate audit (2026-11-14, Mickey)
 - PaperDataTemplate audit v2: author list, Nooner1977, Huber1998 gases, four added papers (2026-11-14, Mickey)
 - PaperDataTemplate v3: analysis techniques and instruments (2026-11-15, Mickey)
+- Study re-measured with corrected hand data; number-as-text and arXiv-cache fixes (2026-11-17, Mickey)

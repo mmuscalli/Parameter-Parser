@@ -83,6 +83,28 @@ def test_stage_values_with_hi_and_negative_values():
     assert {k: v.value for k, v in single.items()} == {"initial_temperature_C": -5}
 
 
+def test_number_parameter_answered_in_its_text():
+    """Huber1998 (2026-11-17): pH came back as v 0 with txt '7.5-9.9 (varies by run, see sample)' and was written as
+    pH 0.0 on 12 rows. The text is read: a range, a number or a quantity; anything else is left out and said."""
+    packs.activate("prebiotic_chemistry")
+    from parameter_extractor.stages.optional import load_specs, stage_values
+    spec = load_specs()["experimental_conditions"]
+    Item, _ = spec.models()
+    base = dict(q="pH 7 to 10", src="Table 1", c="low")
+
+    def values(**kw):
+        out, problems = stage_values(spec, Item.model_validate({**base, **kw}))
+        return {k: v.value for k, v in out.items()}, problems
+
+    assert values(col="initial_pH", v=0, txt="7.5-9.9 (varies by run, see sample)")[0] == {"initial_pH_range": "7.5:9.9"}
+    assert values(col="initial_pH", v=0, txt="9.8")[0] == {"initial_pH": 9.8}
+    assert values(col="initial_temperature_C", v=0, txt="100 °C")[0] == {"initial_temperature_C": 100}
+    left, problems = values(col="initial_pH", v=0, txt="varies by run")
+    assert left == {} and "given as text" in problems[0], problems
+    assert values(col="initial_pH", v=0)[0] == {"initial_pH": 0}            # a real 0 with no text is kept
+    assert values(col="initial_pH", v=7.1, txt="7.1")[0] == {"initial_pH": 7.1}
+
+
 def test_tables_are_cropped():
     if not EDER.is_file():
         print("SKIP: needs eder1994.pdf"); return

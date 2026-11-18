@@ -282,9 +282,21 @@ def _arxiv_text(ex, config) -> Tuple[str, str]:
         cached = cache.record(key) if cache is not None else None
         if isinstance(cached, Exception):
             return "", ""
-        record = cached or ax.resolve(ident)
-        if cache is not None and not cached:
-            cache.put(key, record)
-            cache.save()
+        if cached is None:
+            try:
+                record = ax.resolve(ident)
+            except ax.PaperSourceError as e:
+                # 'not on arXiv' is cached too (2026-11-17: it raised past the cache, so every run and rebuild asked
+                # arXiv again for each paper, 3 s apart and backing off -- a 56-paper rebuild crawled); network
+                # trouble isn't cached (LookupCache.put)
+                if cache is not None:
+                    cache.put(key, e)
+                    cache.save()
+                raise
+            if cache is not None:
+                cache.put(key, record)
+                cache.save()
+        else:
+            record = cached
     text = ax.fetch_html_text(record, cache=cache)
     return (text or ""), f"the arXiv version {record.arxiv_id}{record.version}"

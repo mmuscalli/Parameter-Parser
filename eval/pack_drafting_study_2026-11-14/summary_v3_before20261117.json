@@ -1,0 +1,2662 @@
+{
+ "written": {
+  "peptide_pack_5": {
+   "all": {
+    "papers": 46,
+    "rows": 716,
+    "hand_rows": 1265,
+    "metadata": {
+     "recall": 0.723,
+     "recall_close": 0.723,
+     "paper_mean_recall": 0.723,
+     "paper_mean_recall_close": 0.723,
+     "printed_values": 184,
+     "shared_values": 0,
+     "agree_match": null,
+     "agree_close": null
+    },
+    "methodology": {
+     "recall": 0.477,
+     "recall_close": 0.479,
+     "paper_mean_recall": 0.555,
+     "paper_mean_recall_close": 0.556,
+     "printed_values": 532,
+     "shared_values": 403,
+     "agree_match": 0.792,
+     "agree_close": 0.868
+    },
+    "chemistry_in": {
+     "recall": 0.562,
+     "recall_close": 0.562,
+     "paper_mean_recall": 0.533,
+     "paper_mean_recall_close": 0.533,
+     "printed_values": 73,
+     "shared_values": 99,
+     "agree_match": 0.848,
+     "agree_close": 0.869
+    },
+    "chemistry_out": {
+     "recall": 0.372,
+     "recall_close": 0.388,
+     "paper_mean_recall": 0.311,
+     "paper_mean_recall_close": 0.322,
+     "printed_values": 121,
+     "shared_values": 505,
+     "agree_match": 0.883,
+     "agree_close": 0.901
+    },
+    "overall": {
+     "recall": 0.52,
+     "recall_close": 0.523,
+     "paper_mean_recall": 0.555,
+     "paper_mean_recall_close": 0.558,
+     "printed_values": 910
+    },
+    "title": {
+     "recall": 0.761,
+     "recall_close": 0.761,
+     "printed": 46
+    },
+    "journal": {
+     "recall": 0.674,
+     "recall_close": 0.674,
+     "printed": 46
+    },
+    "year": {
+     "recall": 0.739,
+     "recall_close": 0.739,
+     "printed": 46
+    },
+    "doi": {
+     "recall": 0.717,
+     "recall_close": 0.717,
+     "printed": 46
+    },
+    "experiment_type": {
+     "recall": null,
+     "recall_close": null,
+     "printed": 0
+    },
+    "solution_type": {
+     "recall": null,
+     "recall_close": null,
+     "printed": 0
+    },
+    "solvent": {
+     "recall": 0.739,
+     "recall_close": 0.739,
+     "printed": 46
+    },
+    "vessel": {
+     "recall": null,
+     "recall_close": null,
+     "printed": 0
+    },
+    "headspace_gas": {
+     "recall": 0.0,
+     "recall_close": 0.0,
+     "printed": 10
+    },
+    "solid_material": {
+     "recall": 0.205,
+     "recall_close": 0.205,
+     "printed": 39
+    },
+    "temperature": {
+     "recall": 0.676,
+     "recall_close": 0.676,
+     "printed": 34
+    },
+    "duration": {
+     "recall": 0.36,
+     "recall_close": 0.368,
+     "printed": 125
+    },
+    "pH": {
+     "recall": 0.36,
+     "recall_close": 0.36,
+     "printed": 139
+    },
+    "pressure": {
+     "recall": 0.333,
+     "recall_close": 0.333,
+     "printed": 9
+    },
+    "volume": {
+     "recall": 0.5,
+     "recall_close": 0.5,
+     "printed": 24
+    },
+    "solid_mass": {
+     "recall": 0.545,
+     "recall_close": 0.545,
+     "printed": 11
+    },
+    "flow_rate": {
+     "recall": 0.0,
+     "recall_close": 0.0,
+     "printed": 3
+    },
+    "cycles": {
+     "recall": 0.929,
+     "recall_close": 0.929,
+     "printed": 14
+    },
+    "analysis": {
+     "recall": 0.769,
+     "recall_close": 0.769,
+     "printed": 78
+    },
+    "inputs_mM": {
+     "recall": 0.562,
+     "recall_close": 0.562,
+     "printed": 73
+    },
+    "outputs_mM": {
+     "recall": 0.034,
+     "recall_close": 0.034,
+     "printed": 59
+    },
+    "outputs_pct": {
+     "recall": 0.694,
+     "recall_close": 0.726,
+     "printed": 62
+    },
+    "new_values": 172,
+    "new_columns_per_paper": 0.9,
+    "no_rows": 9
+   },
+   "with_rows": {
+    "papers": 37,
+    "rows": 716,
+    "hand_rows": 892,
+    "metadata": {
+     "recall": 0.899,
+     "recall_close": 0.899,
+     "paper_mean_recall": 0.899,
+     "paper_mean_recall_close": 0.899,
+     "printed_values": 148,
+     "shared_values": 0,
+     "agree_match": null,
+     "agree_close": null
+    },
+    "methodology": {
+     "recall": 0.593,
+     "recall_close": 0.596,
+     "paper_mean_recall": 0.69,
+     "paper_mean_recall_close": 0.691,
+     "printed_values": 428,
+     "shared_values": 403,
+     "agree_match": 0.792,
+     "agree_close": 0.868
+    },
+    "chemistry_in": {
+     "recall": 0.695,
+     "recall_close": 0.695,
+     "paper_mean_recall": 0.704,
+     "paper_mean_recall_close": 0.704,
+     "printed_values": 59,
+     "shared_values": 99,
+     "agree_match": 0.848,
+     "agree_close": 0.869
+    },
+    "chemistry_out": {
+     "recall": 0.441,
+     "recall_close": 0.461,
+     "paper_mean_recall": 0.391,
+     "paper_mean_recall_close": 0.405,
+     "printed_values": 102,
+     "shared_values": 505,
+     "agree_match": 0.883,
+     "agree_close": 0.901
+    },
+    "overall": {
+     "recall": 0.642,
+     "recall_close": 0.646,
+     "paper_mean_recall": 0.69,
+     "paper_mean_recall_close": 0.694,
+     "printed_values": 737
+    },
+    "title": {
+     "recall": 0.946,
+     "recall_close": 0.946,
+     "printed": 37
+    },
+    "journal": {
+     "recall": 0.838,
+     "recall_close": 0.838,
+     "printed": 37
+    },
+    "year": {
+     "recall": 0.919,
+     "recall_close": 0.919,
+     "printed": 37
+    },
+    "doi": {
+     "recall": 0.892,
+     "recall_close": 0.892,
+     "printed": 37
+    },
+    "experiment_type": {
+     "recall": null,
+     "recall_close": null,
+     "printed": 0
+    },
+    "solution_type": {
+     "recall": null,
+     "recall_close": null,
+     "printed": 0
+    },
+    "solvent": {
+     "recall": 0.919,
+     "recall_close": 0.919,
+     "printed": 37
+    },
+    "vessel": {
+     "recall": null,
+     "recall_close": null,
+     "printed": 0
+    },
+    "headspace_gas": {
+     "recall": 0.0,
+     "recall_close": 0.0,
+     "printed": 10
+    },
+    "solid_material": {
+     "recall": 0.286,
+     "recall_close": 0.286,
+     "printed": 28
+    },
+    "temperature": {
+     "recall": 0.958,
+     "recall_close": 0.958,
+     "printed": 24
+    },
+    "duration": {
+     "recall": 0.421,
+     "recall_close": 0.43,
+     "printed": 107
+    },
+    "pH": {
+     "recall": 0.467,
+     "recall_close": 0.467,
+     "printed": 107
+    },
+    "pressure": {
+     "recall": 0.429,
+     "recall_close": 0.429,
+     "printed": 7
+    },
+    "volume": {
+     "recall": 0.632,
+     "recall_close": 0.632,
+     "printed": 19
+    },
+    "solid_mass": {
+     "recall": 0.75,
+     "recall_close": 0.75,
+     "printed": 8
+    },
+    "flow_rate": {
+     "recall": 0.0,
+     "recall_close": 0.0,
+     "printed": 2
+    },
+    "cycles": {
+     "recall": 0.929,
+     "recall_close": 0.929,
+     "printed": 14
+    },
+    "analysis": {
+     "recall": 0.923,
+     "recall_close": 0.923,
+     "printed": 65
+    },
+    "inputs_mM": {
+     "recall": 0.695,
+     "recall_close": 0.695,
+     "printed": 59
+    },
+    "outputs_mM": {
+     "recall": 0.047,
+     "recall_close": 0.047,
+     "printed": 43
+    },
+    "outputs_pct": {
+     "recall": 0.729,
+     "recall_close": 0.763,
+     "printed": 59
+    },
+    "new_values": 172,
+    "new_columns_per_paper": 1.1,
+    "no_rows": 0
+   }
+  },
+  "peptide_pack_25": {
+   "all": {
+    "papers": 46,
+    "rows": 788,
+    "hand_rows": 1265,
+    "metadata": {
+     "recall": 0.723,
+     "recall_close": 0.723,
+     "paper_mean_recall": 0.723,
+     "paper_mean_recall_close": 0.723,
+     "printed_values": 184,
+     "shared_values": 0,
+     "agree_match": null,
+     "agree_close": null
+    },
+    "methodology": {
+     "recall": 0.424,
+     "recall_close": 0.453,
+     "paper_mean_recall": 0.465,
+     "paper_mean_recall_close": 0.487,
+     "printed_values": 578,
+     "shared_values": 404,
+     "agree_match": 0.775,
+     "agree_close": 0.847
+    },
+    "chemistry_in": {
+     "recall": 0.699,
+     "recall_close": 0.699,
+     "paper_mean_recall": 0.662,
+     "paper_mean_recall_close": 0.662,
+     "printed_values": 73,
+     "shared_values": 136,
+     "agree_match": 0.853,
+     "agree_close": 0.868
+    },
+    "chemistry_out": {
+     "recall": 0.38,
+     "recall_close": 0.397,
+     "paper_mean_recall": 0.319,
+     "paper_mean_recall_close": 0.327,
+     "printed_values": 121,
+     "shared_values": 622,
+     "agree_match": 0.905,
+     "agree_close": 0.92
+    },
+    "overall": {
+     "recall": 0.497,
+     "recall_close": 0.517,
+     "paper_mean_recall": 0.519,
+     "paper_mean_recall_close": 0.535,
+     "printed_values": 956
+    },
+    "title": {
+     "recall": 0.761,
+     "recall_close": 0.761,
+     "printed": 46
+    },
+    "journal": {
+     "recall": 0.674,
+     "recall_close": 0.674,
+     "printed": 46
+    },
+    "year": {
+     "recall": 0.739,
+     "recall_close": 0.739,
+     "printed": 46
+    },
+    "doi": {
+     "recall": 0.717,
+     "recall_close": 0.717,
+     "printed": 46
+    },
+    "experiment_type": {
+     "recall": 0.0,
+     "recall_close": 0.0,
+     "printed": 46
+    },
+    "solution_type": {
+     "recall": null,
+     "recall_close": null,
+     "printed": 0
+    },
+    "solvent": {
+     "recall": 0.717,
+     "recall_close": 0.717,
+     "printed": 46
+    },
+    "vessel": {
+     "recall": null,
+     "recall_close": null,
+     "printed": 0
+    },
+    "headspace_gas": {
+     "recall": 0.0,
+     "recall_close": 0.0,
+     "printed": 10
+    },
+    "solid_material": {
+     "recall": 0.205,
+     "recall_close": 0.205,
+     "printed": 39
+    },
+    "temperature": {
+     "recall": 0.676,
+     "recall_close": 0.676,
+     "printed": 34
+    },
+    "duration": {
+     "recall": 0.36,
+     "recall_close": 0.368,
+     "printed": 125
+    },
+    "pH": {
+     "recall": 0.324,
+     "recall_close": 0.439,
+     "printed": 139
+    },
+    "pressure": {
+     "recall": 0.333,
+     "recall_close": 0.333,
+     "printed": 9
+    },
+    "volume": {
+     "recall": 0.5,
+     "recall_close": 0.5,
+     "printed": 24
+    },
+    "solid_mass": {
+     "recall": 0.636,
+     "recall_close": 0.636,
+     "printed": 11
+    },
+    "flow_rate": {
+     "recall": 0.333,
+     "recall_close": 0.333,
+     "printed": 3
+    },
+    "cycles": {
+     "recall": 0.571,
+     "recall_close": 0.571,
+     "printed": 14
+    },
+    "analysis": {
+     "recall": 0.769,
+     "recall_close": 0.769,
+     "printed": 78
+    },
+    "inputs_mM": {
+     "recall": 0.699,
+     "recall_close": 0.699,
+     "printed": 73
+    },
+    "outputs_mM": {
+     "recall": 0.051,
+     "recall_close": 0.051,
+     "printed": 59
+    },
+    "outputs_pct": {
+     "recall": 0.694,
+     "recall_close": 0.726,
+     "printed": 62
+    },
+    "new_values": 239,
+    "new_columns_per_paper": 2.1,
+    "no_rows": 9
+   },
+   "with_rows": {
+    "papers": 37,
+    "rows": 788,
+    "hand_rows": 892,
+    "metadata": {
+     "recall": 0.899,
+     "recall_close": 0.899,
+     "paper_mean_recall": 0.899,
+     "paper_mean_recall_close": 0.899,
+     "printed_values": 148,
+     "shared_values": 0,
+     "agree_match": null,
+     "agree_close": null
+    },
+    "methodology": {
+     "recall": 0.527,
+     "recall_close": 0.563,
+     "paper_mean_recall": 0.578,
+     "paper_mean_recall_close": 0.605,
+     "printed_values": 465,
+     "shared_values": 404,
+     "agree_match": 0.775,
+     "agree_close": 0.847
+    },
+    "chemistry_in": {
+     "recall": 0.864,
+     "recall_close": 0.864,
+     "paper_mean_recall": 0.873,
+     "paper_mean_recall_close": 0.873,
+     "printed_values": 59,
+     "shared_values": 136,
+     "agree_match": 0.853,
+     "agree_close": 0.868
+    },
+    "chemistry_out": {
+     "recall": 0.451,
+     "recall_close": 0.471,
+     "paper_mean_recall": 0.402,
+     "paper_mean_recall_close": 0.412,
+     "printed_values": 102,
+     "shared_values": 622,
+     "agree_match": 0.905,
+     "agree_close": 0.92
+    },
+    "overall": {
+     "recall": 0.614,
+     "recall_close": 0.638,
+     "paper_mean_recall": 0.646,
+     "paper_mean_recall_close": 0.665,
+     "printed_values": 774
+    },
+    "title": {
+     "recall": 0.946,
+     "recall_close": 0.946,
+     "printed": 37
+    },
+    "journal": {
+     "recall": 0.838,
+     "recall_close": 0.838,
+     "printed": 37
+    },
+    "year": {
+     "recall": 0.919,
+     "recall_close": 0.919,
+     "printed": 37
+    },
+    "doi": {
+     "recall": 0.892,
+     "recall_close": 0.892,
+     "printed": 37
+    },
+    "experiment_type": {
+     "recall": 0.0,
+     "recall_close": 0.0,
+     "printed": 37
+    },
+    "solution_type": {
+     "recall": null,
+     "recall_close": null,
+     "printed": 0
+    },
+    "solvent": {
+     "recall": 0.892,
+     "recall_close": 0.892,
+     "printed": 37
+    },
+    "vessel": {
+     "recall": null,
+     "recall_close": null,
+     "printed": 0
+    },
+    "headspace_gas": {
+     "recall": 0.0,
+     "recall_close": 0.0,
+     "printed": 10
+    },
+    "solid_material": {
+     "recall": 0.286,
+     "recall_close": 0.286,
+     "printed": 28
+    },
+    "temperature": {
+     "recall": 0.958,
+     "recall_close": 0.958,
+     "printed": 24
+    },
+    "duration": {
+     "recall": 0.421,
+     "recall_close": 0.43,
+     "printed": 107
+    },
+    "pH": {
+     "recall": 0.421,
+     "recall_close": 0.57,
+     "printed": 107
+    },
+    "pressure": {
+     "recall": 0.429,
+     "recall_close": 0.429,
+     "printed": 7
+    },
+    "volume": {
+     "recall": 0.632,
+     "recall_close": 0.632,
+     "printed": 19
+    },
+    "solid_mass": {
+     "recall": 0.875,
+     "recall_close": 0.875,
+     "printed": 8
+    },
+    "flow_rate": {
+     "recall": 0.5,
+     "recall_close": 0.5,
+     "printed": 2
+    },
+    "cycles": {
+     "recall": 0.571,
+     "recall_close": 0.571,
+     "printed": 14
+    },
+    "analysis": {
+     "recall": 0.923,
+     "recall_close": 0.923,
+     "printed": 65
+    },
+    "inputs_mM": {
+     "recall": 0.864,
+     "recall_close": 0.864,
+     "printed": 59
+    },
+    "outputs_mM": {
+     "recall": 0.07,
+     "recall_close": 0.07,
+     "printed": 43
+    },
+    "outputs_pct": {
+     "recall": 0.729,
+     "recall_close": 0.763,
+     "printed": 59
+    },
+    "new_values": 239,
+    "new_columns_per_paper": 2.6,
+    "no_rows": 0
+   }
+  },
+  "peptide_pack_56": {
+   "all": {
+    "papers": 46,
+    "rows": 769,
+    "hand_rows": 1265,
+    "metadata": {
+     "recall": 0.755,
+     "recall_close": 0.755,
+     "paper_mean_recall": 0.755,
+     "paper_mean_recall_close": 0.755,
+     "printed_values": 184,
+     "shared_values": 0,
+     "agree_match": null,
+     "agree_close": null
+    },
+    "methodology": {
+     "recall": 0.504,
+     "recall_close": 0.536,
+     "paper_mean_recall": 0.568,
+     "paper_mean_recall_close": 0.592,
+     "printed_values": 532,
+     "shared_values": 383,
+     "agree_match": 0.815,
+     "agree_close": 0.875
+    },
+    "chemistry_in": {
+     "recall": 0.712,
+     "recall_close": 0.712,
+     "paper_mean_recall": 0.652,
+     "paper_mean_recall_close": 0.652,
+     "printed_values": 73,
+     "shared_values": 159,
+     "agree_match": 0.868,
+     "agree_close": 0.874
+    },
+    "chemistry_out": {
+     "recall": 0.397,
+     "recall_close": 0.405,
+     "paper_mean_recall": 0.39,
+     "paper_mean_recall_close": 0.372,
+     "printed_values": 121,
+     "shared_values": 657,
+     "agree_match": 0.91,
+     "agree_close": 0.924
+    },
+    "overall": {
+     "recall": 0.557,
+     "recall_close": 0.577,
+     "paper_mean_recall": 0.591,
+     "paper_mean_recall_close": 0.607,
+     "printed_values": 910
+    },
+    "title": {
+     "recall": 0.783,
+     "recall_close": 0.783,
+     "printed": 46
+    },
+    "journal": {
+     "recall": 0.739,
+     "recall_close": 0.739,
+     "printed": 46
+    },
+    "year": {
+     "recall": 0.761,
+     "recall_close": 0.761,
+     "printed": 46
+    },
+    "doi": {
+     "recall": 0.739,
+     "recall_close": 0.739,
+     "printed": 46
+    },
+    "experiment_type": {
+     "recall": null,
+     "recall_close": null,
+     "printed": 0
+    },
+    "solution_type": {
+     "recall": null,
+     "recall_close": null,
+     "printed": 0
+    },
+    "solvent": {
+     "recall": 0.652,
+     "recall_close": 0.652,
+     "printed": 46
+    },
+    "vessel": {
+     "recall": null,
+     "recall_close": null,
+     "printed": 0
+    },
+    "headspace_gas": {
+     "recall": 0.0,
+     "recall_close": 0.0,
+     "printed": 10
+    },
+    "solid_material": {
+     "recall": 0.564,
+     "recall_close": 0.564,
+     "printed": 39
+    },
+    "temperature": {
+     "recall": 0.676,
+     "recall_close": 0.676,
+     "printed": 34
+    },
+    "duration": {
+     "recall": 0.36,
+     "recall_close": 0.368,
+     "printed": 125
+    },
+    "pH": {
+     "recall": 0.374,
+     "recall_close": 0.489,
+     "printed": 139
+    },
+    "pressure": {
+     "recall": 0.333,
+     "recall_close": 0.333,
+     "printed": 9
+    },
+    "volume": {
+     "recall": 0.542,
+     "recall_close": 0.542,
+     "printed": 24
+    },
+    "solid_mass": {
+     "recall": 0.545,
+     "recall_close": 0.545,
+     "printed": 11
+    },
+    "flow_rate": {
+     "recall": 0.333,
+     "recall_close": 0.333,
+     "printed": 3
+    },
+    "cycles": {
+     "recall": 0.929,
+     "recall_close": 0.929,
+     "printed": 14
+    },
+    "analysis": {
+     "recall": 0.769,
+     "recall_close": 0.769,
+     "printed": 78
+    },
+    "inputs_mM": {
+     "recall": 0.712,
+     "recall_close": 0.712,
+     "printed": 73
+    },
+    "outputs_mM": {
+     "recall": 0.051,
+     "recall_close": 0.051,
+     "printed": 59
+    },
+    "outputs_pct": {
+     "recall": 0.726,
+     "recall_close": 0.742,
+     "printed": 62
+    },
+    "new_values": 304,
+    "new_columns_per_paper": 2.5,
+    "no_rows": 9
+   },
+   "with_rows": {
+    "papers": 37,
+    "rows": 769,
+    "hand_rows": 892,
+    "metadata": {
+     "recall": 0.939,
+     "recall_close": 0.939,
+     "paper_mean_recall": 0.939,
+     "paper_mean_recall_close": 0.939,
+     "printed_values": 148,
+     "shared_values": 0,
+     "agree_match": null,
+     "agree_close": null
+    },
+    "methodology": {
+     "recall": 0.626,
+     "recall_close": 0.666,
+     "paper_mean_recall": 0.707,
+     "paper_mean_recall_close": 0.736,
+     "printed_values": 428,
+     "shared_values": 383,
+     "agree_match": 0.815,
+     "agree_close": 0.875
+    },
+    "chemistry_in": {
+     "recall": 0.881,
+     "recall_close": 0.881,
+     "paper_mean_recall": 0.86,
+     "paper_mean_recall_close": 0.86,
+     "printed_values": 59,
+     "shared_values": 159,
+     "agree_match": 0.868,
+     "agree_close": 0.874
+    },
+    "chemistry_out": {
+     "recall": 0.471,
+     "recall_close": 0.48,
+     "paper_mean_recall": 0.491,
+     "paper_mean_recall_close": 0.469,
+     "printed_values": 102,
+     "shared_values": 657,
+     "agree_match": 0.91,
+     "agree_close": 0.924
+    },
+    "overall": {
+     "recall": 0.688,
+     "recall_close": 0.712,
+     "paper_mean_recall": 0.735,
+     "paper_mean_recall_close": 0.754,
+     "printed_values": 737
+    },
+    "title": {
+     "recall": 0.973,
+     "recall_close": 0.973,
+     "printed": 37
+    },
+    "journal": {
+     "recall": 0.919,
+     "recall_close": 0.919,
+     "printed": 37
+    },
+    "year": {
+     "recall": 0.946,
+     "recall_close": 0.946,
+     "printed": 37
+    },
+    "doi": {
+     "recall": 0.919,
+     "recall_close": 0.919,
+     "printed": 37
+    },
+    "experiment_type": {
+     "recall": null,
+     "recall_close": null,
+     "printed": 0
+    },
+    "solution_type": {
+     "recall": null,
+     "recall_close": null,
+     "printed": 0
+    },
+    "solvent": {
+     "recall": 0.811,
+     "recall_close": 0.811,
+     "printed": 37
+    },
+    "vessel": {
+     "recall": null,
+     "recall_close": null,
+     "printed": 0
+    },
+    "headspace_gas": {
+     "recall": 0.0,
+     "recall_close": 0.0,
+     "printed": 10
+    },
+    "solid_material": {
+     "recall": 0.786,
+     "recall_close": 0.786,
+     "printed": 28
+    },
+    "temperature": {
+     "recall": 0.958,
+     "recall_close": 0.958,
+     "printed": 24
+    },
+    "duration": {
+     "recall": 0.421,
+     "recall_close": 0.43,
+     "printed": 107
+    },
+    "pH": {
+     "recall": 0.486,
+     "recall_close": 0.636,
+     "printed": 107
+    },
+    "pressure": {
+     "recall": 0.429,
+     "recall_close": 0.429,
+     "printed": 7
+    },
+    "volume": {
+     "recall": 0.684,
+     "recall_close": 0.684,
+     "printed": 19
+    },
+    "solid_mass": {
+     "recall": 0.75,
+     "recall_close": 0.75,
+     "printed": 8
+    },
+    "flow_rate": {
+     "recall": 0.5,
+     "recall_close": 0.5,
+     "printed": 2
+    },
+    "cycles": {
+     "recall": 0.929,
+     "recall_close": 0.929,
+     "printed": 14
+    },
+    "analysis": {
+     "recall": 0.923,
+     "recall_close": 0.923,
+     "printed": 65
+    },
+    "inputs_mM": {
+     "recall": 0.881,
+     "recall_close": 0.881,
+     "printed": 59
+    },
+    "outputs_mM": {
+     "recall": 0.07,
+     "recall_close": 0.07,
+     "printed": 43
+    },
+    "outputs_pct": {
+     "recall": 0.763,
+     "recall_close": 0.78,
+     "printed": 59
+    },
+    "new_values": 304,
+    "new_columns_per_paper": 3.1,
+    "no_rows": 0
+   }
+  },
+  "prebiotic_chemistry": {
+   "all": {
+    "papers": 46,
+    "rows": 746,
+    "hand_rows": 1265,
+    "metadata": {
+     "recall": 0.723,
+     "recall_close": 0.723,
+     "paper_mean_recall": 0.723,
+     "paper_mean_recall_close": 0.723,
+     "printed_values": 184,
+     "shared_values": 0,
+     "agree_match": null,
+     "agree_close": null
+    },
+    "methodology": {
+     "recall": 0.54,
+     "recall_close": 0.552,
+     "paper_mean_recall": 0.572,
+     "paper_mean_recall_close": 0.582,
+     "printed_values": 672,
+     "shared_values": 414,
+     "agree_match": 0.857,
+     "agree_close": 0.882
+    },
+    "chemistry_in": {
+     "recall": 0.726,
+     "recall_close": 0.726,
+     "paper_mean_recall": 0.682,
+     "paper_mean_recall_close": 0.682,
+     "printed_values": 73,
+     "shared_values": 213,
+     "agree_match": 0.883,
+     "agree_close": 0.892
+    },
+    "chemistry_out": {
+     "recall": 0.455,
+     "recall_close": 0.455,
+     "paper_mean_recall": 0.409,
+     "paper_mean_recall_close": 0.409,
+     "printed_values": 121,
+     "shared_values": 811,
+     "agree_match": 0.914,
+     "agree_close": 0.925
+    },
+    "overall": {
+     "recall": 0.575,
+     "recall_close": 0.583,
+     "paper_mean_recall": 0.593,
+     "paper_mean_recall_close": 0.599,
+     "printed_values": 1050
+    },
+    "title": {
+     "recall": 0.783,
+     "recall_close": 0.783,
+     "printed": 46
+    },
+    "journal": {
+     "recall": 0.652,
+     "recall_close": 0.652,
+     "printed": 46
+    },
+    "year": {
+     "recall": 0.739,
+     "recall_close": 0.739,
+     "printed": 46
+    },
+    "doi": {
+     "recall": 0.717,
+     "recall_close": 0.717,
+     "printed": 46
+    },
+    "experiment_type": {
+     "recall": 0.783,
+     "recall_close": 0.783,
+     "printed": 46
+    },
+    "solution_type": {
+     "recall": 0.667,
+     "recall_close": 0.667,
+     "printed": 48
+    },
+    "solvent": {
+     "recall": 0.783,
+     "recall_close": 0.783,
+     "printed": 46
+    },
+    "vessel": {
+     "recall": 0.457,
+     "recall_close": 0.457,
+     "printed": 46
+    },
+    "headspace_gas": {
+     "recall": 0.0,
+     "recall_close": 0.0,
+     "printed": 10
+    },
+    "solid_material": {
+     "recall": 0.154,
+     "recall_close": 0.154,
+     "printed": 39
+    },
+    "temperature": {
+     "recall": 0.676,
+     "recall_close": 0.676,
+     "printed": 34
+    },
+    "duration": {
+     "recall": 0.504,
+     "recall_close": 0.504,
+     "printed": 125
+    },
+    "pH": {
+     "recall": 0.36,
+     "recall_close": 0.41,
+     "printed": 139
+    },
+    "pressure": {
+     "recall": 0.444,
+     "recall_close": 0.556,
+     "printed": 9
+    },
+    "volume": {
+     "recall": 0.542,
+     "recall_close": 0.542,
+     "printed": 24
+    },
+    "solid_mass": {
+     "recall": 0.545,
+     "recall_close": 0.545,
+     "printed": 11
+    },
+    "flow_rate": {
+     "recall": 0.333,
+     "recall_close": 0.333,
+     "printed": 3
+    },
+    "cycles": {
+     "recall": 0.929,
+     "recall_close": 0.929,
+     "printed": 14
+    },
+    "analysis": {
+     "recall": 0.756,
+     "recall_close": 0.756,
+     "printed": 78
+    },
+    "inputs_mM": {
+     "recall": 0.726,
+     "recall_close": 0.726,
+     "printed": 73
+    },
+    "outputs_mM": {
+     "recall": 0.051,
+     "recall_close": 0.051,
+     "printed": 59
+    },
+    "outputs_pct": {
+     "recall": 0.839,
+     "recall_close": 0.839,
+     "printed": 62
+    },
+    "new_values": 92,
+    "new_columns_per_paper": 1.4,
+    "no_rows": 9
+   },
+   "with_rows": {
+    "papers": 37,
+    "rows": 746,
+    "hand_rows": 892,
+    "metadata": {
+     "recall": 0.899,
+     "recall_close": 0.899,
+     "paper_mean_recall": 0.899,
+     "paper_mean_recall_close": 0.899,
+     "printed_values": 148,
+     "shared_values": 0,
+     "agree_match": null,
+     "agree_close": null
+    },
+    "methodology": {
+     "recall": 0.671,
+     "recall_close": 0.686,
+     "paper_mean_recall": 0.711,
+     "paper_mean_recall_close": 0.724,
+     "printed_values": 541,
+     "shared_values": 414,
+     "agree_match": 0.857,
+     "agree_close": 0.882
+    },
+    "chemistry_in": {
+     "recall": 0.898,
+     "recall_close": 0.898,
+     "paper_mean_recall": 0.9,
+     "paper_mean_recall_close": 0.9,
+     "printed_values": 59,
+     "shared_values": 213,
+     "agree_match": 0.883,
+     "agree_close": 0.892
+    },
+    "chemistry_out": {
+     "recall": 0.539,
+     "recall_close": 0.539,
+     "paper_mean_recall": 0.515,
+     "paper_mean_recall_close": 0.515,
+     "printed_values": 102,
+     "shared_values": 811,
+     "agree_match": 0.914,
+     "agree_close": 0.925
+    },
+    "overall": {
+     "recall": 0.711,
+     "recall_close": 0.72,
+     "paper_mean_recall": 0.737,
+     "paper_mean_recall_close": 0.745,
+     "printed_values": 850
+    },
+    "title": {
+     "recall": 0.973,
+     "recall_close": 0.973,
+     "printed": 37
+    },
+    "journal": {
+     "recall": 0.811,
+     "recall_close": 0.811,
+     "printed": 37
+    },
+    "year": {
+     "recall": 0.919,
+     "recall_close": 0.919,
+     "printed": 37
+    },
+    "doi": {
+     "recall": 0.892,
+     "recall_close": 0.892,
+     "printed": 37
+    },
+    "experiment_type": {
+     "recall": 0.973,
+     "recall_close": 0.973,
+     "printed": 37
+    },
+    "solution_type": {
+     "recall": 0.821,
+     "recall_close": 0.821,
+     "printed": 39
+    },
+    "solvent": {
+     "recall": 0.973,
+     "recall_close": 0.973,
+     "printed": 37
+    },
+    "vessel": {
+     "recall": 0.568,
+     "recall_close": 0.568,
+     "printed": 37
+    },
+    "headspace_gas": {
+     "recall": 0.0,
+     "recall_close": 0.0,
+     "printed": 10
+    },
+    "solid_material": {
+     "recall": 0.214,
+     "recall_close": 0.214,
+     "printed": 28
+    },
+    "temperature": {
+     "recall": 0.958,
+     "recall_close": 0.958,
+     "printed": 24
+    },
+    "duration": {
+     "recall": 0.589,
+     "recall_close": 0.589,
+     "printed": 107
+    },
+    "pH": {
+     "recall": 0.467,
+     "recall_close": 0.533,
+     "printed": 107
+    },
+    "pressure": {
+     "recall": 0.571,
+     "recall_close": 0.714,
+     "printed": 7
+    },
+    "volume": {
+     "recall": 0.684,
+     "recall_close": 0.684,
+     "printed": 19
+    },
+    "solid_mass": {
+     "recall": 0.75,
+     "recall_close": 0.75,
+     "printed": 8
+    },
+    "flow_rate": {
+     "recall": 0.5,
+     "recall_close": 0.5,
+     "printed": 2
+    },
+    "cycles": {
+     "recall": 0.929,
+     "recall_close": 0.929,
+     "printed": 14
+    },
+    "analysis": {
+     "recall": 0.908,
+     "recall_close": 0.908,
+     "printed": 65
+    },
+    "inputs_mM": {
+     "recall": 0.898,
+     "recall_close": 0.898,
+     "printed": 59
+    },
+    "outputs_mM": {
+     "recall": 0.07,
+     "recall_close": 0.07,
+     "printed": 43
+    },
+    "outputs_pct": {
+     "recall": 0.881,
+     "recall_close": 0.881,
+     "printed": 59
+    },
+    "new_values": 92,
+    "new_columns_per_paper": 1.7,
+    "no_rows": 0
+   }
+  }
+ },
+ "reviewed": {
+  "peptide_pack_5": {
+   "all": {
+    "papers": 46,
+    "rows": 716,
+    "hand_rows": 1265,
+    "metadata": {
+     "recall": 0.723,
+     "recall_close": 0.723,
+     "paper_mean_recall": 0.723,
+     "paper_mean_recall_close": 0.723,
+     "printed_values": 184,
+     "shared_values": 0,
+     "agree_match": null,
+     "agree_close": null
+    },
+    "methodology": {
+     "recall": 0.479,
+     "recall_close": 0.481,
+     "paper_mean_recall": 0.556,
+     "paper_mean_recall_close": 0.557,
+     "printed_values": 532,
+     "shared_values": 404,
+     "agree_match": 0.792,
+     "agree_close": 0.869
+    },
+    "chemistry_in": {
+     "recall": 0.74,
+     "recall_close": 0.74,
+     "paper_mean_recall": 0.697,
+     "paper_mean_recall_close": 0.697,
+     "printed_values": 73,
+     "shared_values": 167,
+     "agree_match": 0.88,
+     "agree_close": 0.892
+    },
+    "chemistry_out": {
+     "recall": 0.446,
+     "recall_close": 0.446,
+     "paper_mean_recall": 0.419,
+     "paper_mean_recall_close": 0.404,
+     "printed_values": 121,
+     "shared_values": 691,
+     "agree_match": 0.9,
+     "agree_close": 0.913
+    },
+    "overall": {
+     "recall": 0.545,
+     "recall_close": 0.546,
+     "paper_mean_recall": 0.581,
+     "paper_mean_recall_close": 0.582,
+     "printed_values": 910
+    },
+    "title": {
+     "recall": 0.761,
+     "recall_close": 0.761,
+     "printed": 46
+    },
+    "journal": {
+     "recall": 0.674,
+     "recall_close": 0.674,
+     "printed": 46
+    },
+    "year": {
+     "recall": 0.739,
+     "recall_close": 0.739,
+     "printed": 46
+    },
+    "doi": {
+     "recall": 0.717,
+     "recall_close": 0.717,
+     "printed": 46
+    },
+    "experiment_type": {
+     "recall": null,
+     "recall_close": null,
+     "printed": 0
+    },
+    "solution_type": {
+     "recall": null,
+     "recall_close": null,
+     "printed": 0
+    },
+    "solvent": {
+     "recall": 0.739,
+     "recall_close": 0.739,
+     "printed": 46
+    },
+    "vessel": {
+     "recall": null,
+     "recall_close": null,
+     "printed": 0
+    },
+    "headspace_gas": {
+     "recall": 0.0,
+     "recall_close": 0.0,
+     "printed": 10
+    },
+    "solid_material": {
+     "recall": 0.205,
+     "recall_close": 0.205,
+     "printed": 39
+    },
+    "temperature": {
+     "recall": 0.676,
+     "recall_close": 0.676,
+     "printed": 34
+    },
+    "duration": {
+     "recall": 0.36,
+     "recall_close": 0.368,
+     "printed": 125
+    },
+    "pH": {
+     "recall": 0.36,
+     "recall_close": 0.36,
+     "printed": 139
+    },
+    "pressure": {
+     "recall": 0.333,
+     "recall_close": 0.333,
+     "printed": 9
+    },
+    "volume": {
+     "recall": 0.542,
+     "recall_close": 0.542,
+     "printed": 24
+    },
+    "solid_mass": {
+     "recall": 0.545,
+     "recall_close": 0.545,
+     "printed": 11
+    },
+    "flow_rate": {
+     "recall": 0.0,
+     "recall_close": 0.0,
+     "printed": 3
+    },
+    "cycles": {
+     "recall": 0.929,
+     "recall_close": 0.929,
+     "printed": 14
+    },
+    "analysis": {
+     "recall": 0.769,
+     "recall_close": 0.769,
+     "printed": 78
+    },
+    "inputs_mM": {
+     "recall": 0.74,
+     "recall_close": 0.74,
+     "printed": 73
+    },
+    "outputs_mM": {
+     "recall": 0.051,
+     "recall_close": 0.051,
+     "printed": 59
+    },
+    "outputs_pct": {
+     "recall": 0.823,
+     "recall_close": 0.823,
+     "printed": 62
+    },
+    "new_values": 575,
+    "new_columns_per_paper": 3.8,
+    "no_rows": 9
+   },
+   "with_rows": {
+    "papers": 37,
+    "rows": 716,
+    "hand_rows": 892,
+    "metadata": {
+     "recall": 0.899,
+     "recall_close": 0.899,
+     "paper_mean_recall": 0.899,
+     "paper_mean_recall_close": 0.899,
+     "printed_values": 148,
+     "shared_values": 0,
+     "agree_match": null,
+     "agree_close": null
+    },
+    "methodology": {
+     "recall": 0.596,
+     "recall_close": 0.598,
+     "paper_mean_recall": 0.691,
+     "paper_mean_recall_close": 0.693,
+     "printed_values": 428,
+     "shared_values": 404,
+     "agree_match": 0.792,
+     "agree_close": 0.869
+    },
+    "chemistry_in": {
+     "recall": 0.915,
+     "recall_close": 0.915,
+     "paper_mean_recall": 0.92,
+     "paper_mean_recall_close": 0.92,
+     "printed_values": 59,
+     "shared_values": 167,
+     "agree_match": 0.88,
+     "agree_close": 0.892
+    },
+    "chemistry_out": {
+     "recall": 0.529,
+     "recall_close": 0.529,
+     "paper_mean_recall": 0.528,
+     "paper_mean_recall_close": 0.509,
+     "printed_values": 102,
+     "shared_values": 691,
+     "agree_match": 0.9,
+     "agree_close": 0.913
+    },
+    "overall": {
+     "recall": 0.673,
+     "recall_close": 0.674,
+     "paper_mean_recall": 0.722,
+     "paper_mean_recall_close": 0.723,
+     "printed_values": 737
+    },
+    "title": {
+     "recall": 0.946,
+     "recall_close": 0.946,
+     "printed": 37
+    },
+    "journal": {
+     "recall": 0.838,
+     "recall_close": 0.838,
+     "printed": 37
+    },
+    "year": {
+     "recall": 0.919,
+     "recall_close": 0.919,
+     "printed": 37
+    },
+    "doi": {
+     "recall": 0.892,
+     "recall_close": 0.892,
+     "printed": 37
+    },
+    "experiment_type": {
+     "recall": null,
+     "recall_close": null,
+     "printed": 0
+    },
+    "solution_type": {
+     "recall": null,
+     "recall_close": null,
+     "printed": 0
+    },
+    "solvent": {
+     "recall": 0.919,
+     "recall_close": 0.919,
+     "printed": 37
+    },
+    "vessel": {
+     "recall": null,
+     "recall_close": null,
+     "printed": 0
+    },
+    "headspace_gas": {
+     "recall": 0.0,
+     "recall_close": 0.0,
+     "printed": 10
+    },
+    "solid_material": {
+     "recall": 0.286,
+     "recall_close": 0.286,
+     "printed": 28
+    },
+    "temperature": {
+     "recall": 0.958,
+     "recall_close": 0.958,
+     "printed": 24
+    },
+    "duration": {
+     "recall": 0.421,
+     "recall_close": 0.43,
+     "printed": 107
+    },
+    "pH": {
+     "recall": 0.467,
+     "recall_close": 0.467,
+     "printed": 107
+    },
+    "pressure": {
+     "recall": 0.429,
+     "recall_close": 0.429,
+     "printed": 7
+    },
+    "volume": {
+     "recall": 0.684,
+     "recall_close": 0.684,
+     "printed": 19
+    },
+    "solid_mass": {
+     "recall": 0.75,
+     "recall_close": 0.75,
+     "printed": 8
+    },
+    "flow_rate": {
+     "recall": 0.0,
+     "recall_close": 0.0,
+     "printed": 2
+    },
+    "cycles": {
+     "recall": 0.929,
+     "recall_close": 0.929,
+     "printed": 14
+    },
+    "analysis": {
+     "recall": 0.923,
+     "recall_close": 0.923,
+     "printed": 65
+    },
+    "inputs_mM": {
+     "recall": 0.915,
+     "recall_close": 0.915,
+     "printed": 59
+    },
+    "outputs_mM": {
+     "recall": 0.07,
+     "recall_close": 0.07,
+     "printed": 43
+    },
+    "outputs_pct": {
+     "recall": 0.864,
+     "recall_close": 0.864,
+     "printed": 59
+    },
+    "new_values": 575,
+    "new_columns_per_paper": 4.8,
+    "no_rows": 0
+   }
+  },
+  "peptide_pack_25": {
+   "all": {
+    "papers": 46,
+    "rows": 788,
+    "hand_rows": 1265,
+    "metadata": {
+     "recall": 0.723,
+     "recall_close": 0.723,
+     "paper_mean_recall": 0.723,
+     "paper_mean_recall_close": 0.723,
+     "printed_values": 184,
+     "shared_values": 0,
+     "agree_match": null,
+     "agree_close": null
+    },
+    "methodology": {
+     "recall": 0.427,
+     "recall_close": 0.457,
+     "paper_mean_recall": 0.467,
+     "paper_mean_recall_close": 0.489,
+     "printed_values": 578,
+     "shared_values": 406,
+     "agree_match": 0.773,
+     "agree_close": 0.845
+    },
+    "chemistry_in": {
+     "recall": 0.74,
+     "recall_close": 0.74,
+     "paper_mean_recall": 0.697,
+     "paper_mean_recall_close": 0.697,
+     "printed_values": 73,
+     "shared_values": 172,
+     "agree_match": 0.86,
+     "agree_close": 0.872
+    },
+    "chemistry_out": {
+     "recall": 0.43,
+     "recall_close": 0.421,
+     "paper_mean_recall": 0.404,
+     "paper_mean_recall_close": 0.375,
+     "printed_values": 121,
+     "shared_values": 764,
+     "agree_match": 0.92,
+     "agree_close": 0.932
+    },
+    "overall": {
+     "recall": 0.508,
+     "recall_close": 0.525,
+     "paper_mean_recall": 0.531,
+     "paper_mean_recall_close": 0.543,
+     "printed_values": 956
+    },
+    "title": {
+     "recall": 0.761,
+     "recall_close": 0.761,
+     "printed": 46
+    },
+    "journal": {
+     "recall": 0.674,
+     "recall_close": 0.674,
+     "printed": 46
+    },
+    "year": {
+     "recall": 0.739,
+     "recall_close": 0.739,
+     "printed": 46
+    },
+    "doi": {
+     "recall": 0.717,
+     "recall_close": 0.717,
+     "printed": 46
+    },
+    "experiment_type": {
+     "recall": 0.0,
+     "recall_close": 0.0,
+     "printed": 46
+    },
+    "solution_type": {
+     "recall": null,
+     "recall_close": null,
+     "printed": 0
+    },
+    "solvent": {
+     "recall": 0.717,
+     "recall_close": 0.717,
+     "printed": 46
+    },
+    "vessel": {
+     "recall": null,
+     "recall_close": null,
+     "printed": 0
+    },
+    "headspace_gas": {
+     "recall": 0.0,
+     "recall_close": 0.0,
+     "printed": 10
+    },
+    "solid_material": {
+     "recall": 0.205,
+     "recall_close": 0.205,
+     "printed": 39
+    },
+    "temperature": {
+     "recall": 0.676,
+     "recall_close": 0.676,
+     "printed": 34
+    },
+    "duration": {
+     "recall": 0.36,
+     "recall_close": 0.368,
+     "printed": 125
+    },
+    "pH": {
+     "recall": 0.324,
+     "recall_close": 0.439,
+     "printed": 139
+    },
+    "pressure": {
+     "recall": 0.333,
+     "recall_close": 0.333,
+     "printed": 9
+    },
+    "volume": {
+     "recall": 0.542,
+     "recall_close": 0.542,
+     "printed": 24
+    },
+    "solid_mass": {
+     "recall": 0.636,
+     "recall_close": 0.636,
+     "printed": 11
+    },
+    "flow_rate": {
+     "recall": 0.333,
+     "recall_close": 0.333,
+     "printed": 3
+    },
+    "cycles": {
+     "recall": 0.643,
+     "recall_close": 0.643,
+     "printed": 14
+    },
+    "analysis": {
+     "recall": 0.769,
+     "recall_close": 0.769,
+     "printed": 78
+    },
+    "inputs_mM": {
+     "recall": 0.74,
+     "recall_close": 0.74,
+     "printed": 73
+    },
+    "outputs_mM": {
+     "recall": 0.051,
+     "recall_close": 0.051,
+     "printed": 59
+    },
+    "outputs_pct": {
+     "recall": 0.79,
+     "recall_close": 0.774,
+     "printed": 62
+    },
+    "new_values": 497,
+    "new_columns_per_paper": 4.0,
+    "no_rows": 9
+   },
+   "with_rows": {
+    "papers": 37,
+    "rows": 788,
+    "hand_rows": 892,
+    "metadata": {
+     "recall": 0.899,
+     "recall_close": 0.899,
+     "paper_mean_recall": 0.899,
+     "paper_mean_recall_close": 0.899,
+     "printed_values": 148,
+     "shared_values": 0,
+     "agree_match": null,
+     "agree_close": null
+    },
+    "methodology": {
+     "recall": 0.531,
+     "recall_close": 0.568,
+     "paper_mean_recall": 0.58,
+     "paper_mean_recall_close": 0.608,
+     "printed_values": 465,
+     "shared_values": 406,
+     "agree_match": 0.773,
+     "agree_close": 0.845
+    },
+    "chemistry_in": {
+     "recall": 0.915,
+     "recall_close": 0.915,
+     "paper_mean_recall": 0.92,
+     "paper_mean_recall_close": 0.92,
+     "printed_values": 59,
+     "shared_values": 172,
+     "agree_match": 0.86,
+     "agree_close": 0.872
+    },
+    "chemistry_out": {
+     "recall": 0.51,
+     "recall_close": 0.5,
+     "paper_mean_recall": 0.509,
+     "paper_mean_recall_close": 0.472,
+     "printed_values": 102,
+     "shared_values": 764,
+     "agree_match": 0.92,
+     "agree_close": 0.932
+    },
+    "overall": {
+     "recall": 0.628,
+     "recall_close": 0.649,
+     "paper_mean_recall": 0.66,
+     "paper_mean_recall_close": 0.675,
+     "printed_values": 774
+    },
+    "title": {
+     "recall": 0.946,
+     "recall_close": 0.946,
+     "printed": 37
+    },
+    "journal": {
+     "recall": 0.838,
+     "recall_close": 0.838,
+     "printed": 37
+    },
+    "year": {
+     "recall": 0.919,
+     "recall_close": 0.919,
+     "printed": 37
+    },
+    "doi": {
+     "recall": 0.892,
+     "recall_close": 0.892,
+     "printed": 37
+    },
+    "experiment_type": {
+     "recall": 0.0,
+     "recall_close": 0.0,
+     "printed": 37
+    },
+    "solution_type": {
+     "recall": null,
+     "recall_close": null,
+     "printed": 0
+    },
+    "solvent": {
+     "recall": 0.892,
+     "recall_close": 0.892,
+     "printed": 37
+    },
+    "vessel": {
+     "recall": null,
+     "recall_close": null,
+     "printed": 0
+    },
+    "headspace_gas": {
+     "recall": 0.0,
+     "recall_close": 0.0,
+     "printed": 10
+    },
+    "solid_material": {
+     "recall": 0.286,
+     "recall_close": 0.286,
+     "printed": 28
+    },
+    "temperature": {
+     "recall": 0.958,
+     "recall_close": 0.958,
+     "printed": 24
+    },
+    "duration": {
+     "recall": 0.421,
+     "recall_close": 0.43,
+     "printed": 107
+    },
+    "pH": {
+     "recall": 0.421,
+     "recall_close": 0.57,
+     "printed": 107
+    },
+    "pressure": {
+     "recall": 0.429,
+     "recall_close": 0.429,
+     "printed": 7
+    },
+    "volume": {
+     "recall": 0.684,
+     "recall_close": 0.684,
+     "printed": 19
+    },
+    "solid_mass": {
+     "recall": 0.875,
+     "recall_close": 0.875,
+     "printed": 8
+    },
+    "flow_rate": {
+     "recall": 0.5,
+     "recall_close": 0.5,
+     "printed": 2
+    },
+    "cycles": {
+     "recall": 0.643,
+     "recall_close": 0.643,
+     "printed": 14
+    },
+    "analysis": {
+     "recall": 0.923,
+     "recall_close": 0.923,
+     "printed": 65
+    },
+    "inputs_mM": {
+     "recall": 0.915,
+     "recall_close": 0.915,
+     "printed": 59
+    },
+    "outputs_mM": {
+     "recall": 0.07,
+     "recall_close": 0.07,
+     "printed": 43
+    },
+    "outputs_pct": {
+     "recall": 0.831,
+     "recall_close": 0.814,
+     "printed": 59
+    },
+    "new_values": 497,
+    "new_columns_per_paper": 4.9,
+    "no_rows": 0
+   }
+  },
+  "peptide_pack_56": {
+   "all": {
+    "papers": 46,
+    "rows": 769,
+    "hand_rows": 1265,
+    "metadata": {
+     "recall": 0.755,
+     "recall_close": 0.755,
+     "paper_mean_recall": 0.755,
+     "paper_mean_recall_close": 0.755,
+     "printed_values": 184,
+     "shared_values": 0,
+     "agree_match": null,
+     "agree_close": null
+    },
+    "methodology": {
+     "recall": 0.508,
+     "recall_close": 0.539,
+     "paper_mean_recall": 0.57,
+     "paper_mean_recall_close": 0.594,
+     "printed_values": 532,
+     "shared_values": 385,
+     "agree_match": 0.813,
+     "agree_close": 0.873
+    },
+    "chemistry_in": {
+     "recall": 0.726,
+     "recall_close": 0.726,
+     "paper_mean_recall": 0.667,
+     "paper_mean_recall_close": 0.667,
+     "printed_values": 73,
+     "shared_values": 160,
+     "agree_match": 0.869,
+     "agree_close": 0.875
+    },
+    "chemistry_out": {
+     "recall": 0.455,
+     "recall_close": 0.446,
+     "paper_mean_recall": 0.434,
+     "paper_mean_recall_close": 0.404,
+     "printed_values": 121,
+     "shared_values": 740,
+     "agree_match": 0.919,
+     "agree_close": 0.931
+    },
+    "overall": {
+     "recall": 0.568,
+     "recall_close": 0.586,
+     "paper_mean_recall": 0.603,
+     "paper_mean_recall_close": 0.616,
+     "printed_values": 910
+    },
+    "title": {
+     "recall": 0.783,
+     "recall_close": 0.783,
+     "printed": 46
+    },
+    "journal": {
+     "recall": 0.739,
+     "recall_close": 0.739,
+     "printed": 46
+    },
+    "year": {
+     "recall": 0.761,
+     "recall_close": 0.761,
+     "printed": 46
+    },
+    "doi": {
+     "recall": 0.739,
+     "recall_close": 0.739,
+     "printed": 46
+    },
+    "experiment_type": {
+     "recall": null,
+     "recall_close": null,
+     "printed": 0
+    },
+    "solution_type": {
+     "recall": null,
+     "recall_close": null,
+     "printed": 0
+    },
+    "solvent": {
+     "recall": 0.652,
+     "recall_close": 0.652,
+     "printed": 46
+    },
+    "vessel": {
+     "recall": null,
+     "recall_close": null,
+     "printed": 0
+    },
+    "headspace_gas": {
+     "recall": 0.0,
+     "recall_close": 0.0,
+     "printed": 10
+    },
+    "solid_material": {
+     "recall": 0.564,
+     "recall_close": 0.564,
+     "printed": 39
+    },
+    "temperature": {
+     "recall": 0.676,
+     "recall_close": 0.676,
+     "printed": 34
+    },
+    "duration": {
+     "recall": 0.36,
+     "recall_close": 0.368,
+     "printed": 125
+    },
+    "pH": {
+     "recall": 0.374,
+     "recall_close": 0.489,
+     "printed": 139
+    },
+    "pressure": {
+     "recall": 0.333,
+     "recall_close": 0.333,
+     "printed": 9
+    },
+    "volume": {
+     "recall": 0.583,
+     "recall_close": 0.583,
+     "printed": 24
+    },
+    "solid_mass": {
+     "recall": 0.636,
+     "recall_close": 0.636,
+     "printed": 11
+    },
+    "flow_rate": {
+     "recall": 0.333,
+     "recall_close": 0.333,
+     "printed": 3
+    },
+    "cycles": {
+     "recall": 0.929,
+     "recall_close": 0.929,
+     "printed": 14
+    },
+    "analysis": {
+     "recall": 0.769,
+     "recall_close": 0.769,
+     "printed": 78
+    },
+    "inputs_mM": {
+     "recall": 0.726,
+     "recall_close": 0.726,
+     "printed": 73
+    },
+    "outputs_mM": {
+     "recall": 0.051,
+     "recall_close": 0.051,
+     "printed": 59
+    },
+    "outputs_pct": {
+     "recall": 0.839,
+     "recall_close": 0.823,
+     "printed": 62
+    },
+    "new_values": 550,
+    "new_columns_per_paper": 4.0,
+    "no_rows": 9
+   },
+   "with_rows": {
+    "papers": 37,
+    "rows": 769,
+    "hand_rows": 892,
+    "metadata": {
+     "recall": 0.939,
+     "recall_close": 0.939,
+     "paper_mean_recall": 0.939,
+     "paper_mean_recall_close": 0.939,
+     "printed_values": 148,
+     "shared_values": 0,
+     "agree_match": null,
+     "agree_close": null
+    },
+    "methodology": {
+     "recall": 0.631,
+     "recall_close": 0.671,
+     "paper_mean_recall": 0.709,
+     "paper_mean_recall_close": 0.738,
+     "printed_values": 428,
+     "shared_values": 385,
+     "agree_match": 0.813,
+     "agree_close": 0.873
+    },
+    "chemistry_in": {
+     "recall": 0.898,
+     "recall_close": 0.898,
+     "paper_mean_recall": 0.88,
+     "paper_mean_recall_close": 0.88,
+     "printed_values": 59,
+     "shared_values": 160,
+     "agree_match": 0.869,
+     "agree_close": 0.875
+    },
+    "chemistry_out": {
+     "recall": 0.539,
+     "recall_close": 0.529,
+     "paper_mean_recall": 0.546,
+     "paper_mean_recall_close": 0.509,
+     "printed_values": 102,
+     "shared_values": 740,
+     "agree_match": 0.919,
+     "agree_close": 0.931
+    },
+    "overall": {
+     "recall": 0.701,
+     "recall_close": 0.723,
+     "paper_mean_recall": 0.75,
+     "paper_mean_recall_close": 0.766,
+     "printed_values": 737
+    },
+    "title": {
+     "recall": 0.973,
+     "recall_close": 0.973,
+     "printed": 37
+    },
+    "journal": {
+     "recall": 0.919,
+     "recall_close": 0.919,
+     "printed": 37
+    },
+    "year": {
+     "recall": 0.946,
+     "recall_close": 0.946,
+     "printed": 37
+    },
+    "doi": {
+     "recall": 0.919,
+     "recall_close": 0.919,
+     "printed": 37
+    },
+    "experiment_type": {
+     "recall": null,
+     "recall_close": null,
+     "printed": 0
+    },
+    "solution_type": {
+     "recall": null,
+     "recall_close": null,
+     "printed": 0
+    },
+    "solvent": {
+     "recall": 0.811,
+     "recall_close": 0.811,
+     "printed": 37
+    },
+    "vessel": {
+     "recall": null,
+     "recall_close": null,
+     "printed": 0
+    },
+    "headspace_gas": {
+     "recall": 0.0,
+     "recall_close": 0.0,
+     "printed": 10
+    },
+    "solid_material": {
+     "recall": 0.786,
+     "recall_close": 0.786,
+     "printed": 28
+    },
+    "temperature": {
+     "recall": 0.958,
+     "recall_close": 0.958,
+     "printed": 24
+    },
+    "duration": {
+     "recall": 0.421,
+     "recall_close": 0.43,
+     "printed": 107
+    },
+    "pH": {
+     "recall": 0.486,
+     "recall_close": 0.636,
+     "printed": 107
+    },
+    "pressure": {
+     "recall": 0.429,
+     "recall_close": 0.429,
+     "printed": 7
+    },
+    "volume": {
+     "recall": 0.737,
+     "recall_close": 0.737,
+     "printed": 19
+    },
+    "solid_mass": {
+     "recall": 0.875,
+     "recall_close": 0.875,
+     "printed": 8
+    },
+    "flow_rate": {
+     "recall": 0.5,
+     "recall_close": 0.5,
+     "printed": 2
+    },
+    "cycles": {
+     "recall": 0.929,
+     "recall_close": 0.929,
+     "printed": 14
+    },
+    "analysis": {
+     "recall": 0.923,
+     "recall_close": 0.923,
+     "printed": 65
+    },
+    "inputs_mM": {
+     "recall": 0.898,
+     "recall_close": 0.898,
+     "printed": 59
+    },
+    "outputs_mM": {
+     "recall": 0.07,
+     "recall_close": 0.07,
+     "printed": 43
+    },
+    "outputs_pct": {
+     "recall": 0.881,
+     "recall_close": 0.864,
+     "printed": 59
+    },
+    "new_values": 550,
+    "new_columns_per_paper": 5.0,
+    "no_rows": 0
+   }
+  },
+  "prebiotic_chemistry": {
+   "all": {
+    "papers": 46,
+    "rows": 746,
+    "hand_rows": 1265,
+    "metadata": {
+     "recall": 0.723,
+     "recall_close": 0.723,
+     "paper_mean_recall": 0.723,
+     "paper_mean_recall_close": 0.723,
+     "printed_values": 184,
+     "shared_values": 0,
+     "agree_match": null,
+     "agree_close": null
+    },
+    "methodology": {
+     "recall": 0.543,
+     "recall_close": 0.555,
+     "paper_mean_recall": 0.574,
+     "paper_mean_recall_close": 0.584,
+     "printed_values": 672,
+     "shared_values": 416,
+     "agree_match": 0.856,
+     "agree_close": 0.88
+    },
+    "chemistry_in": {
+     "recall": 0.74,
+     "recall_close": 0.74,
+     "paper_mean_recall": 0.697,
+     "paper_mean_recall_close": 0.697,
+     "printed_values": 73,
+     "shared_values": 213,
+     "agree_match": 0.883,
+     "agree_close": 0.892
+    },
+    "chemistry_out": {
+     "recall": 0.463,
+     "recall_close": 0.455,
+     "paper_mean_recall": 0.438,
+     "paper_mean_recall_close": 0.409,
+     "printed_values": 121,
+     "shared_values": 811,
+     "agree_match": 0.914,
+     "agree_close": 0.925
+    },
+    "overall": {
+     "recall": 0.579,
+     "recall_close": 0.586,
+     "paper_mean_recall": 0.596,
+     "paper_mean_recall_close": 0.602,
+     "printed_values": 1050
+    },
+    "title": {
+     "recall": 0.783,
+     "recall_close": 0.783,
+     "printed": 46
+    },
+    "journal": {
+     "recall": 0.652,
+     "recall_close": 0.652,
+     "printed": 46
+    },
+    "year": {
+     "recall": 0.739,
+     "recall_close": 0.739,
+     "printed": 46
+    },
+    "doi": {
+     "recall": 0.717,
+     "recall_close": 0.717,
+     "printed": 46
+    },
+    "experiment_type": {
+     "recall": 0.783,
+     "recall_close": 0.783,
+     "printed": 46
+    },
+    "solution_type": {
+     "recall": 0.667,
+     "recall_close": 0.667,
+     "printed": 48
+    },
+    "solvent": {
+     "recall": 0.783,
+     "recall_close": 0.783,
+     "printed": 46
+    },
+    "vessel": {
+     "recall": 0.457,
+     "recall_close": 0.457,
+     "printed": 46
+    },
+    "headspace_gas": {
+     "recall": 0.0,
+     "recall_close": 0.0,
+     "printed": 10
+    },
+    "solid_material": {
+     "recall": 0.154,
+     "recall_close": 0.154,
+     "printed": 39
+    },
+    "temperature": {
+     "recall": 0.676,
+     "recall_close": 0.676,
+     "printed": 34
+    },
+    "duration": {
+     "recall": 0.504,
+     "recall_close": 0.504,
+     "printed": 125
+    },
+    "pH": {
+     "recall": 0.36,
+     "recall_close": 0.41,
+     "printed": 139
+    },
+    "pressure": {
+     "recall": 0.444,
+     "recall_close": 0.556,
+     "printed": 9
+    },
+    "volume": {
+     "recall": 0.583,
+     "recall_close": 0.583,
+     "printed": 24
+    },
+    "solid_mass": {
+     "recall": 0.636,
+     "recall_close": 0.636,
+     "printed": 11
+    },
+    "flow_rate": {
+     "recall": 0.333,
+     "recall_close": 0.333,
+     "printed": 3
+    },
+    "cycles": {
+     "recall": 0.929,
+     "recall_close": 0.929,
+     "printed": 14
+    },
+    "analysis": {
+     "recall": 0.756,
+     "recall_close": 0.756,
+     "printed": 78
+    },
+    "inputs_mM": {
+     "recall": 0.74,
+     "recall_close": 0.74,
+     "printed": 73
+    },
+    "outputs_mM": {
+     "recall": 0.051,
+     "recall_close": 0.051,
+     "printed": 59
+    },
+    "outputs_pct": {
+     "recall": 0.855,
+     "recall_close": 0.839,
+     "printed": 62
+    },
+    "new_values": 478,
+    "new_columns_per_paper": 3.6,
+    "no_rows": 9
+   },
+   "with_rows": {
+    "papers": 37,
+    "rows": 746,
+    "hand_rows": 892,
+    "metadata": {
+     "recall": 0.899,
+     "recall_close": 0.899,
+     "paper_mean_recall": 0.899,
+     "paper_mean_recall_close": 0.899,
+     "printed_values": 148,
+     "shared_values": 0,
+     "agree_match": null,
+     "agree_close": null
+    },
+    "methodology": {
+     "recall": 0.675,
+     "recall_close": 0.689,
+     "paper_mean_recall": 0.713,
+     "paper_mean_recall_close": 0.726,
+     "printed_values": 541,
+     "shared_values": 416,
+     "agree_match": 0.856,
+     "agree_close": 0.88
+    },
+    "chemistry_in": {
+     "recall": 0.915,
+     "recall_close": 0.915,
+     "paper_mean_recall": 0.92,
+     "paper_mean_recall_close": 0.92,
+     "printed_values": 59,
+     "shared_values": 213,
+     "agree_match": 0.883,
+     "agree_close": 0.892
+    },
+    "chemistry_out": {
+     "recall": 0.549,
+     "recall_close": 0.539,
+     "paper_mean_recall": 0.552,
+     "paper_mean_recall_close": 0.515,
+     "printed_values": 102,
+     "shared_values": 811,
+     "agree_match": 0.914,
+     "agree_close": 0.925
+    },
+    "overall": {
+     "recall": 0.715,
+     "recall_close": 0.724,
+     "paper_mean_recall": 0.741,
+     "paper_mean_recall_close": 0.748,
+     "printed_values": 850
+    },
+    "title": {
+     "recall": 0.973,
+     "recall_close": 0.973,
+     "printed": 37
+    },
+    "journal": {
+     "recall": 0.811,
+     "recall_close": 0.811,
+     "printed": 37
+    },
+    "year": {
+     "recall": 0.919,
+     "recall_close": 0.919,
+     "printed": 37
+    },
+    "doi": {
+     "recall": 0.892,
+     "recall_close": 0.892,
+     "printed": 37
+    },
+    "experiment_type": {
+     "recall": 0.973,
+     "recall_close": 0.973,
+     "printed": 37
+    },
+    "solution_type": {
+     "recall": 0.821,
+     "recall_close": 0.821,
+     "printed": 39
+    },
+    "solvent": {
+     "recall": 0.973,
+     "recall_close": 0.973,
+     "printed": 37
+    },
+    "vessel": {
+     "recall": 0.568,
+     "recall_close": 0.568,
+     "printed": 37
+    },
+    "headspace_gas": {
+     "recall": 0.0,
+     "recall_close": 0.0,
+     "printed": 10
+    },
+    "solid_material": {
+     "recall": 0.214,
+     "recall_close": 0.214,
+     "printed": 28
+    },
+    "temperature": {
+     "recall": 0.958,
+     "recall_close": 0.958,
+     "printed": 24
+    },
+    "duration": {
+     "recall": 0.589,
+     "recall_close": 0.589,
+     "printed": 107
+    },
+    "pH": {
+     "recall": 0.467,
+     "recall_close": 0.533,
+     "printed": 107
+    },
+    "pressure": {
+     "recall": 0.571,
+     "recall_close": 0.714,
+     "printed": 7
+    },
+    "volume": {
+     "recall": 0.737,
+     "recall_close": 0.737,
+     "printed": 19
+    },
+    "solid_mass": {
+     "recall": 0.875,
+     "recall_close": 0.875,
+     "printed": 8
+    },
+    "flow_rate": {
+     "recall": 0.5,
+     "recall_close": 0.5,
+     "printed": 2
+    },
+    "cycles": {
+     "recall": 0.929,
+     "recall_close": 0.929,
+     "printed": 14
+    },
+    "analysis": {
+     "recall": 0.908,
+     "recall_close": 0.908,
+     "printed": 65
+    },
+    "inputs_mM": {
+     "recall": 0.915,
+     "recall_close": 0.915,
+     "printed": 59
+    },
+    "outputs_mM": {
+     "recall": 0.07,
+     "recall_close": 0.07,
+     "printed": 43
+    },
+    "outputs_pct": {
+     "recall": 0.898,
+     "recall_close": 0.881,
+     "printed": 59
+    },
+    "new_values": 478,
+    "new_columns_per_paper": 4.5,
+    "no_rows": 0
+   }
+  }
+ }
+}

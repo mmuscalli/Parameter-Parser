@@ -791,16 +791,30 @@ def stage_values(spec: StageSpec, item) -> Tuple[Dict[str, StageValue], List[str
                         f"gave no text for it" + (f" (its note: '{item.note}')" if item.note else "") + "."]
         return {param.column: StageValue(text, note=item.note, **base)}, []
     from parameter_extractor.units import convert_printed, is_difference
+    val = item.value
     high = getattr(item, "high", 0.0) or 0.0
-    if high and high > item.value:     # a range: '<column>_range<unit>' = 'low:high' (Mickey, 2026-10-31)
+    text = (getattr(item, "text", "") or "").strip()
+    read_note = ""
+    if not val and not high and text and not param.integer:
+        # a number parameter answered in its text field, value 0 (Huber1998, 2026-11-17: pH '7.5-9.9 (varies by run,
+        # see sample)' had been written as pH 0.0 on every row): read the number or range from the text; text that
+        # isn't one is left out and said, never written as 0
+        parsed = number_from_text(text, printed)
+        if parsed is None:
+            return {}, [f"{spec.label}: {param.column} for '{item.set_label or 'every set'}' left out -- given as "
+                        f"text ('{text}'), not a number."]
+        val, high, printed = parsed
+        read_note = f"read from '{text}'"
+    if high and high > val:            # a range: '<column>_range<unit>' = 'low:high' (Mickey, 2026-10-31)
         from parameter_extractor.ingestion.flatten_to_template import with_range
         from parameter_extractor.units import format_range
-        lo, lo_note = convert_printed(item.value, printed, param.unit, is_error=is_difference(param.column))
+        lo, lo_note = convert_printed(val, printed, param.unit, is_error=is_difference(param.column))
         hi, _ = convert_printed(high, printed, param.unit, is_error=is_difference(param.column))
         if lo is None or hi is None:
-            return {}, [f"{spec.label}: {param.column} = {item.value:g}-{high:g} {printed} for "
+            return {}, [f"{spec.label}: {param.column} = {val:g}-{high:g} {printed} for "
                         f"'{item.set_label}' left out -- {lo_note}."]
-        note = "; ".join(n for n in (item.note, f"range printed as {item.value:g}-{high:g} {printed}".strip()) if n)
+        note = "; ".join(n for n in (item.note, read_note or f"range printed as {val:g}-{high:g} {printed}".strip())
+                         if n)
         return {with_range(param.column, param.unit): StageValue(format_range(lo, hi), note=note, **base)}, []
     if param.integer and not item.value and (getattr(item, "text", "") or "").strip():
         # a count written out ('triplicate experiments; lengths averaged'): read as the number
@@ -812,10 +826,10 @@ def stage_values(spec: StageSpec, item) -> Tuple[Dict[str, StageValue], List[str
         return {param.column: StageValue(n, note="; ".join(x for x in (item.note, f"read from '{item.text}'") if x),
                                          **base)}, []
     # (a temperature difference converts like an uncertainty: no offset)
-    value, note = convert_printed(item.value, printed, param.unit, is_error=is_difference(param.column))
+    value, note = convert_printed(val, printed, param.unit, is_error=is_difference(param.column))
     if value is None:
-        return {}, [f"{spec.label}: {param.column} = {item.value:g} {printed} for '{item.set_label}' left out -- {note}."]
-    notes = "; ".join(n for n in (item.note, note) if n)
+        return {}, [f"{spec.label}: {param.column} = {val:g} {printed} for '{item.set_label}' left out -- {note}."]
+    notes = "; ".join(n for n in (item.note, read_note, note) if n)
     if param.integer:
         if not float(value).is_integer():
             return {}, [f"{spec.label}: {param.column} = {value:g} for '{item.set_label or 'every set'}' left out "
@@ -831,7 +845,7 @@ def stage_values(spec: StageSpec, item) -> Tuple[Dict[str, StageValue], List[str
         cols = [param.column + s for s in suffixes]
         for col, err in zip(cols[:2], (getattr(item, "err_plus", 0.0), getattr(item, "err_minus", 0.0))):
             if err:
-                converted, _ = convert_printed(err, printed, param.unit, is_error=True, about=item.value)
+                converted, _ = convert_printed(err, printed, param.unit, is_error=True, about=val)
                 if converted is not None:
                     out[col] = StageValue(converted, **base)
         if len(cols) > 2:                       # limit flag: 1 upper limit, -1 lower limit, 0 a measurement
@@ -846,6 +860,28 @@ def stage_values(spec: StageSpec, item) -> Tuple[Dict[str, StageValue], List[str
         return out, [f"{spec.label}: {param.column} = {value:g} for '{item.set_label or 'every set'}' is {bound} -- "
                      f"written as the value (this parameter has no limit column)."]
     return out, []
+
+
+_TEXT_NUMBER = re.compile(r"^(?:~|∼|≈|ca\.?\s*|about\s+|approx(?:imately|\.)?\s*)?([-+]?\d+(?:\.\d+)?)$")
+
+
+def number_from_text(text: str, printed: str = "") -> Optional[Tuple[float, float, str]]:
+    """(value, high, unit) read from a number parameter's text: a range ('7.5-9.9', '7 to 10 h') gives low and high,
+    a quantity ('100 °C') or a plain number ('9.8', '~25') gives the value with high 0. A parenthesised remark is
+    ignored ('7.5-9.9 (varies by run)'); a printed unit given with the item is used when the text has none. None
+    when the text isn't one number or range."""
+    from parameter_extractor.units import parse_quantity, parse_range
+    t = re.sub(r"\([^)]*\)", " ", text).strip().rstrip(".;,").strip()
+    rng = parse_range(t)
+    if rng is not None:
+        return rng[0], rng[1], rng[2] or printed
+    q = parse_quantity(t)
+    if q is not None:
+        return q[0], 0.0, q[1]
+    m = _TEXT_NUMBER.match(t)
+    if m:
+        return float(m.group(1)), 0.0, printed
+    return None
 
 
 def time_system(printed: str) -> str:

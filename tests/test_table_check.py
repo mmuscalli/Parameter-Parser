@@ -100,6 +100,33 @@ def test_reference_replays_raise_no_flags():
             assert not flags, (name, flags)
 
 
+def test_not_on_arxiv_is_asked_once():
+    """2026-11-17: a paper that isn't on arXiv raised past the lookup cache, so every run and every rebuild asked arXiv
+    again for each paper, 3 s apart (a 56-paper rebuild crawled). The answer is cached; the second time arXiv isn't
+    asked."""
+    from types import SimpleNamespace
+    from unittest.mock import patch
+    from parameter_extractor.errors import PaperSourceError
+    from parameter_extractor.ingestion import arxiv_source as ax
+    calls = []
+
+    def not_there(ident):
+        calls.append(ident)
+        raise PaperSourceError(f"DOI {ident.value} ('A title') isn't on arXiv, or arXiv's version has a different DOI.")
+
+    with tempfile.TemporaryDirectory() as tmp:
+        config = SimpleNamespace(arxiv_cache_dir=Path(tmp))
+        ex = SimpleNamespace(source=None, parsed=SimpleNamespace(page_texts=["Science 281 (1998) doi:10.1126/science.281.5377.670"],
+                                                                  text=""))
+        with patch.object(ax, "resolve", not_there):
+            for _ in range(2):
+                try:
+                    tc._arxiv_text(ex, config)
+                except PaperSourceError:
+                    pass
+        assert len(calls) == 1, calls
+
+
 if __name__ == "__main__":
     for name, fn in list(globals().items()):
         if name.startswith("test_") and callable(fn):
