@@ -322,7 +322,8 @@ class RecordView(QWidget):
             on_paper = len(self._paper.values) if node.level > 0 else 0
             if node.level > 0:                       # the paper's own values are shown on the paper only
                 holders = holders[1:]
-            entries = [(column, payload, holder) for holder in holders for column, payload in holder.values.items()]
+            entries = [(column, payload, holder) for holder in holders for column, payload in holder.values.items()
+                       if column != "run"]            # the run is the tree's own item ('Run 13')
             groups: Dict[str, list] = {}
             for e in entries:
                 groups.setdefault(self._facet_of.get(e[0], "other"), []).append(e)

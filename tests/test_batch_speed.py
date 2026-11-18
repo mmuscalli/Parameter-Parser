@@ -274,7 +274,8 @@ def test_a_batch_mode_search_shares_batches():
                                           model_profile="economy", batch_mode=True, arxiv_cache_dir=Path(tmp) / "cache")
             items = ["arXiv:1811.01882", "1811.01882v4", "2018arXiv181101882N"]       # three 'papers'
             run = fs.run_focused_search(items, ["pl_fitsoftware"], cfg, search_words=["EXOFAST"])
-            assert [o.status for o in run.outcomes] == ["found"] * 3
+            assert [o.status for o in run.outcomes] == ["found"] * 3, \
+                [(o.status, getattr(o, "error", ""), getattr(o, "message", "")) for o in run.outcomes]
             assert sum(len(b) for b in batches.created) == 3 and len(batches.created) <= 2
             assert all(o.cost_usd > 0 for o in run.outcomes)
             assert (Path(tmp) / "cache" / "lookups.json").is_file()

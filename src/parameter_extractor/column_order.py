@@ -22,7 +22,8 @@ from __future__ import annotations
 import re
 from typing import Dict, Iterable, List, Optional, Tuple
 
-IDENTIFIERS = ["entry_number", "full_id", "set_id", "sample_id", "set_independent_variable", "set_independent_value"]
+IDENTIFIERS = ["entry_number", "full_id", "set_id", "sample_id", "run", "set_independent_variable",
+               "set_independent_value"]
 PROVENANCE = ["yield_below_threshold_note", "source_notes", "extraction_confidence"]
 OTHER = "other"
 IDENTIFIERS_LABEL, PROVENANCE_LABEL = "Row", "Provenance"

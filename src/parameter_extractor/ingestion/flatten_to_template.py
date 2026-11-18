@@ -618,6 +618,10 @@ def build_rows(
                             source=v.source + (f" [{v.note}]" if v.note else "")))
             extra[DATA_LOCATION] = location(sample.source, pset.source_table_or_section)
             prov[DATA_LOCATION] = CellSource(origin="structure", source=sample.source or pset.source_table_or_section)
+            run = (getattr(sample, "run", "") or "").strip()
+            if run:                     # one of several experiments in its set, each sampled more than once (step 4)
+                extra[RUN_COLUMN] = run
+                prov[RUN_COLUMN] = CellSource(origin="structure", source=pset.source_table_or_section)
             if pset.data_source:
                 prov["original_data_reference"] = CellSource(
                     origin="structure (data reproduced from another publication)",
@@ -682,7 +686,10 @@ def row_to_template_dict(row: ExtractedRow) -> dict:
 
 
 # What each set varies (calculators/set_variables.py), next to the row ids.
-SET_COLUMNS = ["set_independent_variable", "set_independent_value"]
+# Which run of its set a row belongs to (the row plan's `run`: several experiments in one set, each sampled more than
+# once -- Huber1998's runs 13-24, each at 1 d and 4 d; Mickey, 2026-11-18): next to the ids, empty for most papers.
+RUN_COLUMN = "run"
+SET_COLUMNS = [RUN_COLUMN, "set_independent_variable", "set_independent_value"]
 # Not template columns: our provenance, always last (the optional one only when filled).
 PROVENANCE_COLUMNS = ["yield_below_threshold_note", "source_notes", "extraction_confidence"]
 OPTIONAL_PROVENANCE_COLUMNS = ["original_data_reference"]

@@ -49,6 +49,25 @@ def test_per_sample_initial_concentrations_and_ph_override():
     assert rows[0].provenance["initial_pH"].origin == "methodology (per set)"
 
 
+def test_a_run_named_in_the_row_plan_reaches_its_rows():
+    """Branch levels-and-facets (Mickey, 2026-11-18, option 2): the row plan's `run` -- several experiments in one
+    set, each sampled more than once -- is the dataset's `run` column, in the Row block after sample_id; empty for
+    rows without one."""
+    from parameter_extractor.ingestion.flatten_to_template import ordered_columns
+    meta, structure = L(PaperMetadata, "metadata"), L(StructurePlan, "structure_planner")
+    meth, chem = L(Methodology, "methodology"), L(ChemistryExtraction, "chemistry")
+    s1 = structure.experiment_sets[0]
+    for i, sample in enumerate(s1.samples):
+        sample.run = f"Run {1 + i // 2}"
+    rows = build_rows(meta, structure, meth, chem, "001")
+    first = [row_to_template_dict(r) for r in rows if r.set_id == "001001"]
+    assert [d["run"] for d in first] == [f"Run {1 + i // 2}" for i in range(len(first))]
+    assert rows[0].provenance["run"].origin == "structure"
+    assert all("run" not in row_to_template_dict(r) for r in rows if r.set_id != "001001")
+    columns = ordered_columns({"initial_Gly_aq_mM", "duration_hr"})
+    assert columns[columns.index("sample_id") + 1] == "run"
+
+
 def test_unlabelled_differing_initial_values_are_left_out_and_flagged():
     """truman2024: four different starting Gly values for one set, no sample labels.
     Picking any one would put wrong values on most rows."""
