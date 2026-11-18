@@ -308,3 +308,21 @@ evaluate_v3 against the rebuilt runs (`per_paper_v3_validation_20261117.csv`). P
 - Added after this run: a curated-pack rule -- a condition a table gives row by row goes on each sample's own row,
   never a set-wide range or 'see sample', including a pH column among a results table's columns. Not measured yet
   (6 papers, ~$0.80).
+
+### Second validation run: the per-row rule (2026-11-17, Mickey approved; $0.88, total $2.38)
+
+The curated pack on the same 6 papers with the per-row table rule (`per_paper_v3_validation2_20261117.csv`). Printed
+pH values found, rebuilt -> first validation -> second validation:
+
+| Paper | pH | Recall (all numeric) |
+|---|---|---|
+| Huber1998 | 0 -> 0 -> 7 of 7 | 0.08 -> 0.67 |
+| Leman2004 | 0 -> 3 -> 11 of 11 | 0.45 -> 0.95 |
+| Leman2015 | 4 -> 14 -> 14 of 14 | 0.45 -> 0.91 |
+| Rabinowitz1985 | 1 -> 3 -> 13 of 13 | 0.28 -> 0.94 |
+| faisal2005 | 6 -> 0 -> 6 of 6 | 0.93 (regression gone) |
+| mitsuzawa2004 | 0 -> 0 -> 0 of 5 | 0.17 |
+
+51 of 56 printed pH values against 11 before. Agreement on shared methodology columns 0.94. Left: mitsuzawa2004 --
+its starting pH is printed per starting material in a rate-constant table ('Starting material (Starting pH)'), and its rows
+(2-5) come from the reactor runs, not that table; the hand data's 37 rows are figure points.
