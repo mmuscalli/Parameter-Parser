@@ -1148,7 +1148,8 @@ def _write_record(ctx, ex: "Extraction", observations, order, renames: dict) -> 
     if renames:
         about["column_names"] = renames                 # columns written under a compound's chosen name
     try:
-        record_tree.write(observations, path, order, record_tree.plan_labels(ex.structure, observations), about)
+        record_tree.write(observations, path, order, record_tree.plan_labels(ex.structure, observations), about,
+                          runs=record_tree.plan_runs(ex.structure, observations))
     except Exception as e:                               # noqa: BLE001
         ctx.note("assemble", f"The nested record (JSON) wasn't written: {type(e).__name__}: {e}")
         return None

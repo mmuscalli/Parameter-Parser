@@ -214,19 +214,18 @@ class RecordView(QWidget):
             top.setFont(0, bold)
             self.tree.addTopLevelItem(top)
             current = top
-            for i, child in enumerate(paper.children, 1):
-                item = self._node_item(child, i)
-                top.addChild(item)
-                if keep == child.id:
-                    current = item
-                for j, leaf in enumerate(child.children, 1):
-                    sub = self._node_item(leaf, j)
-                    item.addChild(sub)
-                    if keep == leaf.id:
-                        current = sub
+            def add(parent_item, node):                # any depth: a set, its runs (if any), their samples
+                found = None
+                for i, child in enumerate(node.children, 1):
+                    item = self._node_item(child, i)
+                    parent_item.addChild(item)
+                    if keep == child.id:
+                        found = item
+                    found = add(item, child) or found
+                    item.setExpanded(len(rows) <= 60)
+                return found
+            current = add(top, paper) or current
             top.setExpanded(True)
-            for i in range(top.childCount()):
-                top.child(i).setExpanded(len(rows) <= 60)
             if sets:
                 what = (f"the paper, its {len(sets)} {plural(set_word, len(sets))} and their {len(rows)} "
                         f"{plural(row_word, len(rows))}")

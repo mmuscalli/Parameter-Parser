@@ -59,17 +59,25 @@ def check_levels(levels: List[dict], limit: int = 0) -> List[str]:
     return problems
 
 
-def levels(pack=None) -> List[Level]:
+RUN = "run"
+
+
+def levels(pack=None, runs: bool = False) -> List[Level]:
     """The pack's levels, top (the paper) to bottom (the dataset's row): declared in pack.json, else the paper and
-    the pack's two words for a set and a sample (`units`)."""
+    the pack's two words for a set and a sample (`units`). `runs`: the paper's row plan names runs -- separate
+    experiments within a set, each sampled more than once (step 4) -- so a run level sits between set and sample."""
     from parameter_extractor import packs
     manifest = (pack or packs.current()).manifest
     declared = getattr(manifest, "levels", None) or []
     if declared:
-        return [Level(str(lv["id"]), str(lv["label"])) for lv in declared]
-    units = manifest.units or {}
-    return [Level("paper", "paper"), Level("set", units.get("set", "set")),
-            Level("sample", units.get("sample", "sample"))]
+        out = [Level(str(lv["id"]), str(lv["label"])) for lv in declared]
+    else:
+        units = manifest.units or {}
+        out = [Level("paper", "paper"), Level("set", units.get("set", "set")),
+               Level("sample", units.get("sample", "sample"))]
+    if runs and len(out) == 3:
+        out.insert(2, Level(RUN, (manifest.units or {}).get("run", "run")))
+    return out
 
 
 class Facets:
@@ -152,13 +160,15 @@ def _payload(o: Observation) -> dict:
 
 
 def build(observations: Iterable[Observation], facets: Facets,
-          labels: Optional[Dict[str, str]] = None) -> Node:
+          labels: Optional[Dict[str, str]] = None, runs: Optional[Dict[str, str]] = None) -> Node:
     """The paper's tree from its observations: one node per set (by set_id) and per row (by full_id), in the order
     the rows come; then every value moved as high as its facet allows and its rows agree. `labels`: {set_id or
     full_id: label} (the row plan's set and sample labels, where known)."""
-    labels = labels or {}
+    labels, runs = labels or {}, runs or {}
+    with_runs = any(lv.id == RUN for lv in facets.levels)
     rows: Dict[str, Node] = {}
     sets: Dict[str, Node] = {}
+    run_nodes: Dict[tuple, Node] = {}
     paper = Node(level=0, id="")
     row_level = facets.row
     for o in observations:
@@ -170,6 +180,13 @@ def build(observations: Iterable[Observation], facets: Facets,
                 if parent is None:
                     parent = sets[o.set_id] = Node(level=1, id=o.set_id, label=labels.get(o.set_id, ""))
                     paper.children.append(parent)
+                run = runs.get(o.full_id, "") if with_runs else ""
+                if run:                              # one of several experiments in the set (row plan `run`)
+                    key = (o.set_id, run)
+                    if key not in run_nodes:
+                        run_nodes[key] = Node(level=2, id=f"{o.set_id}:{run}", label=run)
+                        parent.children.append(run_nodes[key])
+                    parent = run_nodes[key]
             row = rows[o.full_id] = Node(level=row_level, id=o.full_id, label=labels.get(o.full_id, ""),
                                          set_id=o.set_id, sample_id=o.sample_id, entry_number=o.entry_number)
             parent.children.append(row)
@@ -366,10 +383,11 @@ def from_json(data: dict) -> Node:
 
 
 def write(observations: List[Observation], path: Path, order, labels: Optional[Dict[str, str]] = None,
-          about: Optional[dict] = None) -> dict:
-    """<paper>_record.json from a run's observations; returns the JSON written."""
-    facets = Facets(order, levels(order.pack))
-    data = to_json(build(observations, facets, labels), facets, about)
+          about: Optional[dict] = None, runs: Optional[Dict[str, str]] = None) -> dict:
+    """<paper>_record.json from a run's observations; returns the JSON written. `runs`: {full_id: run} from the row
+    plan (plan_runs) -- a run level only when there are any."""
+    facets = Facets(order, levels(order.pack, runs=any((runs or {}).values())))
+    data = to_json(build(observations, facets, labels, runs), facets, about)
     Path(path).write_text(json.dumps(data, indent=1, ensure_ascii=False) + "\n", encoding="utf-8")
     return data
 
@@ -388,6 +406,19 @@ def plan_labels(structure, observations: Iterable[Observation]) -> Dict[str, str
         out.setdefault(o.set_id, pset.set_label)
         if k.isdigit() and 0 < int(k) <= len(pset.samples):
             out.setdefault(o.full_id, pset.samples[int(k) - 1].sample_label)
+    return out
+
+
+def plan_runs(structure, observations: Iterable[Observation]) -> Dict[str, str]:
+    """{full_id: run} for the rows of the row plan's samples that name a run (as plan_labels finds them)."""
+    out: Dict[str, str] = {}
+    plan = getattr(structure, "experiment_sets", None) or []
+    for o in observations:
+        s, k = o.set_id[-3:], o.sample_id[-3:]
+        if s.isdigit() and 0 < int(s) <= len(plan) and k.isdigit() and 0 < int(k) <= len(plan[int(s) - 1].samples):
+            run = (getattr(plan[int(s) - 1].samples[int(k) - 1], "run", "") or "").strip()
+            if run:
+                out[o.full_id] = run
     return out
 
 

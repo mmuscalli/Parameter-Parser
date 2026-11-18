@@ -36,6 +36,11 @@ class PlannedSample(BaseModel):
     source: str = Field("", alias="src", description="Only when the sample is somewhere other than its set's src "
                                                      "(another table, a figure, a section); '' for a row of the "
                                                      "set's table.")
+    # which of several separate experiments in one set the sample belongs to (branch levels-and-facets step 4: a
+    # run level between a set and its samples, record_tree.py); '' -- the usual -- when the set is one experiment
+    run: str = Field("", alias="run", description="Only when one set holds several separate experiments each "
+                                                  "sampled more than once: the same short name on every sample of "
+                                                  "one experiment; '' otherwise.")
 
 
 class PlannedSet(BaseModel):

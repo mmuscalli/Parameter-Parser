@@ -16,7 +16,11 @@ when the data is reproduced from another publication ('' otherwise), and
 `samples` -- one per row: `label`, `hr` its duration in hours (`hi` the upper
 end when the duration is a range), and `src` ONLY when the sample is somewhere
 other than its set's `src` (another table, a figure, a section) -- leave it '' when
-it's a row of the set's table. Then `n_rows`, `excluded` (each at most 8 words:
+it's a row of the set's table; `run` ONLY when one set holds several separate
+experiments (different starting solutions, or repeated runs) that are EACH
+sampled more than once -- the same short name on every sample of one experiment
+('starting with GG', 'Run 2') -- else leave it '' (a set that is one
+experiment, or whose rows are each a separate experiment). Then `n_rows`, `excluded` (each at most 8 words:
 what and why) and `notes` (one sentence, only for a real ambiguity, else '').
 
 Guidance:

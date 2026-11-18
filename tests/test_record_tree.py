@@ -112,6 +112,43 @@ def test_levels_and_their_limit():
     packs.activate("prebiotic_chemistry")
 
 
+def test_runs_within_a_set_are_a_level_of_their_own():
+    """Step 4: a row plan whose samples name a run (several experiments in one set, each sampled more than once) puts
+    a run level between the set and its samples; without runs the tree is as before. Values a run's samples share
+    sit on the run."""
+    from types import SimpleNamespace
+    packs.activate("prebiotic_chemistry")
+    order = ColumnOrder()
+    obs = []
+    for fid, start, t in (("001001001", "G", 1.0), ("001001002", "G", 2.0), ("001001003", "GG", 1.0),
+                          ("001001004", "GG", 2.0), ("001002001", "G", 5.0)):
+        obs += [_obs(fid, "initial_Gly_aq_mM", 10.0 if start == "G" else 0.0, source=f"Fig. 5 {start}"),
+                _obs(fid, "duration_hr", t, source=f"row {fid}")]
+    sample = lambda label, run="": SimpleNamespace(sample_label=label, run=run)       # noqa: E731
+    plan = SimpleNamespace(experiment_sets=[
+        SimpleNamespace(set_label="160 C", samples=[sample("1 min", "starting with G"), sample("2 min", "starting with G"),
+                                                    sample("1 min", "starting with GG"), sample("2 min", "starting with GG")]),
+        SimpleNamespace(set_label="other", samples=[sample("5 min")])])
+    runs = record_tree.plan_runs(plan, obs)
+    assert runs == {"001001001": "starting with G", "001001002": "starting with G", "001001003": "starting with GG",
+                    "001001004": "starting with GG"}
+    facets = record_tree.Facets(order, record_tree.levels(runs=True))
+    assert [lv.id for lv in facets.levels] == ["paper", "set", "run", "sample"]
+    paper = record_tree.build(obs, facets, record_tree.plan_labels(plan, obs), runs)
+    s1, s2 = paper.children
+    assert [c.label for c in s1.children] == ["starting with G", "starting with GG"] and s1.children[0].level == 2
+    assert "initial_Gly_aq_mM" in s1.children[0].values                 # shared by the run's samples: on the run
+    assert s2.children[0].level == 3 and not s2.children[0].children     # a set without runs: samples under it
+    assert record_tree.flatten(paper) == obs
+    data = record_tree.to_json(paper, facets)
+    assert [lv["id"] for lv in data["levels"]] == ["paper", "set", "run", "sample"]
+    back = record_tree.flatten(record_tree.from_json(json.loads(json.dumps(data))), order)
+    assert sorted(map(repr, back)) == sorted(map(repr, obs))
+    assert [lv.id for lv in record_tree.levels()] == ["paper", "set", "sample"]          # no runs: as before
+    from parameter_extractor.schemas.structure_plan import PlannedSample
+    assert PlannedSample.model_validate({"label": "t = 1 h"}).run == ""                  # older plans load
+
+
 def test_every_reference_run_is_reproduced_by_its_tree_and_its_json():
     from parameter_extractor.compound_names import renames_for
     from parameter_extractor.ingestion.flatten_to_template import write_template_csv
