@@ -88,9 +88,10 @@ class Facets:
         self.labels = {ROW_FACET: IDENTIFIERS_LABEL, PROVENANCE_FACET: PROVENANCE_LABEL}
         # what a set varies belongs to the set; provenance (source notes, confidence) to each row
         self.caps = {ROW_FACET: min(1, self.row), PROVENANCE_FACET: self.row}
+        chosen = dict(getattr(order.pack.manifest, "category_levels", None) or {})     # the pack's choices win
         for c in order.categories:
             self.labels[c.id] = c.label
-            self.caps[c.id] = index.get(getattr(c, "level", "") or "", self.row)
+            self.caps[c.id] = index.get(chosen.get(c.id) or getattr(c, "level", "") or "", self.row)
 
     def of(self, column: str) -> str:
         if column in self._identifiers:
@@ -115,11 +116,18 @@ class KnownFacets:
     """The facets as a written record names them (its header and where each column sits), for writing a changed tree
     back without the data pack (corrections.py); a column it doesn't know goes under 'other'."""
 
-    def __init__(self, level_list: List[Level], of: Dict[str, str], order: List[str]):
+    def __init__(self, level_list: List[Level], of: Dict[str, str], order: List[str],
+                 facet_levels: Optional[Dict[str, str]] = None):
         self.levels, self._of, self._order = level_list, of, order
+        index = {lv.id: i for i, lv in enumerate(level_list)}
+        self.row = len(level_list) - 1
+        self._caps = {f: index.get(lv, self.row) for f, lv in (facet_levels or {}).items()}
 
     def of(self, column: str) -> str:
         return self._of.get(column, "other")
+
+    def cap(self, column: str) -> int:
+        return self._caps.get(self.of(column), self.row)
 
     def described(self) -> List[dict]:
         return [{"id": f} for f in self._order]
@@ -182,7 +190,12 @@ def _same(a: dict, b: dict) -> bool:
     return all(type(a[k]) is type(b[k]) and a[k] == b[k] for k in PAYLOAD)
 
 
-def _lift(node: Node, facets: Facets) -> None:
+def share(paper: Node, facets) -> None:
+    """Values every row under a node now agrees on move up again (after corrections changed rows one by one)."""
+    _lift(paper, facets)
+
+
+def _lift(node: Node, facets) -> None:
     """Bottom-up: a column every child holds, with the same value and provenance, moves up to this node -- if its
     facet may sit this high."""
     if not node.children:

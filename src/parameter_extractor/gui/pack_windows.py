@@ -407,6 +407,8 @@ class PackEditor(QDialog):
         tabs = (("Overview", self._overview_tab(), "What happens to each paper with this data pack: every request to "
                  "the AI model (and where it comes from) and every calculation done on your computer."),
                 ("General", self._general_tab(), "This data pack's name, row words, built-in steps and calculations."),
+                ("Structure", self._structure_tab(), "How this data pack's data is organised: a paper, its groups "
+                 "of rows, their rows -- and what each kind of value is recorded for."),
                 ("Columns", self._columns_tab(), "This data pack's columns, by category."),
                 ("Steps", self._stages_tab(), "This data pack's own configurable steps: each is one model request per "
                  "paper it runs for (files in the pack's stages/ folder)."),
@@ -852,6 +854,17 @@ class PackEditor(QDialog):
         update()
         if box:
             box.toggled.connect(update)
+
+    # ---- Structure (levels and the level of each kind of value; branch levels-and-facets) ------------------------
+
+    def _structure_tab(self) -> QWidget:
+        from parameter_extractor.gui.structure_page import StructurePage
+        try:
+            pack = packs.Pack(self.draft.folder)
+        except Exception:                           # a pack that can't load as saved: its own categories only
+            pack = None
+        self.structure_page = StructurePage(self.draft.manifest, pack, self.set_edit, self.sample_edit)
+        return self.structure_page
 
     # ---- Overview (what happens to each paper) and module settings (2026-11-09) ------------------------------------
 
@@ -2300,6 +2313,7 @@ class PackEditor(QDialog):
         else:
             units.pop("row", None)
         m["units"] = units
+        self.structure_page.store(m)
         m["focused_row_plan"] = self.focused_box.isChecked()
         m["compact_text"] = self.compact_box.isChecked()
         provided = self._module_steps()

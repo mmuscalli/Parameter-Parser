@@ -1,6 +1,5 @@
 {
   "id": "wet_dry",
-  "level": "set",
   "label": "Wet-dry cycling",
   "version": 1,
   "description": "Cycle number and length, wet and dry phase temperatures, durations and humidity of wet-dry cycling experiments (a step that runs only for wet-dry experiments); rows per cycle with cumulative times.",
@@ -8,6 +7,7 @@
   "variable_categories": [
     {
       "id": "wet_dry",
+      "level": "set",
       "table_order": 35,
       "label": "Wet-Dry Cycling",
       "value_type": "number",

@@ -1,6 +1,5 @@
 {
   "id": "mineral_surfaces",
-  "level": "set",
   "label": "Mineral and clay surfaces",
   "description": "Records the identity, form, amount and preparation of mineral or clay solids used as catalysts or adsorbents. Applies to mineral-catalysed oligomerisation, clay-catalysed condensation and mineral adsorption experiments.",
   "covers": "Mineral or clay identity and class, formula, exchangeable cation, mass, particle size, pretreatment and structural Fe3+ content.",
@@ -25,6 +24,7 @@
   "variable_categories": [
     {
       "id": "mineral_surfaces",
+      "level": "set",
       "table_order": 38,
       "label": "Mineral surfaces",
       "value_type": "any",

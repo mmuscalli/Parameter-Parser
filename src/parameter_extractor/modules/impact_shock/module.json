@@ -1,6 +1,5 @@
 {
   "id": "impact_shock",
-  "level": "set",
   "label": "Impact and shock conditions",
   "description": "Records the projectile, target and shock state of impact and shock experiments or models. Applies to light-gas-gun, laser, dust-accelerator and numerical impact studies.",
   "covers": "Impact velocity, shock pressure, shock and post-shock temperature, shock duration, impact angle, and projectile and target material and size.",
@@ -20,6 +19,7 @@
   "variable_categories": [
     {
       "id": "impact_shock",
+      "level": "set",
       "table_order": 34,
       "label": "Impact and shock",
       "value_type": "any",

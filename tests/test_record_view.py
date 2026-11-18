@@ -1,0 +1,176 @@
+"""
+The results by experiment set and the data pack's Structure tab (gui/record_view.py, gui/structure_page.py; branch
+levels-and-facets step 2): the paper, its sets and samples in words; a value shared by a set corrected for all its
+samples or one; undone; computed values not editable; the tab named after the pack's word; the Structure tab's
+choices saved where they belong. eder1994 replay, no API.
+
+Run with: python tests/test_record_view.py
+"""
+import _isolation  # noqa: F401,E402 -- first: the user's own data never reaches a test (tests/_isolation.py)
+import csv
+import json
+import os
+import sys
+import tempfile
+import time
+from pathlib import Path
+from unittest.mock import patch
+
+os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
+
+from PySide6.QtWidgets import QApplication  # noqa: E402
+
+from parameter_extractor import api_client, packs  # noqa: E402
+from parameter_extractor.column_labels import readable  # noqa: E402
+from parameter_extractor.pipeline import run_pipeline  # noqa: E402
+from test_pipeline_offline import PDF, _config, _have_inputs, _replay_send  # noqa: E402
+
+app = QApplication.instance() or QApplication([])
+
+
+def _pump(n=10):
+    for _ in range(n):
+        app.processEvents()
+        time.sleep(0.01)
+
+
+def _cells(path: Path, column: str) -> dict:
+    with open(path, newline="", encoding="utf-8") as f:
+        return {r["full_id"]: r.get(column, "") for r in csv.DictReader(f)}
+
+
+def _values(view) -> dict:
+    out = {}
+    for i in range(view.values.topLevelItemCount()):
+        item = view.values.topLevelItem(i)
+        if item.data(0, 257) is not None:                  # VALUE_ROLE
+            out[item.data(0, 257)[0]] = item
+    return out
+
+
+def test_column_names_in_words():
+    assert readable("initial_Gly_aq_mM") == "Gly concentration (starting, dissolved)"
+    assert readable("sampled_Gly-Gly_aq_%yield") == "Gly-Gly yield (measured, dissolved)"
+    assert readable("initial_temperature_C") == "Initial temperature" and readable("initial_pH") == "Initial pH"
+    assert readable("pl_orbper", "exoplanets") == "Orbital Period"            # the archive's own label
+    from parameter_extractor.gui.record_view import RecordView
+    assert RecordView.title_for(packs.available()["prebiotic_chemistry"]) == "Experiment sets"
+    exo = packs.available()["exoplanets"]
+    assert RecordView.title_for(exo) == exo.manifest.units["set"][:1].upper() + exo.manifest.units["set"][1:] + "s"
+
+
+def test_the_experiment_sets_tab_shows_and_corrects():
+    if not _have_inputs():
+        return
+    from parameter_extractor.gui.main_window import MainWindow
+    from parameter_extractor.gui.record_view import RecordView
+    with tempfile.TemporaryDirectory() as tmp:
+        with patch.object(api_client, "_send", _replay_send):
+            result = run_pipeline(PDF, _config(Path(tmp)))
+        w = MainWindow()
+        w.show_result(result)
+        _pump()
+        view = w.record_view
+        index = w.tabs.indexOf(view)
+        assert w.tabs.tabText(index) == "Experiment sets" and w.tabs.isTabEnabled(index)
+        paper = view.tree.topLevelItem(0)
+        record = json.loads(result.record_path.read_text())
+        assert paper.childCount() == len(record["paper"]["children"])
+        assert sum(paper.child(i).childCount() for i in range(paper.childCount())) == len(result.rows)
+        assert "experiment sets and their 42 samples" in view.intro.text()
+        first_set = paper.child(0)
+        sample = first_set.child(0)
+        assert first_set.text(0).startswith("Experiment set 1") and sample.text(0).startswith("Sample 1")
+        view.tree.setCurrentItem(sample)
+        _pump()
+        values = _values(view)
+        temp = values["initial_temperature_C"]
+        assert temp.text(0) == "Initial temperature" and "all 3 samples" in temp.text(3)
+        assert "paper_title" not in values                                     # the paper's own: on the paper
+        assert any("recorded for the whole paper" in view.values.topLevelItem(i).text(0)
+                   for i in range(view.values.topLevelItemCount()))
+        assert "set_independent_variable" in values and not view._correctable("set_independent_variable")
+        view.values.setCurrentItem(temp)
+        assert "Initial temperature" in view.source.toPlainText() and "initial_temperature_C" in view.source.toPlainText()
+        ids = [first_set.child(i).data(0, 256).id for i in range(first_set.childCount())]   # NODE_ROLE
+        before = _cells(result.csv_path, "initial_temperature_C")
+
+        # only this sample
+        with patch.object(RecordView, "_targets", lambda self, holder: [ids[0]]):
+            temp.setText(1, "90")
+        _pump()
+        now = _cells(result.csv_path, "initial_temperature_C")
+        assert now[ids[0]] == "90.0" and all(now[i] == before[i] for i in ids[1:])
+        table_col = [w.rows_table.horizontalHeaderItem(c).text() for c in range(w.rows_table.columnCount())]
+        assert w.rows_table.item(0, table_col.index("initial_temperature_C")).text() == "90.0"   # the table follows
+        assert "corrected" in _values(view)["initial_temperature_C"].text(3)
+
+        # all three samples of the set: shared by the set again in the record
+        view.tree.setCurrentItem(view.tree.topLevelItem(0).child(0).child(1))
+        _pump()
+        with patch.object(RecordView, "_targets", lambda self, holder: ids):
+            _values(view)["initial_temperature_C"].setText(1, "95")
+        _pump()
+        now = _cells(result.csv_path, "initial_temperature_C")
+        assert all(now[i] == "95.0" for i in ids)
+        view.tree.setCurrentItem(view.tree.topLevelItem(0).child(0).child(2))
+        _pump()
+        assert "all 3 samples" in _values(view)["initial_temperature_C"].text(3)
+
+        # a value that isn't one: refused
+        with patch("PySide6.QtWidgets.QMessageBox.warning", lambda *a, **k: None):
+            _values(view)["initial_temperature_C"].setText(1, "hot")
+        _pump()
+        assert _cells(result.csv_path, "initial_temperature_C") == now
+
+        # undone
+        from parameter_extractor import corrections as corr
+        corr.restore(result.run_dir, [(i, "initial_temperature_C", None) for i in ids])
+        view.refresh()
+        _pump()
+        assert _cells(result.csv_path, "initial_temperature_C") == before
+        assert "corrected" not in _values(view)["initial_temperature_C"].text(3)
+        w.close()
+
+
+def test_the_structure_tab_saves_levels():
+    from parameter_extractor.gui.pack_windows import PackEditor
+    with tempfile.TemporaryDirectory() as tmp, patch.object(packs, "user_packs_dir", lambda: Path(tmp)):
+        pack = packs.create_pack("my_area", "My area", base=Path(tmp), source=packs.available()["prebiotic_chemistry"])
+        own = json.loads((pack.folder / "pack.json").read_text())["variable_categories"][0]["id"]
+        e = PackEditor(pack.folder)
+        page = e.structure_page
+        rows = {page._kinds[r]["id"]: r for r in range(page.table.rowCount())}
+        assert {"metadata", "methodology", own} <= set(rows)
+        assert page.table.cellWidget(rows["metadata"], 1).currentData() == "paper"
+        page.group_word.setText("reaction series")
+        assert e.set_edit.text() == "reaction series"                          # the General tab's word too
+        assert page.table.cellWidget(rows["metadata"], 1).itemText(1) == "each reaction series"
+        page.table.cellWidget(rows["metadata"], 1).setCurrentIndex(1)            # a shared one: category_levels
+        page.table.cellWidget(rows[own], 1).setCurrentIndex(0)                   # the pack's own: in its entry
+        assert "Each reaction series" in page.picture.text()
+        with patch("PySide6.QtWidgets.QMessageBox.warning", lambda *a, **k: None):
+            e.collect()
+            assert e.save()
+        saved = json.loads((pack.folder / "pack.json").read_text())
+        assert saved["units"]["set"] == "reaction series" and saved["category_levels"] == {"metadata": "set"}
+        assert next(c for c in saved["variable_categories"] if c["id"] == own)["level"] == "paper"
+        from parameter_extractor import record_tree
+        from parameter_extractor.column_order import ColumnOrder
+        p = packs.Pack(pack.folder)
+        facets = record_tree.Facets(ColumnOrder(pack=p), record_tree.levels(p))
+        assert facets.levels[facets.caps["metadata"]].id == "set" and facets.levels[facets.caps[own]].id == "paper"
+        e.close()
+    built_in = PackEditor(packs.available()["prebiotic_chemistry"].folder)              # read-only: locked
+    assert not built_in.structure_page.table.cellWidget(0, 1).isEnabled()
+    built_in.close()
+
+
+if __name__ == "__main__":
+    for name, fn in list(globals().items()):
+        if name.startswith("test_") and callable(fn):
+            fn()
+            print(f"PASS: {name}")
+    print("All record view tests passed.")

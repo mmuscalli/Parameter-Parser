@@ -451,9 +451,11 @@ def check(draft: PackDraft) -> List[Problem]:
     for message in record_tree.check_levels(declared, int(m.get("level_limit") or 0)) if declared else []:
         add("error", "Levels", message)
     level_ids = [str(lv.get("id", "")) for lv in declared] or ["paper", "set", "sample"]
-    for cat in m.get("variable_categories", []):
-        if cat.get("level") and cat["level"] not in level_ids:
-            add("error", "Categories", f"category '{cat.get('id', '')}' sits at level '{cat['level']}', which the data "
+    placed = [(cat.get("id", ""), cat.get("level")) for cat in m.get("variable_categories", [])]
+    placed += list((m.get("category_levels") or {}).items())
+    for cid, lv in placed:
+        if lv and lv not in level_ids:
+            add("error", "Categories", f"category '{cid}' sits at level '{lv}', which the data "
                                        f"pack doesn't have (levels: {', '.join(level_ids)}).")
     for key in ("standard_columns", "species_cids"):
         if m.get(key) and not (draft.folder / m[key]).is_file():

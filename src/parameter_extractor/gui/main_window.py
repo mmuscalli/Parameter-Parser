@@ -817,20 +817,29 @@ class MainWindow(QMainWindow):
                               "about the paper -- grouped by kind. Select one for the details and the quote; tick it "
                               "once you've dealt with it (saved with the run).")
 
+        # the same data by experiment: the paper, its sets, their rows (record_view.py; branch levels-and-facets)
+        from parameter_extractor.gui.record_view import RecordView
+        self.record_view = RecordView()
+        self.record_view.corrected.connect(lambda: self._fill_rows(self._shown_result, from_record=True))
+        tabs.addTab(self.record_view, "Experiment sets")
+        tabs.setTabToolTip(2, "The same data arranged the way the work was done: the paper, its sets and their "
+                              "samples. Select one to see everything recorded for it, and where each value came from; "
+                              "double-click a value to correct it.")
+
         # captured figures and labelled equations, at a glance (rich text: images + captions)
         self.figures_view = QTextBrowser(placeholderText="Figures found in the paper appear here.")
         self.figures_view.setOpenExternalLinks(False)
         tabs.addTab(self.figures_view, "Figures")
-        tabs.setTabToolTip(2, "The paper's figures, and the ones you digitized (values read off the plot).")
+        tabs.setTabToolTip(3, "The paper's figures, and the ones you digitized (values read off the plot).")
         self.tables_view = QTextBrowser(placeholderText="Tables found in the paper appear here.")
         self.tables_view.setOpenExternalLinks(False)
         tabs.addTab(self.tables_view, "Tables")
-        tabs.setTabToolTip(3, "The paper's tables as images, to compare the extracted values with.")
+        tabs.setTabToolTip(4, "The paper's tables as images, to compare the extracted values with.")
         self.equations_view = QTextBrowser(placeholderText="Equations the authors label, e.g. '(1)' or "
                                                            "'Eq. 2', appear here.")
         self.equations_view.setTextInteractionFlags(Qt.TextInteractionFlag.TextBrowserInteraction)
         tabs.addTab(self.equations_view, "Equations")
-        tabs.setTabToolTip(4, "Equations the authors number or name.")
+        tabs.setTabToolTip(5, "Equations the authors number or name.")
 
         summary = QWidget()
         s_layout = QVBoxLayout(summary)
@@ -846,7 +855,7 @@ class MainWindow(QMainWindow):
         s_layout.addWidget(self.summary_text)
         s_layout.addLayout(s_buttons)
         tabs.addTab(summary, "Summary")
-        tabs.setTabToolTip(5, "What the run did and cost, and where the files were saved.")
+        tabs.setTabToolTip(6, "What the run did and cost, and where the files were saved.")
 
         # a focused search's results: one row per paper and object, a column per parameter (focused_results.csv)
         self.search_table = QTableWidget(0, 4)
@@ -1623,6 +1632,7 @@ class MainWindow(QMainWindow):
     def show_result(self, result) -> None:
         self._last_run_dir, self._last_csv = result.run_dir, result.csv_path
         self._fill_rows(result)
+        self._fill_record(result)
         self._fill_flags(result)
         self._fill_figures(result)
         self._fill_tables(result)
@@ -1635,13 +1645,33 @@ class MainWindow(QMainWindow):
         self._update_flags_title()
         self.tabs.setCurrentIndex(1 if n_flags else 0)
 
-    def _fill_rows(self, result) -> None:
-        """Shows the CSV exactly as saved, minus columns that are empty in every row."""
+    def _fill_rows(self, result, from_record: bool = False) -> None:
+        """Shows the CSV exactly as saved, minus columns that are empty in every row. The Experiment sets tab follows
+        a correction made here (and this table one made there: `from_record`)."""
         self._filling_rows = True
         try:
             self._fill_rows_now(result)
         finally:
             self._filling_rows = False
+        if not from_record and self.record_view.result is result:
+            try:
+                self.record_view.refresh()
+            except Exception:                   # the second view never gets in the way of the table
+                pass
+
+    def _fill_record(self, result) -> None:
+        """The Experiment sets tab (record_view.py): titled with the pack's word for a set."""
+        from parameter_extractor import packs
+        from parameter_extractor.gui.record_view import RecordView
+        pack = packs.available().get(getattr(result, "pack", "") or self.pack_combo.currentData() or "")
+        index = self.tabs.indexOf(self.record_view)
+        try:
+            self.tabs.setTabText(index, RecordView.title_for(pack) if pack else "Experiment sets")
+            self.record_view.show_result(result, self.registry_path)
+            self.tabs.setTabEnabled(index, True)
+        except Exception as e:                  # an older or damaged folder: the table still shows everything
+            self.tabs.setTabEnabled(index, False)
+            self.tabs.setTabToolTip(index, f"Not available for this run ({type(e).__name__}: {e})")
 
     def _fill_rows_now(self, result) -> None:
         with open(result.csv_path, newline="") as f:

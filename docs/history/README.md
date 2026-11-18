@@ -150,3 +150,4 @@ current month's file (start `YYYY-MM.md` in a new month), with one line here.
 - Paper summary rows: reactants of different experiments flagged on their cells (2026-11-18, Mickey)
 - Version 0.5.0: a resumed queue's whole cost; axes read from their numbers; a cost and time estimate before a run (2026-11-18, Mickey)
 - Branch levels-and-facets, step 1: a paper's data as a tree of levels and facets; nested JSON record (2026-11-18, Mickey)
+- Branch levels-and-facets, step 2: the results by experiment set; a Structure tab for data packs (2026-11-18, Mickey)

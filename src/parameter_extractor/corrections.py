@@ -309,6 +309,7 @@ def _write_record(path: Path, changes: List[Tuple[Correction, bool]]) -> None:
             changed |= record_tree.set_value(tree, c.full_id, c.column, payload)
         if changed:
             facets = _record_facets(data, paper_json)
+            record_tree.share(tree, facets)              # a value now the same on every row of its set: shared again
             paper_json["paper"] = record_tree.node_json(tree, facets)
     path.write_text(json.dumps(data, indent=1, ensure_ascii=False) + "\n", encoding="utf-8")
 
@@ -338,7 +339,9 @@ def _record_facets(data: dict, paper_json: dict):
         for child in node.get("children", []):
             walk(child)
     walk(paper_json["paper"])
-    return record_tree.KnownFacets(levels, of, [f["id"] for f in data.get("facets", paper_json.get("facets", []))])
+    header = data.get("facets", paper_json.get("facets", []))
+    return record_tree.KnownFacets(levels, of, [f["id"] for f in header],
+                                   {f["id"]: f.get("level", "") for f in header})
 
 
 # ---- checking a value against its column ----------------------------------------------------------------------------

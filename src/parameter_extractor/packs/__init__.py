@@ -71,6 +71,8 @@ class PackManifest(BaseModel):
     # paper, then `units`' set and sample. At most record_tree.MAX_LEVELS unless level_limit says more.
     levels: List[dict] = Field(default_factory=list)
     level_limit: int = 0
+    # this pack's level for a category, over the category's own (a module's or a shared one too): {category id: level}
+    category_levels: Dict[str, str] = Field(default_factory=dict)
     # send the paper text with long runs of layout spaces collapsed (-20% tokens; tables go
     # as images anyway)
     compact_text: bool = False
