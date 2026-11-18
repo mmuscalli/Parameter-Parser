@@ -280,3 +280,31 @@ Duration 0.59 / 0.59 / 0.55 / 0.88; pH 0.75 / 0.67 / 0.71 / 0.42.
   pH also goes in `initial_pH`.
 - Left as they are: Sakata2010 and Zamaraev1996 (results in figures: their rows don't exist unattended), Takaoka1991,
   Rabinowitz1978 and Nooner1977 (1-2 values each).
+
+### Validation run (2026-11-17, Mickey approved ~$3; spent $1.50)
+
+New runs (batch Standard, no automatic figures) with the two fixes: Pack 56 on 6 papers whose durations the drafted
+packs had missed, the curated pack on 6 papers with pH misses (faisal2005 as a regression check). Scored with
+evaluate_v3 against the rebuilt runs (`per_paper_v3_validation_20261117.csv`). Printed hand values found, before -> after:
+
+| Pack | Paper | Duration | pH | Recall (all numeric) |
+|---|---|---|---|---|
+| Pack 56 | Eder1992 | 0 -> 12 of 12 | 1 -> 1 of 1 | 0.18 -> 0.94 |
+| Pack 56 | Rode1990 | 2 -> 3 of 3 | 0 of 2 | 0.71 -> 0.81 |
+| Pack 56 | Ying2019 | 0 of 1 | 0 -> 1 of 1 | 0.00 -> 0.75 |
+| Pack 56 | Leman2015, Rabinowitz1985, Steinman1966 | unchanged | unchanged | unchanged |
+| Curated | Leman2015 | 1 of 1 | 4 -> 14 of 14 | 0.45 -> 0.91 |
+| Curated | Leman2004 | 5 of 5 | 0 -> 3 of 11 | 0.45 -> 0.59 |
+| Curated | Rabinowitz1985 | 1 of 1 | 1 -> 3 of 13 | 0.28 -> 0.39 |
+| Curated | Huber1998 | -- | 0 of 7 | 0.08 |
+| Curated | mitsuzawa2004 | -- | 0 of 5 | 0.17 |
+| Curated | faisal2005 | -- | 6 -> 0 of 6 | 0.93 -> 0.50 |
+
+- The duration fix works (Eder1992's per-row times now on every row).
+- The pH descriptions help where the pH is in the text or a labelled column, but the curated conditions step still
+  answers set-level where a TABLE gives pH per row: Huber1998 'see sample' (now left out, not written as 0), mitsuzawa
+  2004's starting pH not given, and faisal2005's results-table pH no longer given at all (2 to 5 rows per answer
+  against Pack 56's 47 per-run rows for Huber1998; both answers complete, end_turn).
+- Added after this run: a curated-pack rule -- a condition a table gives row by row goes on each sample's own row,
+  never a set-wide range or 'see sample', including a pH column among a results table's columns. Not measured yet
+  (6 papers, ~$0.80).

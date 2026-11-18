@@ -214,7 +214,10 @@ def with_review(run, folder):
 rows, new_cols = [], Counter()
 texts = {}
 for mode, pack in [(m, p) for m in ("written", "reviewed") for p in PACKS]:
-    runs = queue_runs(latest(STUDY / f"runs_{pack}"))
+    main_queue = latest(STUDY / f"runs_{pack}")
+    if main_queue is None:                                # a study folder with only some packs (a validation run)
+        continue
+    runs = queue_runs(main_queue)
     sq = latest(STUDY / f"scanned_{pack}")
     if sq is not None:
         runs.update(queue_runs(sq))                       # the scanned papers' reruns with text recognition
@@ -339,6 +342,7 @@ def view(sub):
     return out
 
 
+PACKS = [p for p in PACKS if (df.pack == p).any()]
 summary = {mode: {pack: {"all": view(df[(df["mode"] == mode) & (df.pack == pack)]),
                          "with_rows": view(df[(df["mode"] == mode) & (df.pack == pack) & (df.rows > 0)])}
                   for pack in PACKS} for mode in ("written", "reviewed")}
