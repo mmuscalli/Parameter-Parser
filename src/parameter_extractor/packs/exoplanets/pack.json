@@ -7,7 +7,8 @@
   "standard_columns": "standard_columns.json",
   "builtin_stages": ["fit_models"],
   "postprocess": ["row_labels", "exoplanet_masses", "reference_names", "archive_validation"],
-  "units": {"set": "planetary system", "sample": "planet", "row": "object model instance"},
+  "units": {"set": "planetary system", "sample": "planet", "row": "object model instance", "run": "planet", "run_row": "fit solution"},
+  "runs_from_labels": true,
   "compact_text": true,
   "variable_categories": [
     {"id": "fitting", "label": "Fitting models", "model_assigns": false, "table_order": 60, "description": "how each solution was fitted (pl_fit*, st_fit*)", "patterns": ["^(pl|st)_fit"]},

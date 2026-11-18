@@ -149,6 +149,15 @@ def test_runs_within_a_set_are_a_level_of_their_own():
     assert PlannedSample.model_validate({"label": "t = 1 h"}).run == ""                  # older plans load
 
 
+def test_runs_read_from_row_labels():
+    """A pack with runs_from_labels (exoplanets): rows labelled 'name [which]' that share a name are a run."""
+    from types import SimpleNamespace
+    smp = lambda label: SimpleNamespace(sample_label=label)                      # noqa: E731
+    pset = SimpleNamespace(samples=[smp("HD 14067 b [RV fit, Table 3]"), smp("HD 14067 b [joint fit, Table 4]"),
+                                    smp("HD 14067 c"), smp("HD 99 b [only one]")])
+    assert record_tree.label_runs(pset) == {0: "HD 14067 b", 1: "HD 14067 b"}
+
+
 def test_every_reference_run_is_reproduced_by_its_tree_and_its_json():
     from parameter_extractor.compound_names import renames_for
     from parameter_extractor.ingestion.flatten_to_template import write_template_csv
@@ -179,6 +188,11 @@ def test_every_reference_run_is_reproduced_by_its_tree_and_its_json():
             assert sorted(map(repr, back)) == sorted(map(repr, observations)), ref.name
             write_template_csv(observations_to_records(back), wide, column_categories=chosen)
             assert wide.read_text() == (ref / "expected_extracted.csv").read_text(), ref.name
+            if json.loads((ref / "reference.json").read_text())["pack"] == "exoplanets":
+                # a planet's fit solutions are a run of their own, read from the row labels ('TOI-3862 b [...]')
+                assert [lv["label"] for lv in data["levels"]][2:] == ["planet", "fit solution"], data["levels"]
+                runs = [c for s in data["paper"]["children"] for c in s.get("children", []) if c["level"] == "run"]
+                assert runs and all(len(r["children"]) >= 2 for r in runs), runs
             rows = sum(1 for _ in _leaves(data["paper"]))
             print(f"  {ref.name}: {len(observations)} values, {rows} rows; "
                   f"{len(observations) - _stored(data['paper'])} copies saved by the tree")

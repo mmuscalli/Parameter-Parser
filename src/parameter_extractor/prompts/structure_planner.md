@@ -22,8 +22,13 @@ duration in hours whenever the paper states one -- a time point, a time given
 per table row, or one time stated once for the whole table or experiment (a
 caption's "heated at 90 °C for 3 hours") -- empty only when the paper gives
 none (`hi` the upper end when a duration is given as a range), and `src` ONLY when the sample
-is somewhere other than its set's `src` -- '' for a row of the set's table. Then
-`n_rows`, `excluded` (each at most 8 words) and `notes` (one sentence, or '').
+is somewhere other than its set's `src` -- '' for a row of the set's table; `run`
+ONLY when one set holds several separate experiments (different starting
+materials or conditions, or repeated runs) that are EACH sampled more than once
+-- the same short name on every sample of one experiment ('Run 2', 'with
+catalyst') -- else leave it '' (a set that is one experiment, or whose rows are
+each a separate experiment). Then `n_rows`, `excluded` (each at most 8 words) and
+`notes` (one sentence, or '').
 
 Guidance:
 {{#TEXT_ROWS}}

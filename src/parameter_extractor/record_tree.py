@@ -22,6 +22,7 @@ data platforms take.
 from __future__ import annotations
 
 import json
+import re
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Dict, Iterable, List, Optional, Tuple
@@ -76,7 +77,10 @@ def levels(pack=None, runs: bool = False) -> List[Level]:
         out = [Level("paper", "paper"), Level("set", units.get("set", "set")),
                Level("sample", units.get("sample", "sample"))]
     if runs and len(out) == 3:
-        out.insert(2, Level(RUN, (manifest.units or {}).get("run", "run")))
+        units = manifest.units or {}
+        out.insert(2, Level(RUN, units.get("run", "run")))
+        if units.get("run_row"):                     # what a row is within a run ('fit solution' of a planet)
+            out[-1] = Level(out[-1].id, units["run_row"])
     return out
 
 
@@ -409,14 +413,33 @@ def plan_labels(structure, observations: Iterable[Observation]) -> Dict[str, str
     return out
 
 
-def plan_runs(structure, observations: Iterable[Observation]) -> Dict[str, str]:
-    """{full_id: run} for the rows of the row plan's samples that name a run (as plan_labels finds them)."""
+_BRACKETED = re.compile(r"^(?P<run>.+?)\s*\[[^\]]+\]\s*$")
+
+
+def label_runs(pset) -> Dict[int, str]:
+    """{sample index: run} read from a set's sample labels, for a pack whose row plan labels the rows of one thing
+    'name [which]' (the exoplanet pack: 'HD 14067 b [RV fit, Table 3]', one row per fit solution of a planet): a name
+    two or more samples share is a run; a sample alone with its name isn't in one."""
+    names = {}
+    for i, smp in enumerate(pset.samples):
+        m = _BRACKETED.match(smp.sample_label or "")
+        if m:
+            names[i] = m.group("run").strip()
+    shared = {n for n in names.values() if list(names.values()).count(n) > 1}
+    return {i: n for i, n in names.items() if n in shared}
+
+
+def plan_runs(structure, observations: Iterable[Observation], from_labels: bool = False) -> Dict[str, str]:
+    """{full_id: run} for the rows of the row plan's samples that name a run (as plan_labels finds them); with
+    `from_labels` (the pack's `runs_from_labels`), also runs read from the sample labels (label_runs)."""
     out: Dict[str, str] = {}
     plan = getattr(structure, "experiment_sets", None) or []
+    by_label = [label_runs(p) if from_labels else {} for p in plan]
     for o in observations:
         s, k = o.set_id[-3:], o.sample_id[-3:]
         if s.isdigit() and 0 < int(s) <= len(plan) and k.isdigit() and 0 < int(k) <= len(plan[int(s) - 1].samples):
-            run = (getattr(plan[int(s) - 1].samples[int(k) - 1], "run", "") or "").strip()
+            run = (getattr(plan[int(s) - 1].samples[int(k) - 1], "run", "") or "").strip() \
+                or by_label[int(s) - 1].get(int(k) - 1, "")
             if run:
                 out[o.full_id] = run
     return out
