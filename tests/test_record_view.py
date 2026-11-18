@@ -182,10 +182,13 @@ def test_the_structure_tab_saves_levels():
         page.table.cellWidget(rows["metadata"], 1).setCurrentIndex(1)            # a shared one: category_levels
         page.table.cellWidget(rows[own], 1).setCurrentIndex(0)                   # the pack's own: in its entry
         assert "Each reaction series" in page.picture.text()
+        assert page.level_limit.value() == 4
+        page.level_limit.setValue(5)                                             # the advanced override
         with patch("PySide6.QtWidgets.QMessageBox.warning", lambda *a, **k: None):
             e.collect()
             assert e.save()
         saved = json.loads((pack.folder / "pack.json").read_text())
+        assert saved["level_limit"] == 5
         assert saved["units"]["set"] == "reaction series" and saved["category_levels"] == {"metadata": "set"}
         assert next(c for c in saved["variable_categories"] if c["id"] == own)["level"] == "paper"
         from parameter_extractor import record_tree

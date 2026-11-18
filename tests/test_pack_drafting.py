@@ -218,6 +218,33 @@ def test_stage_discipline():
 
 
 
+def test_a_drafted_pack_gets_levels_and_fill_settings_from_the_surveys():
+    """Branch levels-and-facets: a drafted pack's categories get the level their values sit at and whether they're
+    filled in, from what the surveys say of each variable (where it differs, its role) -- conditions that differ
+    between sets: the set, filled within it; results: the rows, never filled. The template's settings stay."""
+    from types import SimpleNamespace
+    from parameter_extractor.calculators.shared_values import selectors
+    from parameter_extractor.pack_drafting import structure_from_surveys, write_pack
+    surveys = [SimpleNamespace(survey=_survey(n)) for n in range(3)]
+    levels, fills, never = structure_from_surveys(
+        [("temp_C", "conditions", "reaction_temperature"), ("yield_pct", "results", "product_yield")], surveys)
+    assert levels == {"conditions": "set"} and fills == {"conditions": "set"} and never == []
+    with tempfile.TemporaryDirectory() as tmp, patch.object(packs, "user_packs_dir", lambda: Path(tmp)):
+        pack, _, _ = write_pack(PROPOSAL, "levels_drafted", "Levels drafted", base=Path(tmp), surveys=surveys)
+        m = json.loads((pack.folder / "pack.json").read_text())
+        cats = {c["id"]: c for c in m["variable_categories"]}
+        assert cats["conditions"]["level"] == "set" and cats["conditions"]["fill"] == "set"
+        assert "level" not in cats["results"] and "fill" not in cats["results"]
+        assert m["category_fill"] == {"methodology": "paper"} and m["fill_columns"]["duration_hr"] == "none"
+        assert "shared_columns" not in m and "group_columns" not in m
+        shared, group = selectors(packs.Pack(pack.folder))
+        assert "conditions" in group["categories"] and "methodology" in shared["categories"]
+        # without surveys (an older caller): the template's settings only
+        plain, _, _ = write_pack(PROPOSAL, "levels_plain", "Levels plain", base=Path(tmp))
+        m2 = json.loads((plain.folder / "pack.json").read_text())
+        assert not any(c.get("fill") or c.get("level") for c in m2["variable_categories"])
+
+
 def test_modules_are_chosen_before_the_design():
     """2026-11-09: the modules the surveys call for are chosen BEFORE the design request, which is told what they
     record; what a proposal still asks of them is left to them; a step named like a module's is renamed; compounds

@@ -50,7 +50,15 @@ def test_an_older_pack_keeps_its_lists_until_a_fill_changes():
     QApplication.instance() or QApplication([])
     from parameter_extractor.gui.pack_windows import PackEditor
     with tempfile.TemporaryDirectory() as tmp, patch.object(packs, "user_packs_dir", lambda: Path(tmp)):
-        pack = packs.create_pack("older", "Older", base=Path(tmp))              # from the template: the lists
+        pack = packs.create_pack("older", "Older", base=Path(tmp))
+        manifest = json.loads((pack.folder / "pack.json").read_text())        # as packs were before step 3: lists
+        for key in ("category_fill", "fill_columns", "_about_category_fill", "_about_fill_columns"):
+            manifest.pop(key, None)
+        for c in manifest.get("variable_categories", []):
+            c.pop("fill", None)
+        manifest["shared_columns"] = {"categories": ["methodology"], "exclude": ["set_type"]}
+        manifest["group_columns"] = {"categories": ["methodology"], "exclude": ["set_type"]}
+        (pack.folder / "pack.json").write_text(json.dumps(manifest, indent=1))
         legacy = packs.Pack(pack.folder)
         assert not uses_fill_settings(legacy.own_manifest)
         assert selectors(legacy) == (legacy.manifest.shared_columns, legacy.manifest.group_columns)

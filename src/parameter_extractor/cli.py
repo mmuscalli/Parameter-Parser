@@ -463,9 +463,6 @@ def _focused(args, parser) -> int:
     return 0
 
 
-if __name__ == "__main__":
-    raise SystemExit(main())
-
 
 PROFILE_FIELDS = ("provider", "model_profile", "profile_roles", "local", "max_tokens", "temperature",
                   "max_parallel_stages", "max_retries", "prices", "prompt_caching")
@@ -689,3 +686,7 @@ def _suggest_additions(args, parser) -> int:
         for p in problems:
             print(f"  {p}")
     return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

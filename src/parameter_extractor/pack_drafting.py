@@ -442,8 +442,42 @@ def _disciplined_stages(stages: List[ProposedStage], notes: List[str]) -> List[P
     return stages
 
 
+def structure_from_surveys(params: Sequence[tuple], papers) -> tuple:
+    """(category levels, category fills, columns never filled) for a drafted pack (branch levels-and-facets): from what
+    the surveys say of each variable -- where its values differ (between rows, between groups, one for the paper) and
+    its role. `params`: [(column, category id, survey column)]. A category whose variables are mostly one value per
+    paper sits at the paper, mostly per group (or paper) at the set, else at the rows; a paper- or set-level category
+    that isn't mostly results is filled in where only some rows give a value (from its set, or across the paper), its
+    columns that vary row by row or are results never."""
+    from collections import Counter, defaultdict
+    by: Dict[str, list] = {}
+    for p in papers:
+        for v in (p.survey.variables if getattr(p, "survey", None) else []):
+            by.setdefault(_slug(v.column), []).append((v.level, v.role))
+    per_cat: Dict[str, list] = defaultdict(list)
+    for column, cat, key in params:
+        votes = by.get(key, [])
+        if votes:
+            per_cat[cat].append((Counter(lv for lv, _ in votes).most_common(1)[0][0],
+                                 Counter(r for _, r in votes).most_common(1)[0][0], column))
+    levels, fills, never = {}, {}, []
+    for cat, items in per_cat.items():
+        n = len(items)
+        paper = sum(1 for lv, _, _ in items if lv == "paper")
+        grouped = sum(1 for lv, _, _ in items if lv == "set") + paper
+        results = sum(1 for _, r, _ in items if r == "result")
+        level = "paper" if paper / n >= 0.6 else "set" if grouped / n >= 0.5 else ""
+        if level:
+            levels[cat] = level
+            if results / n < 0.5:
+                fills[cat] = level
+                never += [col for lv, r, col in items if lv == "row" or r == "result"]
+    return levels, fills, never
+
+
 def write_pack(proposal: PackProposal, pack_id: str, label: str, description: str = "",
-               base: Optional[Path] = None, tidy: bool = True, modules: Sequence[str] = ()) -> tuple:
+               base: Optional[Path] = None, tidy: bool = True, modules: Sequence[str] = (),
+               surveys: Sequence = ()) -> tuple:
     """A new pack from the proposal (packs.create_pack from the template, examples replaced), linking `modules`;
     proposed parameters / steps / categories a linked module already covers are left out. (pack, dropped duplicate
     columns, {column: proposed parameter}); by_column["__tidied__"] / ["__left_to_modules__"] carry the notes."""
@@ -482,7 +516,7 @@ def write_pack(proposal: PackProposal, pack_id: str, label: str, description: st
     first = categories[0]["id"] if categories else "methodology"
     category_columns.setdefault(first, {"columns": []})["columns"].append("duration_hr")
     columns, seen, dropped, by_column, tidied = ["set_type", "duration_hr"], set(), [], {}, []
-    proposed = []
+    proposed, placed = [], []
     for st in proposal.stages:                  # what the linked modules record is theirs (before merging stages)
         st = st.model_copy(deep=True)
         kept = []
@@ -550,8 +584,18 @@ def write_pack(proposal: PackProposal, pack_id: str, label: str, description: st
             if cat not in {c["id"] for c in categories}:
                 cat = first
             category_columns.setdefault(cat, {"columns": []})["columns"].append(column)
+            placed.append((column, cat, _slug(p.column)))
         spec["parameters"] = params
     m["category_columns"] = category_columns
+    if surveys:                     # each category's level and fill setting, from what the surveys say (Structure tab)
+        levels, fills, never = structure_from_surveys(placed, surveys)
+        for c in categories:
+            if c["id"] in levels:
+                c["level"] = levels[c["id"]]
+            if c["id"] in fills:
+                c["fill"] = fills[c["id"]]
+        if never:
+            m["fill_columns"] = {**(m.get("fill_columns") or {}), **{col: "none" for col in never}}
     draft.columns = columns
     draft.species = []
     draft.rules["structure_planner"] = items_to_rules([r for r in proposal.row_rules if r.strip()])
@@ -1120,7 +1164,7 @@ def draft_pack(items: Sequence, pack_id: str, label: str, description: str, conf
     proposal, merge_cost = synthesize(good, config, work_dir, area, description, cancel_event, modules=list(evidence))
     report(len(items) + 1, total, "Writing the data pack")
     pack, dropped, by_column = write_pack(proposal, pack_id, label, description, base=base, tidy=tidy,
-                                          modules=list(evidence))
+                                          modules=list(evidence), surveys=good)
     tidied = by_column.pop("__tidied__", [])
     left = by_column.pop("__left_to_modules__", [])
     linked = PackDraft.load(pack.folder).linked_modules()

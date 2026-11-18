@@ -15,7 +15,7 @@ from typing import Dict, List, Optional
 
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (QComboBox, QFormLayout, QHBoxLayout, QHeaderView, QLabel, QLineEdit, QPushButton,
-                               QTableWidget, QTableWidgetItem, QVBoxLayout, QWidget)
+                               QSpinBox, QTableWidget, QTableWidgetItem, QToolButton, QVBoxLayout, QWidget)
 
 RESERVED = {"figure", "assumed"}
 
@@ -87,6 +87,28 @@ class StructurePage(QWidget):
         self.fill_note = QLabel(wordWrap=True)
         self.fill_note.setStyleSheet("color: gray;")
         v.addWidget(self.fill_note)
+        # advanced: how many levels a paper's record may have (Mickey, 2026-11-18: four by default, an override)
+        from parameter_extractor import record_tree
+        self.advanced_btn = QToolButton(text="Advanced", checkable=True)
+        self.advanced_btn.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
+        self.advanced_btn.setArrowType(Qt.ArrowType.RightArrow)
+        self.advanced_btn.setStyleSheet("QToolButton { border: none; font-weight: bold; }")
+        self.advanced = QWidget()
+        av = QFormLayout(self.advanced)
+        self.level_limit = QSpinBox(minimum=record_tree.MAX_LEVELS, maximum=12)
+        self.level_limit.setValue(max(int(manifest.get("level_limit") or 0), record_tree.MAX_LEVELS))
+        self.level_limit.setToolTip("A paper's record has the paper, its groups and their rows -- and, where a group "
+                                    "holds several separate experiments each sampled over time, a run between them "
+                                    f"(four levels). Raise this only for a research area that needs more.")
+        av.addRow("Most levels a paper's record may have:", self.level_limit)
+        av.addRow(QLabel("<span style='color:gray'>The levels come from each paper's row plan: the paper, its "
+                         "groups, a run where a group holds several experiments each sampled over time, and the "
+                         "rows.</span>", textFormat=Qt.TextFormat.RichText, wordWrap=True))
+        self.advanced.setVisible(False)
+        self.advanced_btn.toggled.connect(lambda on: (self.advanced.setVisible(on), self.advanced_btn.setArrowType(
+            Qt.ArrowType.DownArrow if on else Qt.ArrowType.RightArrow)))
+        v.addWidget(self.advanced_btn)
+        v.addWidget(self.advanced)
         self._kinds: List[dict] = []
         self._column_fill: Dict[str, str] = {}
         self.fill_changed = False
@@ -260,6 +282,11 @@ class StructurePage(QWidget):
     def store(self, manifest: dict) -> None:
         """The choices into the manifest: a pack's own category keeps its level in its entry; another category's level
         for this pack goes into category_levels when it differs from the category's own."""
+        from parameter_extractor import record_tree
+        if self.level_limit.value() > record_tree.MAX_LEVELS:
+            manifest["level_limit"] = self.level_limit.value()
+        else:
+            manifest.pop("level_limit", None)
         own = {c.get("id"): c for c in manifest.get("variable_categories", [])}
         levels = {}
         for k in self._kinds:
