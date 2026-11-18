@@ -54,6 +54,6 @@ version = {attr = "parameter_extractor.__version__"}
 where = ["src"]
 
 [tool.setuptools.package-data]
-parameter_extractor = ["prompts/*.md", "schemas/*.json", "gui/resources/*.png",
+parameter_extractor = ["prompts/*.md", "schemas/*.json", "gui/resources/*.png", "estimate_data.json",
                        "packs/*.json", "packs/*/*.json", "packs/*/prompts/*.md", "packs/*/stages/*.json",
                        "packs/*/*.md", "modules/*.md", "modules/*/*.json", "modules/*/prompts/*.md", "modules/*/stages/*.json"]

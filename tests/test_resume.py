@@ -187,6 +187,14 @@ def test_review_decisions_of_the_old_run_are_reused():
         assert [d.column for d in resume.review_with_saved(old)([decided, new], [], None)] == ["stirring"]
 
 
+def test_reused_answers_count_in_the_total_cost_only():
+    from parameter_extractor.run_context import StageUsage, total_cost
+    usage = [StageUsage(stage="a", model="m", input_tokens=0, output_tokens=0, elapsed_sec=0, cost_usd=0.10),
+             StageUsage(stage="b", model="m", input_tokens=0, output_tokens=0, elapsed_sec=0, cost_usd=0.0, reused=True, earlier_cost_usd=0.25),
+             StageUsage(stage="c", model="m", input_tokens=0, output_tokens=0, elapsed_sec=0, cost_usd=0.0, reused=True)]          # an audit without a cost
+    assert total_cost(usage) == 0.10 and abs(total_cost(usage, True) - 0.35) < 1e-9
+
+
 def test_a_stopped_queue_resumes_into_a_new_queue_folder():
     if not _have_inputs():
         return
@@ -204,6 +212,13 @@ def test_a_stopped_queue_resumes_into_a_new_queue_folder():
         assert paper.status == "finished" and paper.prefix == "001" and paper.result.csv_path.read_text() == \
             COMMITTED.read_text()
         assert json.loads((queue.out_dir / "queue.json").read_text())["resumed_from"] == str(old_queue.out_dir)
+        # the cost of the answers reused from the stopped queue counts in the totals (Mickey 2026-11-18: a resumed
+        # queue showed $3.6-4.5 of the $14-17 spent)
+        import csv
+        summary = json.loads((queue.out_dir / "queue_summary.json").read_text())
+        assert summary["cost_total_usd"] > summary["cost_usd"], summary
+        listed_cost = next(csv.DictReader((queue.out_dir / "papers.csv").open()))
+        assert float(listed_cost["cost_total_usd"]) > float(listed_cost["cost_usd"]), listed_cost
         # an older queue folder (no queue.json): its papers.csv, else its paper folders
         (queue.out_dir / "queue.json").unlink()
         listed = resume.queue_papers(queue.out_dir)

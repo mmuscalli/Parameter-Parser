@@ -57,6 +57,7 @@ class Frame:
     has_right_axis: bool
     has_top_axis: bool
     gridlines: Tuple[float, ...] = ()     # y of horizontal gridlines (frames found from a grid alone)
+    from_numbers: bool = False            # read from its axis numbers (number_frames), not from its lines
 
     def contains(self, x: float, y: float) -> bool:
         return self.left <= x <= self.right and self.top <= y <= self.bottom
@@ -413,7 +414,9 @@ def _pair_with_gridlines(gridlines: Sequence[float], labels: List[float]):
 
 
 def _pair_with_text(horizontal_axis, line_pos, frame, text_numbers):
-    """Numbers in the PDF's text layer printed just outside this axis, in order."""
+    """Numbers in the PDF's text layer (or read from the image) printed just outside this axis, in order: all of
+    them when they are evenly spaced, else the largest set of them that is (fit_number_axis -- a misread or a stray
+    number no longer spoils the rest)."""
     if horizontal_axis:
         near = [(cx, v) for cx, cy, v in text_numbers
                 if 0 < (cy - line_pos) * (1 if line_pos >= frame.bottom - 1 else -1) < 0.15 * (frame.bottom - frame.top)
@@ -427,13 +430,226 @@ def _pair_with_text(horizontal_axis, line_pos, frame, text_numbers):
     if len(near) < 2:
         return None
     positions, values = [p for p, _ in near], [v for _, v in near]
-    if not _even(positions):
-        return None
     linear = _even(values)
     logged = all(v > 0 for v in values) and _even(np.log10(values))
-    if not (linear or logged):
+    if _even(positions) and (linear or logged):
+        return positions, values, logged and not linear
+    fit = fit_number_axis(near, horizontal_axis)
+    return fit[:3] if fit else None
+
+
+# ---- axes read from their numbers -----------------------------------------------------------------------------------
+# (Mickey, 2026-11-18: of the pack study's line and scatter plots, 54 figures failed calibration; in most of them the
+# tick numbers were all there -- in the text layer or read from the image -- but one misread ('1.09' for 1.8), one
+# stray number near the axis, or axis lines too faint or broken to find as a frame stopped it.)
+
+AXIS_FIT_TOL = 0.012        # a number sits within this share of its axis' length (at least 4 px) of where its value goes
+BOX_INK = 200               # grey level below which a thin box line counts as ink
+ROW_TOL, COLUMN_TOL = 10, 30  # px: numbers of one row share their centre's y; a column's centres differ more (widths)
+
+
+def _lattice(values: Sequence[float]) -> bool:
+    """The values are steps of one size from the lowest ('0, 5, 10, 20' yes; '0, 5, 7' no) -- tick numbers, not data."""
+    vs = sorted(set(round(v, 9) for v in values))
+    if len(vs) < 2:
+        return False
+    step = min(np.diff(vs))
+    k = (np.array(vs) - vs[0]) / step
+    return step > 0 and bool(np.all(np.abs(k - np.round(k)) < 0.02))
+
+
+def fit_number_axis(points: Sequence[Tuple[float, float]], horizontal: bool):
+    """(positions, values, is_log, inliers) -- the largest set of (position, value) numbers that lie where one
+    linear (or log) scale puts them, values growing rightwards or upwards, at least three different values in even
+    steps; positions ordered from the axis' low end. More numbers first, then linear before log, then the closest
+    fit (two panels' numbers in one row: the first panel's, by position). None when there is no such set."""
+    import math
+    best, best_key = None, None
+    for log in (False, True):
+        pts = [(i, p, math.log10(v) if log else v) for i, (p, v) in enumerate(points) if not log or v > 0]
+        if len(pts) < 3:
+            continue
+        span = max(p for _, p, _ in pts) - min(p for _, p, _ in pts)
+        tol = max(4.0, AXIS_FIT_TOL * span)
+        for a in range(len(pts)):
+            for b in range(a + 1, len(pts)):
+                (_, pa, va), (_, pb, vb) = pts[a], pts[b]
+                if va == vb or pa == pb:
+                    continue
+                slope = (vb - va) / (pb - pa)                       # value per pixel
+                if (slope > 0) != horizontal:                       # y pixels grow downwards
+                    continue
+                by_value = {}
+                for i, p, v in pts:                                 # one number per value: the closest
+                    err = abs(p - (pa + (v - va) / slope))
+                    if err <= tol and (v not in by_value or err < by_value[v][0]):
+                        by_value[v] = (err, i, p)
+                if len(by_value) < 3 or not _lattice(list(by_value)):
+                    continue
+                # within a tenth of the spacing between neighbouring ticks (at least 4 px)
+                step_px = min(np.diff(sorted(by_value))) / abs(slope)
+                fine = max(4.0, min(tol, 0.12 * step_px))
+                by_value = {v: e for v, e in by_value.items() if e[0] <= fine}
+                if len(by_value) < 3 or not _lattice(list(by_value)):
+                    continue
+                chosen = sorted(by_value.items(), key=lambda kv: kv[1][2], reverse=not horizontal)
+                placed = [p for _, (_, _, p) in chosen]
+                if np.abs(np.diff(placed)).min() < 3 * fine:        # numbers side by side, not along an axis
+                    continue
+                # every other number printed between them sits at a tick too (a misread value: '1.09' at 1.8's
+                # place); one that doesn't belongs to another axis -- panels side by side share a row of numbers,
+                # and one number from each can happen to fit a scale (Sakata2014 Fig. 3: 0, 10, 20 of three panels)
+                lo, hi = min(placed), max(placed)
+                used = {e[1] for e in by_value.values()}
+                if any(lo < p < hi and abs((k := (p - placed[0]) / step_px) - round(k)) * step_px > 2 * fine
+                       for i, p, _ in pts if i not in used):
+                    continue
+                # one axis' numbers follow each other: more than two tick places with nothing printed splits them,
+                # and the longest stretch is kept (fuchida2014 Fig. 3: a '2' of '2,000 cm-1' in the text above
+                # panel (b) sat where its axis would put 2.0)
+                printed = [p for _, p, _ in pts]
+                runs, run = [], [chosen[0]]
+                for prev, cur in zip(chosen, chosen[1:]):
+                    a_, b_ = sorted((prev[1][2], cur[1][2]))
+                    places = [a_ + j * step_px for j in range(1, int(round((b_ - a_) / step_px)))]
+                    empty = [q for q in places if not any(abs(q - p) <= 2 * fine for p in printed)]
+                    if len(empty) > 2:
+                        runs.append(run)
+                        run = []
+                    run.append(cur)
+                runs.append(run)
+                chosen = max(runs, key=len)
+                if len(chosen) < 3:
+                    continue
+                key = (len(chosen), not log, -round(sum(e for _, (e, _, _) in chosen), 3),
+                       -chosen[0][1][2] if horizontal else chosen[0][1][2])
+                if best_key is None or key > best_key:
+                    best_key = key
+                    best = ([p for _, (_, _, p) in chosen], [10 ** v if log else v for v, _ in chosen], log,
+                            sorted(i for _, (_, i, _) in chosen))
+    return best
+
+
+@dataclass
+class NumberAxis:
+    horizontal: bool
+    cross: float                    # the row's y (horizontal) or the column's x (vertical), page pixels
+    positions: List[float]          # from the axis' low end
+    values: List[float]
+    is_log: bool
+
+
+def _clusters(items, key, tol):
+    out = []
+    for it in sorted(items, key=key):
+        if out and key(it) - key(out[-1][-1]) <= tol:
+            out[-1].append(it)
+        else:
+            out.append([it])
+    return out
+
+
+def number_axes(text_numbers: Sequence[Tuple[float, float, float]]) -> List[NumberAxis]:
+    """Axes made of their tick numbers alone: rows of numbers (x axes) and columns (y axes) that fit one scale.
+    A row shared by panels side by side, or a column by stacked panels, gives one axis each."""
+    out, taken = [], set()
+    for horizontal in (True, False):          # x axes first: the '0' under the corner is the x axis' (Takaoka1991)
+        cross = (lambda t: t[1]) if horizontal else (lambda t: t[0])
+        along = (lambda t: t[0]) if horizontal else (lambda t: t[1])
+        free = [t for t in text_numbers if tuple(t) not in taken]
+        for group in _clusters(free, cross, ROW_TOL if horizontal else COLUMN_TOL):
+            rest = list(group)
+            while len(rest) >= 3:
+                fit = fit_number_axis([(along(t), t[2]) for t in rest], horizontal)
+                if fit is None:
+                    break
+                positions, values, is_log, used = fit
+                members = [rest[i] for i in used]
+                taken.update(tuple(t) for t in members)
+                out.append(NumberAxis(horizontal, float(np.median([cross(t) for t in members])), positions, values,
+                                      is_log))
+                rest = [t for i, t in enumerate(rest) if i not in set(used)]
+    return out
+
+
+def _line_near(gray: np.ndarray, vertical: bool, lo: float, hi: float, a: float, b: float,
+               from_hi: bool = False, share_min: float = 0.5, ink: int = DARK) -> Optional[float]:
+    """The axis line between lo and hi (x for a vertical line, y for a horizontal one) along a..b: the first column /
+    row at least half ink, walking from lo (from hi: `from_hi`) -- from the numbers inwards, so a data line further in
+    isn't taken for the axis."""
+    h, w = gray.shape
+    lo, hi = int(max(lo, 0)), int(min(hi, (w if vertical else h) - 1))
+    a, b = int(max(a, 0)), int(min(b, (h if vertical else w) - 1))
+    if hi <= lo or b - a < 10:
         return None
-    return positions, values, logged and not linear
+    sub = gray[a:b, lo:hi + 1] < ink if vertical else gray[lo:hi + 1, a:b] < ink
+    share = sub.mean(axis=0 if vertical else 1)
+    order = range(len(share) - 1, -1, -1) if from_hi else range(len(share))
+    for k in order:
+        if share[k] >= share_min:
+            # the line's centre: the run of such columns / rows (a thick line)
+            run = [j for j in range(max(k - 6, 0), min(k + 7, len(share))) if share[j] >= share_min]
+            return float(lo + (min(run) + max(run)) / 2)
+    return None
+
+
+def number_frames(gray: np.ndarray, text_numbers: Sequence[Tuple[float, float, float]]) -> List[Frame]:
+    """Plot frames found from their numbers: an x axis' row of numbers below the end of a y axis' column of numbers,
+    the column to the left of the row's start. The axis lines are looked for between them (scanned and faint plots
+    often have broken ones); without one, the frame side is halfway between the numbers."""
+    axes = number_axes(text_numbers)
+    xs = [a for a in axes if a.horizontal and len(a.positions) >= 3]
+    ys = [a for a in axes if not a.horizontal and len(a.positions) >= 3]
+    frames = []
+    for x in xs:
+        x_lo, x_hi = min(x.positions), max(x.positions)
+        x_span = x_hi - x_lo
+        fits = []
+        for y in ys:
+            y_top, y_low = min(y.positions), max(y.positions)
+            y_span = y_low - y_top
+            if x_lo - 0.4 * x_span <= y.cross <= x_lo + 0.05 * x_span and \
+                    y_low - 0.05 * y_span <= x.cross <= y_low + 0.4 * y_span:
+                fits.append(((x_lo - y.cross) / x_span + (x.cross - y_low) / y_span, y))
+        if not fits:
+            continue
+        y = min(fits, key=lambda f: f[0])[1]
+        y_top, y_low = min(y.positions), max(y.positions)
+        left = _line_near(gray, True, y.cross + 8, x_lo + 12, y_top, y_low)
+        bottom = _line_near(gray, False, y_low - 12, x.cross - 8, x_lo, x_hi, from_hi=True)
+        left = left if left is not None else (y.cross + x_lo) / 2
+        bottom = bottom if bottom is not None else (y_low + x.cross) / 2
+        # a box's right and top sides, the first whole line beyond the last numbers (data often go past the last
+        # labelled tick: Steinman1966 Fig. 3 read to 1.6 of 2.4) -- not past another panel's numbers; without one, a
+        # tenth of the axis further (and the figure is never 'easy': auto_figure)
+        y_span = y_low - y_top
+        beyond_x = min([a.cross for a in ys if a.cross > x_hi + 4] + [x_hi + 0.6 * x_span])
+        above_y = max([a.cross for a in xs if a.cross < y_top - 4] + [y_top - 0.6 * y_span])
+        # (thin box lines are anti-aliased grey: lighter ink, but nearly unbroken)
+        # (from just inside the last numbers: a box often ends at the last tick)
+        right = _line_near(gray, True, x_hi - 6, beyond_x, y_top, y_low, share_min=0.8, ink=BOX_INK)
+        top = _line_near(gray, False, above_y, y_top + 6, x_lo, x_hi, from_hi=True, share_min=0.8, ink=BOX_INK)
+        frames.append(Frame(left=left, right=right if right is not None else x_hi + 0.1 * x_span,
+                            top=top if top is not None else y_top - 0.06 * y_span, bottom=bottom,
+                            has_right_axis=right is not None, has_top_axis=top is not None, from_numbers=True))
+    return frames
+
+
+def with_number_frames(frames: List[Frame], gray: np.ndarray,
+                       text_numbers: Sequence[Tuple[float, float, float]]) -> List[Frame]:
+    """The frames found from axis lines, corrected by the numbers: a frame with a whole x axis' numbers inside it
+    is a box drawn around the figure (or a panel), not the plot's axes -- the frames read from the numbers inside it
+    replace it; frames read from numbers where no frame was found are added."""
+    from_numbers = number_frames(gray, text_numbers)
+    if not from_numbers:
+        return frames
+
+    def encloses(f: Frame, n: Frame) -> bool:
+        return f.left - 5 <= n.left and n.right <= f.right + 5 and f.top - 5 <= n.top and n.bottom < f.bottom - 15
+
+    kept = [f for f in frames if not any(encloses(f, n) for n in from_numbers)]
+    added = [n for n in from_numbers if not any(_overlap(n, f) for f in kept)]
+    return sorted(kept + added, key=lambda f: (f.top, f.left))
 
 
 def choose_frame(frames: List[Frame], view_centre: Optional[Tuple[float, float]], index: int) -> Frame:
@@ -444,8 +660,24 @@ def choose_frame(frames: List[Frame], view_centre: Optional[Tuple[float, float]]
         inside = [f for f in frames if f.contains(*view_centre)]
         if inside:
             return inside[0]
-    ordered = sorted(frames, key=lambda f: (round(f.top / 50), f.left))
+    ordered = reading_order(frames)
     return ordered[min(index, len(ordered) - 1)]
+
+
+def reading_order(frames: List[Frame]) -> List[Frame]:
+    """Rows of frames top to bottom, each left to right; frames are in one row when they overlap vertically by more
+    than half the shorter one (2026-11-18: rounding the tops to 50 px split side-by-side panels whose tops differ a
+    little -- frames read from numbers -- and swapped panels (a) and (b))."""
+    rows: List[List[Frame]] = []
+    for f in sorted(frames, key=lambda f: f.top):
+        for row in rows:
+            r = row[0]
+            if min(r.bottom, f.bottom) - max(r.top, f.top) > 0.5 * min(r.bottom - r.top, f.bottom - f.top):
+                row.append(f)
+                break
+        else:
+            rows.append([f])
+    return [f for row in rows for f in sorted(row, key=lambda f: f.left)]
 
 
 def find_boxes_inside(gray: np.ndarray, frame: Frame) -> List[Tuple[float, float, float, float]]:

@@ -40,6 +40,9 @@ class StageUsage:
     cache_read_tokens: int = 0
     batch: bool = False                    # sent through the Message Batches API (half price)
     reused: bool = False                   # answered from an earlier run's folder (resume / rebuild): nothing sent
+    # what a reused answer cost when it was first asked (its audit's estimate; 2026-11-18: a resumed queue's papers.csv
+    # showed only the cost after resuming -- $3.6-4.5 of $14-17). Not spent by this run: in total_cost(..., True) only
+    earlier_cost_usd: Optional[float] = None
 
     @property
     def prompt_tokens(self) -> int:
@@ -47,9 +50,13 @@ class StageUsage:
         return self.input_tokens + self.cache_write_tokens + self.cache_read_tokens
 
 
-def total_cost(usage) -> Optional[float]:
-    """Sum of the estimated costs, or None if any request's price is unknown."""
+def total_cost(usage, including_reused: bool = False) -> Optional[float]:
+    """Sum of the estimated costs, or None if any request's price is unknown. `including_reused`: also what the
+    answers this run reused from an earlier run cost when they were asked (resume / rebuild) -- the results' cost, not
+    this run's spending."""
     costs = [u.cost_usd for u in usage]
+    if including_reused:
+        costs = [(u.cost_usd or 0.0) + (u.earlier_cost_usd or 0.0) if u.reused else u.cost_usd for u in usage]
     return None if any(c is None for c in costs) else sum(costs)
 
 

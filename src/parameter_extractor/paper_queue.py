@@ -272,16 +272,19 @@ class PaperQueue:
         out["papers_csv"] = self.out_dir / "papers.csv"
         with open(out["papers_csv"], "w", newline="", encoding="utf-8") as f:
             w = csv.writer(f)
+            # cost_usd: what this run spent; cost_total_usd: with what the answers it reused from an earlier run
+            # cost when they were asked (a resumed or rebuilt queue; 2026-11-18)
             w.writerow(["prefix", "item", "label", "status", "rows", "flags", "figures_digitized", "cost_usd",
-                        "run_folder", "error"])
+                        "run_folder", "error", "cost_total_usd"])
             for p in self.papers:
                 r = p.result
                 w.writerow([p.prefix, str(p.item), p.label, p.status, len(r.rows) if r else "",
                             (len(r.paper_flags) + sum(len(x) for x in r.row_flags.values())) if r else "",
                             len(p.digitized), round(total_cost(r.usage) or 0, 4) if r else "",
                             str(r.run_dir) if r else (str(p.extraction.ctx.run_dir) if p.extraction else ""),
-                            p.error])
+                            p.error, round(total_cost(r.usage, True) or 0, 4) if r else ""])
         out["cost_usd"] = sum((total_cost(p.result.usage) or 0) for p in finished)
+        out["cost_total_usd"] = round(sum((total_cost(p.result.usage, True) or 0) for p in finished), 4)
         (self.out_dir / "queue_summary.json").write_text(json.dumps(
             {k: str(v) if isinstance(v, Path) else v for k, v in out.items()}
             | {"config": self.config.to_public_dict()}, indent=2))

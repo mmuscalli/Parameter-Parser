@@ -101,8 +101,10 @@ def saved_answer(ctx, stage: str, name: str, model: str, fingerprint: str, syste
     audit = dict(audit, reused_from=str(old), request_fingerprint_now=fingerprint, request_changed=not same)
     (run_dir / f"{name}.audit.json").write_text(json.dumps(audit, indent=2))
     (run_dir / f"{name}.output.json").write_text(output_path.read_text())
+    earlier = audit.get("estimated_cost_usd")
     ctx.record_usage(StageUsage(stage=stage, model=audit.get("model", model), input_tokens=0, output_tokens=0,
-                                elapsed_sec=0.0, cost_usd=0.0, reused=True))
+                                elapsed_sec=0.0, cost_usd=0.0, reused=True,
+                                earlier_cost_usd=float(earlier) if isinstance(earlier, (int, float)) else None))
     _note(ctx, stage, f"{stage}: answer reused from the earlier run" + ("" if same else " (its request has changed)"))
     return parsed
 

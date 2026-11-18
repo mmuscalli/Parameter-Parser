@@ -231,7 +231,9 @@ def _write_summary(ctx: RunContext, pdf_path: Path, started: datetime, **extra) 
         "prices_checked": PRICES_CHECKED,
         "provider": ctx.config.provider,
         **({"resumed_from": str(ctx.config.resume_from), "rebuilt": bool(ctx.config.rebuild),
-            "reused_steps": [u.stage for u in ctx.usage if getattr(u, "reused", False)]}
+            "reused_steps": [u.stage for u in ctx.usage if getattr(u, "reused", False)],
+            # with what the reused answers cost when they were asked (2026-11-18)
+            "estimated_cost_total_usd": total_cost(ctx.usage, True)}
            if getattr(ctx.config, "resume_from", None) else {}),
         **extra,
     }

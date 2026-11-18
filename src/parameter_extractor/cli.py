@@ -176,6 +176,9 @@ def main() -> int:
     parser.add_argument("--auto-figures", action="store_true",
                         help="Digitize easy figures automatically: request suggestions for every figure and keep "
                              "the bar charts / scatter plots that parse cleanly (flagged for checking)")
+    parser.add_argument("--estimate-only", action="store_true",
+                        help="Print the estimated cost and time of the run (or queue) with these settings, and stop "
+                             "(nothing is sent)")
     parser.add_argument("--rows-from-text", action="store_true",
                         help="Also make rows from results stated in the body text or a caption (with complete "
                              "conditions); by default rows come only from tables and digitized figures")
@@ -278,6 +281,10 @@ def main() -> int:
         return _queue(args, config)
     if args.resume or args.rebuild:
         return _resume(args, config)
+    if not args.triage_only:
+        print(_estimate(config, [args.paper or args.pdf]))
+        if args.estimate_only:
+            return 0
     try:
         if args.triage_only:
             triage = run_triage_only(args.pdf, config, on_progress=print_progress)
@@ -323,7 +330,9 @@ def _report(result) -> None:
           f"(estimated cost {format_usd(result.cost_usd)})")
     reused = [u.stage for u in result.usage if getattr(u, "reused", False)]
     if reused:
-        print(f"Reused from the earlier run (no cost): {', '.join(reused)}")
+        from parameter_extractor.run_context import total_cost
+        print(f"Reused from the earlier run (no cost now): {', '.join(reused)} -- the results' cost with them: "
+              f"{format_usd(total_cost(result.usage, True))}")
 
 
 def _queue_progress():
@@ -334,6 +343,30 @@ def _queue_progress():
             shown[paper.prefix] = line
             print(line)
     return changed
+
+
+def _estimate(config, items) -> str:
+    """The estimate before a run (estimate.py), with its notes; a failure to estimate never stops a run."""
+    from parameter_extractor.estimate import estimate
+    try:
+        est = estimate(config, items)
+    except Exception as e:                            # noqa: BLE001
+        return f"(No estimate: {type(e).__name__}: {e})"
+    return est.text() + "".join(f"\n  {n}" for n in est.notes)
+
+
+def _queue_cost(queue) -> str:
+    """The queue's estimated cost (queue_summary.json): this run's, and with the reused answers when they differ."""
+    import json
+    try:
+        s = json.loads((queue.out_dir / "queue_summary.json").read_text())
+    except (OSError, ValueError):
+        return ""
+    line = f"Estimated cost {format_usd(s.get('cost_usd'))}"
+    total = s.get("cost_total_usd")
+    if total is not None and total - (s.get("cost_usd") or 0) > 0.005:
+        line += f" ({format_usd(total)} with the answers reused from the earlier run)"
+    return line
 
 
 def _resume(args, config) -> int:
@@ -349,6 +382,7 @@ def _resume(args, config) -> int:
                               rebuild=rebuild)
             finished = [p for p in queue.papers if p.result is not None]
             print(f"\n{len(finished)} of {len(queue.papers)} paper(s) assembled -> {queue.out_dir}")
+            print(_queue_cost(queue))
             return 0 if finished else 1
         print(f"{what} {folder}")
         result = resume.resume_run(folder, config, rebuild=rebuild, on_progress=print_progress)
@@ -369,6 +403,9 @@ def _queue(args, config) -> int:
     if not items:
         print(f"No papers found in {args.queue}.", file=sys.stderr)
         return 1
+    print(_estimate(config, items))
+    if args.estimate_only:
+        return 0
     try:
         queue = run_queue(items, config, on_change=_queue_progress(), parallel=args.parallel)
     except KeyboardInterrupt:
@@ -378,6 +415,7 @@ def _queue(args, config) -> int:
     print(f"\n{len(finished)} of {len(queue.papers)} paper(s) assembled, {sum(len(p.result.rows) for p in finished)} rows "
           f"-> {queue.out_dir}")
     print(f"Combined CSV: {queue.out_dir / 'combined_extracted.csv'}\nPapers: {queue.out_dir / 'papers.csv'}")
+    print(_queue_cost(queue))
     return 0 if finished else 1
 
 

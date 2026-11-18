@@ -194,8 +194,10 @@ class FigureImage:
     @property
     def frames(self):
         if self._frames is None:
-            from parameter_extractor.digitizing.auto_axes import find_frames
-            self._frames = find_frames(self.gray, self.region())
+            from parameter_extractor.digitizing.auto_axes import find_frames, with_number_frames
+            x0, y0, x1, y1 = self.region()
+            numbers = [t for t in self.fig.tick_numbers if x0 <= t[0] <= x1 and y0 <= t[1] <= y1]
+            self._frames = with_number_frames(find_frames(self.gray, self.region()), self.gray, numbers)
         return self._frames
 
 
@@ -424,6 +426,16 @@ def auto_digitize(fig: DigitizedFigure, plan: Optional[FigurePlan]) -> AutoResul
         for axis, done in ok.items():
             if not done:
                 reasons.append(f"{panel.name}: {axis} axis not calibrated")
+    for i, panel in enumerate(fig.panels):
+        # a plot area read from its axis numbers without its box's top and right lines may end too early (at the last
+        # number read): points beyond it would be missed without a word (Steinman1966 Fig. 3, 2026-11-18)
+        try:
+            frame = frame_of(fig, image, i)
+        except Exception:
+            continue
+        if frame.from_numbers and not (frame.has_top_axis and frame.has_right_axis):
+            reasons.append(f"{panel.name}: plot area estimated from its axis numbers -- check that every point was "
+                           f"found")
     if not reasons:
         result = find_points(fig, image, list(range(len(fig.panels))))
         notes += result.notes

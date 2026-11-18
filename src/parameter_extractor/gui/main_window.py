@@ -281,6 +281,12 @@ class MainWindow(QMainWindow):
         self.lookups_action.toggled.connect(self.pubchem_box.setChecked)
         self.pubchem_box.toggled.connect(self.lookups_action.setChecked)
 
+        # the estimate follows every option that changes what a run asks (estimate_line.py)
+        for signal in (self.profile_combo.currentIndexChanged, self.passes_combo.currentIndexChanged,
+                       self.pack_combo.currentIndexChanged, self.batch_box.toggled, self.auto_figures_box.toggled,
+                       self.suggest_box.toggled, self.equations_box.toggled):
+            signal.connect(lambda *_: self.estimate_line.refresh(shown=not self.params.focused))
+
         self._load_preferences()
         self._update_run_enabled()
 
@@ -640,6 +646,8 @@ class MainWindow(QMainWindow):
                                     + (f" -- without {', '.join(off)}" if off else "")
                                     + (f" -- only {narrowed}" if narrowed else ""))
             self.run_btn.setText(f"Extract data from {n} papers" if n > 1 else "Extract data")
+        if hasattr(self, "estimate_line"):
+            self.estimate_line.refresh(shown=not focused)
 
     def _model_store(self):
         from parameter_extractor.model_profiles import ModelStore
@@ -735,8 +743,12 @@ class MainWindow(QMainWindow):
         self.status.linkActivated.connect(self._status_link)
         self.privacy_note = QLabel(PRIVACY_NOTE, wordWrap=True)
         self.privacy_note.setStyleSheet("color: palette(placeholder-text);")
+        # W4: what the run will cost and take, before it starts (estimate.py)
+        from parameter_extractor.gui.estimate_line import EstimateLine
+        self.estimate_line = EstimateLine(self.current_config, self.run_items, lambda: self._busy, self)
         col = QVBoxLayout()
         col.addLayout(buttons)
+        col.addWidget(self.estimate_line)
         col.addWidget(self.settings_hint)
         col.addWidget(self.status)
         col.addWidget(self.privacy_note)

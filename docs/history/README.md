@@ -148,3 +148,4 @@ current month's file (start `YYYY-MM.md` in a new month), with one line here.
 - Tables read incompletely: a check against the row plan (2026-11-17, Mickey)
 - Tables read again automatically; a Paper summary row for papers without rows (2026-11-17, Mickey)
 - Paper summary rows: reactants of different experiments flagged on their cells (2026-11-18, Mickey)
+- Version 0.5.0: a resumed queue's whole cost; axes read from their numbers; a cost and time estimate before a run (2026-11-18, Mickey)

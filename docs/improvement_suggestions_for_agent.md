@@ -114,7 +114,7 @@ paid Claude runs or the local server. Update Status as you go: `proposed` → `a
 | W1 | Resume a failed or cancelled run; rebuild a dataset from saved answers | Workflow | M–L | no | done (c9733fa) |
 | W2 | Corrections and "checked" marks in the results window | Workflow | L | no | done (corrections + checked marks; single cells) |
 | W3 | Open a previous run in the window | Workflow | S–M | no | done (5335f6b) |
-| W4 | Cost and time estimate before a run starts | Workflow | M | no | postponed |
+| W4 | Cost and time estimate before a run starts | Workflow | M | no | done 2026-11-18 (estimate.py; 88% of study papers in range) |
 | W5 | Command line: scope flags; a notification when a long run ends | Workflow | S | no | postponed |
 | W6 | Keep the local-model test scripts in the repository | Workflow | S | no | done (79666a5) |
 | F1 | Units: read "uL/min" and other ASCII spellings of µ | Functionality | S | no | done (fcb3c1a) |

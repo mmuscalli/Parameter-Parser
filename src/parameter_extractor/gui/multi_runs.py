@@ -324,7 +324,10 @@ class QueueRun(QObject):
         failed = sum(p.status == "failed" for p in self.queue.papers)
         m.status.setText(f"Done: {s['finished']} of {s['papers']} paper(s) assembled, {s['rows']} rows"
                          + (f", {failed} failed (see the Papers list)" if failed else "")
-                         + f". Estimated cost ${s['cost_usd']:.2f}. Saved to {self.queue.out_dir}")
+                         + f". Estimated cost ${s['cost_usd']:.2f}"
+                         + (f" (${s['cost_total_usd']:.2f} with the answers reused from the earlier run)"
+                            if s.get("cost_total_usd", 0) - s["cost_usd"] > 0.005 else "")
+                         + f". Saved to {self.queue.out_dir}")
         m.progress.setValue(m.progress.maximum())
         self.finished.emit()
 
