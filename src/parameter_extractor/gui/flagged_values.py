@@ -85,6 +85,7 @@ KIND_LABELS = {
     "method_differs": "Differs between experiments (not filled)",
     "set_gap": "Missing on some rows of its set",
     "for_solution": "Given for a starting solution",
+    "plan_mismatch": "Rows lack what their row plan says varies",
 }
 
 

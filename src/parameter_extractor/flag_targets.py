@@ -32,7 +32,7 @@ PER_VALUE = {"conflicting_values", "out_of_range", "identity_not_quoted", "quote
              "table_check", "unit_conversion"}
 PRIORITY = ["identity_not_quoted", "quote_unrelated", "assumed_value", "table_check", "conflicting_values", "out_of_range",
             "unit_conversion", "value_range", "table_not_found", "concentration_not_stated", "pass_disagreement",
-            "multimodal", "other_estimates", "archive_check", "assumed_default", "assumed_shared", "method_differs", "set_gap", "derived_value",
+            "multimodal", "other_estimates", "archive_check", "assumed_default", "assumed_shared", "method_differs", "set_gap", "plan_mismatch", "derived_value",
             "low_confidence"]
 _COMPOUND = re.compile(r"^(initial|stock|sampled|calculated)_(.+?)_(aq|gas|s)_")
 _LISTED = re.compile(r"^- (.+?), ([A-Za-z0-9_%+\-.()]+): read ([-+]?\d[\d.eE+-]*)")

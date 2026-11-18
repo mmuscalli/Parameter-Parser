@@ -145,3 +145,4 @@ current month's file (start `YYYY-MM.md` in a new month), with one line here.
 - Duration and pH gaps: scoring revised, row-planning duration rule, prebiotic pH descriptions (2026-11-17, Mickey)
 - Set notation (set_independent_variable / value, set_gap flags) and conditions for a starting solution (2026-11-17, Mickey)
 - The experiment-condition fixes for every pack, not only the curated one (2026-11-17, Mickey)
+- Tables read incompletely: a check against the row plan (2026-11-17, Mickey)

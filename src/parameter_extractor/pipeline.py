@@ -1441,6 +1441,12 @@ def finish(
     from parameter_extractor.calculators.set_variables import add_set_variables, set_gap_flags
     add_set_variables(rows)
     paper_flags += set_gap_flags(rows)
+    # rows lacking what their row plan says varies: a table read incompletely (calculators/plan_checks.py)
+    from parameter_extractor.calculators.plan_checks import plan_mismatch_flags
+    try:                                     # a check: never in the way of the run
+        paper_flags += plan_mismatch_flags(rows, ex.structure, pack.manifest.label_columns)
+    except Exception as e:                   # noqa: BLE001
+        ctx.note("assemble", f"the row-plan check was skipped ({type(e).__name__}: {e})")
     if pack.manifest.formulas:                   # the research area's own calculations (formulas.py), after the review
         from parameter_extractor.formulas import apply_formulas, formula_flags
         paper_flags += formula_flags(apply_formulas(rows, pack.manifest.formulas))

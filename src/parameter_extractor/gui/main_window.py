@@ -1819,6 +1819,7 @@ class MainWindow(QMainWindow):
         differs_flags = [f for f in result.paper_flags if f.kind == "method_differs"]
         set_gap_flags = [f for f in result.paper_flags if f.kind == "set_gap"]
         for_solution_flags = [f for f in result.paper_flags if f.kind == "for_solution"]
+        plan_flags = [f for f in result.paper_flags if f.kind == "plan_mismatch"]
         repeat_flags = [f for f in result.paper_flags if f.kind == "duplicate_removed"]
         fit_flags = [f for f in result.paper_flags if f.kind in ("fit_model", "multimodal", "other_estimates")]
         identity_flags = [f for f in result.paper_flags if f.kind == "identity_not_quoted"]
@@ -1838,7 +1839,7 @@ class MainWindow(QMainWindow):
                                                "paper_source", "pass_disagreement", "auto_digitized",
                                                "analysis", "scope", "reused_answer", "table_check",
                                                "table_not_found", "quote_unrelated", "no_starting_composition",
-                                               "assumed_shared", "method_differs", "set_gap", "for_solution")]
+                                               "assumed_shared", "method_differs", "set_gap", "for_solution", "plan_mismatch")]
         if reuse_flags:
             add_group("Reused from an earlier run", reuse_flags)
         if table_flags:
@@ -1867,6 +1868,8 @@ class MainWindow(QMainWindow):
             add_group("Starting compounds missing on some rows of a set", set_gap_flags)
         if for_solution_flags:
             add_group("Conditions given for a starting solution", for_solution_flags)
+        if plan_flags:
+            add_group("Tables probably read incompletely", plan_flags)
         if archive_flags:
             add_group("Checked against the NASA Exoplanet Archive", archive_flags)
         if identity_flags:
