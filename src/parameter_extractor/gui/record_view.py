@@ -119,26 +119,16 @@ class RecordView(QWidget):
         self._fill()
 
     def _load(self) -> None:
-        """The run's record: <paper>_record.json, or -- a run from before it existed -- made from its rows and written
-        into the run's folder (so corrections can reach it)."""
+        """The run's record: <paper>_record.json, or -- a run from before it existed -- made from its observations
+        file (an opened folder: the run's own record of every value, corrections included) or its rows, and written
+        into the run's folder with its corrections marked (so later corrections reach it)."""
         from parameter_extractor import packs, record_tree
         r = self.result
         path = getattr(r, "record_path", None)
         if path and Path(path).is_file():
             self._data = json.loads(Path(path).read_text(encoding="utf-8"))
         else:
-            from parameter_extractor.column_order import ColumnOrder
-            from parameter_extractor.ingestion.observations import rows_to_observations
-            pack = packs.available().get(getattr(r, "pack", "") or "") or packs.current()
-            order = ColumnOrder(pack=pack, chosen={a["column"]: a.get("category", "") for a in r.accepted_variables})
-            facets = record_tree.Facets(order, record_tree.levels(pack))
-            self._data = record_tree.to_json(record_tree.build(rows_to_observations(r.rows), facets), facets,
-                                             {"paper": r.paper_id, "data_pack": pack.id})
-            if r.run_dir and Path(r.run_dir).is_dir() and r.csv_path:
-                r.record_path = Path(r.csv_path).with_name(Path(r.csv_path).name.replace("_extracted.csv",
-                                                                                     "_record.json"))
-                r.record_path.write_text(json.dumps(self._data, indent=1, ensure_ascii=False) + "\n",
-                                         encoding="utf-8")
+            self._data = self._make_record()
         self._paper = record_tree.from_json(self._data)
         self._parent = {}
         self._facet_of: Dict[str, str] = {}
@@ -154,6 +144,41 @@ class RecordView(QWidget):
         self._facet_labels = {f["id"]: f.get("label", f["id"]) for f in self._data.get("facets", [])}
         self._facet_order = [f["id"] for f in self._data.get("facets", [])]
         self._words = [lv["label"] for lv in self._data.get("levels", [])]
+
+    def _make_record(self) -> dict:
+        import csv
+        from parameter_extractor import corrections as corr, packs, record_tree
+        from parameter_extractor.column_order import ColumnOrder
+        from parameter_extractor.ingestion.observations import read_observations_csv, rows_to_observations
+        r = self.result
+        pack = packs.available().get(getattr(r, "pack", "") or "") or packs.current()
+        order = ColumnOrder(pack=pack, chosen={a["column"]: a.get("category", "") for a in r.accepted_variables})
+        facets = record_tree.Facets(order, record_tree.levels(pack))
+        obs_path = getattr(r, "observations_path", None)
+        if obs_path and Path(obs_path).is_file():
+            entries = {}
+            if r.csv_path and Path(r.csv_path).is_file():
+                with open(r.csv_path, newline="", encoding="utf-8") as f:
+                    entries = {row.get("full_id", ""): row.get("entry_number", "") for row in csv.DictReader(f)}
+            observations = read_observations_csv(Path(obs_path), {k: v for k, v in entries.items() if v})
+        elif r.rows and not hasattr(r.rows[0], "model_dump"):       # an old folder's saved rows, no observations
+            from parameter_extractor.ingestion.observations import Observation, _typed
+            observations = [Observation(full_id=row.full_id, set_id=row.set_id, sample_id=row.sample_id,
+                                        entry_number=i, column=c, value=_typed(str(v)))
+                            for i, row in enumerate(r.rows, 1) for c, v in row.values.items()
+                            if v not in ("", None) and c not in ("full_id", "set_id", "sample_id", "entry_number")]
+        else:
+            observations = rows_to_observations(r.rows)
+        data = record_tree.to_json(record_tree.build(observations, facets), facets,
+                                   {"paper": r.paper_id, "data_pack": pack.id})
+        if r.run_dir and Path(r.run_dir).is_dir() and r.csv_path:
+            r.record_path = Path(r.csv_path).with_name(Path(r.csv_path).name.replace("_extracted.csv", "_record.json"))
+            r.record_path.write_text(json.dumps(data, indent=1, ensure_ascii=False) + "\n", encoding="utf-8")
+            fixes = corr.load(r.run_dir)
+            if fixes:                                  # marked as corrected, with the extracted value beside them
+                corr._write_record(r.record_path, [(c, True) for c in fixes.values()])
+                data = json.loads(r.record_path.read_text(encoding="utf-8"))
+        return data
 
     # ---- the tree on the left -----------------------------------------------------------------------------------
 
@@ -241,15 +266,31 @@ class RecordView(QWidget):
             out.insert(0, self._parent[id(out[0])])
         return out
 
-    def _recorded_for(self, holder, selected) -> str:
+    def _seen(self, payload: dict, selected) -> dict:
+        """A value as the selection has it: a row its own copy (stated, or assumed from the other rows)."""
+        from parameter_extractor import record_tree
+        return record_tree.resolve(payload, selected.id) if not selected.children else payload
+
+    def _recorded_for(self, holder, selected, payload: Optional[dict] = None) -> str:
+        from parameter_extractor import record_tree
         n = len(self._rows_under(holder))
         row_word = self._words[-1] if self._words else "row"
+        payload = payload or {}
+        mine = self._seen(payload, selected)
+        if not selected.children and record_tree._is_assumed(mine):
+            return f"this {row_word} -- assumed: the others state it, this one doesn't"
         if holder is selected and not holder.children:
             return f"this {row_word}"
         if holder.level == 0:
-            return f"the paper (every {row_word})" if n > 1 else "the paper"
-        word = self._word(holder)
-        return f"{'this' if holder is selected else 'its'} {word} (all {n} {plural(row_word, n)})"
+            text = f"the paper (every {row_word})" if n > 1 else "the paper"
+        else:
+            text = f"{'this' if holder is selected else 'its'} {self._word(holder)} (all {n} {plural(row_word, n)})"
+        assumed = payload.get(record_tree.ASSUMED)
+        if assumed and selected.children:
+            k = len([r for r in assumed["rows"] if r in {x.id for x in self._rows_under(selected)}])
+            if k:
+                text += f" -- assumed for {k} of them"
+        return text
 
     def _show_node(self, item) -> None:
         if self._filling or item is None or self._paper is None:
@@ -294,14 +335,15 @@ class RecordView(QWidget):
                 head.setFlags(Qt.ItemFlag.ItemIsEnabled)
                 self.values.addTopLevelItem(head)
                 head.setFirstColumnSpanned(True)
-                for column, payload, holder in groups[facet]:
+                for column, held, holder in groups[facet]:
+                    payload = self._seen(held, node)
                     name = column_labels.readable(column, pack_id)
                     corrected = bool(payload.get("corrected"))
                     shown = _text(payload.get("value"))
                     if column == "set_independent_variable":     # a column's name: in words
                         shown = ", ".join(column_labels.readable(c.strip(), pack_id) for c in shown.split(",") if c)
                     item = QTreeWidgetItem([name, shown, payload.get("unit", "") or "",
-                                            self._recorded_for(holder, node)])
+                                            self._recorded_for(holder, node, held)])
                     item.setData(0, VALUE_ROLE, (column, holder))
                     item.setToolTip(0, column)
                     if self._correctable(column):
@@ -317,6 +359,8 @@ class RecordView(QWidget):
                         item.setText(3, item.text(3) + " -- corrected")
                     if holder is not node:
                         item.setForeground(3, self.palette().placeholderText())
+                    if "assumed" in item.text(3):              # not stated for (all of) it: shown lighter
+                        item.setForeground(1, self.palette().placeholderText())
                     self.values.addTopLevelItem(item)
             if not entries:
                 self.values.addTopLevelItem(QTreeWidgetItem([f"Nothing recorded for this {self._word(node)} "
@@ -337,7 +381,8 @@ class RecordView(QWidget):
             return
         from parameter_extractor import column_labels
         column, holder = item.data(0, VALUE_ROLE)
-        p = holder.values.get(column, {})
+        node = self.tree.currentItem().data(0, NODE_ROLE)
+        p = self._seen(holder.values.get(column, {}), node)
         parts = [f"<b>{html.escape(column_labels.readable(column, self._data.get('data_pack', '')))}</b> "
                  f"<span style='color:gray'>(column {html.escape(column)})</span>"]
         about = column_labels.description(column, self._data.get("data_pack", ""))
@@ -353,6 +398,16 @@ class RecordView(QWidget):
                          + (f" <span style='color:gray'>({check})</span>" if check else ""))
         if p.get("confidence"):
             parts.append(f"<b>Confidence:</b> {html.escape(str(p['confidence']))}")
+        from parameter_extractor import record_tree
+        row_word = self._words[-1] if self._words else "row"
+        if record_tree._is_assumed(p):
+            parts.append(f"<b>Assumed</b>: the paper doesn't state it for this {html.escape(row_word)}; the "
+                         f"{html.escape(plural(row_word))} around it that do all give this value, so it is assumed "
+                         f"the same (flagged under Things to check). Correct it if the paper says otherwise.")
+        elif record_tree.ASSUMED in p and node.children:
+            k = len(p[record_tree.ASSUMED]["rows"])
+            parts.append(f"<b>Assumed for {k} {html.escape(plural(row_word, k))}</b> that don't state it: the "
+                         f"others all give this value.")
         if p.get("origin"):
             parts.append(f"<span style='color:gray'>Found by: {html.escape(str(p['origin']))}</span>")
         if p.get("corrected"):
@@ -407,7 +462,8 @@ class RecordView(QWidget):
             return
         from parameter_extractor import corrections as corr
         column, holder = item.data(0, VALUE_ROLE)
-        before = _text(holder.values.get(column, {}).get("value"))
+        before = _text(self._seen(holder.values.get(column, {}),
+                                  self.tree.currentItem().data(0, NODE_ROLE)).get("value"))
         text = item.text(1)
         if text == before:
             return

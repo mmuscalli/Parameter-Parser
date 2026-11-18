@@ -44,6 +44,9 @@ class VariableCategory(BaseModel):
     table_order: int = 500
     # the highest level of the pack's tree its values may sit at (record_tree.py: 'paper', 'set', ...); '' = the row
     level: str = ""
+    # when only some rows give a value of it, the others of its 'set' (or figure / table) or of the whole 'paper' get it
+    # too; '' / 'none': left empty (calculators/shared_values.py). Read from a pack's own categories only.
+    fill: str = ""
 
     @property
     def assignable(self) -> bool:

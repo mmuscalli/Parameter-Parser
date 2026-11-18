@@ -457,6 +457,12 @@ def check(draft: PackDraft) -> List[Problem]:
         if lv and lv not in level_ids:
             add("error", "Categories", f"category '{cid}' sits at level '{lv}', which the data "
                                        f"pack doesn't have (levels: {', '.join(level_ids)}).")
+    fills = [(f"category '{c.get('id', '')}'", c.get("fill")) for c in m.get("variable_categories", []) if c.get("fill")]
+    fills += [(f"category '{k}'", v) for k, v in (m.get("category_fill") or {}).items()]
+    fills += [(f"column '{k}'", v) for k, v in (m.get("fill_columns") or {}).items()]
+    for what, value in fills:
+        if value not in ("set", "paper", "none"):
+            add("error", "Structure", f"{what}: '{value}' isn't a fill setting (set, paper or none).")
     for key in ("standard_columns", "species_cids"):
         if m.get(key) and not (draft.folder / m[key]).is_file():
             add("error", "pack.json", f"{key} names '{m[key]}', which isn't in the folder.")

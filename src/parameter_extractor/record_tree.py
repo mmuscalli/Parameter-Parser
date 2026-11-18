@@ -186,8 +186,67 @@ def _common_prefix(ids: List[str]) -> str:
     return heads.pop() if len(heads) == 1 else ""
 
 
+# A value stated by some rows of a node and assumed for the others (calculators/shared_values.py fills a value the
+# rows that state it agree on into the rows that don't, marking it "assumed shared"): held once, at the node, with the
+# rows it was assumed for and the assumed copy's provenance (step 3, 2026-11-18).
+ASSUMED = "assumed_for"
+ASSUMED_MARK = " -- assumed shared ("
+
+
 def _same(a: dict, b: dict) -> bool:
-    return all(type(a[k]) is type(b[k]) and a[k] == b[k] for k in PAYLOAD)
+    if not all(type(a[k]) is type(b[k]) and a[k] == b[k] for k in PAYLOAD):
+        return False
+    x, y = a.get(ASSUMED), b.get(ASSUMED)
+    if x is None or y is None:
+        return x is None and y is None
+    return x["rows"] == y["rows"] and _same(x["payload"], y["payload"])
+
+
+def _is_assumed(payload: dict) -> bool:
+    return ASSUMED not in payload and ASSUMED_MARK in str(payload.get("origin", ""))
+
+
+def resolve(payload: dict, row_id: str) -> dict:
+    """What one row holds of a value: the assumed copy for a row it was assumed for, else the stated value."""
+    held = payload.get(ASSUMED)
+    if held is None:
+        return payload
+    if row_id in held["rows"]:
+        return dict(held["payload"])
+    return {k: v for k, v in payload.items() if k != ASSUMED}
+
+
+def _leaf_ids(node: Node) -> List[str]:
+    if not node.children:
+        return [node.id]
+    return [i for c in node.children for i in _leaf_ids(c)]
+
+
+def _merge(node: Node, column: str) -> Optional[dict]:
+    """The children's values of a column as one stated value with the rows it was assumed for -- when the stated
+    ones agree (value and provenance), the assumed ones agree, and both are the same value; else None."""
+    stated, assumed, rows = [], [], []
+    for c in node.children:
+        p = c.values.get(column)
+        if p is None:
+            return None
+        if ASSUMED in p:
+            stated.append({k: v for k, v in p.items() if k != ASSUMED})
+            assumed.append(p[ASSUMED]["payload"])
+            rows += p[ASSUMED]["rows"]
+        elif _is_assumed(p):
+            assumed.append(p)
+            rows += _leaf_ids(c)
+        else:
+            stated.append(p)
+    if not stated or not assumed:
+        return None
+    s0, a0 = stated[0], assumed[0]
+    if not (all(_same(x, s0) for x in stated[1:]) and all(_same(x, a0) for x in assumed[1:])):
+        return None
+    if type(s0["value"]) is not type(a0["value"]) or s0["value"] != a0["value"]:
+        return None
+    return {**s0, ASSUMED: {"rows": rows, "payload": a0}}
 
 
 def share(paper: Node, facets) -> None:
@@ -209,14 +268,19 @@ def _lift(node: Node, facets) -> None:
         payload = first.values[column]
         if all(column in c.values and _same(c.values[column], payload) for c in node.children[1:]):
             node.values[column] = payload
-            for c in node.children:
-                del c.values[column]
+        else:
+            payload = _merge(node, column)            # stated by some rows, assumed for the others
+            if payload is None:
+                continue
+            node.values[column] = payload
+        for c in node.children:
+            del c.values[column]
 
 
 def _rows(node: Node, inherited: Dict[str, dict]):
     here = {**inherited, **node.values}
     if not node.children:
-        yield node, here
+        yield node, {column: resolve(p, node.id) for column, p in here.items()}
     for child in node.children:
         yield from _rows(child, here)
 
@@ -236,14 +300,24 @@ def flatten(paper: Node, column_order=None) -> List[Observation]:
 # ---- the JSON ---------------------------------------------------------------------------------------------------------
 
 def _compact(payload: dict) -> dict:
-    """A value with only the provenance it has ({'value': 2.5, 'unit': 'mM', 'source': 'Table 1', ...})."""
-    return {k: v for k, v in payload.items() if k == "value" or v not in ("", None)}
+    """A value with only the provenance it has ({'value': 2.5, 'unit': 'mM', 'source': 'Table 1', ...}); one assumed
+    for some rows: 'assumed_for': {'rows': [...], and the assumed copy's provenance}."""
+    out = {k: v for k, v in payload.items() if k != ASSUMED and (k == "value" or v not in ("", None))}
+    if ASSUMED in payload:
+        held = payload[ASSUMED]
+        out[ASSUMED] = {"rows": list(held["rows"]),
+                        **{k: v for k, v in _compact(held["payload"]).items() if k != "value"}}
+    return out
 
 
 def _expand(compact: dict) -> dict:
     out = {k: "" for k in PAYLOAD}
     out["confidence"] = None
-    out.update(compact)
+    out.update({k: v for k, v in compact.items() if k != ASSUMED})
+    if ASSUMED in compact:
+        held = dict(compact[ASSUMED])
+        rows = held.pop("rows")
+        out[ASSUMED] = {"rows": rows, "payload": _expand({"value": compact["value"], **held})}
     return out
 
 
@@ -338,6 +412,23 @@ def node_path(paper: Node, full_id: str) -> List[Node]:
     return walk(paper, []) or []
 
 
+def _handed_down(held: dict, child: Node) -> dict:
+    """A node's value as one of its children holds it: a row its own copy (stated or assumed); a group the rows under
+    it that it was assumed for, if any."""
+    if not child.children:
+        return dict(resolve(held, child.id))
+    if ASSUMED not in held:
+        return dict(held)
+    under = set(_leaf_ids(child))
+    rows = [r for r in held[ASSUMED]["rows"] if r in under]
+    plain = {k: v for k, v in held.items() if k != ASSUMED}
+    if not rows:
+        return plain
+    if len(rows) == len(under):
+        return dict(held[ASSUMED]["payload"])          # assumed for every row under it
+    return {**plain, ASSUMED: {"rows": rows, "payload": held[ASSUMED]["payload"]}}
+
+
 def set_value(paper: Node, full_id: str, column: str, payload: Optional[dict]) -> bool:
     """One row's value changed (a reviewer's correction; None removes it): a value its ancestors hold for several
     rows is first handed down to each of them, so only this row changes. False when the row isn't in the tree."""
@@ -348,7 +439,7 @@ def set_value(paper: Node, full_id: str, column: str, payload: Optional[dict]) -
         if column in n.values:                       # held higher up: down one level at a time, to every child
             held = n.values.pop(column)
             for c in n.children:
-                c.values.setdefault(column, dict(held))
+                c.values.setdefault(column, _handed_down(held, c))
     row = path[-1]
     if payload is None:
         row.values.pop(column, None)

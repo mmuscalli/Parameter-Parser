@@ -73,6 +73,11 @@ class PackManifest(BaseModel):
     level_limit: int = 0
     # this pack's level for a category, over the category's own (a module's or a shared one too): {category id: level}
     category_levels: Dict[str, str] = Field(default_factory=dict)
+    # when only some rows give a value, whether the others get it (calculators/shared_values.py): per category
+    # {id: "set" | "paper" | "none"} (a pack's own category may say it in its entry, `fill`) and per column; when a
+    # pack has none of these, its older shared_columns / group_columns lists are used
+    category_fill: Dict[str, str] = Field(default_factory=dict)
+    fill_columns: Dict[str, str] = Field(default_factory=dict)
     # send the paper text with long runs of layout spaces collapsed (-20% tokens; tables go
     # as images anyway)
     compact_text: bool = False

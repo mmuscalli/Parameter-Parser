@@ -169,3 +169,36 @@ def write_observations_csv(observations: List[Observation], out_path: Path, orde
                 d["category"] = order.label_of(o.column)
             d["column"] = renames.get(o.column, o.column)
             writer.writerow(["" if d[k] is None else d[k] for k in OBSERVATION_FIELDS])
+
+
+_INT = re.compile(r"^-?\d+$")
+_FLOAT = re.compile(r"^-?(\d+\.\d*|\.\d+|\d+)([eE][-+]?\d+)?$")
+
+
+def _typed(text: str):
+    """A value read back from a CSV: a number where the text is one ('1994', '81.0'), else the text."""
+    if _INT.match(text):
+        return int(text)
+    if _FLOAT.match(text):
+        return float(text)
+    return text
+
+
+def read_observations_csv(path: Path, entry_numbers: Optional[dict] = None) -> List[Observation]:
+    """A run's observations file read back (an opened run folder): numbers as numbers; `entry_numbers`
+    {full_id: n} from its dataset CSV (the file doesn't repeat them). Values corrected by the reviewer are read as
+    corrected (corrections.py writes them into the file)."""
+    out: List[Observation] = []
+    entry_numbers = entry_numbers or {}
+    with open(path, newline="", encoding="utf-8") as f:
+        for r in csv.DictReader(f):
+            if not r.get("full_id") or not r.get("column") or r.get("value", "") == "":
+                continue
+            page = r.get("page", "")
+            out.append(Observation(
+                full_id=r["full_id"], set_id=r.get("set_id", ""), sample_id=r.get("sample_id", ""),
+                entry_number=int(entry_numbers.get(r["full_id"]) or len(entry_numbers) + 1 or 0),
+                column=r["column"], value=_typed(r["value"]), unit=r.get("unit", ""), origin=r.get("origin", ""),
+                source=r.get("source", ""), page=int(page) if page.isdigit() else page, quote=r.get("quote", ""),
+                quote_in_paper=r.get("quote_in_paper", ""), confidence=r.get("confidence") or None))
+    return out

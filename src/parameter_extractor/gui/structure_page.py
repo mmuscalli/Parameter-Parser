@@ -14,8 +14,8 @@ import html
 from typing import Dict, List, Optional
 
 from PySide6.QtCore import Qt
-from PySide6.QtWidgets import (QComboBox, QFormLayout, QHeaderView, QLabel, QLineEdit, QTableWidget, QTableWidgetItem,
-                               QVBoxLayout, QWidget)
+from PySide6.QtWidgets import (QComboBox, QFormLayout, QHBoxLayout, QHeaderView, QLabel, QLineEdit, QPushButton,
+                               QTableWidget, QTableWidgetItem, QVBoxLayout, QWidget)
 
 RESERVED = {"figure", "assumed"}
 
@@ -52,15 +52,44 @@ class StructurePage(QWidget):
                 theirs.textChanged.connect(lambda t, w=mine: self._sync(w, t))
         self.picture = QLabel(textFormat=Qt.TextFormat.RichText, wordWrap=True)
         v.addWidget(self.picture)
-        self.table = QTableWidget(0, 3)
-        self.table.setHorizontalHeaderLabels(["Kind of value", "Recorded for", "Comes from"])
+        self.table = QTableWidget(0, 4)
+        self.table.setHorizontalHeaderLabels(["Kind of value", "Recorded for", "If only some rows give it",
+                                              "Comes from"])
+        self.table.horizontalHeaderItem(2).setToolTip(
+            "Papers often state a method or condition once, for one experiment. Fill in: the rows that don't give it "
+            "get the value the others agree on (marked as assumed, and listed under Things to check). Never filled "
+            "when the rows that give it disagree.")
         self.table.verticalHeader().setVisible(False)
         head = self.table.horizontalHeader()
         head.setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
-        head.setSectionResizeMode(1, QHeaderView.ResizeMode.ResizeToContents)
-        head.setSectionResizeMode(2, QHeaderView.ResizeMode.ResizeToContents)
+        for i in (1, 2, 3):
+            head.setSectionResizeMode(i, QHeaderView.ResizeMode.ResizeToContents)
         v.addWidget(self.table, 1)
+        # single columns with a setting of their own (a time that differs per row is never filled in)
+        v.addWidget(QLabel("<b>Single values with their own setting</b> <span style='color:gray'>(over their kind's; "
+                           "e.g. a duration, which differs from row to row, is never filled in)</span>",
+                           textFormat=Qt.TextFormat.RichText, wordWrap=True))
+        self.columns = QTableWidget(0, 3)
+        self.columns.setHorizontalHeaderLabels(["Value (column)", "If only some rows give it", ""])
+        self.columns.verticalHeader().setVisible(False)
+        ch = self.columns.horizontalHeader()
+        ch.setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
+        ch.setSectionResizeMode(1, QHeaderView.ResizeMode.ResizeToContents)
+        ch.setSectionResizeMode(2, QHeaderView.ResizeMode.ResizeToContents)
+        self.columns.setMaximumHeight(170)
+        v.addWidget(self.columns)
+        add = QHBoxLayout()
+        self.new_column = QLineEdit(placeholderText="a column's name, e.g. stirring_rate_rpm")
+        self.add_column_btn = QPushButton("Add", clicked=self._add_column)
+        add.addWidget(self.new_column, 1)
+        add.addWidget(self.add_column_btn)
+        v.addLayout(add)
+        self.fill_note = QLabel(wordWrap=True)
+        self.fill_note.setStyleSheet("color: gray;")
+        v.addWidget(self.fill_note)
         self._kinds: List[dict] = []
+        self._column_fill: Dict[str, str] = {}
+        self.fill_changed = False
         self.load(pack)
 
     # ---- the words ----------------------------------------------------------------------------------------------
@@ -81,11 +110,22 @@ class StructurePage(QWidget):
         group, row = self._words()
         return [("paper", "the paper"), ("set", f"each {group}"), ("sample", f"each {row}")]
 
+    def _fill_choices(self):
+        group, row = self._words()
+        return [("none", "leave the others empty"), ("set", f"fill in from its {group} (or figure / table)"),
+                ("paper", "fill in across the paper")]
+
     def _words_changed(self) -> None:
         for r in range(self.table.rowCount()):
-            combo = self.table.cellWidget(r, 1)
+            for col, choices in ((1, self._level_choices()), (2, self._fill_choices())):
+                combo = self.table.cellWidget(r, col)
+                if combo is not None:
+                    for i, (_v, text) in enumerate(choices):
+                        combo.setItemText(i, text)
+        for r in range(self.columns.rowCount()):
+            combo = self.columns.cellWidget(r, 1)
             if combo is not None:
-                for i, (_lv, text) in enumerate(self._level_choices()):
+                for i, (_v, text) in enumerate(self._fill_choices()):
                     combo.setItemText(i, text)
         self._draw()
 
@@ -108,6 +148,14 @@ class StructurePage(QWidget):
                 cats = []
         if not cats:
             cats = [vc.VariableCategory(**c) for c in own.values()]
+        from parameter_extractor.calculators import shared_values
+        fills, self._column_fill = {}, {}
+        self._patterns = False
+        if pack is not None:
+            fills, self._column_fill = shared_values.fill_choices(pack)
+            legacy = not shared_values.uses_fill_settings(pack.own_manifest)
+            self._patterns = legacy and any((pack.manifest.shared_columns or {}).get("patterns") or
+                                            (pack.manifest.group_columns or {}).get("patterns") for _ in [0])
         self._kinds = []
         for c in cats:
             if c.id in own:
@@ -119,8 +167,10 @@ class StructurePage(QWidget):
             self._kinds.append({"id": c.id, "label": c.label, "description": c.description, "origin": origin,
                                 "own": c.id in own, "default": default or "sample",
                                 "level": chosen.get(c.id) or (own[c.id].get("level") if c.id in own else "")
-                                or default or "sample"})
+                                or default or "sample",
+                                "fill": fills.get(c.id) or "none"})
         self._fill()
+        self._fill_columns()
 
     def _fill(self) -> None:
         self.table.setRowCount(len(self._kinds))
@@ -135,10 +185,58 @@ class StructurePage(QWidget):
             combo.setCurrentIndex(max(combo.findData(k["level"]), 0))
             combo.currentIndexChanged.connect(lambda _i, r=r, c=combo: self._moved(r, c.currentData()))
             self.table.setCellWidget(r, 1, combo)
+            fill = QComboBox()
+            for f, text in self._fill_choices():
+                fill.addItem(text, f)
+            fill.setCurrentIndex(max(fill.findData(k["fill"]), 0))
+            fill.currentIndexChanged.connect(lambda _i, r=r, c=fill: self._fill_set(r, c.currentData()))
+            fill.setEnabled(not self._patterns)
+            self.table.setCellWidget(r, 2, fill)
             origin = QTableWidgetItem(k["origin"])
             origin.setFlags(Qt.ItemFlag.ItemIsEnabled)
-            self.table.setItem(r, 2, origin)
+            self.table.setItem(r, 3, origin)
+        self.fill_note.setText("This data pack chooses the values to fill in by name patterns (pack.json "
+                               "shared_columns / group_columns): edit them there." if self._patterns else "")
         self._draw()
+
+    def _fill_set(self, row: int, fill: str) -> None:
+        self._kinds[row]["fill"] = fill
+        self.fill_changed = True
+
+    def _fill_columns(self) -> None:
+        self.columns.setRowCount(len(self._column_fill))
+        for r, (column, fill) in enumerate(sorted(self._column_fill.items())):
+            name = QTableWidgetItem(column)
+            name.setFlags(Qt.ItemFlag.ItemIsEnabled)
+            self.columns.setItem(r, 0, name)
+            combo = QComboBox()
+            for f, text in self._fill_choices():
+                combo.addItem(text, f)
+            combo.setCurrentIndex(max(combo.findData(fill), 0))
+            combo.currentIndexChanged.connect(lambda _i, col=column, c=combo: self._column_set(col, c.currentData()))
+            combo.setEnabled(not self._patterns)
+            self.columns.setCellWidget(r, 1, combo)
+            remove = QPushButton("Remove", clicked=lambda _c=False, col=column: self._remove_column(col))
+            remove.setEnabled(not self._patterns)
+            self.columns.setCellWidget(r, 2, remove)
+
+    def _column_set(self, column: str, fill: str) -> None:
+        self._column_fill[column] = fill
+        self.fill_changed = True
+
+    def _remove_column(self, column: str) -> None:
+        self._column_fill.pop(column, None)
+        self.fill_changed = True
+        self._fill_columns()
+
+    def _add_column(self) -> None:
+        column = self.new_column.text().strip()
+        if not column or self._patterns:
+            return
+        self._column_fill.setdefault(column, "none")
+        self.fill_changed = True
+        self.new_column.clear()
+        self._fill_columns()
 
     def _moved(self, row: int, level: str) -> None:
         self._kinds[row]["level"] = level
@@ -176,3 +274,21 @@ class StructurePage(QWidget):
             manifest["category_levels"] = levels
         else:
             manifest.pop("category_levels", None)
+        if not self.fill_changed or self._patterns:   # an older pack's lists stay as they are until a fill changes
+            return
+        fills = {}
+        for k in self._kinds:
+            if k["id"] in own:
+                if k["fill"] in ("set", "paper"):
+                    own[k["id"]]["fill"] = k["fill"]
+                else:
+                    own[k["id"]].pop("fill", None)
+            elif k["fill"] in ("set", "paper"):
+                fills[k["id"]] = k["fill"]
+        for key, value in (("category_fill", fills), ("fill_columns", dict(sorted(self._column_fill.items())))):
+            if value:
+                manifest[key] = value
+            else:
+                manifest.pop(key, None)
+        manifest.pop("shared_columns", None)          # replaced by the settings above
+        manifest.pop("group_columns", None)

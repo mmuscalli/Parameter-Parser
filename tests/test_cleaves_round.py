@@ -338,7 +338,8 @@ def test_methods_the_experiments_share_are_filled_in():
             row(5, {"sampled_Gly_aq_%yield": 4.0}, original_data_reference="Smith 1999")]  # another paper's data
     rows[0].provenance["vessel_material"] = CellSource(origin="experimental conditions", quote="Hastelloy C-22",
                                                        source="Methods")
-    flags = fill_shared(rows, packs.current().manifest.shared_columns, ColumnOrder(packs.current()))
+    from parameter_extractor.calculators.shared_values import selectors
+    flags = fill_shared(rows, selectors(packs.current())[0], ColumnOrder(packs.current()))   # the pack's paper-wide fill
     rec = {r.full_id: row_to_template_dict(r) for r in rows}
     assert rec["001001002"]["vessel_material"] == rec["001001003"]["vessel_material"] == "Hastelloy"
     assert rec["001001003"]["analysis_method"] == "RP-HPLC"
@@ -478,7 +479,9 @@ def test_fill_in_within_groups_related_columns_and_conflicts():
             row("001002", 2, {"data_location": "Table. 1"}, initial_temperature_C=60.0,
                 sampled_temperature_C=61.0)]                                                     # differs: kept
     m = packs.current().manifest
-    flags = fill_in(rows, m.shared_columns, m.group_columns, m.column_pairs, ColumnOrder(packs.current()))
+    from parameter_extractor.calculators.shared_values import selectors
+    shared, group = selectors(packs.current())               # the pack's fill settings (Structure tab)
+    flags = fill_in(rows, shared, group, m.column_pairs, ColumnOrder(packs.current()))
     rec = [row_to_template_dict(r) for r in rows]
     assert rec[2]["flow_rate_mL_min"] == 2.0 and rec[4]["flow_rate_mL_min"] == 5.0          # within each set
     assert rec[2]["vessel_material"] == "glass" and rec[4]["vessel_material"] == "quartz"   # set, not the paper
@@ -496,7 +499,7 @@ def test_fill_in_within_groups_related_columns_and_conflicts():
     # across the paper, disagreeing rows: nothing filled, a 'differs' flag naming the rows without a value
     rows3 = [row("001003", 1, {}, vessel_material="glass"), row("001004", 1, {}, vessel_material="quartz"),
              row("001005", 1, {})]
-    flags3 = fill_in(rows3, m.shared_columns, None, (), ColumnOrder(packs.current()))
+    flags3 = fill_in(rows3, shared, None, (), ColumnOrder(packs.current()))
     assert row_to_template_dict(rows3[2]).get("vessel_material") is None
     assert any(f.kind == "method_differs" and "vessel_material" in f.message and "001005001" in f.message
                for f in flags3)

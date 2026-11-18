@@ -74,8 +74,9 @@ Version: `parameter_extractor.__version__` (0.5.0, tag `v0.5.0`), the one place 
   (`levels`, category `level`), values grouped by facet -> `<paper>_record.json`; flattens back to the same CSVs
   (tests/test_record_tree.py). Step 2: `gui/record_view.py` (results by set; corrections there),
   `gui/structure_page.py` (pack editor: level words, each kind of value's level; `category_levels`),
-  `column_labels.py` (names in words). Later steps (inheritance replacing shared/group columns, a Run level in the
-  row plan) are planned in docs/history 2026-11-18.
+  `column_labels.py` (names in words). Step 3: fill settings per kind of value (`fill`, `category_fill`,
+  `fill_columns`; `shared_values.selectors`; older packs keep shared_columns / group_columns). Next: a Run level in the row
+  plan (docs/history 2026-11-18).
 - `estimate.py`: cost and time before a run (under the Run button, `--estimate-only`), from `estimate_data.json`
   (rebuild it with `scripts/build_estimate_data.py` after many new runs; check with `scripts/check_estimates.py`).
 

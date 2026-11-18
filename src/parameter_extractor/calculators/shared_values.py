@@ -24,7 +24,7 @@ Selectors (`shared_columns`, `group_columns`): {"categories": [variable category
 from __future__ import annotations
 
 import re
-from typing import Dict, List, Optional, Sequence
+from typing import Dict, List, Optional, Sequence, Tuple
 
 from parameter_extractor.ingestion.flatten_to_template import row_to_template_dict, set_row_value
 from parameter_extractor.schemas.row_schema import CellSource, ExtractedRow
@@ -197,6 +197,53 @@ def fill_in(rows: List[ExtractedRow], shared: Optional[dict], group: Optional[di
             f"into the {len(missing)} row(s) that don't state it -- set it for them if the paper says which applies. "
             f"Rows: {', '.join(r.full_id for r in missing)}."))
     return flags
+
+
+FILL_SCOPES = ("set", "paper")
+
+
+def uses_fill_settings(manifest) -> bool:
+    """The pack says per kind of value whether to fill (category_fill, fill_columns, or `fill` in its own categories:
+    the Structure tab, 2026-11-18) -- else its older shared_columns / group_columns lists apply."""
+    own = getattr(manifest, "variable_categories", []) or []
+    return bool(getattr(manifest, "category_fill", None) or getattr(manifest, "fill_columns", None)
+                or any(c.get("fill") for c in own))
+
+
+def fill_choices(pack) -> Tuple[Dict[str, str], Dict[str, str]]:
+    """({category id: 'set' | 'paper' | 'none'}, {column: ...}) for a pack: its settings, or -- an older pack -- read
+    from its shared_columns / group_columns lists (a category in the paper-wide list fills across the paper, one only
+    in the group list within its set; named columns and exclusions per column)."""
+    m = pack.manifest
+    if uses_fill_settings(pack.own_manifest if hasattr(pack, "own_manifest") else m):
+        cats = {c.get("id"): c.get("fill") for c in m.variable_categories if c.get("fill")}
+        cats.update(m.category_fill or {})
+        return cats, dict(m.fill_columns or {})
+    shared, group = m.shared_columns or {}, m.group_columns or {}
+    cats = {c: "set" for c in group.get("categories", [])}
+    cats.update({c: "paper" for c in shared.get("categories", [])})
+    cols = {c: "set" for c in group.get("columns", [])}
+    cols.update({c: "paper" for c in shared.get("columns", [])})
+    for c in set(group.get("exclude", [])) | set(shared.get("exclude", [])):
+        cols[c] = "none"
+    return cats, cols
+
+
+def selectors(pack) -> Tuple[dict, dict]:
+    """(shared_columns, group_columns) selectors for fill_in: from the pack's fill settings, or its older lists as
+    they are (patterns included)."""
+    m = pack.manifest
+    if not uses_fill_settings(pack.own_manifest if hasattr(pack, "own_manifest") else m):
+        return m.shared_columns or {}, m.group_columns or {}
+    cats, cols = fill_choices(pack)
+    group = {"categories": sorted(c for c, f in cats.items() if f in FILL_SCOPES),
+             "columns": sorted(c for c, f in cols.items() if f in FILL_SCOPES),
+             "exclude": sorted(c for c, f in cols.items() if f not in FILL_SCOPES)}
+    shared = {"categories": sorted(c for c, f in cats.items() if f == "paper"),
+              "columns": sorted(c for c, f in cols.items() if f == "paper"),
+              "exclude": sorted(c for c, f in cols.items() if f != "paper")}
+    return (shared if shared["categories"] or shared["columns"] else {}), \
+        (group if group["categories"] or group["columns"] else {})
 
 
 def fill_shared(rows: List[ExtractedRow], spec: dict, order) -> List[Flag]:

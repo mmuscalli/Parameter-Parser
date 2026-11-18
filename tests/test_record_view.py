@@ -135,6 +135,37 @@ def test_the_experiment_sets_tab_shows_and_corrects():
         w.close()
 
 
+def test_an_opened_older_run_gets_its_record():
+    """Feedback 2026-11-18: a run opened from its folder (File > Open a results folder…) made before the record
+    existed left the tab greyed out -- its rows are read back as saved rows. Now its record is made from its
+    observations file, its corrections marked."""
+    if not _have_inputs():
+        return
+    from parameter_extractor import corrections as corr, run_folder
+    from parameter_extractor.gui.main_window import MainWindow
+    with tempfile.TemporaryDirectory() as tmp:
+        with patch.object(api_client, "_send", _replay_send):
+            result = run_pipeline(PDF, _config(Path(tmp)))
+        fid = result.rows[0].full_id
+        before = _cells(result.csv_path, "duration_hr")[fid]
+        corr.correct(result.run_dir, fid, "duration_hr", before, "99.0")
+        expected = json.loads(result.record_path.read_text())
+        result.record_path.unlink()                                             # as before the record existed
+        opened = run_folder.load_result(result.run_dir)
+        w = MainWindow()
+        w.show_result(opened)
+        _pump()
+        assert w.tabs.isTabEnabled(w.tabs.indexOf(w.record_view))
+        made = json.loads(result.record_path.read_text())
+        assert len(made["paper"]["children"]) == len(expected["paper"]["children"])
+        view = w.record_view
+        view.tree.setCurrentItem(view.tree.topLevelItem(0).child(0).child(0))
+        _pump()
+        duration = _values(view)["duration_hr"]
+        assert duration.text(1) == "99.0" and "corrected" in duration.text(3)
+        w.close()
+
+
 def test_the_structure_tab_saves_levels():
     from parameter_extractor.gui.pack_windows import PackEditor
     with tempfile.TemporaryDirectory() as tmp, patch.object(packs, "user_packs_dir", lambda: Path(tmp)):
