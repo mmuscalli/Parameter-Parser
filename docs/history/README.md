@@ -155,3 +155,4 @@ current month's file (start `YYYY-MM.md` in a new month), with one line here.
 - Branch levels-and-facets, step 4: runs within a set, measured on 12 papers + a control + Huber1998 ($1.92) (2026-11-18, Mickey)
 - Branch levels-and-facets follow-ups: cli -m, level limit in the window, drafted packs' levels and fills, set variables / keys evaluated (2026-11-18, Mickey)
 - Branch levels-and-facets: a `run` column in the dataset (2026-11-18, Mickey)
+- Branch levels-and-facets: runs for exoplanets (from labels) and drafted packs (measured); fuchida2014 settled (2026-11-18, Mickey)
