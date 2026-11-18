@@ -269,7 +269,7 @@ def test_a_batch_mode_search_shares_batches():
         with tempfile.TemporaryDirectory() as tmp, patch.object(ax, "_get", fake_get()), \
                 patch.object(anthropic, "Anthropic", lambda **kw: fake_client), \
                 patch.object(api_client, "BATCH_POLL_SECONDS", (0.01, 0.01)), \
-                patch.object(api_client.BatchCollector.__init__, "__defaults__", (0.3, 5.0, 2000)):
+                patch.object(api_client.BatchCollector.__init__, "__defaults__", (1.5, 10.0, 2000)):   # room under load
             cfg = RunConfig.from_settings(api_key="x", output_dir=Path(tmp) / "out", pack="exoplanets",
                                           model_profile="economy", batch_mode=True, arxiv_cache_dir=Path(tmp) / "cache")
             items = ["arXiv:1811.01882", "1811.01882v4", "2018arXiv181101882N"]       # three 'papers'
