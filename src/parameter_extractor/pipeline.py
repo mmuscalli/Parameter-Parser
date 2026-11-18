@@ -1510,6 +1510,10 @@ def finish(
         archive = _archive_check(rows, ex, ctx)
         paper_flags += archive_flags(archive)
     row_flags = {r.full_id: f for r in rows if (f := check_row(r, **thresholds))}
+    # a Paper summary row with reactants of different experiments, on their cells (calculators/summary_checks.py)
+    from parameter_extractor.calculators.summary_checks import summary_mixed_flags
+    for fid, flags in summary_mixed_flags(rows, SUMMARY_SET).items():
+        row_flags.setdefault(fid, []).extend(flags)
     paper_flags += _range_flags(rows)
     paper_flags += starting_composition_flags(rows)          # products but no starting compounds (2026-11-12)
     from parameter_extractor.calculators.label_values import label_mismatches

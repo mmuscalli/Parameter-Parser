@@ -28,11 +28,11 @@ NOT_ABOUT_VALUES = {"reused_answer", "paper_source", "cited_data", "scope", "loc
 # kinds that question each value on its own (a conflict, a range, an unread or unquoted value): always shown on their
 # cells. Other flags about ONE value stated for several rows (a method 'for every experiment set') are listed once in
 # the Flagged values window instead of on every row (gui/flagged_values.py).
-PER_VALUE = {"conflicting_values", "out_of_range", "identity_not_quoted", "quote_unrelated", "value_not_read",
+PER_VALUE = {"summary_mixed", "conflicting_values", "out_of_range", "identity_not_quoted", "quote_unrelated", "value_not_read",
              "table_check", "unit_conversion"}
 PRIORITY = ["identity_not_quoted", "quote_unrelated", "assumed_value", "table_check", "conflicting_values", "out_of_range",
             "unit_conversion", "value_range", "table_not_found", "concentration_not_stated", "pass_disagreement",
-            "multimodal", "other_estimates", "archive_check", "assumed_default", "assumed_shared", "method_differs", "set_gap", "plan_mismatch", "derived_value",
+            "multimodal", "other_estimates", "archive_check", "assumed_default", "assumed_shared", "method_differs", "set_gap", "plan_mismatch", "summary_mixed", "derived_value",
             "low_confidence"]
 _COMPOUND = re.compile(r"^(initial|stock|sampled|calculated)_(.+?)_(aq|gas|s)_")
 _LISTED = re.compile(r"^- (.+?), ([A-Za-z0-9_%+\-.()]+): read ([-+]?\d[\d.eE+-]*)")

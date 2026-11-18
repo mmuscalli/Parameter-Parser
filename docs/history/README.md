@@ -147,3 +147,4 @@ current month's file (start `YYYY-MM.md` in a new month), with one line here.
 - The experiment-condition fixes for every pack, not only the curated one (2026-11-17, Mickey)
 - Tables read incompletely: a check against the row plan (2026-11-17, Mickey)
 - Tables read again automatically; a Paper summary row for papers without rows (2026-11-17, Mickey)
+- Paper summary rows: reactants of different experiments flagged on their cells (2026-11-18, Mickey)

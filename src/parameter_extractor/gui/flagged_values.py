@@ -87,6 +87,7 @@ KIND_LABELS = {
     "for_solution": "Given for a starting solution",
     "plan_mismatch": "Rows lack what their row plan says varies",
     "paper_summary": "One row for the whole paper",
+    "summary_mixed": "Probably from different experiments",
 }
 
 
