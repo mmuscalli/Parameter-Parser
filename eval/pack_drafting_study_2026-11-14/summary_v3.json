@@ -16,41 +16,41 @@
      "agree_close": null
     },
     "methodology": {
-     "recall": 0.494,
-     "recall_close": 0.496,
-     "paper_mean_recall": 0.567,
-     "paper_mean_recall_close": 0.568,
-     "printed_values": 532,
+     "recall": 0.577,
+     "recall_close": 0.579,
+     "paper_mean_recall": 0.6,
+     "paper_mean_recall_close": 0.602,
+     "printed_values": 482,
      "shared_values": 414,
      "agree_match": 0.795,
      "agree_close": 0.87
     },
     "chemistry_in": {
-     "recall": 0.562,
-     "recall_close": 0.562,
-     "paper_mean_recall": 0.533,
-     "paper_mean_recall_close": 0.533,
-     "printed_values": 73,
+     "recall": 0.569,
+     "recall_close": 0.569,
+     "paper_mean_recall": 0.548,
+     "paper_mean_recall_close": 0.548,
+     "printed_values": 72,
      "shared_values": 99,
      "agree_match": 0.848,
      "agree_close": 0.869
     },
     "chemistry_out": {
-     "recall": 0.372,
-     "recall_close": 0.388,
-     "paper_mean_recall": 0.311,
-     "paper_mean_recall_close": 0.322,
-     "printed_values": 121,
+     "recall": 0.516,
+     "recall_close": 0.548,
+     "paper_mean_recall": 0.396,
+     "paper_mean_recall_close": 0.412,
+     "printed_values": 62,
      "shared_values": 505,
      "agree_match": 0.883,
      "agree_close": 0.901
     },
     "overall": {
-     "recall": 0.53,
-     "recall_close": 0.533,
-     "paper_mean_recall": 0.562,
-     "paper_mean_recall_close": 0.565,
-     "printed_values": 910
+     "recall": 0.605,
+     "recall_close": 0.609,
+     "paper_mean_recall": 0.604,
+     "paper_mean_recall_close": 0.608,
+     "printed_values": 800
     },
     "title": {
      "recall": 0.761,
@@ -103,19 +103,19 @@
      "printed": 39
     },
     "temperature": {
-     "recall": 0.676,
-     "recall_close": 0.676,
-     "printed": 34
+     "recall": 0.667,
+     "recall_close": 0.667,
+     "printed": 33
     },
     "duration": {
-     "recall": 0.368,
-     "recall_close": 0.376,
-     "printed": 125
+     "recall": 0.478,
+     "recall_close": 0.478,
+     "printed": 69
     },
     "pH": {
-     "recall": 0.417,
-     "recall_close": 0.417,
-     "printed": 139
+     "recall": 0.582,
+     "recall_close": 0.589,
+     "printed": 146
     },
     "pressure": {
      "recall": 0.333,
@@ -123,8 +123,8 @@
      "printed": 9
     },
     "volume": {
-     "recall": 0.5,
-     "recall_close": 0.5,
+     "recall": 0.583,
+     "recall_close": 0.583,
      "printed": 24
     },
     "solid_mass": {
@@ -148,19 +148,19 @@
      "printed": 78
     },
     "inputs_mM": {
-     "recall": 0.562,
-     "recall_close": 0.562,
-     "printed": 73
+     "recall": 0.569,
+     "recall_close": 0.569,
+     "printed": 72
     },
     "outputs_mM": {
-     "recall": 0.034,
-     "recall_close": 0.034,
-     "printed": 59
+     "recall": 0.048,
+     "recall_close": 0.048,
+     "printed": 21
     },
     "outputs_pct": {
-     "recall": 0.694,
-     "recall_close": 0.726,
-     "printed": 62
+     "recall": 0.756,
+     "recall_close": 0.805,
+     "printed": 41
     },
     "new_values": 172,
     "new_columns_per_paper": 0.9,
@@ -181,41 +181,41 @@
      "agree_close": null
     },
     "methodology": {
-     "recall": 0.614,
-     "recall_close": 0.617,
-     "paper_mean_recall": 0.705,
-     "paper_mean_recall_close": 0.706,
-     "printed_values": 428,
+     "recall": 0.726,
+     "recall_close": 0.728,
+     "paper_mean_recall": 0.746,
+     "paper_mean_recall_close": 0.748,
+     "printed_values": 383,
      "shared_values": 414,
      "agree_match": 0.795,
      "agree_close": 0.87
     },
     "chemistry_in": {
-     "recall": 0.695,
-     "recall_close": 0.695,
-     "paper_mean_recall": 0.704,
-     "paper_mean_recall_close": 0.704,
-     "printed_values": 59,
+     "recall": 0.707,
+     "recall_close": 0.707,
+     "paper_mean_recall": 0.724,
+     "paper_mean_recall_close": 0.724,
+     "printed_values": 58,
      "shared_values": 99,
      "agree_match": 0.848,
      "agree_close": 0.869
     },
     "chemistry_out": {
-     "recall": 0.441,
-     "recall_close": 0.461,
-     "paper_mean_recall": 0.391,
-     "paper_mean_recall_close": 0.405,
-     "printed_values": 102,
+     "recall": 0.525,
+     "recall_close": 0.557,
+     "paper_mean_recall": 0.414,
+     "paper_mean_recall_close": 0.431,
+     "printed_values": 61,
      "shared_values": 505,
      "agree_match": 0.883,
      "agree_close": 0.901
     },
     "overall": {
-     "recall": 0.654,
-     "recall_close": 0.658,
-     "paper_mean_recall": 0.699,
-     "paper_mean_recall_close": 0.702,
-     "printed_values": 737
+     "recall": 0.745,
+     "recall_close": 0.749,
+     "paper_mean_recall": 0.751,
+     "paper_mean_recall_close": 0.755,
+     "printed_values": 650
     },
     "title": {
      "recall": 0.946,
@@ -268,19 +268,19 @@
      "printed": 28
     },
     "temperature": {
-     "recall": 0.958,
-     "recall_close": 0.958,
-     "printed": 24
+     "recall": 0.957,
+     "recall_close": 0.957,
+     "printed": 23
     },
     "duration": {
-     "recall": 0.43,
-     "recall_close": 0.439,
-     "printed": 107
+     "recall": 0.589,
+     "recall_close": 0.589,
+     "printed": 56
     },
     "pH": {
-     "recall": 0.542,
-     "recall_close": 0.542,
-     "printed": 107
+     "recall": 0.746,
+     "recall_close": 0.754,
+     "printed": 114
     },
     "pressure": {
      "recall": 0.429,
@@ -288,8 +288,8 @@
      "printed": 7
     },
     "volume": {
-     "recall": 0.632,
-     "recall_close": 0.632,
+     "recall": 0.737,
+     "recall_close": 0.737,
      "printed": 19
     },
     "solid_mass": {
@@ -313,19 +313,19 @@
      "printed": 65
     },
     "inputs_mM": {
-     "recall": 0.695,
-     "recall_close": 0.695,
-     "printed": 59
+     "recall": 0.707,
+     "recall_close": 0.707,
+     "printed": 58
     },
     "outputs_mM": {
-     "recall": 0.047,
-     "recall_close": 0.047,
-     "printed": 43
+     "recall": 0.05,
+     "recall_close": 0.05,
+     "printed": 20
     },
     "outputs_pct": {
-     "recall": 0.729,
-     "recall_close": 0.763,
-     "printed": 59
+     "recall": 0.756,
+     "recall_close": 0.805,
+     "printed": 41
     },
     "new_values": 172,
     "new_columns_per_paper": 1.1,
@@ -348,41 +348,41 @@
      "agree_close": null
     },
     "methodology": {
-     "recall": 0.427,
-     "recall_close": 0.457,
-     "paper_mean_recall": 0.469,
-     "paper_mean_recall_close": 0.491,
-     "printed_values": 578,
-     "shared_values": 409,
-     "agree_match": 0.775,
-     "agree_close": 0.846
+     "recall": 0.502,
+     "recall_close": 0.54,
+     "paper_mean_recall": 0.505,
+     "paper_mean_recall_close": 0.529,
+     "printed_values": 528,
+     "shared_values": 455,
+     "agree_match": 0.787,
+     "agree_close": 0.853
     },
     "chemistry_in": {
-     "recall": 0.699,
-     "recall_close": 0.699,
-     "paper_mean_recall": 0.662,
-     "paper_mean_recall_close": 0.662,
-     "printed_values": 73,
+     "recall": 0.708,
+     "recall_close": 0.708,
+     "paper_mean_recall": 0.677,
+     "paper_mean_recall_close": 0.677,
+     "printed_values": 72,
      "shared_values": 136,
      "agree_match": 0.853,
      "agree_close": 0.868
     },
     "chemistry_out": {
-     "recall": 0.38,
-     "recall_close": 0.397,
-     "paper_mean_recall": 0.319,
-     "paper_mean_recall_close": 0.327,
-     "printed_values": 121,
+     "recall": 0.532,
+     "recall_close": 0.565,
+     "paper_mean_recall": 0.415,
+     "paper_mean_recall_close": 0.429,
+     "printed_values": 62,
      "shared_values": 622,
      "agree_match": 0.905,
      "agree_close": 0.92
     },
     "overall": {
-     "recall": 0.499,
-     "recall_close": 0.519,
-     "paper_mean_recall": 0.521,
-     "paper_mean_recall_close": 0.537,
-     "printed_values": 956
+     "recall": 0.57,
+     "recall_close": 0.596,
+     "paper_mean_recall": 0.565,
+     "paper_mean_recall_close": 0.583,
+     "printed_values": 846
     },
     "title": {
      "recall": 0.761,
@@ -435,19 +435,19 @@
      "printed": 39
     },
     "temperature": {
-     "recall": 0.676,
-     "recall_close": 0.676,
-     "printed": 34
+     "recall": 0.667,
+     "recall_close": 0.667,
+     "printed": 33
     },
     "duration": {
-     "recall": 0.376,
-     "recall_close": 0.384,
-     "printed": 125
+     "recall": 0.478,
+     "recall_close": 0.493,
+     "printed": 69
     },
     "pH": {
-     "recall": 0.324,
-     "recall_close": 0.439,
-     "printed": 139
+     "recall": 0.521,
+     "recall_close": 0.651,
+     "printed": 146
     },
     "pressure": {
      "recall": 0.333,
@@ -455,8 +455,8 @@
      "printed": 9
     },
     "volume": {
-     "recall": 0.5,
-     "recall_close": 0.5,
+     "recall": 0.583,
+     "recall_close": 0.583,
      "printed": 24
     },
     "solid_mass": {
@@ -480,22 +480,22 @@
      "printed": 78
     },
     "inputs_mM": {
-     "recall": 0.699,
-     "recall_close": 0.699,
-     "printed": 73
+     "recall": 0.708,
+     "recall_close": 0.708,
+     "printed": 72
     },
     "outputs_mM": {
-     "recall": 0.051,
-     "recall_close": 0.051,
-     "printed": 59
+     "recall": 0.095,
+     "recall_close": 0.095,
+     "printed": 21
     },
     "outputs_pct": {
-     "recall": 0.694,
-     "recall_close": 0.726,
-     "printed": 62
+     "recall": 0.756,
+     "recall_close": 0.805,
+     "printed": 41
     },
-    "new_values": 239,
-    "new_columns_per_paper": 2.1,
+    "new_values": 253,
+    "new_columns_per_paper": 2.2,
     "no_rows": 9
    },
    "with_rows": {
@@ -513,41 +513,41 @@
      "agree_close": null
     },
     "methodology": {
-     "recall": 0.531,
-     "recall_close": 0.568,
-     "paper_mean_recall": 0.583,
-     "paper_mean_recall_close": 0.61,
-     "printed_values": 465,
-     "shared_values": 409,
-     "agree_match": 0.775,
-     "agree_close": 0.846
+     "recall": 0.631,
+     "recall_close": 0.679,
+     "paper_mean_recall": 0.628,
+     "paper_mean_recall_close": 0.658,
+     "printed_values": 420,
+     "shared_values": 455,
+     "agree_match": 0.787,
+     "agree_close": 0.853
     },
     "chemistry_in": {
-     "recall": 0.864,
-     "recall_close": 0.864,
-     "paper_mean_recall": 0.873,
-     "paper_mean_recall_close": 0.873,
-     "printed_values": 59,
+     "recall": 0.879,
+     "recall_close": 0.879,
+     "paper_mean_recall": 0.893,
+     "paper_mean_recall_close": 0.893,
+     "printed_values": 58,
      "shared_values": 136,
      "agree_match": 0.853,
      "agree_close": 0.868
     },
     "chemistry_out": {
-     "recall": 0.451,
-     "recall_close": 0.471,
-     "paper_mean_recall": 0.402,
-     "paper_mean_recall_close": 0.412,
-     "printed_values": 102,
+     "recall": 0.541,
+     "recall_close": 0.574,
+     "paper_mean_recall": 0.434,
+     "paper_mean_recall_close": 0.449,
+     "printed_values": 61,
      "shared_values": 622,
      "agree_match": 0.905,
      "agree_close": 0.92
     },
     "overall": {
-     "recall": 0.616,
-     "recall_close": 0.641,
-     "paper_mean_recall": 0.648,
-     "paper_mean_recall_close": 0.667,
-     "printed_values": 774
+     "recall": 0.702,
+     "recall_close": 0.734,
+     "paper_mean_recall": 0.703,
+     "paper_mean_recall_close": 0.725,
+     "printed_values": 687
     },
     "title": {
      "recall": 0.946,
@@ -600,19 +600,19 @@
      "printed": 28
     },
     "temperature": {
-     "recall": 0.958,
-     "recall_close": 0.958,
-     "printed": 24
+     "recall": 0.957,
+     "recall_close": 0.957,
+     "printed": 23
     },
     "duration": {
-     "recall": 0.439,
-     "recall_close": 0.449,
-     "printed": 107
+     "recall": 0.589,
+     "recall_close": 0.607,
+     "printed": 56
     },
     "pH": {
-     "recall": 0.421,
-     "recall_close": 0.57,
-     "printed": 107
+     "recall": 0.667,
+     "recall_close": 0.833,
+     "printed": 114
     },
     "pressure": {
      "recall": 0.429,
@@ -620,8 +620,8 @@
      "printed": 7
     },
     "volume": {
-     "recall": 0.632,
-     "recall_close": 0.632,
+     "recall": 0.737,
+     "recall_close": 0.737,
      "printed": 19
     },
     "solid_mass": {
@@ -645,22 +645,22 @@
      "printed": 65
     },
     "inputs_mM": {
-     "recall": 0.864,
-     "recall_close": 0.864,
-     "printed": 59
+     "recall": 0.879,
+     "recall_close": 0.879,
+     "printed": 58
     },
     "outputs_mM": {
-     "recall": 0.07,
-     "recall_close": 0.07,
-     "printed": 43
+     "recall": 0.1,
+     "recall_close": 0.1,
+     "printed": 20
     },
     "outputs_pct": {
-     "recall": 0.729,
-     "recall_close": 0.763,
-     "printed": 59
+     "recall": 0.756,
+     "recall_close": 0.805,
+     "printed": 41
     },
-    "new_values": 239,
-    "new_columns_per_paper": 2.6,
+    "new_values": 253,
+    "new_columns_per_paper": 2.7,
     "no_rows": 0
    }
   },
@@ -680,41 +680,41 @@
      "agree_close": null
     },
     "methodology": {
-     "recall": 0.506,
-     "recall_close": 0.538,
-     "paper_mean_recall": 0.57,
-     "paper_mean_recall_close": 0.593,
-     "printed_values": 532,
-     "shared_values": 386,
-     "agree_match": 0.813,
-     "agree_close": 0.873
+     "recall": 0.589,
+     "recall_close": 0.612,
+     "paper_mean_recall": 0.6,
+     "paper_mean_recall_close": 0.614,
+     "printed_values": 482,
+     "shared_values": 435,
+     "agree_match": 0.825,
+     "agree_close": 0.878
     },
     "chemistry_in": {
-     "recall": 0.712,
-     "recall_close": 0.712,
-     "paper_mean_recall": 0.652,
-     "paper_mean_recall_close": 0.652,
-     "printed_values": 73,
+     "recall": 0.722,
+     "recall_close": 0.722,
+     "paper_mean_recall": 0.667,
+     "paper_mean_recall_close": 0.667,
+     "printed_values": 72,
      "shared_values": 159,
      "agree_match": 0.868,
      "agree_close": 0.874
     },
     "chemistry_out": {
-     "recall": 0.397,
-     "recall_close": 0.405,
-     "paper_mean_recall": 0.39,
-     "paper_mean_recall_close": 0.372,
-     "printed_values": 121,
+     "recall": 0.581,
+     "recall_close": 0.597,
+     "paper_mean_recall": 0.485,
+     "paper_mean_recall_close": 0.461,
+     "printed_values": 62,
      "shared_values": 657,
      "agree_match": 0.91,
      "agree_close": 0.924
     },
     "overall": {
-     "recall": 0.558,
-     "recall_close": 0.578,
-     "paper_mean_recall": 0.592,
-     "paper_mean_recall_close": 0.608,
-     "printed_values": 910
+     "recall": 0.639,
+     "recall_close": 0.654,
+     "paper_mean_recall": 0.634,
+     "paper_mean_recall_close": 0.644,
+     "printed_values": 800
     },
     "title": {
      "recall": 0.783,
@@ -767,19 +767,19 @@
      "printed": 39
     },
     "temperature": {
-     "recall": 0.676,
-     "recall_close": 0.676,
-     "printed": 34
+     "recall": 0.667,
+     "recall_close": 0.667,
+     "printed": 33
     },
     "duration": {
-     "recall": 0.368,
-     "recall_close": 0.376,
-     "printed": 125
+     "recall": 0.449,
+     "recall_close": 0.464,
+     "printed": 69
     },
     "pH": {
-     "recall": 0.374,
-     "recall_close": 0.489,
-     "printed": 139
+     "recall": 0.555,
+     "recall_close": 0.623,
+     "printed": 146
     },
     "pressure": {
      "recall": 0.333,
@@ -787,8 +787,8 @@
      "printed": 9
     },
     "volume": {
-     "recall": 0.542,
-     "recall_close": 0.542,
+     "recall": 0.625,
+     "recall_close": 0.625,
      "printed": 24
     },
     "solid_mass": {
@@ -812,21 +812,21 @@
      "printed": 78
     },
     "inputs_mM": {
-     "recall": 0.712,
-     "recall_close": 0.712,
-     "printed": 73
+     "recall": 0.722,
+     "recall_close": 0.722,
+     "printed": 72
     },
     "outputs_mM": {
-     "recall": 0.051,
-     "recall_close": 0.051,
-     "printed": 59
+     "recall": 0.095,
+     "recall_close": 0.095,
+     "printed": 21
     },
     "outputs_pct": {
-     "recall": 0.726,
-     "recall_close": 0.742,
-     "printed": 62
+     "recall": 0.829,
+     "recall_close": 0.854,
+     "printed": 41
     },
-    "new_values": 304,
+    "new_values": 326,
     "new_columns_per_paper": 2.5,
     "no_rows": 9
    },
@@ -845,41 +845,41 @@
      "agree_close": null
     },
     "methodology": {
-     "recall": 0.629,
-     "recall_close": 0.668,
-     "paper_mean_recall": 0.709,
-     "paper_mean_recall_close": 0.738,
-     "printed_values": 428,
-     "shared_values": 386,
-     "agree_match": 0.813,
-     "agree_close": 0.873
+     "recall": 0.742,
+     "recall_close": 0.77,
+     "paper_mean_recall": 0.746,
+     "paper_mean_recall_close": 0.764,
+     "printed_values": 383,
+     "shared_values": 435,
+     "agree_match": 0.825,
+     "agree_close": 0.878
     },
     "chemistry_in": {
-     "recall": 0.881,
-     "recall_close": 0.881,
-     "paper_mean_recall": 0.86,
-     "paper_mean_recall_close": 0.86,
-     "printed_values": 59,
+     "recall": 0.897,
+     "recall_close": 0.897,
+     "paper_mean_recall": 0.88,
+     "paper_mean_recall_close": 0.88,
+     "printed_values": 58,
      "shared_values": 159,
      "agree_match": 0.868,
      "agree_close": 0.874
     },
     "chemistry_out": {
-     "recall": 0.471,
-     "recall_close": 0.48,
-     "paper_mean_recall": 0.491,
-     "paper_mean_recall_close": 0.469,
-     "printed_values": 102,
+     "recall": 0.59,
+     "recall_close": 0.607,
+     "paper_mean_recall": 0.507,
+     "paper_mean_recall_close": 0.482,
+     "printed_values": 61,
      "shared_values": 657,
      "agree_match": 0.91,
      "agree_close": 0.924
     },
     "overall": {
-     "recall": 0.689,
-     "recall_close": 0.714,
-     "paper_mean_recall": 0.736,
-     "paper_mean_recall_close": 0.755,
-     "printed_values": 737
+     "recall": 0.786,
+     "recall_close": 0.805,
+     "paper_mean_recall": 0.788,
+     "paper_mean_recall_close": 0.801,
+     "printed_values": 650
     },
     "title": {
      "recall": 0.973,
@@ -932,19 +932,19 @@
      "printed": 28
     },
     "temperature": {
-     "recall": 0.958,
-     "recall_close": 0.958,
-     "printed": 24
+     "recall": 0.957,
+     "recall_close": 0.957,
+     "printed": 23
     },
     "duration": {
-     "recall": 0.43,
-     "recall_close": 0.439,
-     "printed": 107
+     "recall": 0.554,
+     "recall_close": 0.571,
+     "printed": 56
     },
     "pH": {
-     "recall": 0.486,
-     "recall_close": 0.636,
-     "printed": 107
+     "recall": 0.711,
+     "recall_close": 0.798,
+     "printed": 114
     },
     "pressure": {
      "recall": 0.429,
@@ -952,8 +952,8 @@
      "printed": 7
     },
     "volume": {
-     "recall": 0.684,
-     "recall_close": 0.684,
+     "recall": 0.789,
+     "recall_close": 0.789,
      "printed": 19
     },
     "solid_mass": {
@@ -977,22 +977,22 @@
      "printed": 65
     },
     "inputs_mM": {
-     "recall": 0.881,
-     "recall_close": 0.881,
-     "printed": 59
+     "recall": 0.897,
+     "recall_close": 0.897,
+     "printed": 58
     },
     "outputs_mM": {
-     "recall": 0.07,
-     "recall_close": 0.07,
-     "printed": 43
+     "recall": 0.1,
+     "recall_close": 0.1,
+     "printed": 20
     },
     "outputs_pct": {
-     "recall": 0.763,
-     "recall_close": 0.78,
-     "printed": 59
+     "recall": 0.829,
+     "recall_close": 0.854,
+     "printed": 41
     },
-    "new_values": 304,
-    "new_columns_per_paper": 3.1,
+    "new_values": 326,
+    "new_columns_per_paper": 3.2,
     "no_rows": 0
    }
   },
@@ -1012,41 +1012,41 @@
      "agree_close": null
     },
     "methodology": {
-     "recall": 0.54,
-     "recall_close": 0.552,
-     "paper_mean_recall": 0.572,
-     "paper_mean_recall_close": 0.582,
-     "printed_values": 672,
-     "shared_values": 414,
-     "agree_match": 0.857,
+     "recall": 0.559,
+     "recall_close": 0.593,
+     "paper_mean_recall": 0.576,
+     "paper_mean_recall_close": 0.601,
+     "printed_values": 622,
+     "shared_values": 417,
+     "agree_match": 0.859,
      "agree_close": 0.882
     },
     "chemistry_in": {
-     "recall": 0.726,
-     "recall_close": 0.726,
-     "paper_mean_recall": 0.682,
-     "paper_mean_recall_close": 0.682,
-     "printed_values": 73,
+     "recall": 0.736,
+     "recall_close": 0.736,
+     "paper_mean_recall": 0.697,
+     "paper_mean_recall_close": 0.697,
+     "printed_values": 72,
      "shared_values": 213,
      "agree_match": 0.883,
      "agree_close": 0.892
     },
     "chemistry_out": {
-     "recall": 0.455,
-     "recall_close": 0.455,
-     "paper_mean_recall": 0.409,
-     "paper_mean_recall_close": 0.409,
-     "printed_values": 121,
+     "recall": 0.661,
+     "recall_close": 0.661,
+     "paper_mean_recall": 0.529,
+     "paper_mean_recall_close": 0.529,
+     "printed_values": 62,
      "shared_values": 811,
      "agree_match": 0.914,
      "agree_close": 0.925
     },
     "overall": {
-     "recall": 0.575,
-     "recall_close": 0.583,
-     "paper_mean_recall": 0.593,
-     "paper_mean_recall_close": 0.599,
-     "printed_values": 1050
+     "recall": 0.612,
+     "recall_close": 0.634,
+     "paper_mean_recall": 0.611,
+     "paper_mean_recall_close": 0.628,
+     "printed_values": 940
     },
     "title": {
      "recall": 0.783,
@@ -1099,19 +1099,19 @@
      "printed": 39
     },
     "temperature": {
-     "recall": 0.676,
-     "recall_close": 0.676,
-     "printed": 34
+     "recall": 0.667,
+     "recall_close": 0.667,
+     "printed": 33
     },
     "duration": {
-     "recall": 0.504,
-     "recall_close": 0.504,
-     "printed": 125
+     "recall": 0.71,
+     "recall_close": 0.71,
+     "printed": 69
     },
     "pH": {
-     "recall": 0.36,
-     "recall_close": 0.41,
-     "printed": 139
+     "recall": 0.329,
+     "recall_close": 0.466,
+     "printed": 146
     },
     "pressure": {
      "recall": 0.444,
@@ -1119,8 +1119,8 @@
      "printed": 9
     },
     "volume": {
-     "recall": 0.542,
-     "recall_close": 0.542,
+     "recall": 0.625,
+     "recall_close": 0.625,
      "printed": 24
     },
     "solid_mass": {
@@ -1144,21 +1144,21 @@
      "printed": 78
     },
     "inputs_mM": {
-     "recall": 0.726,
-     "recall_close": 0.726,
-     "printed": 73
+     "recall": 0.736,
+     "recall_close": 0.736,
+     "printed": 72
     },
     "outputs_mM": {
-     "recall": 0.051,
-     "recall_close": 0.051,
-     "printed": 59
+     "recall": 0.095,
+     "recall_close": 0.095,
+     "printed": 21
     },
     "outputs_pct": {
-     "recall": 0.839,
-     "recall_close": 0.839,
-     "printed": 62
+     "recall": 0.951,
+     "recall_close": 0.951,
+     "printed": 41
     },
-    "new_values": 92,
+    "new_values": 94,
     "new_columns_per_paper": 1.4,
     "no_rows": 9
    },
@@ -1177,41 +1177,41 @@
      "agree_close": null
     },
     "methodology": {
-     "recall": 0.671,
-     "recall_close": 0.686,
-     "paper_mean_recall": 0.711,
-     "paper_mean_recall_close": 0.724,
-     "printed_values": 541,
-     "shared_values": 414,
-     "agree_match": 0.857,
+     "recall": 0.702,
+     "recall_close": 0.744,
+     "paper_mean_recall": 0.716,
+     "paper_mean_recall_close": 0.747,
+     "printed_values": 496,
+     "shared_values": 417,
+     "agree_match": 0.859,
      "agree_close": 0.882
     },
     "chemistry_in": {
-     "recall": 0.898,
-     "recall_close": 0.898,
-     "paper_mean_recall": 0.9,
-     "paper_mean_recall_close": 0.9,
-     "printed_values": 59,
+     "recall": 0.914,
+     "recall_close": 0.914,
+     "paper_mean_recall": 0.92,
+     "paper_mean_recall_close": 0.92,
+     "printed_values": 58,
      "shared_values": 213,
      "agree_match": 0.883,
      "agree_close": 0.892
     },
     "chemistry_out": {
-     "recall": 0.539,
-     "recall_close": 0.539,
-     "paper_mean_recall": 0.515,
-     "paper_mean_recall_close": 0.515,
-     "printed_values": 102,
+     "recall": 0.672,
+     "recall_close": 0.672,
+     "paper_mean_recall": 0.553,
+     "paper_mean_recall_close": 0.553,
+     "printed_values": 61,
      "shared_values": 811,
      "agree_match": 0.914,
      "agree_close": 0.925
     },
     "overall": {
-     "recall": 0.711,
-     "recall_close": 0.72,
-     "paper_mean_recall": 0.737,
-     "paper_mean_recall_close": 0.745,
-     "printed_values": 850
+     "recall": 0.754,
+     "recall_close": 0.781,
+     "paper_mean_recall": 0.759,
+     "paper_mean_recall_close": 0.781,
+     "printed_values": 763
     },
     "title": {
      "recall": 0.973,
@@ -1264,19 +1264,19 @@
      "printed": 28
     },
     "temperature": {
-     "recall": 0.958,
-     "recall_close": 0.958,
-     "printed": 24
+     "recall": 0.957,
+     "recall_close": 0.957,
+     "printed": 23
     },
     "duration": {
-     "recall": 0.589,
-     "recall_close": 0.589,
-     "printed": 107
+     "recall": 0.875,
+     "recall_close": 0.875,
+     "printed": 56
     },
     "pH": {
-     "recall": 0.467,
-     "recall_close": 0.533,
-     "printed": 107
+     "recall": 0.421,
+     "recall_close": 0.596,
+     "printed": 114
     },
     "pressure": {
      "recall": 0.571,
@@ -1284,8 +1284,8 @@
      "printed": 7
     },
     "volume": {
-     "recall": 0.684,
-     "recall_close": 0.684,
+     "recall": 0.789,
+     "recall_close": 0.789,
      "printed": 19
     },
     "solid_mass": {
@@ -1309,22 +1309,22 @@
      "printed": 65
     },
     "inputs_mM": {
-     "recall": 0.898,
-     "recall_close": 0.898,
-     "printed": 59
+     "recall": 0.914,
+     "recall_close": 0.914,
+     "printed": 58
     },
     "outputs_mM": {
-     "recall": 0.07,
-     "recall_close": 0.07,
-     "printed": 43
+     "recall": 0.1,
+     "recall_close": 0.1,
+     "printed": 20
     },
     "outputs_pct": {
-     "recall": 0.881,
-     "recall_close": 0.881,
-     "printed": 59
+     "recall": 0.951,
+     "recall_close": 0.951,
+     "printed": 41
     },
-    "new_values": 92,
-    "new_columns_per_paper": 1.7,
+    "new_values": 94,
+    "new_columns_per_paper": 1.8,
     "no_rows": 0
    }
   }
@@ -1346,41 +1346,41 @@
      "agree_close": null
     },
     "methodology": {
-     "recall": 0.496,
-     "recall_close": 0.498,
-     "paper_mean_recall": 0.568,
-     "paper_mean_recall_close": 0.569,
-     "printed_values": 532,
+     "recall": 0.579,
+     "recall_close": 0.581,
+     "paper_mean_recall": 0.602,
+     "paper_mean_recall_close": 0.603,
+     "printed_values": 482,
      "shared_values": 415,
      "agree_match": 0.795,
      "agree_close": 0.87
     },
     "chemistry_in": {
-     "recall": 0.74,
-     "recall_close": 0.74,
-     "paper_mean_recall": 0.697,
-     "paper_mean_recall_close": 0.697,
-     "printed_values": 73,
+     "recall": 0.75,
+     "recall_close": 0.75,
+     "paper_mean_recall": 0.712,
+     "paper_mean_recall_close": 0.712,
+     "printed_values": 72,
      "shared_values": 167,
      "agree_match": 0.88,
      "agree_close": 0.892
     },
     "chemistry_out": {
-     "recall": 0.446,
-     "recall_close": 0.446,
-     "paper_mean_recall": 0.419,
-     "paper_mean_recall_close": 0.404,
-     "printed_values": 121,
+     "recall": 0.645,
+     "recall_close": 0.645,
+     "paper_mean_recall": 0.543,
+     "paper_mean_recall_close": 0.522,
+     "printed_values": 62,
      "shared_values": 691,
      "agree_match": 0.9,
      "agree_close": 0.913
     },
     "overall": {
-     "recall": 0.555,
-     "recall_close": 0.556,
-     "paper_mean_recall": 0.588,
-     "paper_mean_recall_close": 0.588,
-     "printed_values": 910
+     "recall": 0.632,
+     "recall_close": 0.634,
+     "paper_mean_recall": 0.629,
+     "paper_mean_recall_close": 0.63,
+     "printed_values": 800
     },
     "title": {
      "recall": 0.761,
@@ -1433,19 +1433,19 @@
      "printed": 39
     },
     "temperature": {
-     "recall": 0.676,
-     "recall_close": 0.676,
-     "printed": 34
+     "recall": 0.667,
+     "recall_close": 0.667,
+     "printed": 33
     },
     "duration": {
-     "recall": 0.368,
-     "recall_close": 0.376,
-     "printed": 125
+     "recall": 0.478,
+     "recall_close": 0.478,
+     "printed": 69
     },
     "pH": {
-     "recall": 0.417,
-     "recall_close": 0.417,
-     "printed": 139
+     "recall": 0.582,
+     "recall_close": 0.589,
+     "printed": 146
     },
     "pressure": {
      "recall": 0.333,
@@ -1453,8 +1453,8 @@
      "printed": 9
     },
     "volume": {
-     "recall": 0.542,
-     "recall_close": 0.542,
+     "recall": 0.625,
+     "recall_close": 0.625,
      "printed": 24
     },
     "solid_mass": {
@@ -1478,19 +1478,19 @@
      "printed": 78
     },
     "inputs_mM": {
-     "recall": 0.74,
-     "recall_close": 0.74,
-     "printed": 73
+     "recall": 0.75,
+     "recall_close": 0.75,
+     "printed": 72
     },
     "outputs_mM": {
-     "recall": 0.051,
-     "recall_close": 0.051,
-     "printed": 59
+     "recall": 0.095,
+     "recall_close": 0.095,
+     "printed": 21
     },
     "outputs_pct": {
-     "recall": 0.823,
-     "recall_close": 0.823,
-     "printed": 62
+     "recall": 0.927,
+     "recall_close": 0.927,
+     "printed": 41
     },
     "new_values": 575,
     "new_columns_per_paper": 3.8,
@@ -1511,41 +1511,41 @@
      "agree_close": null
     },
     "methodology": {
-     "recall": 0.617,
-     "recall_close": 0.619,
-     "paper_mean_recall": 0.706,
-     "paper_mean_recall_close": 0.707,
-     "printed_values": 428,
+     "recall": 0.728,
+     "recall_close": 0.731,
+     "paper_mean_recall": 0.748,
+     "paper_mean_recall_close": 0.75,
+     "printed_values": 383,
      "shared_values": 415,
      "agree_match": 0.795,
      "agree_close": 0.87
     },
     "chemistry_in": {
-     "recall": 0.915,
-     "recall_close": 0.915,
-     "paper_mean_recall": 0.92,
-     "paper_mean_recall_close": 0.92,
-     "printed_values": 59,
+     "recall": 0.931,
+     "recall_close": 0.931,
+     "paper_mean_recall": 0.94,
+     "paper_mean_recall_close": 0.94,
+     "printed_values": 58,
      "shared_values": 167,
      "agree_match": 0.88,
      "agree_close": 0.892
     },
     "chemistry_out": {
-     "recall": 0.529,
-     "recall_close": 0.529,
-     "paper_mean_recall": 0.528,
-     "paper_mean_recall_close": 0.509,
-     "printed_values": 102,
+     "recall": 0.656,
+     "recall_close": 0.656,
+     "paper_mean_recall": 0.568,
+     "paper_mean_recall_close": 0.545,
+     "printed_values": 61,
      "shared_values": 691,
      "agree_match": 0.9,
      "agree_close": 0.913
     },
     "overall": {
-     "recall": 0.685,
-     "recall_close": 0.687,
-     "paper_mean_recall": 0.731,
-     "paper_mean_recall_close": 0.732,
-     "printed_values": 737
+     "recall": 0.778,
+     "recall_close": 0.78,
+     "paper_mean_recall": 0.782,
+     "paper_mean_recall_close": 0.783,
+     "printed_values": 650
     },
     "title": {
      "recall": 0.946,
@@ -1598,19 +1598,19 @@
      "printed": 28
     },
     "temperature": {
-     "recall": 0.958,
-     "recall_close": 0.958,
-     "printed": 24
+     "recall": 0.957,
+     "recall_close": 0.957,
+     "printed": 23
     },
     "duration": {
-     "recall": 0.43,
-     "recall_close": 0.439,
-     "printed": 107
+     "recall": 0.589,
+     "recall_close": 0.589,
+     "printed": 56
     },
     "pH": {
-     "recall": 0.542,
-     "recall_close": 0.542,
-     "printed": 107
+     "recall": 0.746,
+     "recall_close": 0.754,
+     "printed": 114
     },
     "pressure": {
      "recall": 0.429,
@@ -1618,8 +1618,8 @@
      "printed": 7
     },
     "volume": {
-     "recall": 0.684,
-     "recall_close": 0.684,
+     "recall": 0.789,
+     "recall_close": 0.789,
      "printed": 19
     },
     "solid_mass": {
@@ -1643,19 +1643,19 @@
      "printed": 65
     },
     "inputs_mM": {
-     "recall": 0.915,
-     "recall_close": 0.915,
-     "printed": 59
+     "recall": 0.931,
+     "recall_close": 0.931,
+     "printed": 58
     },
     "outputs_mM": {
-     "recall": 0.07,
-     "recall_close": 0.07,
-     "printed": 43
+     "recall": 0.1,
+     "recall_close": 0.1,
+     "printed": 20
     },
     "outputs_pct": {
-     "recall": 0.864,
-     "recall_close": 0.864,
-     "printed": 59
+     "recall": 0.927,
+     "recall_close": 0.927,
+     "printed": 41
     },
     "new_values": 575,
     "new_columns_per_paper": 4.8,
@@ -1678,41 +1678,41 @@
      "agree_close": null
     },
     "methodology": {
-     "recall": 0.431,
-     "recall_close": 0.46,
-     "paper_mean_recall": 0.471,
-     "paper_mean_recall_close": 0.493,
-     "printed_values": 578,
-     "shared_values": 411,
-     "agree_match": 0.774,
-     "agree_close": 0.844
+     "recall": 0.506,
+     "recall_close": 0.544,
+     "paper_mean_recall": 0.508,
+     "paper_mean_recall_close": 0.532,
+     "printed_values": 528,
+     "shared_values": 457,
+     "agree_match": 0.786,
+     "agree_close": 0.851
     },
     "chemistry_in": {
-     "recall": 0.74,
-     "recall_close": 0.74,
-     "paper_mean_recall": 0.697,
-     "paper_mean_recall_close": 0.697,
-     "printed_values": 73,
+     "recall": 0.75,
+     "recall_close": 0.75,
+     "paper_mean_recall": 0.712,
+     "paper_mean_recall_close": 0.712,
+     "printed_values": 72,
      "shared_values": 172,
      "agree_match": 0.86,
      "agree_close": 0.872
     },
     "chemistry_out": {
-     "recall": 0.43,
-     "recall_close": 0.421,
-     "paper_mean_recall": 0.404,
-     "paper_mean_recall_close": 0.375,
-     "printed_values": 121,
+     "recall": 0.613,
+     "recall_close": 0.597,
+     "paper_mean_recall": 0.522,
+     "paper_mean_recall_close": 0.478,
+     "printed_values": 62,
      "shared_values": 764,
      "agree_match": 0.92,
      "agree_close": 0.932
     },
     "overall": {
-     "recall": 0.51,
-     "recall_close": 0.527,
-     "paper_mean_recall": 0.533,
-     "paper_mean_recall_close": 0.545,
-     "printed_values": 956
+     "recall": 0.582,
+     "recall_close": 0.604,
+     "paper_mean_recall": 0.576,
+     "paper_mean_recall_close": 0.591,
+     "printed_values": 846
     },
     "title": {
      "recall": 0.761,
@@ -1765,19 +1765,19 @@
      "printed": 39
     },
     "temperature": {
-     "recall": 0.676,
-     "recall_close": 0.676,
-     "printed": 34
+     "recall": 0.667,
+     "recall_close": 0.667,
+     "printed": 33
     },
     "duration": {
-     "recall": 0.376,
-     "recall_close": 0.384,
-     "printed": 125
+     "recall": 0.478,
+     "recall_close": 0.493,
+     "printed": 69
     },
     "pH": {
-     "recall": 0.324,
-     "recall_close": 0.439,
-     "printed": 139
+     "recall": 0.521,
+     "recall_close": 0.651,
+     "printed": 146
     },
     "pressure": {
      "recall": 0.333,
@@ -1785,8 +1785,8 @@
      "printed": 9
     },
     "volume": {
-     "recall": 0.542,
-     "recall_close": 0.542,
+     "recall": 0.625,
+     "recall_close": 0.625,
      "printed": 24
     },
     "solid_mass": {
@@ -1810,21 +1810,21 @@
      "printed": 78
     },
     "inputs_mM": {
-     "recall": 0.74,
-     "recall_close": 0.74,
-     "printed": 73
+     "recall": 0.75,
+     "recall_close": 0.75,
+     "printed": 72
     },
     "outputs_mM": {
-     "recall": 0.051,
-     "recall_close": 0.051,
-     "printed": 59
+     "recall": 0.095,
+     "recall_close": 0.095,
+     "printed": 21
     },
     "outputs_pct": {
-     "recall": 0.79,
-     "recall_close": 0.774,
-     "printed": 62
+     "recall": 0.878,
+     "recall_close": 0.854,
+     "printed": 41
     },
-    "new_values": 497,
+    "new_values": 511,
     "new_columns_per_paper": 4.0,
     "no_rows": 9
    },
@@ -1843,41 +1843,41 @@
      "agree_close": null
     },
     "methodology": {
-     "recall": 0.535,
-     "recall_close": 0.572,
-     "paper_mean_recall": 0.586,
-     "paper_mean_recall_close": 0.613,
-     "printed_values": 465,
-     "shared_values": 411,
-     "agree_match": 0.774,
-     "agree_close": 0.844
+     "recall": 0.636,
+     "recall_close": 0.683,
+     "paper_mean_recall": 0.632,
+     "paper_mean_recall_close": 0.662,
+     "printed_values": 420,
+     "shared_values": 457,
+     "agree_match": 0.786,
+     "agree_close": 0.851
     },
     "chemistry_in": {
-     "recall": 0.915,
-     "recall_close": 0.915,
-     "paper_mean_recall": 0.92,
-     "paper_mean_recall_close": 0.92,
-     "printed_values": 59,
+     "recall": 0.931,
+     "recall_close": 0.931,
+     "paper_mean_recall": 0.94,
+     "paper_mean_recall_close": 0.94,
+     "printed_values": 58,
      "shared_values": 172,
      "agree_match": 0.86,
      "agree_close": 0.872
     },
     "chemistry_out": {
-     "recall": 0.51,
-     "recall_close": 0.5,
-     "paper_mean_recall": 0.509,
-     "paper_mean_recall_close": 0.472,
-     "printed_values": 102,
+     "recall": 0.623,
+     "recall_close": 0.607,
+     "paper_mean_recall": 0.545,
+     "paper_mean_recall_close": 0.5,
+     "printed_values": 61,
      "shared_values": 764,
      "agree_match": 0.92,
      "agree_close": 0.932
     },
     "overall": {
-     "recall": 0.63,
-     "recall_close": 0.651,
-     "paper_mean_recall": 0.662,
-     "paper_mean_recall_close": 0.678,
-     "printed_values": 774
+     "recall": 0.716,
+     "recall_close": 0.744,
+     "paper_mean_recall": 0.716,
+     "paper_mean_recall_close": 0.735,
+     "printed_values": 687
     },
     "title": {
      "recall": 0.946,
@@ -1930,19 +1930,19 @@
      "printed": 28
     },
     "temperature": {
-     "recall": 0.958,
-     "recall_close": 0.958,
-     "printed": 24
+     "recall": 0.957,
+     "recall_close": 0.957,
+     "printed": 23
     },
     "duration": {
-     "recall": 0.439,
-     "recall_close": 0.449,
-     "printed": 107
+     "recall": 0.589,
+     "recall_close": 0.607,
+     "printed": 56
     },
     "pH": {
-     "recall": 0.421,
-     "recall_close": 0.57,
-     "printed": 107
+     "recall": 0.667,
+     "recall_close": 0.833,
+     "printed": 114
     },
     "pressure": {
      "recall": 0.429,
@@ -1950,8 +1950,8 @@
      "printed": 7
     },
     "volume": {
-     "recall": 0.684,
-     "recall_close": 0.684,
+     "recall": 0.789,
+     "recall_close": 0.789,
      "printed": 19
     },
     "solid_mass": {
@@ -1975,21 +1975,21 @@
      "printed": 65
     },
     "inputs_mM": {
-     "recall": 0.915,
-     "recall_close": 0.915,
-     "printed": 59
+     "recall": 0.931,
+     "recall_close": 0.931,
+     "printed": 58
     },
     "outputs_mM": {
-     "recall": 0.07,
-     "recall_close": 0.07,
-     "printed": 43
+     "recall": 0.1,
+     "recall_close": 0.1,
+     "printed": 20
     },
     "outputs_pct": {
-     "recall": 0.831,
-     "recall_close": 0.814,
-     "printed": 59
+     "recall": 0.878,
+     "recall_close": 0.854,
+     "printed": 41
     },
-    "new_values": 497,
+    "new_values": 511,
     "new_columns_per_paper": 4.9,
     "no_rows": 0
    }
@@ -2010,41 +2010,41 @@
      "agree_close": null
     },
     "methodology": {
-     "recall": 0.509,
-     "recall_close": 0.541,
-     "paper_mean_recall": 0.572,
-     "paper_mean_recall_close": 0.595,
-     "printed_values": 532,
-     "shared_values": 388,
-     "agree_match": 0.812,
-     "agree_close": 0.871
+     "recall": 0.593,
+     "recall_close": 0.616,
+     "paper_mean_recall": 0.603,
+     "paper_mean_recall_close": 0.617,
+     "printed_values": 482,
+     "shared_values": 437,
+     "agree_match": 0.824,
+     "agree_close": 0.876
     },
     "chemistry_in": {
-     "recall": 0.726,
-     "recall_close": 0.726,
-     "paper_mean_recall": 0.667,
-     "paper_mean_recall_close": 0.667,
-     "printed_values": 73,
+     "recall": 0.736,
+     "recall_close": 0.736,
+     "paper_mean_recall": 0.682,
+     "paper_mean_recall_close": 0.682,
+     "printed_values": 72,
      "shared_values": 160,
      "agree_match": 0.869,
      "agree_close": 0.875
     },
     "chemistry_out": {
-     "recall": 0.455,
-     "recall_close": 0.446,
-     "paper_mean_recall": 0.434,
-     "paper_mean_recall_close": 0.404,
-     "printed_values": 121,
+     "recall": 0.661,
+     "recall_close": 0.645,
+     "paper_mean_recall": 0.565,
+     "paper_mean_recall_close": 0.522,
+     "printed_values": 62,
      "shared_values": 740,
      "agree_match": 0.919,
      "agree_close": 0.931
     },
     "overall": {
-     "recall": 0.569,
-     "recall_close": 0.587,
-     "paper_mean_recall": 0.604,
-     "paper_mean_recall_close": 0.617,
-     "printed_values": 910
+     "recall": 0.649,
+     "recall_close": 0.661,
+     "paper_mean_recall": 0.644,
+     "paper_mean_recall_close": 0.652,
+     "printed_values": 800
     },
     "title": {
      "recall": 0.783,
@@ -2097,19 +2097,19 @@
      "printed": 39
     },
     "temperature": {
-     "recall": 0.676,
-     "recall_close": 0.676,
-     "printed": 34
+     "recall": 0.667,
+     "recall_close": 0.667,
+     "printed": 33
     },
     "duration": {
-     "recall": 0.368,
-     "recall_close": 0.376,
-     "printed": 125
+     "recall": 0.449,
+     "recall_close": 0.464,
+     "printed": 69
     },
     "pH": {
-     "recall": 0.374,
-     "recall_close": 0.489,
-     "printed": 139
+     "recall": 0.555,
+     "recall_close": 0.623,
+     "printed": 146
     },
     "pressure": {
      "recall": 0.333,
@@ -2117,8 +2117,8 @@
      "printed": 9
     },
     "volume": {
-     "recall": 0.583,
-     "recall_close": 0.583,
+     "recall": 0.667,
+     "recall_close": 0.667,
      "printed": 24
     },
     "solid_mass": {
@@ -2142,21 +2142,21 @@
      "printed": 78
     },
     "inputs_mM": {
-     "recall": 0.726,
-     "recall_close": 0.726,
-     "printed": 73
+     "recall": 0.736,
+     "recall_close": 0.736,
+     "printed": 72
     },
     "outputs_mM": {
-     "recall": 0.051,
-     "recall_close": 0.051,
-     "printed": 59
+     "recall": 0.095,
+     "recall_close": 0.095,
+     "printed": 21
     },
     "outputs_pct": {
-     "recall": 0.839,
-     "recall_close": 0.823,
-     "printed": 62
+     "recall": 0.951,
+     "recall_close": 0.927,
+     "printed": 41
     },
-    "new_values": 550,
+    "new_values": 572,
     "new_columns_per_paper": 4.0,
     "no_rows": 9
    },
@@ -2175,41 +2175,41 @@
      "agree_close": null
     },
     "methodology": {
-     "recall": 0.633,
-     "recall_close": 0.673,
-     "paper_mean_recall": 0.711,
-     "paper_mean_recall_close": 0.74,
-     "printed_values": 428,
-     "shared_values": 388,
-     "agree_match": 0.812,
-     "agree_close": 0.871
+     "recall": 0.747,
+     "recall_close": 0.775,
+     "paper_mean_recall": 0.75,
+     "paper_mean_recall_close": 0.768,
+     "printed_values": 383,
+     "shared_values": 437,
+     "agree_match": 0.824,
+     "agree_close": 0.876
     },
     "chemistry_in": {
-     "recall": 0.898,
-     "recall_close": 0.898,
-     "paper_mean_recall": 0.88,
-     "paper_mean_recall_close": 0.88,
-     "printed_values": 59,
+     "recall": 0.914,
+     "recall_close": 0.914,
+     "paper_mean_recall": 0.9,
+     "paper_mean_recall_close": 0.9,
+     "printed_values": 58,
      "shared_values": 160,
      "agree_match": 0.869,
      "agree_close": 0.875
     },
     "chemistry_out": {
-     "recall": 0.539,
-     "recall_close": 0.529,
-     "paper_mean_recall": 0.546,
-     "paper_mean_recall_close": 0.509,
-     "printed_values": 102,
+     "recall": 0.672,
+     "recall_close": 0.656,
+     "paper_mean_recall": 0.591,
+     "paper_mean_recall_close": 0.545,
+     "printed_values": 61,
      "shared_values": 740,
      "agree_match": 0.919,
      "agree_close": 0.931
     },
     "overall": {
-     "recall": 0.703,
-     "recall_close": 0.725,
-     "paper_mean_recall": 0.751,
-     "paper_mean_recall_close": 0.767,
-     "printed_values": 737
+     "recall": 0.798,
+     "recall_close": 0.814,
+     "paper_mean_recall": 0.8,
+     "paper_mean_recall_close": 0.811,
+     "printed_values": 650
     },
     "title": {
      "recall": 0.973,
@@ -2262,19 +2262,19 @@
      "printed": 28
     },
     "temperature": {
-     "recall": 0.958,
-     "recall_close": 0.958,
-     "printed": 24
+     "recall": 0.957,
+     "recall_close": 0.957,
+     "printed": 23
     },
     "duration": {
-     "recall": 0.43,
-     "recall_close": 0.439,
-     "printed": 107
+     "recall": 0.554,
+     "recall_close": 0.571,
+     "printed": 56
     },
     "pH": {
-     "recall": 0.486,
-     "recall_close": 0.636,
-     "printed": 107
+     "recall": 0.711,
+     "recall_close": 0.798,
+     "printed": 114
     },
     "pressure": {
      "recall": 0.429,
@@ -2282,8 +2282,8 @@
      "printed": 7
     },
     "volume": {
-     "recall": 0.737,
-     "recall_close": 0.737,
+     "recall": 0.842,
+     "recall_close": 0.842,
      "printed": 19
     },
     "solid_mass": {
@@ -2307,21 +2307,21 @@
      "printed": 65
     },
     "inputs_mM": {
-     "recall": 0.898,
-     "recall_close": 0.898,
-     "printed": 59
+     "recall": 0.914,
+     "recall_close": 0.914,
+     "printed": 58
     },
     "outputs_mM": {
-     "recall": 0.07,
-     "recall_close": 0.07,
-     "printed": 43
+     "recall": 0.1,
+     "recall_close": 0.1,
+     "printed": 20
     },
     "outputs_pct": {
-     "recall": 0.881,
-     "recall_close": 0.864,
-     "printed": 59
+     "recall": 0.951,
+     "recall_close": 0.927,
+     "printed": 41
     },
-    "new_values": 550,
+    "new_values": 572,
     "new_columns_per_paper": 5.0,
     "no_rows": 0
    }
@@ -2342,41 +2342,41 @@
      "agree_close": null
     },
     "methodology": {
-     "recall": 0.543,
-     "recall_close": 0.555,
-     "paper_mean_recall": 0.574,
-     "paper_mean_recall_close": 0.584,
-     "printed_values": 672,
-     "shared_values": 416,
-     "agree_match": 0.856,
-     "agree_close": 0.88
+     "recall": 0.563,
+     "recall_close": 0.596,
+     "paper_mean_recall": 0.578,
+     "paper_mean_recall_close": 0.603,
+     "printed_values": 622,
+     "shared_values": 419,
+     "agree_match": 0.857,
+     "agree_close": 0.881
     },
     "chemistry_in": {
-     "recall": 0.74,
-     "recall_close": 0.74,
-     "paper_mean_recall": 0.697,
-     "paper_mean_recall_close": 0.697,
-     "printed_values": 73,
+     "recall": 0.75,
+     "recall_close": 0.75,
+     "paper_mean_recall": 0.712,
+     "paper_mean_recall_close": 0.712,
+     "printed_values": 72,
      "shared_values": 213,
      "agree_match": 0.883,
      "agree_close": 0.892
     },
     "chemistry_out": {
-     "recall": 0.463,
-     "recall_close": 0.455,
-     "paper_mean_recall": 0.438,
-     "paper_mean_recall_close": 0.409,
-     "printed_values": 121,
+     "recall": 0.677,
+     "recall_close": 0.661,
+     "paper_mean_recall": 0.572,
+     "paper_mean_recall_close": 0.529,
+     "printed_values": 62,
      "shared_values": 811,
      "agree_match": 0.914,
      "agree_close": 0.925
     },
     "overall": {
-     "recall": 0.579,
-     "recall_close": 0.586,
-     "paper_mean_recall": 0.596,
-     "paper_mean_recall_close": 0.602,
-     "printed_values": 1050
+     "recall": 0.616,
+     "recall_close": 0.637,
+     "paper_mean_recall": 0.615,
+     "paper_mean_recall_close": 0.631,
+     "printed_values": 940
     },
     "title": {
      "recall": 0.783,
@@ -2429,19 +2429,19 @@
      "printed": 39
     },
     "temperature": {
-     "recall": 0.676,
-     "recall_close": 0.676,
-     "printed": 34
+     "recall": 0.667,
+     "recall_close": 0.667,
+     "printed": 33
     },
     "duration": {
-     "recall": 0.504,
-     "recall_close": 0.504,
-     "printed": 125
+     "recall": 0.71,
+     "recall_close": 0.71,
+     "printed": 69
     },
     "pH": {
-     "recall": 0.36,
-     "recall_close": 0.41,
-     "printed": 139
+     "recall": 0.329,
+     "recall_close": 0.466,
+     "printed": 146
     },
     "pressure": {
      "recall": 0.444,
@@ -2449,8 +2449,8 @@
      "printed": 9
     },
     "volume": {
-     "recall": 0.583,
-     "recall_close": 0.583,
+     "recall": 0.667,
+     "recall_close": 0.667,
      "printed": 24
     },
     "solid_mass": {
@@ -2474,21 +2474,21 @@
      "printed": 78
     },
     "inputs_mM": {
-     "recall": 0.74,
-     "recall_close": 0.74,
-     "printed": 73
+     "recall": 0.75,
+     "recall_close": 0.75,
+     "printed": 72
     },
     "outputs_mM": {
-     "recall": 0.051,
-     "recall_close": 0.051,
-     "printed": 59
+     "recall": 0.095,
+     "recall_close": 0.095,
+     "printed": 21
     },
     "outputs_pct": {
-     "recall": 0.855,
-     "recall_close": 0.839,
-     "printed": 62
+     "recall": 0.976,
+     "recall_close": 0.951,
+     "printed": 41
     },
-    "new_values": 478,
+    "new_values": 480,
     "new_columns_per_paper": 3.6,
     "no_rows": 9
    },
@@ -2507,41 +2507,41 @@
      "agree_close": null
     },
     "methodology": {
-     "recall": 0.675,
-     "recall_close": 0.689,
-     "paper_mean_recall": 0.713,
-     "paper_mean_recall_close": 0.726,
-     "printed_values": 541,
-     "shared_values": 416,
-     "agree_match": 0.856,
-     "agree_close": 0.88
+     "recall": 0.706,
+     "recall_close": 0.748,
+     "paper_mean_recall": 0.719,
+     "paper_mean_recall_close": 0.75,
+     "printed_values": 496,
+     "shared_values": 419,
+     "agree_match": 0.857,
+     "agree_close": 0.881
     },
     "chemistry_in": {
-     "recall": 0.915,
-     "recall_close": 0.915,
-     "paper_mean_recall": 0.92,
-     "paper_mean_recall_close": 0.92,
-     "printed_values": 59,
+     "recall": 0.931,
+     "recall_close": 0.931,
+     "paper_mean_recall": 0.94,
+     "paper_mean_recall_close": 0.94,
+     "printed_values": 58,
      "shared_values": 213,
      "agree_match": 0.883,
      "agree_close": 0.892
     },
     "chemistry_out": {
-     "recall": 0.549,
-     "recall_close": 0.539,
-     "paper_mean_recall": 0.552,
-     "paper_mean_recall_close": 0.515,
-     "printed_values": 102,
+     "recall": 0.689,
+     "recall_close": 0.672,
+     "paper_mean_recall": 0.598,
+     "paper_mean_recall_close": 0.553,
+     "printed_values": 61,
      "shared_values": 811,
      "agree_match": 0.914,
      "agree_close": 0.925
     },
     "overall": {
-     "recall": 0.715,
-     "recall_close": 0.724,
-     "paper_mean_recall": 0.741,
-     "paper_mean_recall_close": 0.748,
-     "printed_values": 850
+     "recall": 0.759,
+     "recall_close": 0.785,
+     "paper_mean_recall": 0.764,
+     "paper_mean_recall_close": 0.784,
+     "printed_values": 763
     },
     "title": {
      "recall": 0.973,
@@ -2594,19 +2594,19 @@
      "printed": 28
     },
     "temperature": {
-     "recall": 0.958,
-     "recall_close": 0.958,
-     "printed": 24
+     "recall": 0.957,
+     "recall_close": 0.957,
+     "printed": 23
     },
     "duration": {
-     "recall": 0.589,
-     "recall_close": 0.589,
-     "printed": 107
+     "recall": 0.875,
+     "recall_close": 0.875,
+     "printed": 56
     },
     "pH": {
-     "recall": 0.467,
-     "recall_close": 0.533,
-     "printed": 107
+     "recall": 0.421,
+     "recall_close": 0.596,
+     "printed": 114
     },
     "pressure": {
      "recall": 0.571,
@@ -2614,8 +2614,8 @@
      "printed": 7
     },
     "volume": {
-     "recall": 0.737,
-     "recall_close": 0.737,
+     "recall": 0.842,
+     "recall_close": 0.842,
      "printed": 19
     },
     "solid_mass": {
@@ -2639,21 +2639,21 @@
      "printed": 65
     },
     "inputs_mM": {
-     "recall": 0.915,
-     "recall_close": 0.915,
-     "printed": 59
+     "recall": 0.931,
+     "recall_close": 0.931,
+     "printed": 58
     },
     "outputs_mM": {
-     "recall": 0.07,
-     "recall_close": 0.07,
-     "printed": 43
+     "recall": 0.1,
+     "recall_close": 0.1,
+     "printed": 20
     },
     "outputs_pct": {
-     "recall": 0.898,
-     "recall_close": 0.881,
-     "printed": 59
+     "recall": 0.976,
+     "recall_close": 0.951,
+     "printed": 41
     },
-    "new_values": 478,
+    "new_values": 480,
     "new_columns_per_paper": 4.5,
     "no_rows": 0
    }

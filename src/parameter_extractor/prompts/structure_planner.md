@@ -18,8 +18,10 @@ with no results of any kind gets no sets, and its extraction steps are skipped),
 what distinguishes it from the other sets, `src` the table or section it comes
 from, `ds` the original reference when the data is reproduced from another
 publication ('' otherwise), and `samples` -- one per row: `label`, `hr` its
-duration in hours when the rows are time points (else leave it empty; `hi` the
-upper end when a duration is given as a range), and `src` ONLY when the sample
+duration in hours whenever the paper states one -- a time point, a time given
+per table row, or one time stated once for the whole table or experiment (a
+caption's "heated at 90 °C for 3 hours") -- empty only when the paper gives
+none (`hi` the upper end when a duration is given as a range), and `src` ONLY when the sample
 is somewhere other than its set's `src` -- '' for a row of the set's table. Then
 `n_rows`, `excluded` (each at most 8 words) and `notes` (one sentence, or '').
 

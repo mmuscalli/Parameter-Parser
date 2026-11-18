@@ -58,6 +58,68 @@ TEXT = {k: v for k, v in _v2["TEXT"].items() if k != "analysis"}
 GROUPS = {g: [k for k in ks if k != "analysis"] for g, ks in GROUPS.items()}
 GROUPS["methodology"].append("analysis")
 
+# ---- changes to v2's definitions (Mickey, 2026-11-17) ------------------------------------------------------------
+# pH: the hand dataset sometimes keeps a final or after-reaction pH in initial_pH (faisal2005's results table, Leman2004's
+# 'Final pH'); a value is found in any pH column of the run, so its placement isn't scored as a miss.
+NUMERIC["pH"] = (r"^(initial|sampled)_pH$", r"^(initial|sampled)_pH$", [1], NUMERIC["pH"][3])
+_PRINTED = re.compile(r"(?<![\w.])(\d+)(?:\.(\d+))?(?:\s*[×x]\s*10\s*([-−–]?)\s*(\d+)|[eE]([-+]?\d+))?")
+
+
+def printed_with_decimals(text, unit=None):
+    """[(value, decimals as printed)] for numbers followed by a unit of the quantity (v2's printed_numbers, keeping
+    the precision each number is printed with)."""
+    out = []
+    for m in _PRINTED.finditer(text):
+        if unit and not re.match(unit, text[m.end():m.end() + 16]):
+            continue
+        frac = m.group(2) or ""
+        v, dec = float(m.group(1) + ("." + frac if frac else "")), len(frac)
+        if m.group(4):
+            e = int(m.group(4)) * (-1 if m.group(3) else 1)
+            v, dec = v * 10 ** e, max(0, dec - e)
+        elif m.group(5):
+            e = int(m.group(5))
+            v, dec = v * 10 ** e, max(0, dec - e)
+        out.append((v, dec))
+    return out
+
+
+def _decimals(x):
+    t = f"{round(x, 9):.9f}".rstrip("0")
+    return len(t.split(".")[1]) if "." in t else 0
+
+
+def is_printed_exact(value, factors, numbers):
+    """Printed AS this value (Mickey: values calculated or digitized for the hand dataset aren't misses): in the
+    printed unit (factor 1) the value has no more decimals than the printed number and equals it at that precision --
+    23.8 h isn't the printed '24 h' -- in a converted unit, the printed number converted equals the value at the value's own precision (0.0333 h is a
+    printed '2 min'; 71.37 h isn't a printed '3 d', which is 72 h)."""
+    for f in factors:
+        target = value * f
+        if target == 0:
+            continue
+        for n, dec in numbers:
+            if f == 1:
+                if _decimals(target) <= dec and abs(n - target) <= 0.5 * 10 ** -dec + 1e-9:
+                    return True
+            elif abs(n / f - value) <= 0.5 * 10 ** -_decimals(value) + 1e-9:
+                return True            # the printed number in the hand value's unit, at the hand value's precision
+    return False
+
+
+def range_values(df, pattern):
+    """Both ends of the run's range columns for a quantity ('initial_pH_range' '8.3:8.9' -> 8.3, 8.9): recall only."""
+    out = set()
+    for c in df.columns:
+        if "_range" in c and re.search(pattern, c.replace("_range", "")):
+            for v in df[c].dropna().astype(str):
+                for part in v.split(":"):
+                    x = num(part)
+                    if x is not None and x != 0:
+                        out.add(round(x, 9))
+    return out
+
+
 THERMO = re.compile(r"pka|pH_calc|pH_working|pH_neutral_delta|WORM|is_balanced_by|^calc_|_IS_|total_monomers|"
                     r"^initial_(Cys-|Phe\+)_mM$")
 CHARGED = re.compile(r"^initial_[^_]+[+-]\d*_(?:WORMadd_)?mM$")      # ion speciation (initial_Na+_mM): calculated
@@ -165,7 +227,7 @@ for mode, pack in [(m, p) for m in ("written", "reviewed") for p in PACKS]:
         hd = hand[hand.paper == hid]
         if name not in texts:
             raw = paper_text(Path(item))
-            texts[name] = {k: printed_numbers(raw, UNIT_AFTER.get(k)) for k in NUMERIC} | {"any": printed_numbers(raw)}
+            texts[name] = {k: printed_with_decimals(raw, UNIT_AFTER.get(k)) for k in NUMERIC}
         numbers = texts[name]
         # what the rows are (item 2, 'too many rows'): rows with a product value, figure rows still waiting for their
         # figure to be digitized, rows reproduced from a cited paper
@@ -192,7 +254,8 @@ for mode, pack in [(m, p) for m in ("written", "reviewed") for p in PACKS]:
             for c in run.columns:
                 if re.search(rpat, c) and not RUN_EXCLUDE.search(c):
                     rv |= numeric_values(run[c])
-            printed = {v for v in hv if is_printed(v, factors, numbers[key])}
+            rv |= range_values(run, rpat)
+            printed = {v for v in hv if is_printed_exact(v, factors, numbers[key])}
             rec[f"{key}_printed"] = len(printed)
             rec[f"{key}_found"] = sum(any(close(h, r, tol) for r in rv) for h in printed)
             rec[f"{key}_found_close"] = sum(any(close(h, r, CLOSE) for r in rv) for h in printed)

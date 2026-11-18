@@ -110,13 +110,13 @@
       "column": "initial_pH",
       "unit": "",
       "uncertainties": true,
-      "description": "pH at the start."
+      "description": "pH at the start, as set or measured before the reaction: per set or row when a table gives it (a 'pH' or 'starting pH' column of the conditions); a buffer's stated pH when the paper gives no other."
     },
     {
       "column": "sampled_pH",
       "unit": "",
       "uncertainties": true,
-      "description": "pH measured when the sample was taken, if stated."
+      "description": "pH measured after the reaction or when the sample was taken: per row when a table of results gives it (a 'final pH' column, or a pH column among the results)."
     },
     {
       "column": "flow_rate_mL_min",
@@ -172,7 +172,7 @@
     {
       "column": "pH_buffer",
       "kind": "text",
-      "description": "the pH buffer used, briefly (name and concentration, e.g. '50 mM HEPES, pH 7'), or 'none' when the paper says no buffer was used."
+      "description": "the pH buffer used, briefly (name and concentration, e.g. '50 mM HEPES, pH 7'), or 'none' when the paper says no buffer was used. Its pH also goes in initial_pH."
     },
     {
       "column": "reagent_suppliers",

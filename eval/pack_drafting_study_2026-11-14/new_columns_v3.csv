@@ -52,6 +52,7 @@ peptide_pack_56,stock_Ala_aq_mM,2
 peptide_pack_56,stock_Gly_aq_mM,2
 prebiotic_chemistry,sampled_Gly-Gly-Gly_aq_%yield,2
 prebiotic_chemistry,sampled_(Gly)4_aq_%yield,2
+prebiotic_chemistry,sampled_pH,2
 prebiotic_chemistry,initial_Phe_aq_mM,2
 prebiotic_chemistry,initial_sodium_tripolyphosphate_aq_mM,2
 peptide_pack_5,sampled_Asp-Gly_aq_%yield,1
@@ -84,6 +85,7 @@ peptide_pack_25,initial_potassium_hydrogen_phthalate_aq_mM,1
 peptide_pack_25,initial_sulfate_aq_mM,1
 peptide_pack_25,initial_uridine-5'-monophosphate_aq_mM,1
 peptide_pack_25,sampled_glycocyamine_aq_%yield,1
+peptide_pack_25,sampled_pH,1
 peptide_pack_25,initial_CH3SH_aq_mM,1
 peptide_pack_25,initial_D_L-tyrosine_aq_mM,1
 peptide_pack_25,initial_H2S_aq_mM,1
@@ -145,6 +147,7 @@ peptide_pack_56,sampled_orthophosphate_aq_%yield,1
 peptide_pack_56,initial_potassium_hydrogen_phthalate_aq_mM,1
 peptide_pack_56,initial_sulfate_aq_mM,1
 peptide_pack_56,sampled_glycocyamine_aq_%yield,1
+peptide_pack_56,sampled_pH,1
 peptide_pack_56,initial_CH3SH_aq_mM,1
 peptide_pack_56,initial_H2S_aq_mM,1
 peptide_pack_56,initial_Phe_aq_mM,1

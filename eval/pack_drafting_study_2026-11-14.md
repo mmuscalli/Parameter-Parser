@@ -253,3 +253,30 @@ per_paper_v3.csv has, per paper: rows with a product value, figure rows still em
 **Fixed on the way:** a number parameter answered in its text field with value 0 was written as 0 (Huber1998: pH
 '7.5-9.9 (varies by run, see sample)' -> pH 0.0 on 12 rows); and 'not on arXiv' was never cached by the table check,
 so every run and rebuild asked arXiv again for every paper, 3 s apart (a 56-paper rebuild crawled).
+
+## Duration and pH gaps (2026-11-17, Mickey: fix them; values calculated for the hand dataset aren't misses)
+
+**Scoring v3, revised** (`evaluate_v3.py`):
+- A hand value counts as printed only when the paper prints it AS that value: in the printed unit it has no more
+  decimals than the printed number and equals it at that precision; in a converted unit the printed number converted
+  equals it at its own precision. Digitized or calculated hand values no longer count as misses (Sakata2010's
+  23.8 / 71.37 h had matched a printed '24 h' / '3 d'). Printed durations 107 -> 56.
+- pH is found in any pH column (`initial_pH`, `sampled_pH`): the hand dataset keeps final pH in `initial_pH` in places
+  (faisal2005's results-table pH, Leman2004's 'Final pH').
+- Both ends of a range column count for recall (Rabinowitz1985's '8.3:8.9').
+
+Mean recall per paper, rebuilt runs (37 papers with rows): Pack 5 0.75, Pack 25 0.70, Pack 56 0.79, curated 0.76.
+Duration 0.59 / 0.59 / 0.55 / 0.88; pH 0.75 / 0.67 / 0.71 / 0.42.
+
+**Causes and fixes** (requests change: measured only by a new run, not a rebuild):
+- Duration, drafted packs: the shared row-planning prompt (packs without their own: drafted and users' packs) asked
+  for `hr` only "when the rows are time points (else leave it empty)", so a set of separate experiments, each with its
+  own time (Eder1992 Table 1: 106, 107, 114 ... h), got none. Now: whenever the paper states one -- a time point, a time
+  per table row, or one time for the whole table or experiment. The curated pack's own prompt already said so.
+- pH, curated pack: `pH_buffer` took the pH ("500 mM Me3N buffer, initial pH 9.1", Leman2004) or 'none' (mitsuzawa2004)
+  and the per-row pH columns of the tables were never read ('Final pH', '(Starting pH)'). The descriptions now say:
+  `initial_pH` as set or measured before the reaction, per set or row when a table gives it, a buffer's pH when there
+  is no other; `sampled_pH` after the reaction or at sampling, per row from a results table ('final pH'); a buffer's
+  pH also goes in `initial_pH`.
+- Left as they are: Sakata2010 and Zamaraev1996 (results in figures: their rows don't exist unattended), Takaoka1991,
+  Rabinowitz1978 and Nooner1977 (1-2 values each).
