@@ -97,6 +97,20 @@ def test_the_map_opens_the_tab_where_a_part_is_edited():
     e.close()
 
 
+def test_the_categories_window_refills_without_leftovers():
+    """Choosing another data pack in the Variable categories window: only the new rows' controls are shown (the
+    replaced ones used to stay drawn while the window was open from another window)."""
+    from PySide6.QtWidgets import QComboBox
+    from parameter_extractor.gui.categories_dialog import CategoriesDialog
+    packs.activate("prebiotic_chemistry")
+    with tempfile.TemporaryDirectory() as tmp:
+        dlg = CategoriesDialog(Path(tmp) / "r.json")
+        dlg.area_combo.setCurrentIndex(dlg.area_combo.findData("exoplanets"))
+        shown = [c for c in dlg.table.findChildren(QComboBox) if c.parentWidget().isVisibleTo(dlg)]
+        assert len(shown) == dlg.table.rowCount()
+        dlg.close()
+
+
 if __name__ == "__main__":
     for name, fn in list(globals().items()):
         if name.startswith("test_") and callable(fn):

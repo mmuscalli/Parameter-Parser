@@ -17,6 +17,8 @@ from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (QComboBox, QFormLayout, QHBoxLayout, QHeaderView, QLabel, QLineEdit, QPushButton,
                                QSpinBox, QTableWidget, QTableWidgetItem, QToolButton, QVBoxLayout, QWidget)
 
+from parameter_extractor.gui.widgets import clear_cell_widgets
+
 RESERVED = {"figure", "assumed"}
 
 
@@ -232,6 +234,7 @@ class StructurePage(QWidget):
         self._fill()
 
     def _fill(self) -> None:
+        clear_cell_widgets(self.table)                 # refilled in an open window: the old ones away now
         self.table.setRowCount(len(self._kinds))
         for r, k in enumerate(self._kinds):
             name = QTableWidgetItem(k["label"])
@@ -263,6 +266,7 @@ class StructurePage(QWidget):
         self.fill_changed = True
 
     def _fill_columns(self) -> None:
+        clear_cell_widgets(self.columns)               # refilled in an open window: the old ones away now
         self.columns.setRowCount(len(self._column_fill))
         for r, (column, fill) in enumerate(sorted(self._column_fill.items())):
             name = QTableWidgetItem(column)

@@ -173,6 +173,18 @@ def in_cell(widget: QWidget) -> QWidget:
     return holder
 
 
+def clear_cell_widgets(table) -> None:
+    """Take a table's cell widgets away now. Replaced ones are only deleted later, by the event loop they were replaced
+    in -- in a window opened with exec() from a handler that is not until it closes, so a refill drew them in their
+    old places over the new ones (2026-11-19: the Variable categories window after choosing another data pack)."""
+    for r in range(table.rowCount()):
+        for c in range(table.columnCount()):
+            w = table.cellWidget(r, c)
+            if w is not None:
+                w.hide()
+                table.removeCellWidget(r, c)
+
+
 class CollapsibleSection(QWidget):
     """A titled group of settings, closed until its title is clicked (Mickey, 2026-11-12: the run options). Add the
     settings to `body` (a QVBoxLayout)."""

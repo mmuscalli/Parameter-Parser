@@ -43,6 +43,7 @@ TAGS = 1         # item data: the steps and kinds a line or dot connects (frozen
 BODY = 2         # item data: a step's or card's outline (outlined in the accent colour while hovered)
 PEN = 3          # item data: its own pen, put back after
 TARGET = 4       # item data: a part without hovering that can still be opened elsewhere ("level:<id>", "paper")
+LANE = 5         # item data: a level's lane and its words (lit while what's hovered has a kind of value in it)
 
 
 @dataclass
@@ -55,6 +56,12 @@ class Step:
     kinds: List[str] = field(default_factory=list)       # category ids its columns belong to
     other_kinds: List[str] = field(default_factory=list)  # kinds only its 'other values' answers may fill
     makes_rows: bool = False
+    built_in: bool = False      # written in the app's code (its instructions fixed) -- not a configurable step
+    own_prompt: bool = False    # an app step following this data pack's own prompt (the row plan's rules)
+
+
+APP_STEPS = ("structure_planner", "metadata")    # every data pack has them
+BUILT_IN = " (built-in step)"
 
 
 @dataclass
@@ -147,7 +154,15 @@ def structure_of(pack) -> Structure:
             cid = order.category_of(column)
             if cid and cid not in found:
                 found.append(cid)
-        steps.append(Step(f.name, f.label, source, f.when, f.what, found, makes_rows=f.name == "structure_planner"))
+        own_prompt = f.name in APP_STEPS and source == "pack"
+        steps.append(Step(f.name, f.label.removesuffix(BUILT_IN), "app" if f.name in APP_STEPS else source, f.when,
+                          f.what, found, makes_rows=f.name == "structure_planner",
+                          built_in=f.label.endswith(BUILT_IN), own_prompt=own_prompt))
+    # grouped by where they come from: the app's, this pack's, then each module's together (in the order first met)
+    first = {}
+    for st in steps:
+        first.setdefault(st.source, len(first))
+    steps.sort(key=lambda st: (0 if st.source == "app" else 1 if st.source == "pack" else 2, first[st.source]))
 
     # kinds of value only 'other values' answers fill: from every step that asks for other values
     filled = {k for st in steps for k in st.kinds}
@@ -270,6 +285,8 @@ class _Drawing:
             item.setData(TAGS, frozenset(tags))
 
 
+STEP_GROUPS = {"app": "The app's steps (every data pack)", "pack": "This data pack's steps",
+               "modules": "From linked modules"}
 FILL_TEXT = {"set": "fills in per {set}", "paper": "fills in across the paper", "none": ""}
 MANY = 99                                        # every line (the header, a lane's note)
 OPEN_LINES = 3                                   # an opened node: at most this many lines under its name
@@ -279,7 +296,8 @@ def brief(text: str) -> str:
     """The first sentence of a description, without its asides in brackets (the other tabs have it whole)."""
     import re
     first = re.split(r"(?<=[.;])\s+(?=[A-Z])", (text or "").strip(), maxsplit=1)[0].rstrip(".;")
-    return re.sub(r"\s*\([^)]*\)", "", first).strip()
+    first = re.sub(r"^Extracts (the )?", "", re.sub(r"\s*\([^)]*\)", "", first).strip())   # what, not 'Extracts ...'
+    return first[:1].upper() + first[1:]
 
 
 def opened_lines(about: str, facts: List[str], font: QFont, width: float) -> List[str]:
@@ -346,18 +364,33 @@ def build_scene(pack, palette: Optional[QPalette] = None, opened: Optional[Set[s
     step_out: Dict[str, QPointF] = {}
     name_font = _font(NAME_PT, True)
     name_h = QFontMetricsF(name_font).height()
+    tag_font = _font(8.5, True)
+    tag_w = QFontMetricsF(tag_font).horizontalAdvance("BUILT-IN") + 10
+    group = None
     for st in s.steps:
         key = f"step:{st.name}"
         is_open = key in opened
-        source = "App" if st.source == "app" else "Data pack" if st.source == "pack" else f"{st.source} module"
+        here = "app" if st.source == "app" else "pack" if st.source == "pack" else "modules"
+        if here != group:                        # a heading where the steps' source changes
+            if group is not None:
+                y += 10
+            group = here
+            d.text(STEP_GROUPS[here], COL_STEPS, y, muted, 10.5, True)
+            y += 20
+        source = ("App, with this data pack's prompt" if st.own_prompt else "App") if st.source == "app" else \
+            "Data pack" if st.source == "pack" else f"{st.source} module"
         runs = "Always" if st.when.startswith("every paper") else "Conditional"
-        name = wrap(st.label, name_font, STEP_W - 24, 2)
+        tag = st.built_in and st.source != "app"     # the app's are all written in code: their heading says so
+        name = wrap(st.label, name_font, STEP_W - 24 - (tag_w + 6 if tag else 0), 2)
         more = opened_lines(brief(st.what), [f"Runs: {runs} · {source}"], sub_font, STEP_W - 24) if is_open else []
         height = 12 + len(name) * name_h + (len(more) * sub_h + 4 if more else 0)
         rect = QRectF(COL_STEPS, y, STEP_W, height)
         col = colors.get(st.source, text)
         d.box(rect, card, _mix(col, card, 0.35), 8, 1.2, key=key, body=True)
         d.box(QRectF(COL_STEPS, y, 6, height), col, col, 3, key=key)
+        if tag:                                  # written in the app's code, not a configurable step
+            d.box(QRectF(rect.right() - tag_w - 8, y + 8, tag_w, 15), card, muted, 7.5, 0.8, key=key)
+            d.text("BUILT-IN", rect.right() - tag_w - 3, y + 9, muted, 8.5, True, key)
         ty = d.lines(name, COL_STEPS + 15, y + 6, text, NAME_PT, True, key)
         d.lines(more, COL_STEPS + 15, ty + 3, muted, SUB_PT, False, key)
         step_out[st.name] = QPointF(rect.right(), rect.top() + 6 + name_h * min(len(name), 2) / 2)  # opened or not
@@ -390,6 +423,7 @@ def build_scene(pack, palette: Optional[QPalette] = None, opened: Optional[Set[s
     y = top
     card_in: Dict[str, QPointF] = {}
     lane_tops: List[float] = []
+    lane_kinds: Dict[str, Set[str]] = {}
     ports: Dict[int, Set[str]] = {}
 
     def fillers(k: Kind) -> Tuple[List[Step], List[Step]]:
@@ -429,10 +463,14 @@ def build_scene(pack, palette: Optional[QPalette] = None, opened: Optional[Set[s
             _font(10.5), LANES_W - 2 * LANE_PAD, MANY)
         height = lane_title + (sum(h + CARD_GAP for h in row_heights) if cards else len(empty) * 16 + 4) + LANE_PAD
         tint = _mix(window, accent, 0.04 + 0.03 * (len(s.levels) - 1 - i))
+        before = set(scene.items())
         d.box(QRectF(COL_LANES, y, LANES_W, height), tint, line, 12, 1.0, dashed=is_run).setData(TARGET, f"level:{lid}")
         d.text(title, COL_LANES + LANE_PAD, y + 7, text, 13, True)
         d.lines(note_lines, COL_LANES + LANE_PAD + title_w + 20, y + 10, muted, 10.5)
         d.lines(empty, COL_LANES + LANE_PAD, y + lane_title, muted, 10.5)
+        for item in set(scene.items()) - before:
+            item.setData(LANE, lid)
+        lane_kinds[lid] = {f"kind:{k.id}" for k in cards}
         lane_tops.append(y)
         cy = y + lane_title
         for row, row_h in zip(rows, row_heights):
@@ -466,8 +504,9 @@ def build_scene(pack, palette: Optional[QPalette] = None, opened: Optional[Set[s
         col = QColor(colors.get(st.source, text))
         col.setAlpha(170)
         if st.makes_rows:
-            for top_y in lane_tops[1:]:
+            for (lid, _label, _note), top_y in list(zip(s.levels, lane_tops))[1:]:
                 d.curve(start, QPointF(COL_LANES, top_y + 14), col, 1.6, tags={key})
+                relations.setdefault(key, set()).add(f"level:{lid}")
             continue
         faint = QColor(col)
         faint.setAlpha(90)
@@ -483,6 +522,7 @@ def build_scene(pack, palette: Optional[QPalette] = None, opened: Optional[Set[s
     scene.relations = relations
     scene.accent = accent
     scene.structure = s
+    scene.lane_kinds = lane_kinds
     return scene
 
 
@@ -605,6 +645,7 @@ class StructureCanvas(QGraphicsView):
         self._hovered = key
         related = ({key} | getattr(scene, "relations", {}).get(key, set())) if key else set()
         accent = getattr(scene, "accent", self.palette().color(QPalette.ColorRole.Highlight))
+        lane_kinds = getattr(scene, "lane_kinds", {})
         for item in scene.items():
             own, tags = item.data(KEY), item.data(TAGS)
             if item.data(BODY):
@@ -615,6 +656,10 @@ class StructureCanvas(QGraphicsView):
                 item.setOpacity(1.0 if own in related else FADED)
             elif tags:
                 item.setOpacity(1.0 if key in tags else FADED)
+            elif item.data(LANE):                   # a level: lit when it holds what's lit (the row plan: every level)
+                lane = item.data(LANE)
+                lit = f"level:{lane}" in related or related & lane_kinds.get(lane, set())
+                item.setOpacity(1.0 if lit else FADED)
 
     def mouseMoveEvent(self, event) -> None:
         super().mouseMoveEvent(event)

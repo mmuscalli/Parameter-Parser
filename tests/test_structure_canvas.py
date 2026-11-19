@@ -65,8 +65,25 @@ def test_hovering_highlights_a_step_and_what_it_fills():
             assert item.opacity() == 1.0                                   # its lines stay
         elif own or tags:
             assert item.opacity() == FADED                                 # everything else fades
+    from parameter_extractor.gui.structure_canvas import LANE
+    lanes = {item.data(LANE): item.opacity() for item in scene.items() if item.data(LANE)}
+    assert lanes["paper"] == 1.0 and lanes["sample"] == FADED              # a level holding nothing it fills fades
     canvas.highlight(None)
     assert all(item.opacity() == 1.0 for item in scene.items())
+    canvas.highlight("step:structure_planner")                             # the row plan makes the groups and rows
+    lanes = {item.data(LANE): item.opacity() for item in scene.items() if item.data(LANE)}
+    assert lanes["set"] == lanes["sample"] == 1.0 and lanes["paper"] == FADED
+    canvas.highlight(None)
+
+
+def test_steps_are_grouped_by_where_they_come_from():
+    from parameter_extractor.gui.structure_canvas import structure_of
+    s = structure_of(packs.activate("prebiotic_chemistry"))
+    order = [0 if st.source == "app" else 1 if st.source == "pack" else 2 for st in s.steps]
+    assert order == sorted(order) and [st.name for st in s.steps[:2]] == ["structure_planner", "metadata"]
+    modules = [st.source for st in s.steps if order[s.steps.index(st)] == 2]
+    assert all(modules.index(m) == i or modules[i - 1] == m for i, m in enumerate(modules))   # a module's together
+    assert not any("(built-in step)" in st.label for st in s.steps) and any(st.built_in for st in s.steps[2:])
 
 
 def test_clicking_opens_a_step_or_kind_in_place():

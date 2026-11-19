@@ -22,7 +22,7 @@ from PySide6.QtWidgets import (QAbstractItemView, QStyledItemDelegate, QCheckBox
 
 from parameter_extractor.gui import themes
 from parameter_extractor import packs, variable_categories as vc
-from parameter_extractor.gui.widgets import RowSeparatorDelegate, in_cell, style_rows
+from parameter_extractor.gui.widgets import RowSeparatorDelegate, clear_cell_widgets, in_cell, style_rows
 from parameter_extractor.registry import STANDARD, VariableRegistry, areas
 
 FORMATS = {"number": "One number with a unit", "text": "Text", "any": "Number or text"}
@@ -120,6 +120,7 @@ class CategoriesDialog(QDialog):
         try:
             rows = self.rows()
             t = self.table
+            clear_cell_widgets(t)
             t.setRowCount(len(rows))
             for r, row in enumerate(rows):
                 for c, field in ((C_ID, "id"), (C_LABEL, "label"), (C_DESC, "description")):
