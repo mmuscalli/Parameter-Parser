@@ -69,6 +69,23 @@ def test_hovering_highlights_a_step_and_what_it_fills():
     assert all(item.opacity() == 1.0 for item in scene.items())
 
 
+def test_clicking_opens_a_step_or_kind_in_place():
+    from parameter_extractor.gui.structure_canvas import BODY, KEY, StructureCanvas
+    pack = packs.activate("prebiotic_chemistry")
+    canvas = StructureCanvas(pack)
+
+    def height(key):
+        return next(i.sceneBoundingRect().height() for i in canvas.scene().items()
+                    if i.data(KEY) == key and i.data(BODY))
+    for key in ("step:metadata", "kind:metadata"):
+        shut = height(key)
+        canvas.toggle(key)
+        assert key in canvas.opened and height(key) > shut                 # opened: everything it says
+        canvas.toggle(key)
+        assert key not in canvas.opened and height(key) == shut
+    assert not any(i.toolTip() for i in canvas.scene().items())            # no tooltips over the picture
+
+
 def test_the_pack_editor_has_a_map():
     from parameter_extractor.gui.pack_windows import PackEditor
     import shutil
