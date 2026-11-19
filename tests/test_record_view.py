@@ -156,6 +156,44 @@ def test_the_experiment_sets_tab_shows_and_corrects():
         w.close()
 
 
+def test_the_values_panel_keeps_its_place_between_samples():
+    """Scrolled down to one sample's results, the next sample opens at the same value (Mickey, 2026-11-19)."""
+    if not _have_inputs():
+        return
+    from parameter_extractor.gui.record_view import RecordView, TIER_ROLE
+    with tempfile.TemporaryDirectory() as tmp:
+        with patch.object(api_client, "_send", _replay_send):
+            result = run_pipeline(PDF, _config(Path(tmp)))
+        view = RecordView()
+        view.resize(1000, 380)                                   # short: the values scroll
+        view.show()
+        view.show_result(result)
+        _pump()
+        group = next(view.tree.topLevelItem(0).child(i) for i in range(view.tree.topLevelItem(0).childCount())
+                     if view.tree.topLevelItem(0).child(i).childCount() >= 2)
+        first, second = group.child(0), group.child(1)
+        while first.childCount():                                 # a set with runs: their first rows
+            first, second = first.child(0), first.child(1) if first.childCount() > 1 else second
+        view.tree.setCurrentItem(first)
+        _pump()
+        values = _values(view)
+        late = list(values)[-1]                                   # the last value: scroll it to the top
+        view.values.scrollToItem(values[late], view.values.ScrollHint.PositionAtTop)
+        _pump()
+        assert view.values.verticalScrollBar().value() > 0
+        top_before = view.values.visualItemRect(values[late]).top()
+        view.tree.setCurrentItem(second)
+        _pump()
+        after = _values(view)
+        assert view.values.verticalScrollBar().value() > 0                     # not back at the top
+        assert late in after                                                   # the same value, at the same height
+        assert abs(view.values.visualItemRect(after[late]).top() - top_before) <= 1
+        view.tree.setCurrentItem(view.tree.topLevelItem(0))                    # the paper: other values
+        _pump()
+        assert view.values.itemAt(view.values.viewport().rect().topLeft()) is not None
+        view.close()
+
+
 def test_exoplanet_rows_are_planets_or_fit_solutions():
     """A planet with several fit solutions is a run ('planet') of 'fit solution' rows; a planet alone is a 'planet'."""
     from types import SimpleNamespace

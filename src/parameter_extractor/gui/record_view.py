@@ -20,7 +20,7 @@ import json
 from pathlib import Path
 from typing import Dict, List, Optional
 
-from PySide6.QtCore import QPointF, QRect, QSize, Qt, Signal
+from PySide6.QtCore import QPoint, QPointF, QRect, QSize, Qt, Signal
 from PySide6.QtGui import QColor, QFont, QPalette, QPen
 from PySide6.QtWidgets import (QAbstractItemView, QHeaderView, QInputDialog, QLabel, QMenu, QMessageBox, QSplitter,
                                QStyledItemDelegate, QTextBrowser, QTreeWidget, QTreeWidgetItem, QVBoxLayout, QWidget)
@@ -172,6 +172,7 @@ class RecordView(QWidget):
         self.values.setHeaderLabels(["Value", "Amount", "Unit", "Recorded for"])
         self.values.setRootIsDecorated(False)
         self.values.setItemDelegate(TierDelegate(self.values))
+        self.values.setVerticalScrollMode(QAbstractItemView.ScrollMode.ScrollPerPixel)   # kept to the pixel (_anchor)
         self.values.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
         self.values.itemDoubleClicked.connect(self._start_edit)
         self.values.itemChanged.connect(self._edited)
@@ -433,6 +434,7 @@ class RecordView(QWidget):
         from parameter_extractor import column_labels
         node = item.data(0, NODE_ROLE)
         pack_id = self._data.get("data_pack", "")
+        anchor = self._anchor()
         self._filling = True
         try:
             self.values.clear()
@@ -513,6 +515,42 @@ class RecordView(QWidget):
                 note.setFirstColumnSpanned(True)
         finally:
             self._filling = False
+        self._scroll_to(anchor)
+
+    # ---- the values panel keeps its place from one sample to the next (Mickey, 2026-11-19: "tab through the same part
+    # of the details panel ... without having to re-scroll") ---------------------------------------------------------
+
+    def _anchor(self) -> Optional[tuple]:
+        """What the values panel shows at its top: (column or None, its kind of value's heading, pixels above the
+        top). None when it is at the top (it stays there)."""
+        if self.values.verticalScrollBar().value() == 0:
+            return None
+        item = self.values.itemAt(QPoint(4, 1))
+        if item is None:
+            return None
+        held = item.data(0, VALUE_ROLE)
+        heading = item
+        i = self.values.indexOfTopLevelItem(item)
+        while heading is not None and heading.data(0, TIER_ROLE) != "set" and i > 0:
+            i -= 1
+            heading = self.values.topLevelItem(i)
+        return (held[0] if held else None, heading.text(0) if heading is not None else "",
+                self.values.visualItemRect(item).top())
+
+    def _scroll_to(self, anchor: Optional[tuple]) -> None:
+        """The same value at the same height as before -- else the start of the same kind of value; else the top."""
+        if anchor is None:
+            return
+        column, heading, offset = anchor
+        items = [self.values.topLevelItem(i) for i in range(self.values.topLevelItemCount())]
+        target = next((it for it in items if column and (it.data(0, VALUE_ROLE) or (None,))[0] == column), None) \
+            or next((it for it in items if it.data(0, TIER_ROLE) == "set" and it.text(0) == heading), None)
+        if target is None:
+            return
+        self.values.doItemsLayout()                  # the rows' places, before the panel is next drawn
+        bar = self.values.verticalScrollBar()
+        same = not column or target.data(0, VALUE_ROLE) is not None     # the very row: at its old height too
+        bar.setValue(bar.value() + self.values.visualItemRect(target).top() - (offset if same else 0))
 
     def _show_source(self, item) -> None:
         if item is None or item.data(0, VALUE_ROLE) is None:
