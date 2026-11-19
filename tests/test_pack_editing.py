@@ -190,9 +190,15 @@ def test_windows():
         assert built_in.read_only and not built_in.save_btn.isEnabled() and built_in.label_edit.isReadOnly()
         page = built_in.rules_page                                                  # its rules can be looked at
         assert page.prompt_list.isEnabled() and page.show_btn.isEnabled()
-        page.select("structure_planner")                       # its own whole row prompt has no place for rules
-        assert page.note.text() and "aren't used" in page.note.text()
-        assert "Rules for this research area" not in page.assembled("structure_planner")
+        page.select("structure_planner")                       # its own whole row prompt: rules where it says
+        own = (built_in.draft.folder / "prompts" / "structure_planner.md").read_text()
+        used = page.module_row_rules()[0]
+        if "{{PACK_RULES}}" in own:
+            assert "aren't used" not in page.note.text()
+            assert all(r in page.assembled("structure_planner") for _m, r in used)   # the modules' row rules too
+        else:
+            assert "aren't used" in page.note.text()
+            assert "Rules for this research area" not in page.assembled("structure_planner")
 
 
 def test_compound_and_analysis_tabs():

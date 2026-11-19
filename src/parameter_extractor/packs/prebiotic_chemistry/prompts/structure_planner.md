@@ -8,7 +8,7 @@ concentrations, temperatures), each sampled at multiple time points. Each
 distinct condition is a "set"; each time point or replicate within a set is a
 "sample". Getting this grouping right matters more than any individual value,
 because every later stage builds rows on top of this skeleton.
-
+{{PACK_RULES}}
 Answer format (short field names): `kind` what the paper is (below), `sets` -- one entry per set: `set` its
 label, `type` the set type, `varies` what distinguishes it from the other
 sets, `src` the table or section it comes from, `ds` the original reference

@@ -197,8 +197,11 @@ def test_suggest_and_apply_additions():
         assert any(c["id"] == "light" for c in d.manifest["variable_categories"])
         assert "Tris" in d.species and d.cids_file["species"]["Tris"]["cid"] == 6503
         assert "initial_Tris_aq_mM" in d.columns
-        own = (pack.folder / "prompts" / "structure_planner.md").read_text()      # the pack's own whole prompt
-        assert own.rstrip().endswith("- Dark controls are not rows.")
+        own = (pack.folder / "prompts" / "structure_planner.md").read_text()      # the pack's own whole prompt:
+        if "{{PACK_RULES}}" in own:                                                # rules go where it has room
+            assert "- Dark controls are not rows." in d.rules["structure_planner"]
+        else:                                                                      # else after its text
+            assert own.rstrip().endswith("- Dark controls are not rows.")
         assert not [p for p in problems if p.level == "error"], problems
 
 
