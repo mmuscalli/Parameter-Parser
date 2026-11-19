@@ -552,7 +552,7 @@ def extract_steps(ex: "Extraction") -> "Extraction":
         pack = packs.current()
         if pack.uses("methodology") and not skip:
             running["methodology"] = pool.submit(run_methodology_extraction, ctx, text, ex.structure)
-        passes = 1 if config.handoff_dir else max(1, min(MAX_PASSES, config.passes or 1))
+        passes = 1 if config.answered_elsewhere else max(1, min(MAX_PASSES, config.passes or 1))
         if passes > 1:
             ctx.note("passes", f"{passes} passes of each extraction step, values kept by vote")
         if _chemistry_on(pack, config) and not skip:
@@ -753,7 +753,7 @@ def _step_instructions(pack, config: RunConfig, tools: dict, vocab: dict) -> dic
     in a queue (or any run within the cache's lifetime) they and the tool list are paid once and read at 10% by
     the following papers. Steps whose prompt has other per-paper parts (the user's search terms) aren't listed and
     send their prompt as before; nothing is listed without prompt caching or in developer handoff."""
-    if not config.prompt_caching or config.handoff_dir or not config.shared_instructions:
+    if not config.prompt_caching or config.answered_elsewhere or not config.shared_instructions:
         return {}
     from parameter_extractor.api_client import PAPER_ABOVE, PLAN_MARK
     from parameter_extractor.stages import analysis as analysis_stage, fit_models as fit_stage
@@ -1294,6 +1294,12 @@ def finish(
         from parameter_extractor.local_models import flag_text
         paper_flags.append(Flag("local_model", flag_text(config)))
         paper_flags += [Flag("local_model", m) for m in getattr(ctx, "server_flags", None) or []]   # E3: CPU spill
+    if getattr(config, "exchange_mode", "") == "import":   # answered outside the app (exchange.py)
+        from parameter_extractor import exchange
+        who = exchange.answered_by(config.exchange_dir) or "a model the package doesn't name (no answers/about.json)"
+        paper_flags.append(Flag("other_assistant", f"Answered outside the app by {who}, imported from the package in "
+                                                   f"{config.exchange_dir}. The app hasn't been checked with that model: "
+                                                   f"review the values as you would a new model's."))
     paper_flags += _reuse_flags(ctx)
     paper_flags += stage_flags
     paper_flags += [Flag("assumed_default", m) for m in ex.ambient_notes]

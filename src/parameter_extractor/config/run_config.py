@@ -125,6 +125,10 @@ class RunConfig:
     # Developer only (dev_features.py, never in public builds): write model requests to this folder for
     # answers from a Claude Code session instead of calling the API (handoff.py); no API key needed
     handoff_dir: Optional[Path] = None
+    # Requests for another assistant (exchange.py; 2026-11-19): "export" records a paper's requests into a package at
+    # exchange_dir instead of sending them; "import" answers them from the package's answers. No API key needed.
+    exchange_dir: Optional[Path] = None
+    exchange_mode: str = ""
     # NASA ADS API token: only needed to look up journal ADS bibcodes (2023PASJ...75.1030T)
     ads_token: str = ""
     # arXiv lookups and full texts kept between runs (ingestion/arxiv_source.LookupCache); None = none
@@ -166,7 +170,12 @@ class RunConfig:
 
     @property
     def needs_api_key(self) -> bool:
-        return not self.is_local and not self.handoff_dir
+        return not self.is_local and not self.answered_elsewhere
+
+    @property
+    def answered_elsewhere(self) -> bool:
+        """The model requests aren't sent: developer handoff, or a package for another assistant (exchange.py)."""
+        return bool(self.handoff_dir or self.exchange_dir)
 
     @classmethod
     def from_settings(cls, **overrides) -> "RunConfig":
@@ -209,5 +218,6 @@ class RunConfig:
         d["pubchem_cache_path"] = str(self.pubchem_cache_path) if self.pubchem_cache_path else None
         d["arxiv_cache_dir"] = str(self.arxiv_cache_dir) if self.arxiv_cache_dir else None
         d["handoff_dir"] = str(self.handoff_dir) if self.handoff_dir else None
+        d["exchange_dir"] = str(self.exchange_dir) if self.exchange_dir else None
         d["resume_from"] = str(self.resume_from) if self.resume_from else None
         return d

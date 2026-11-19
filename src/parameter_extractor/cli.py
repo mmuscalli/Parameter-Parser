@@ -185,6 +185,12 @@ def main() -> int:
     parser.add_argument("--no-suggestions", action="store_true",
                         help="Don't suggest new variables: no open-ended capture of conditions without a column "
                              "(new variables are listed in one flag and new_variables.json, never added)")
+    parser.add_argument("--export-requests", metavar="DIR", default=None,
+                        help="Don't send the paper's requests: write them as a package in DIR for another assistant "
+                             "(any model or agent you use) to answer; import its answers with --import-answers")
+    parser.add_argument("--import-answers", metavar="PACKAGE", default=None,
+                        help="Finish a paper from a package another assistant answered (made with --export-requests): "
+                             "no requests are sent, no API key is needed")
     from parameter_extractor import dev_features
     parser.add_argument("--handoff", metavar="DIR", default=None,
                         help=("Developer only: write the model requests to DIR for answers from a Claude Code "
@@ -246,8 +252,9 @@ def main() -> int:
         return _focused(args, parser)
     if args.resume and args.rebuild:
         parser.error("--resume and --rebuild: choose one")
-    if not args.pdf and not args.paper and not args.queue and not args.resume and not args.rebuild:
-        parser.error("--pdf, --paper, --queue, --resume or --rebuild is required")
+    if not args.pdf and not args.paper and not args.queue and not args.resume and not args.rebuild \
+            and not args.import_answers:
+        parser.error("--pdf, --paper, --queue, --resume, --rebuild or --import-answers is required")
 
     from parameter_extractor.registry import default_arxiv_cache_dir, default_pubchem_cache_path, default_registry_path
     overrides = {"paper_prefix": args.prefix, "registry_path": default_registry_path(),
@@ -277,6 +284,8 @@ def main() -> int:
     overrides.update(_provider_overrides(args, parser))
     config = RunConfig.from_settings(**overrides)
 
+    if args.export_requests or args.import_answers:
+        return _exchange(args, config)
     if args.queue:
         return _queue(args, config)
     if args.resume or args.rebuild:
@@ -305,6 +314,26 @@ def main() -> int:
         print("\nCancelled.", file=sys.stderr)
         return 130
 
+    _report(result)
+    return 0
+
+
+def _exchange(args, config) -> int:
+    """--export-requests / --import-answers: a package for another assistant (exchange.py)."""
+    from dataclasses import replace
+    from parameter_extractor import exchange
+    try:
+        if args.export_requests:
+            folder = exchange.export_package(args.paper or args.pdf, replace(config, api_key=""),
+                                             Path(args.export_requests), on_progress=print_progress)
+            n = len(exchange.read_package(folder)["requests"])
+            print(f"\n{n} request(s) written to {folder}. Give that folder to the assistant you use (its "
+                  f"{exchange.INSTRUCTIONS_FILE} says what to do), then: parameter-extract --import-answers \"{folder}\"")
+            return 0
+        result = exchange.import_package(Path(args.import_answers), config, on_progress=print_progress)
+    except PipelineError as e:
+        print(f"\nError: {e}", file=sys.stderr)
+        return 1
     _report(result)
     return 0
 

@@ -194,6 +194,14 @@ class MainWindow(QMainWindow):
         file_menu.addAction(self.resume_action)
         file_menu.addAction(self.rebuild_action)
         file_menu.addSeparator()
+        # requests answered by another assistant the user chooses (exchange.py; Mickey, 2026-11-19)
+        self.export_requests_action = QAction("Export requests for another assistant…", self,
+                                              triggered=lambda: self.export_requests())
+        self.import_answers_action = QAction("Import answers from another assistant…", self,
+                                             triggered=lambda: self.import_answers())
+        file_menu.addAction(self.export_requests_action)
+        file_menu.addAction(self.import_answers_action)
+        file_menu.addSeparator()
         file_menu.addAction(quit_action)
         # Settings: a menu like Data Packs (Mickey, 2026-11-08), not a button
         settings_menu = self.menuBar().addMenu("Settings")
@@ -1032,7 +1040,8 @@ class MainWindow(QMainWindow):
     def _busy(self) -> bool:
         """Something is running: a single paper's extraction and/or its figure review, a run of several papers,
         or a focused search."""
-        return self._running or self._review is not None or self.focused_run.running or self.queue_run.running
+        return self._running or self._review is not None or self.focused_run.running or self.queue_run.running \
+            or getattr(self, "_exporting", False)
 
     def _update_run_enabled(self, *_args) -> None:
         handoff = self.settings_dialog.handoff_dir() is not None      # developer mode: no key needed
@@ -1163,6 +1172,71 @@ class MainWindow(QMainWindow):
             return
         pdf = items[0]
 
+        self._start_single(pdf, config)
+
+    # ---- requests for another assistant (exchange.py) ----------------------------------------------------------------
+
+    def export_requests(self, folder: Optional[Path] = None) -> None:
+        """The chosen paper(s)' requests written as packages for an assistant outside the app (nothing is sent)."""
+        from parameter_extractor.gui.exchange_dialogs import ExportTask
+        if self._busy:                         # the export swaps parts of the pipeline while it records: not alongside
+            return
+        items = self.run_items()
+        if not items:
+            QMessageBox.information(self, "Export requests", "Choose a paper (or several) first: the requests are "
+                                                             "made for those papers, with this data pack and options.")
+            return
+        if folder is None:
+            start = self.out_edit.text().strip() or str(Path.home())
+            chosen = QFileDialog.getExistingDirectory(self, "Where to put the packages", start)
+            if not chosen:
+                return
+            folder = Path(chosen)
+        self._save_preferences()
+        self.export_task = ExportTask(items, self.current_config(), folder, self)
+        self.export_task.finished.connect(lambda folders, problems: self._export_finished(folder, folders, problems))
+        self.export_task.progress.connect(self.status.setText)
+        self._exporting = True
+        self._set_inputs_enabled(False)
+        self._update_run_enabled()
+        self.export_task.start()
+
+    def _export_finished(self, folder: Path, folders, problems) -> None:
+        from parameter_extractor.gui.exchange_dialogs import explain_export
+        self._exporting = False
+        self._set_inputs_enabled(True)
+        self._update_run_enabled()
+        explain_export(self, folder, folders, problems)
+
+    def import_answers(self, folder: Optional[Path] = None) -> None:
+        """A package another assistant answered: its paper run with those answers (no requests sent)."""
+        from parameter_extractor import exchange
+        from parameter_extractor.errors import PipelineError
+        if self._busy:
+            return
+        if folder is None:
+            chosen = QFileDialog.getExistingDirectory(self, "Choose an answered package", self.out_edit.text().strip()
+                                                      or str(Path.home()))
+            if not chosen:
+                return
+            folder = Path(chosen)
+        try:
+            missing = exchange.missing_answers(folder)
+            item = exchange.paper_item(folder)
+        except PipelineError as e:
+            QMessageBox.warning(self, "Not a package", str(e))
+            return
+        if missing:
+            QMessageBox.warning(self, "Answers missing", f"The package still lacks {len(missing)} answer(s): "
+                                f"{', '.join(missing)}.\n\nAnswer them (INSTRUCTIONS.md in the package), then import "
+                                f"again.")
+            return
+        out = self.out_edit.text().strip()
+        if not out:
+            QMessageBox.information(self, "Import answers", "Choose a folder for the results first.")
+            return
+        config = exchange.import_config(folder, self.current_config())
+        pdf = Path(item) if item.lower().endswith(".pdf") else item
         self._start_single(pdf, config)
 
     def _start_single(self, pdf, config, resume_from=None) -> None:
@@ -1582,6 +1656,7 @@ class MainWindow(QMainWindow):
                   self.profile_combo, self.models_btn, self.model_profiles_action,
                   self.model_connections_action, self.passes_combo, self.words_edit, self.add_pdfs_action, self.add_list_action,
                   self.open_results_action, self.resume_action, self.rebuild_action,
+                  self.export_requests_action, self.import_answers_action,
                   self.output_action, self.lookups_action, *self.option_toggles(), self.review_figures_box,
                   self.review_variables_box, self.tables_box, self.plan_box, self.whole_box):
             w.setEnabled(enabled)

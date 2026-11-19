@@ -30,7 +30,8 @@ FlagKind = Literal["out_of_range", "low_confidence", "ambiguous_paper_wide_speci
                    "other_estimates", "assumed_default", "no_results",
                    "identity_not_quoted", "paper_source", "value_range", "reused_answer",
                    "table_check", "table_not_found", "quote_unrelated", "no_starting_composition",
-                   "assumed_shared", "method_differs", "set_gap", "for_solution", "plan_mismatch", "paper_summary", "summary_mixed"]
+                   "assumed_shared", "method_differs", "set_gap", "for_solution", "plan_mismatch", "paper_summary", "summary_mixed",
+                   "local_model", "other_assistant"]
 
 
 @dataclass

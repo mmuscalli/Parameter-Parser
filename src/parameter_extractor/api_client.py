@@ -188,7 +188,7 @@ def warm_cache(ctx: RunContext) -> None:
     steps read it instead of each writing its own copy at the same time (2026-11-09 cost pass). Skipped in tests
     (the network call is replaced), batch mode, handoff, local servers and without caching."""
     cfg = ctx.config
-    if (ctx.paper is None or not cfg.prompt_caching or getattr(cfg, "resume_from", None) or cfg.batch_mode or cfg.handoff_dir or getattr(cfg, "is_local", False)
+    if (ctx.paper is None or not cfg.prompt_caching or getattr(cfg, "resume_from", None) or cfg.batch_mode or cfg.answered_elsewhere or getattr(cfg, "is_local", False)
             or _send is not _REAL_SEND or not getattr(cfg, "api_key", None) or not steps_model_differs(cfg)):
         return
     model = cfg.model_for("chemistry")
@@ -535,6 +535,14 @@ def _send_resuming(ctx: RunContext, stage: str, model: str, **kwargs):
                 time.sleep(STREAM_RETRY_WAITS[attempt])
 
 
+def _exchange_model(ctx) -> str:
+    """The model named in an imported package's answers/about.json (exchange.py); 'another assistant' without it."""
+    if ctx.config.exchange_mode != "import":
+        return "exported (not sent)"
+    from parameter_extractor import exchange
+    return exchange.answered_by(ctx.config.exchange_dir) or "another assistant"
+
+
 def _send_mapping_errors(ctx: RunContext, stage: str, model: str, **kwargs):
     import anthropic
     _streamed.stage = stage
@@ -544,6 +552,9 @@ def _send_mapping_errors(ctx: RunContext, stage: str, model: str, **kwargs):
         except ImportError:
             raise errors.PipelineError("Developer handoff mode isn't part of this build.") from None
         return handoff.answer(ctx, stage, kwargs["system_prompt"], kwargs["content"], kwargs["response_model"])
+    if getattr(ctx.config, "exchange_dir", None):     # a package for another assistant (exchange.py)
+        from parameter_extractor import exchange
+        return exchange.answer(ctx, stage, kwargs["system_prompt"], kwargs["content"], kwargs["response_model"])
     credits = lambda detail: errors.OutOfCreditsError(stage, detail, _finished_steps(ctx), getattr(ctx, "run_dir", None))
     try:
         if getattr(ctx.config, "is_local", False):     # a model on the user's own server (local_models.py)
@@ -626,7 +637,8 @@ def call_structured(
     ingestion/pdf_parser.py:rasterize_table_pages -- so the model has the
     actual page layout available, not just the OCR'd/column-garbled text.
     """
-    model = "claude-code-handoff" if ctx.config.handoff_dir else ctx.config.model_for(stage)
+    model = "claude-code-handoff" if ctx.config.handoff_dir else _exchange_model(ctx) if ctx.config.exchange_dir \
+        else ctx.config.model_for(stage)
     name = (audit_name or stage) + (getattr(_streamed, "pass_suffix", "") or "")   # '.pass2' with several passes
     fingerprint = request_fingerprint(model, system_prompt, user_content, cached_prefix, image_paths, response_model)
     if getattr(ctx.config, "resume_from", None):        # an earlier run's saved answer (resume.py, W1)

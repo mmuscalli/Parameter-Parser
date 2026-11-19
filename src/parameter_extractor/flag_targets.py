@@ -21,7 +21,7 @@ from typing import Dict, Iterable, List, Optional, Set, Tuple
 Cell = Tuple[str, str]                         # (full_id, column)
 
 # flags about the paper or the run, not about particular values
-NOT_ABOUT_VALUES = {"reused_answer", "paper_source", "cited_data", "scope", "local_model", "no_results", "new_variable",
+NOT_ABOUT_VALUES = {"reused_answer", "paper_source", "cited_data", "scope", "local_model", "other_assistant", "no_results", "new_variable",
                     "duplicate_removed", "analysis", "fit_model", "lookup_unavailable", "archive_match",
                     "term_not_found", "figure_problem", "auto_digitized"}
 # which reason leads when flags are merged: the more specific / serious first

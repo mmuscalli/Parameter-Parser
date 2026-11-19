@@ -80,6 +80,9 @@ Version: `parameter_extractor.__version__` (0.5.0, tag `v0.5.0`), the one place 
   `gui/structure_canvas.py` (the Map tab: the pack as a picture; double-click / right-click opens the tabs) and
   `gui/category_panel.py` (the Columns tab: a kind of value's settings beside its columns), `gui/rules_page.py`
   (the Rules tab: each shared prompt laid out, the pack's rules at its {{PACK_RULES}} slot).
+- `exchange.py`: requests for another assistant -- a paper's requests exported as a brand-neutral package (nothing
+  sent), its answers imported into a normal run (File menu; CLI --export-requests / --import-answers). Public; the
+  developer handoff stays developer-only.
 - `column_sources.py`: what fills each column (the Columns tab's "Filled by"); `validation/exoplanet_archive.py`
   also fills empty catalogue columns from the archive (calculation `archive_values`).
 - `estimate.py`: cost and time before a run (under the Run button, `--estimate-only`), from `estimate_data.json`
