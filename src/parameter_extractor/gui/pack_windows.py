@@ -988,9 +988,8 @@ class PackEditor(QDialog):
         w = QWidget()
         v = QVBoxLayout(w)
         bar = QHBoxLayout()
-        bar.addWidget(_hint("As saved -- Save updates it. Hover over a step or a kind of value to follow it, click it for "
-                            "its details, double-click it to edit it (right-click: more); pinch or Ctrl+scroll to "
-                            "zoom, drag to move."), 1)
+        bar.addWidget(_hint("As saved -- Save updates it. Right-click a part for every place it's edited; pinch or "
+                            "Ctrl+scroll to zoom, drag to move."), 1)
         self.map_canvas = StructureCanvas()
         self.map_canvas.actions_for = self._map_actions
         bar.addWidget(QPushButton("Fit to window", clicked=lambda: self.map_canvas.fit()))

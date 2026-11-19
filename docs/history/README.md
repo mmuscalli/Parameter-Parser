@@ -165,3 +165,4 @@ current month's file (start `YYYY-MM.md` in a new month), with one line here.
 - Branch levels-and-facets: structure canvas, visual pass 2 -- brief opened nodes (2026-11-19, Mickey)
 - Branch levels-and-facets: the kinds of value in the Columns tab; the Map opens the editor's tabs (2026-11-19, Mickey)
 - Branch levels-and-facets: Map steps grouped by source, levels fade on hover; the categories window's leftover controls (2026-11-19, Mickey)
+- Branch levels-and-facets: Map headings over the columns, the legend under the levels (2026-11-19, Mickey)

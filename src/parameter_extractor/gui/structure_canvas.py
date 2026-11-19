@@ -285,6 +285,11 @@ class _Drawing:
             item.setData(TAGS, frozenset(tags))
 
 
+STEPS_HEAD = ("One request to the AI model for each paper, grouped by where it comes from. Hover over one to "
+              "follow its lines, click it for its details, double-click it to edit it.")
+LEVELS_HEAD = ("How a paper's values are organised, from the whole paper down to one row. Each card is a kind of "
+               "value; a line comes in from each step that fills it (dashed: only through its 'other values' "
+               "answers).")
 STEP_GROUPS = {"app": "The app's steps (every data pack)", "pack": "This data pack's steps",
                "modules": "From linked modules"}
 FILL_TEXT = {"set": "fills in per {set}", "paper": "fills in across the paper", "none": ""}
@@ -334,25 +339,18 @@ def build_scene(pack, palette: Optional[QPalette] = None, opened: Optional[Set[s
     d = _Drawing(scene)
     units = pack.manifest.units or {}
     set_word = units.get("set", "set")
-    width = COL_LANES + LANES_W
     sub_font, sub_h = _font(SUB_PT), QFontMetricsF(_font(SUB_PT)).height()
 
-    # title, what the picture shows, the colours' legend (wrapped to the picture's width)
-    y = d.lines([s.title], COL_PAPER, 0, text, 17, True)
-    y = d.lines(wrap("How a paper's data is read and organised. Lines: which kinds of value each step fills "
-                     "(dashed: only through its 'other values' answers). Hover over a step or a kind of value to "
-                     "follow it; click one for its details.", _font(11.5), width, MANY),
-                COL_PAPER, y + 4, muted, 11.5) + 6
-    x = COL_PAPER
-    for src in ["app", "pack"] + [k for k in colors if k not in ("app", "pack")]:
-        name = "the app" if src == "app" else "this data pack" if src == "pack" else f"module: {src}"
-        w = 18 + QFontMetricsF(_font(10.5)).horizontalAdvance(name) + 18
-        if x + w > width and x > COL_PAPER:
-            x, y = COL_PAPER, y + 20
-        d.box(QRectF(x, y + 3, 11, 11), colors[src], colors[src], radius=3)
-        d.text(name, x + 17, y, muted, 10.5)
-        x += w
-    top = y + 34
+    # the pack's name; over each column its title and what it shows (the same height, so both start level)
+    y = d.lines([s.title], COL_PAPER, 0, text, 18, True) + 14
+    head_font = _font(10.5)
+    heads = [(COL_STEPS, COL_LANES - 40 - COL_STEPS, "Steps", STEPS_HEAD),
+             (COL_LANES, LANES_W, "Levels", LEVELS_HEAD)]
+    wrapped = [wrap(about, head_font, w, MANY) for _x, w, _t, about in heads]
+    for (x, _w, title, _about), lines in zip(heads, wrapped):
+        d.text(title, x, y, text, 14, True)
+        d.lines(lines, x, y + 24, muted, 10.5)
+    top = y + 24 + max(len(lines) for lines in wrapped) * QFontMetricsF(head_font).height() + 16
 
     paper_rect = QRectF(COL_PAPER, top, PAPER_W, 84)
     d.box(paper_rect, card, line, 10).setData(TARGET, "paper")
@@ -495,6 +493,20 @@ def build_scene(pack, palette: Optional[QPalette] = None, opened: Optional[Set[s
                 ports.setdefault(round(port_y), set()).add(key)
             cy += row_h + CARD_GAP
         y += height + 10
+
+    # the colours: where a step comes from (under the levels, where the steps column is usually longer)
+    y += 4
+    d.text("Colours: where a step comes from", COL_LANES, y, muted, 10.5, True)
+    y += 20
+    x = COL_LANES
+    for src in ["app", "pack"] + [k for k in colors if k not in ("app", "pack")]:
+        name = "the app" if src == "app" else "this data pack" if src == "pack" else f"module: {src}"
+        w = 17 + QFontMetricsF(_font(10.5)).horizontalAdvance(name) + 20
+        if x + w > COL_LANES + LANES_W and x > COL_LANES:
+            x, y = COL_LANES, y + 20
+        d.box(QRectF(x, y + 3, 11, 11), colors[src], colors[src], radius=3)
+        d.text(name, x + 17, y, muted, 10.5)
+        x += w
 
     # lines and where they come in
     relations: Dict[str, Set[str]] = {}
