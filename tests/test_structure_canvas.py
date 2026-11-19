@@ -1,0 +1,56 @@
+"""
+A data pack's structure as one picture (gui/structure_canvas.py, branch levels-and-facets): the steps that read a
+paper, where they come from, the kinds of value they fill, the levels as lanes with the kinds at their level. Built
+from the app's packs (facts from tests/pack_facts.py where they matter); drawn offscreen. No API calls.
+
+Run with: python tests/test_structure_canvas.py
+"""
+import _isolation  # noqa: F401,E402 -- first: the user's own data never reaches a test (tests/_isolation.py)
+import os
+import sys
+import tempfile
+from pathlib import Path
+
+os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
+
+from PySide6.QtWidgets import QApplication  # noqa: E402
+
+from parameter_extractor import packs  # noqa: E402
+
+app = QApplication.instance() or QApplication([])
+
+
+def test_the_structure_of_the_apps_packs():
+    from parameter_extractor.gui.structure_canvas import build_scene, render_png, structure_of
+    import pack_facts as pf
+    for pid in ("prebiotic_chemistry", "exoplanets"):
+        pack = packs.activate(pid)
+        s = structure_of(pack)
+        assert [lv[0] for lv in s.levels] == ["paper", "set", "run", "sample"]
+        names = [st.name for st in s.steps]
+        assert names[:2] == ["structure_planner", "metadata"] and s.steps[0].makes_rows
+        assert set(pf.step_names(pid)) <= set(names)                       # every configurable step is drawn
+        kinds = {k.id: k for k in s.kinds}
+        assert kinds["metadata"].level == "paper" and "metadata" in s.steps[1].kinds
+        assert all(k.level in {lv[0] for lv in s.levels} for k in s.kinds)
+        assert any(st.kinds for st in s.steps[2:])                         # steps fill kinds of value
+        scene = build_scene(pack)
+        assert scene.items() and scene.sceneRect().width() > 1000
+        with tempfile.TemporaryDirectory() as tmp:
+            render_png(pack, Path(tmp) / "x.png", scale=1.0)
+            assert (Path(tmp) / "x.png").stat().st_size > 10000
+    pack = packs.activate("exoplanets")
+    s = structure_of(pack)
+    assert s.levels[2][1] == "planet" and "fit solution" in s.levels[3][1]
+    assert "several fit solutions" in s.levels[2][2]
+    packs.activate("prebiotic_chemistry")
+
+
+if __name__ == "__main__":
+    for name, fn in list(globals().items()):
+        if name.startswith("test_") and callable(fn):
+            fn()
+            print(f"PASS: {name}")
+    print("All structure canvas tests passed.")
