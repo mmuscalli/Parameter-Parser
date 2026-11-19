@@ -89,6 +89,7 @@ def test_clicking_opens_a_step_or_kind_in_place():
                          _font(10), 160)
     assert len(lines) <= OPEN_LINES and lines[0].endswith("…") and lines[-1].startswith("Fills in")
     assert brief("Rate constants (kobs). More text.") == "Rate constants"
+    assert brief("Reference names like 'Teng et al. 2023'. More.") == "Reference names like 'Teng et al. 2023'"
 
 
 def test_the_pack_editor_has_a_map():

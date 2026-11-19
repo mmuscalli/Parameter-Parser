@@ -566,12 +566,6 @@ class PackEditor(QDialog):
         for box in self.builtin_boxes.values():
             box.toggled.connect(lambda _on: self._fill_calculations(self._chosen_calculations()))
 
-        cats = QHBoxLayout()
-        cats.addWidget(_titled("Variable categories", "Variable categories (how suggested variables and columns are grouped) are edited in "
-                             "their own window; categories defined by the pack are in pack.json."), 1)
-        self.categories_btn = QPushButton("Edit variable categories…", clicked=self._open_categories)
-        cats.addWidget(self.categories_btn)
-        v.addLayout(cats)
         return w
 
     # the calculations tables (spaced rows like the categories window, 2026-11-06) -------------------------------
@@ -689,18 +683,20 @@ class PackEditor(QDialog):
         dlg = CategoriesDialog(self.registry_path, parent=self)
         dlg.area_combo.setCurrentIndex(max(dlg.area_combo.findData(self.draft.manifest["id"]), 0))
         dlg.exec()
+        self.category_panel.show_category(self.category_panel.cid)        # as changed there
 
     # ---- Columns ------------------------------------------------------------------------
 
     def _columns_tab(self) -> QWidget:
         w = QWidget()
         v = QVBoxLayout(w)
-        v.addWidget(_titled("The dataset's columns, by category", "The dataset's columns, grouped by variable "
-                          "category in the order the dataset writes them. Put the unit at the end of a name "
+        v.addWidget(_titled("The dataset's columns, by kind of value", "The dataset's columns, grouped by kind of "
+                          "value (variable category) in the order the dataset writes them; click a kind of value for "
+                          "its settings. Put the unit at the end of a name "
                           "(temperature_C, pressure_bar, mass_g, yield_pct): values are converted into it. The shared "
                           "columns (paper, authors, DOI, ...) and row identifiers are added automatically. Columns a "
                           "step fills but that aren't listed here are added after these. Double-click a column to "
-                          "rename it; drag it to reorder, or onto another category to move it there."))
+                          "rename it; drag it to reorder, or onto another kind of value to move it there."))
         row = QHBoxLayout()
         self.column_tree = _ColumnTree()
         self.column_tree.setHeaderLabels(["Column", "Unit", "Filled by"])
@@ -713,10 +709,125 @@ class PackEditor(QDialog):
         side = QVBoxLayout()
         for text, slot in (("Add…", self._add_column), ("Remove", self._remove_column)):
             side.addWidget(QPushButton(text, clicked=slot))
+        side.addSpacing(16)
+        side.addWidget(QPushButton("Add a kind of value…", clicked=self._add_category))
         side.addStretch(1)
         row.addLayout(side)
+        # the selected kind of value's settings (2026-11-19: the categories in the Data packs window)
+        from parameter_extractor.gui.category_panel import CategoryPanel
+        self.category_panel = CategoryPanel(self.draft.manifest, self.structure_page, self._saved_categories,
+                                            self.read_only, open_all=self._open_categories)
+        self.category_panel.setFixedWidth(420)
+        self.category_panel.changed.connect(self._category_renamed)
+        self.category_panel.remove_requested.connect(self._remove_category)
+        self.column_tree.currentItemChanged.connect(lambda item, _old: self._show_category_of(item))
+        row.addWidget(self.category_panel)
         v.addLayout(row, 1)
         return w
+
+    # the Columns tab's kinds of value (variable categories) -------------------------------------------------------
+
+    def _saved_categories(self) -> dict:
+        """{id: VariableCategory} of the pack as saved (its modules' and the shared ones included)."""
+        from parameter_extractor import variable_categories as vc
+        pack = self._saved_pack()
+        try:
+            return {c.id: c for c in vc.categories(pack)} if pack else {}
+        except Exception:                           # noqa: BLE001 -- a pack that can't load: its own only
+            return {}
+
+    def _category_header(self, cid: str) -> Optional[QTreeWidgetItem]:
+        return next((self.column_tree.topLevelItem(i) for i in range(self.column_tree.topLevelItemCount())
+                     if self.column_tree.topLevelItem(i).data(0, Qt.ItemDataRole.UserRole) == cid), None)
+
+    def _show_category_of(self, item: Optional[QTreeWidgetItem]) -> None:
+        group = item.parent() or item if item is not None else None
+        key = group.data(0, Qt.ItemDataRole.UserRole) if group is not None else None
+        if key and key.startswith("__"):
+            self.category_panel.show_category(None, automatic=f"{group.text(0)}: added to every dataset by the "
+                                                              "app (they identify the rows and where values come from).")
+        else:
+            self.category_panel.show_category(key or None)
+
+    def show_category(self, cid: str) -> None:
+        """The Columns tab on a kind of value (the Map's double-click)."""
+        self.tabs.setCurrentIndex(self.tab_index("Columns"))
+        header = self._category_header(cid)
+        if header is not None:
+            self.column_tree.setCurrentItem(header)
+            self.column_tree.scrollToItem(header, QAbstractItemView.ScrollHint.PositionAtTop)
+
+    def _category_renamed(self, cid: str) -> None:
+        header = self._category_header(cid)
+        own = self.category_panel.own_entry(cid)
+        if header is not None and own is not None:
+            header.setText(0, own.get("label", cid))
+
+    def _add_category(self) -> None:
+        label, ok = QInputDialog.getText(self, "Add a kind of value", "Name of the new kind of value (variable "
+                                         "category), e.g. Light source:")
+        label = (label or "").strip()
+        if not ok or not label:
+            return
+        self.add_category(label)
+
+    def add_category(self, label: str) -> str:
+        """A new kind of value of this pack's own (pack.json, saved with it), recorded for each row; returns its id."""
+        import re
+        from parameter_extractor import variable_categories as vc
+        taken = set(self._saved_categories()) | set(vc.RESERVED_IDS) | \
+            {c.get("id") for c in self.draft.manifest.get("variable_categories", [])}
+        base = re.sub(r"[^a-z0-9]+", "_", label.lower()).strip("_") or "category"
+        base = base if base[0].isalpha() else f"c_{base}"
+        cid, n = base, 2
+        while cid in taken:
+            cid, n = f"{base}_{n}", n + 1
+        self.draft.manifest.setdefault("variable_categories", []).append(
+            {"id": cid, "label": label, "description": "", "model_assigns": False})
+        self.structure_page.add_kind(cid, label)
+        header = QTreeWidgetItem([label, "empty", ""])
+        header.setData(0, Qt.ItemDataRole.UserRole, cid)
+        first = self.column_tree.topLevelItem(0)
+        if first is not None:
+            header.setFont(0, first.font(0))
+            header.setForeground(0, first.foreground(0))
+            header.setForeground(1, first.foreground(1))
+        header.setSizeHint(0, QSize(0, 40))
+        header.setFlags(Qt.ItemFlag.ItemIsEnabled | Qt.ItemFlag.ItemIsSelectable | Qt.ItemFlag.ItemIsDropEnabled)
+        header.setToolTip(0, "No columns yet: drag columns here to put them in this category.")
+        at = next((i for i in range(self.column_tree.topLevelItemCount())          # before Other / the added ones
+                   if self.column_tree.topLevelItem(i).data(0, Qt.ItemDataRole.UserRole) in ("other", "__provenance__")),
+                  self.column_tree.topLevelItemCount())
+        self.column_tree.insertTopLevelItem(at, header)
+        header.setFirstColumnSpanned(True)
+        self.column_tree.setCurrentItem(header)
+        return cid
+
+    def _remove_category(self, cid: str) -> None:
+        """A kind of value of this pack's own removed; its columns go to Other."""
+        header = self._category_header(cid)
+        n = header.childCount() if header is not None else 0
+        if n and QMessageBox.question(self, "Remove this kind of value?", f"Its {n} column(s) move to Other. "
+                                      "Remove it?") != QMessageBox.StandardButton.Yes:
+            return
+        self.remove_category(cid)
+
+    def remove_category(self, cid: str) -> None:
+        m = self.draft.manifest
+        m["variable_categories"] = [c for c in m.get("variable_categories", []) if c.get("id") != cid]
+        if not m["variable_categories"]:
+            m.pop("variable_categories")
+        (m.get("category_columns") or {}).pop(cid, None)
+        self.structure_page.remove_kind(cid)
+        header = self._category_header(cid)
+        if header is not None:
+            other = self._category_header("other")
+            children = header.takeChildren()
+            if other is not None and children:
+                other.addChildren(children)
+                other.setText(1, f"{other.childCount()} columns")
+            self.column_tree.takeTopLevelItem(self.column_tree.indexOfTopLevelItem(header))
+        self.category_panel.show_category(None)
 
     # the Columns tab: one header per variable category, its columns below (2026-11-08)
     def _fill_column_tree(self, columns: List[str]) -> None:
@@ -743,7 +854,8 @@ class PackEditor(QDialog):
             item.setForeground(0, QBrush(tree.palette().color(QPalette.ColorRole.Link)))
             item.setSizeHint(0, QSize(0, 40))              # the space above each category
             item.setFirstColumnSpanned(True)
-            flags = Qt.ItemFlag.ItemIsEnabled | (Qt.ItemFlag.ItemIsDropEnabled if droppable else Qt.ItemFlag.NoItemFlags)
+            flags = Qt.ItemFlag.ItemIsEnabled | Qt.ItemFlag.ItemIsSelectable | \
+                (Qt.ItemFlag.ItemIsDropEnabled if droppable else Qt.ItemFlag.NoItemFlags)
             item.setFlags(flags)
             tree.addTopLevelItem(item)
             item.setExpanded(True)
@@ -877,13 +989,70 @@ class PackEditor(QDialog):
         v = QVBoxLayout(w)
         bar = QHBoxLayout()
         bar.addWidget(_hint("As saved -- Save updates it. Hover over a step or a kind of value to follow it, click it for "
-                            "its details; pinch or Ctrl+scroll to zoom, drag to move."), 1)
+                            "its details, double-click it to edit it (right-click: more); pinch or Ctrl+scroll to "
+                            "zoom, drag to move."), 1)
         self.map_canvas = StructureCanvas()
+        self.map_canvas.actions_for = self._map_actions
         bar.addWidget(QPushButton("Fit to window", clicked=lambda: self.map_canvas.fit()))
         v.addLayout(bar)
         v.addWidget(self.map_canvas, 1)
         self._refresh_map()
         return w
+
+    def _map_actions(self, target: str) -> list:
+        """What the Map offers for a step, a kind of value, a level, the calculations or the paper: [(text, run)],
+        the first on a double-click -- the tab where it's edited."""
+        from parameter_extractor import modules as module_store
+        structure = getattr(self.map_canvas.scene(), "structure", None)
+        go = lambda tab: (lambda: self.tabs.setCurrentIndex(self.tab_index(tab)))
+        out = []
+        if target.startswith("step:") and structure is not None:
+            name = target[5:]
+            step = next((st for st in structure.steps if st.name == name), None)
+            stage_file = next((f for f, spec in self.draft.stages.items() if spec.get("name") == name), None)
+            builtin = [self.builtin_list.item(r).data(Qt.ItemDataRole.UserRole) for r in range(self.builtin_list.count())]
+            module = next((mid for mid, mod in module_store.available().items()
+                           if step is not None and mod.label == step.source), None)
+            if stage_file:
+                out.append(("Edit the step (Steps tab)", lambda: self.show_stage(stage_file)))
+            elif name in builtin:
+                out.append(("Show the step (Steps tab)", lambda: self._view_builtin_from_module(name)))
+            if module:
+                out.append((f"Open its module, {step.source} (Modules tab)", lambda: self.show_module(module)))
+            if name == "structure_planner":
+                out.append(("Rules for planning the rows (Rules tab)", go("Rules")))
+            out.append(("Show it in the overview (Overview tab)", go("Overview")))
+            for cid in (step.kinds if step else [])[:6]:
+                kind = next((k for k in structure.kinds if k.id == cid), None)
+                if kind:
+                    out.append((f"Its kind of value: {kind.label} (Columns tab)", lambda c=cid: self.show_category(c)))
+        elif target.startswith("kind:"):
+            cid = target[5:]
+            out += [("Edit the kind of value and its columns (Columns tab)", lambda: self.show_category(cid)),
+                    ("Where it's recorded and filled in (Structure tab)", go("Structure"))]
+        elif target.startswith("level:"):
+            out.append(("Edit the levels and their words (Structure tab)", go("Structure")))
+        elif target == "calcs":
+            out.append(("Choose the calculations (General tab)", go("General")))
+        elif target == "paper":
+            out.append(("What happens to each paper (Overview tab)", go("Overview")))
+        return out
+
+    def show_stage(self, stage_file: str) -> None:
+        """The Steps tab on one of the pack's own steps."""
+        self.tabs.setCurrentIndex(self.tab_index("Steps"))
+        files = list(self.draft.stages)
+        if stage_file in files:
+            self.stage_list.setCurrentRow(files.index(stage_file))
+
+    def show_module(self, mid: str) -> None:
+        """The Modules tab on one module."""
+        self.tabs.setCurrentIndex(self.tab_index("Modules"))
+        for r in range(self.module_table.rowCount()):
+            item = self.module_table.item(r, 0)
+            if item is not None and item.data(Qt.ItemDataRole.UserRole) == mid:
+                self.module_table.setCurrentCell(r, 0)
+                return
 
     def _refresh_map(self) -> None:
         try:
@@ -2379,6 +2548,10 @@ class PackEditor(QDialog):
             QMessageBox.warning(self, "Not saved", str(e))
             return False
         self.setWindowTitle(f"Data pack: {self.draft.manifest.get('label', '')}")
+        shown = self.category_panel.cid
+        self._fill_column_tree(self.draft.columns)      # the kinds of value as saved (names, table order)
+        if shown and self._category_header(shown) is not None:
+            self.column_tree.setCurrentItem(self._category_header(shown))
         self._refresh_overview()
         self._refresh_map()
         self._fill_builtin_list()           # modules linked or unlinked: their built-in steps
@@ -2427,7 +2600,8 @@ class PackEditor(QDialog):
             if isinstance(child, (QLineEdit, QPlainTextEdit)):
                 child.setReadOnly(True)
             elif child is self.rules_combo or (isinstance(child, QPushButton)
-                                               and child.text() in ("Show the shared prompt…", "Fit to window")):
+                                               and child.text() in ("Show the shared prompt…", "Fit to window",
+                                                                    "Variable categories (all data packs)…")):
                 continue                       # choosing which rules to look at; fitting the map
             elif isinstance(child, (QCheckBox, QComboBox, QPushButton)):
                 child.setEnabled(False)

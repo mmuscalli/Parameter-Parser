@@ -76,7 +76,9 @@ Version: `parameter_extractor.__version__` (0.5.0, tag `v0.5.0`), the one place 
   `gui/structure_page.py` (pack editor: level words, each kind of value's level; `category_levels`),
   `column_labels.py` (names in words). Step 3: fill settings per kind of value (`fill`, `category_fill`,
   `fill_columns`; `shared_values.selectors`; older packs keep shared_columns / group_columns). Step 4: an optional `run` per sample in the
-  row plan (prebiotic prompt) -> a run level in the record; measured 2026-11-18 (docs/history).
+  row plan (prebiotic prompt) -> a run level in the record; measured 2026-11-18 (docs/history). Pack editor:
+  `gui/structure_canvas.py` (the Map tab: the pack as a picture; double-click / right-click opens the tabs) and
+  `gui/category_panel.py` (the Columns tab: a kind of value's settings beside its columns).
 - `estimate.py`: cost and time before a run (under the Run button, `--estimate-only`), from `estimate_data.json`
   (rebuild it with `scripts/build_estimate_data.py` after many new runs; check with `scripts/check_estimates.py`).
 

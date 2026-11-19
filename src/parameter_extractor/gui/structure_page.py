@@ -194,6 +194,43 @@ class StructurePage(QWidget):
         self._fill()
         self._fill_columns()
 
+    # ---- one kind of value, from the Columns tab's category panel (gui/category_panel.py) ----------------------------
+
+    def kind(self, cid: str) -> Optional[dict]:
+        """A kind of value's entry here (id, label, level, fill, origin, own, ...), or None."""
+        return next((k for k in self._kinds if k["id"] == cid), None)
+
+    def level_choices(self):
+        return self._level_choices()
+
+    def fill_choices(self):
+        return self._fill_choices()
+
+    def fills_by_patterns(self) -> bool:
+        """An older pack choosing the values to fill in by name patterns: its fill settings are edited in pack.json."""
+        return self._patterns
+
+    def set_kind(self, cid: str, **values) -> None:
+        """Change a kind of value's level, fill or label here (the table follows)."""
+        k = self.kind(cid)
+        if k is None:
+            return
+        if "fill" in values and values["fill"] != k["fill"]:
+            self.fill_changed = True
+        k.update({f: v for f, v in values.items() if f in ("level", "fill", "label")})
+        self._fill()
+
+    def add_kind(self, cid: str, label: str) -> None:
+        """A kind of value the pack has just been given (recorded for each row, not filled in)."""
+        if self.kind(cid) is None:
+            self._kinds.append({"id": cid, "label": label, "description": "", "origin": "this data pack",
+                                "own": True, "default": "sample", "level": "sample", "fill": "none"})
+            self._fill()
+
+    def remove_kind(self, cid: str) -> None:
+        self._kinds = [k for k in self._kinds if k["id"] != cid]
+        self._fill()
+
     def _fill(self) -> None:
         self.table.setRowCount(len(self._kinds))
         for r, k in enumerate(self._kinds):

@@ -19,12 +19,12 @@ the window's palette (follows the themes). Stage 2: read-only.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Dict, List, Optional, Set, Tuple
+from typing import Callable, Dict, List, Optional, Set, Tuple
 
 from PySide6.QtCore import QPointF, QRectF, Qt
 from PySide6.QtGui import QBrush, QColor, QFont, QFontMetricsF, QPainter, QPainterPath, QPalette, QPen
 from PySide6.QtWidgets import (QApplication, QGraphicsItem, QGraphicsPathItem, QGraphicsScene,
-                               QGraphicsSimpleTextItem, QGraphicsView)
+                               QGraphicsSimpleTextItem, QGraphicsView, QMenu)
 
 # geometry (scene units = pixels at 100 %)
 STEP_W, STEP_GAP = 236, 7
@@ -42,6 +42,7 @@ KEY = 0          # item data: the hover target an item belongs to ("step:<name>"
 TAGS = 1         # item data: the steps and kinds a line or dot connects (frozenset of keys)
 BODY = 2         # item data: a step's or card's outline (outlined in the accent colour while hovered)
 PEN = 3          # item data: its own pen, put back after
+TARGET = 4       # item data: a part without hovering that can still be opened elsewhere ("level:<id>", "paper")
 
 
 @dataclass
@@ -134,7 +135,7 @@ def structure_of(pack) -> Structure:
     for f in pack_overview.paper_flow(pack):
         source = "app" if f.source.startswith(pack_overview.APP) else \
             "pack" if f.source.startswith(pack_overview.PACK) else \
-            f.source.replace("the ", "", 1).replace(" module", "")
+            f.source.removeprefix("the ").removesuffix(" module")       # the module's label ('Probe module' too)
         if f.kind == "local":
             calcs.append((f.label, source, f.what))
             continue
@@ -271,15 +272,13 @@ class _Drawing:
 
 FILL_TEXT = {"set": "fills in per {set}", "paper": "fills in across the paper", "none": ""}
 MANY = 99                                        # every line (the header, a lane's note)
-LEVEL_WORDS = {"paper": "Whole paper", "set": "Set", "run": "Run", "sample": "Sample"}
-FILL_WORDS = {"set": "within each set", "paper": "across the whole paper"}
 OPEN_LINES = 3                                   # an opened node: at most this many lines under its name
 
 
 def brief(text: str) -> str:
     """The first sentence of a description, without its asides in brackets (the other tabs have it whole)."""
     import re
-    first = re.split(r"(?<=[.;])\s", (text or "").strip(), maxsplit=1)[0].rstrip(".;")
+    first = re.split(r"(?<=[.;])\s+(?=[A-Z])", (text or "").strip(), maxsplit=1)[0].rstrip(".;")
     return re.sub(r"\s*\([^)]*\)", "", first).strip()
 
 
@@ -338,7 +337,7 @@ def build_scene(pack, palette: Optional[QPalette] = None, opened: Optional[Set[s
     top = y + 34
 
     paper_rect = QRectF(COL_PAPER, top, PAPER_W, 84)
-    d.box(paper_rect, card, line, 10)
+    d.box(paper_rect, card, line, 10).setData(TARGET, "paper")
     d.text("The paper", COL_PAPER + 12, top + 10, text, 13, True)
     d.lines(["text · tables", "figures", "(+ supplement)"], COL_PAPER + 12, top + 32, muted, 10.5)
 
@@ -406,9 +405,10 @@ def build_scene(pack, palette: Optional[QPalette] = None, opened: Optional[Set[s
         fill = FILL_TEXT.get(k.fill, "").format(set=set_word)
         if not is_open:
             return name, wrap(" · ".join(x for x in (count, fill) if x), sub_font, CARD_W - 18, 2)
-        facts = [f"{count[:1].upper()}{count[1:]} · Level: {LEVEL_WORDS.get(k.level, k.level.title())}"]
-        if k.fill in FILL_WORDS:
-            facts.append(f"Fills in: {FILL_WORDS[k.fill]}")
+        facts = [f"{count[:1].upper()}{count[1:]} · Level: {lane[:1].upper()}{lane[1:]}"]   # the pack's words
+        fills = {"set": f"within each {set_word}", "paper": "across the whole paper"}
+        if k.fill in fills:
+            facts.append(f"Fills in: {fills[k.fill]}")
         return name, opened_lines(brief(k.description), facts, sub_font, CARD_W - 18)
 
     for i, (lid, label, note) in enumerate(s.levels):
@@ -429,7 +429,7 @@ def build_scene(pack, palette: Optional[QPalette] = None, opened: Optional[Set[s
             _font(10.5), LANES_W - 2 * LANE_PAD, MANY)
         height = lane_title + (sum(h + CARD_GAP for h in row_heights) if cards else len(empty) * 16 + 4) + LANE_PAD
         tint = _mix(window, accent, 0.04 + 0.03 * (len(s.levels) - 1 - i))
-        d.box(QRectF(COL_LANES, y, LANES_W, height), tint, line, 12, 1.0, dashed=is_run)
+        d.box(QRectF(COL_LANES, y, LANES_W, height), tint, line, 12, 1.0, dashed=is_run).setData(TARGET, f"level:{lid}")
         d.text(title, COL_LANES + LANE_PAD, y + 7, text, 13, True)
         d.lines(note_lines, COL_LANES + LANE_PAD + title_w + 20, y + 10, muted, 10.5)
         d.lines(empty, COL_LANES + LANE_PAD, y + lane_title, muted, 10.5)
@@ -482,6 +482,7 @@ def build_scene(pack, palette: Optional[QPalette] = None, opened: Optional[Set[s
     scene.setSceneRect(scene.itemsBoundingRect().adjusted(-20, -20, 20, 20))
     scene.relations = relations
     scene.accent = accent
+    scene.structure = s
     return scene
 
 
@@ -502,7 +503,11 @@ class StructureCanvas(QGraphicsView):
         self._follow = True            # fitted to the window as it resizes, until zoomed
         self._pack = None
         self._pressed = None
+        self._clicked: Optional[str] = None
         self.opened: Set[str] = set()
+        # target -> [(menu text, what it does)]: the first runs on a double-click, all are on the right-click menu
+        # (the pack editor sets it: its tabs)
+        self.actions_for: Optional[Callable[[str], List[Tuple[str, Callable[[], None]]]]] = None
         if pack is not None:
             self.show_pack(pack)
 
@@ -540,11 +545,47 @@ class StructureCanvas(QGraphicsView):
     def mouseReleaseEvent(self, event) -> None:
         super().mouseReleaseEvent(event)
         pos, self._pressed = event.position().toPoint(), self._pressed
-        if self._pressed is not None and (pos - self._pressed).manhattanLength() <= 4:
+        self._clicked = None
+        if event.button() == Qt.MouseButton.LeftButton and self._pressed is not None \
+                and (pos - self._pressed).manhattanLength() <= 4:
             key = self.key_at(pos)
             if key:
                 self.toggle(key)
+                self._clicked = key
         self._pressed = None
+
+    # ---- going to where a part is edited (the pack editor's tabs) ---------------------------------------------------
+
+    def target_at(self, pos) -> Optional[str]:
+        """What a double-click or right-click at `pos` is about: a step, a kind of value, the calculations, a level
+        ("level:<id>") or the paper."""
+        for item in self.items(pos):
+            key = item.data(KEY) or item.data(TARGET)
+            if key:
+                return key
+        return None
+
+    def mouseDoubleClickEvent(self, event) -> None:
+        """The first of the two places the right-click menu offers: the tab where it's edited."""
+        target = self.target_at(event.position().toPoint())
+        if target and target == self._clicked:
+            self.toggle(target)                      # the double-click's first click opened it: as it was
+        self._clicked = None
+        actions = self.actions_for(target) if target and self.actions_for else []
+        if actions:
+            actions[0][1]()
+        else:
+            super().mouseDoubleClickEvent(event)
+
+    def contextMenuEvent(self, event) -> None:
+        target = self.target_at(event.pos())
+        actions = self.actions_for(target) if target and self.actions_for else []
+        if not actions:
+            return
+        menu = QMenu(self)
+        for text, run in actions:
+            menu.addAction(text, run)
+        menu.exec(event.globalPos())
 
     # ---- following a step or a kind of value ---------------------------------------------------------------------
 

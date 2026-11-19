@@ -163,3 +163,4 @@ current month's file (start `YYYY-MM.md` in a new month), with one line here.
 - Branch levels-and-facets: a structure canvas, stage 2 -- the live map in the pack editor (2026-11-19, Mickey)
 - Branch levels-and-facets: structure canvas, visual pass 1 -- compact nodes that open on a click (2026-11-19, Mickey)
 - Branch levels-and-facets: structure canvas, visual pass 2 -- brief opened nodes (2026-11-19, Mickey)
+- Branch levels-and-facets: the kinds of value in the Columns tab; the Map opens the editor's tabs (2026-11-19, Mickey)
