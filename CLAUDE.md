@@ -78,7 +78,8 @@ Version: `parameter_extractor.__version__` (0.5.0, tag `v0.5.0`), the one place 
   `fill_columns`; `shared_values.selectors`; older packs keep shared_columns / group_columns). Step 4: an optional `run` per sample in the
   row plan (prebiotic prompt) -> a run level in the record; measured 2026-11-18 (docs/history). Pack editor:
   `gui/structure_canvas.py` (the Map tab: the pack as a picture; double-click / right-click opens the tabs) and
-  `gui/category_panel.py` (the Columns tab: a kind of value's settings beside its columns).
+  `gui/category_panel.py` (the Columns tab: a kind of value's settings beside its columns), `gui/rules_page.py`
+  (the Rules tab: each shared prompt laid out, the pack's rules at its {{PACK_RULES}} slot).
 - `estimate.py`: cost and time before a run (under the Run button, `--estimate-only`), from `estimate_data.json`
   (rebuild it with `scripts/build_estimate_data.py` after many new runs; check with `scripts/check_estimates.py`).
 

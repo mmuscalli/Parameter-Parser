@@ -31,11 +31,10 @@ from PySide6.QtWidgets import (QAbstractItemView, QCheckBox, QComboBox, QDialog,
                                QTableWidget, QTableWidgetItem, QTreeWidget, QTreeWidgetItem, QVBoxLayout, QWidget)
 
 from parameter_extractor import packs
-from parameter_extractor.pack_editing import (BUILTIN_STAGES, CALCULATION_NEEDS, CALCULATION_STEP, CALCULATIONS, RULE_PROMPTS,
-                                              PackDraft, Problem, check, items_to_rules, rules_to_items)
+from parameter_extractor.pack_editing import (BUILTIN_STAGES, CALCULATION_NEEDS, CALCULATION_STEP, CALCULATIONS,
+                                              PackDraft, Problem, check)
 from parameter_extractor.gui.widgets import RowSeparatorDelegate, in_cell, style_rows
 
-RULES_ROW_GAP = 13      # rules are long texts: more room between them and the lines (Mickey, 2026-11-06)
 from parameter_extractor.gui import themes  # noqa: E402
 LEVEL_COLORS = {level: themes.MARKS[level] for level in ("error", "warning", "note")}   # follow the theme
 UNCERTAINTY_STYLES = [("<column>_err_plus / _err_minus", ["_err_plus", "_err_minus"], "_"),
@@ -390,7 +389,6 @@ class PackEditor(QDialog):
         # nested modal windows left the main window without input)
         self.next_folder: Optional[Path] = None
         self._stage = None                         # the stage file shown in the Stages tab
-        self._rules_shown = None
         self.setWindowTitle(f"Data pack: {self.draft.manifest.get('label', '')}"
                             + ("  (built in, read-only)" if self.read_only else ""))
         self.resize(1320, 820)
@@ -1019,7 +1017,9 @@ class PackEditor(QDialog):
             if module:
                 out.append((f"Open its module, {step.source} (Modules tab)", lambda: self.show_module(module)))
             if name == "structure_planner":
-                out.append(("Rules for planning the rows (Rules tab)", go("Rules")))
+                out.append(("Rules for planning the rows (Rules tab)",
+                            lambda: (self.tabs.setCurrentIndex(self.tab_index("Rules")),
+                                     self.rules_page.select("structure_planner"))))
             out.append(("Show it in the overview (Overview tab)", go("Overview")))
             for cid in (step.kinds if step else [])[:6]:
                 kind = next((k for k in structure.kinds if k.id == cid), None)
@@ -2131,95 +2131,29 @@ class PackEditor(QDialog):
     # ---- Rules --------------------------------------------------------------------------
 
     def _rules_tab(self) -> QWidget:
-        w = QWidget()
-        v = QVBoxLayout(w)
-        v.addWidget(_titled("Rules for the shared prompts", "Rules for this data pack, added to the app's shared prompts. The most important "
-                          "are the row-planning rules: what ONE row is, what makes rows one set, and which results "
-                          "must not become rows. A few lines are enough."))
-        top = QHBoxLayout()
-        self.rules_combo = QComboBox()
-        for name, about in RULE_PROMPTS.items():
-            self.rules_combo.addItem(f"{name} -- {about}", name)
-        top.addWidget(self.rules_combo, 1)
-        top.addWidget(QPushButton("Show the shared prompt…", clicked=self._show_prompt))
-        v.addLayout(top)
-        self.rules_note = _hint("")
-        v.addWidget(self.rules_note)
-        # one row per rule (the file's '- ' lines; pack_editing.rules_to_items / items_to_rules convert)
-        self.rules_table = QTableWidget(0, 1)
-        self.rules_table.setHorizontalHeaderLabels(["Rule (double-click to edit)"])
-        self.rules_table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
-        style_rows(self.rules_table, RowSeparatorDelegate(self.rules_table, gap=RULES_ROW_GAP))
-        v.addWidget(self.rules_table, 1)
-        buttons = QHBoxLayout()
-        for text, slot in (("Add rule", self._add_rule), ("Remove", self._remove_rule),
-                           ("Up", lambda: self._move_rule(-1)), ("Down", lambda: self._move_rule(1))):
-            buttons.addWidget(QPushButton(text, clicked=slot))
-        buttons.addStretch(1)
-        v.addLayout(buttons)
-        self.rules_combo.currentIndexChanged.connect(self._on_rules_prompt)
-        self._on_rules_prompt(0)
-        return w
+        """The shared prompts this pack adds rules to, each laid out as the model gets it (gui/rules_page.py)."""
+        from parameter_extractor.gui.rules_page import RulesPage
+        self.rules_page = RulesPage(self.draft, self.read_only, self._saved_pack,
+                                    show_modules=lambda: self.tabs.setCurrentIndex(self.tab_index("Modules")))
+        self.rules_table = self.rules_page.rules_table
+        return self.rules_page
 
     def rules_items(self) -> list:
-        return [self.rules_table.item(r, 0).text() for r in range(self.rules_table.rowCount())
-                if self.rules_table.item(r, 0) and self.rules_table.item(r, 0).text().strip()]
+        return self.rules_page.rules_items()
 
     def set_rules_items(self, items: list) -> None:
-        self.rules_table.setRowCount(0)
-        for text in items:
-            self._add_rule(text, edit=False)
+        self.rules_page.set_rules_items(items)
+        self.rules_page.store()
 
     def _add_rule(self, text: str = "", edit: bool = True) -> None:
-        r = self.rules_table.rowCount()
-        self.rules_table.insertRow(r)
-        self.rules_table.setItem(r, 0, QTableWidgetItem(text if isinstance(text, str) else ""))
-        if edit:
-            self.rules_table.setCurrentCell(r, 0)
-            self.rules_table.editItem(self.rules_table.item(r, 0))
-
-    def _remove_rule(self) -> None:
-        for r in sorted({i.row() for i in self.rules_table.selectedIndexes()}, reverse=True):
-            self.rules_table.removeRow(r)
+        self.rules_page.add_rule(text, edit)
+        self.rules_page.store()
 
     def _move_rule(self, step: int) -> None:
-        r = self.rules_table.currentRow()
-        if r < 0 or not 0 <= r + step < self.rules_table.rowCount():
-            return
-        items = [self.rules_table.item(i, 0).text() if self.rules_table.item(i, 0) else ""
-                 for i in range(self.rules_table.rowCount())]
-        items[r], items[r + step] = items[r + step], items[r]
-        self.set_rules_items(items)
-        self.rules_table.setCurrentCell(r + step, 0)
+        self.rules_page.move_rule(step)
 
     def _store_rules(self) -> None:
-        if self._rules_shown is not None and not self.read_only:
-            self.draft.rules[self._rules_shown] = items_to_rules(self.rules_items())
-
-    def _on_rules_prompt(self, _index: int) -> None:
-        self._store_rules()
-        name = self.rules_combo.currentData()
-        self._rules_shown = name
-        self.set_rules_items(rules_to_items(self.draft.rules.get(name, "")))
-        own = name in self.draft.own_prompts
-        self.rules_note.setText(f"This data pack has its own whole {name} prompt (prompts/{name}.md): rules "
-                                "here are used only if that prompt has a {{PACK_RULES}} slot." if own else "")
-
-    def _show_prompt(self) -> None:
-        from parameter_extractor.config import settings
-        name = self.rules_combo.currentData()
-        path = self.draft.folder / "prompts" / f"{name}.md"
-        path = path if path.is_file() else settings.PROMPTS_DIR / f"{name}.md"
-        dlg = QDialog(self)
-        dlg.setWindowTitle(f"The {name} prompt")
-        dlg.resize(820, 640)
-        lay = QVBoxLayout(dlg)
-        lay.addWidget(_hint("Read-only. {{PACK_RULES}} is where this data pack's rules go."))
-        text = QPlainTextEdit(path.read_text() if path.is_file() else "(no prompt)")
-        text.setReadOnly(True)
-        lay.addWidget(text)
-        lay.addWidget(QPushButton("Close", clicked=dlg.accept))
-        dlg.exec()
+        self.rules_page.store()
 
     # ---- Formulas -----------------------------------------------------------------------
 
@@ -2598,10 +2532,10 @@ class PackEditor(QDialog):
         for child in widget.findChildren(QWidget):
             if isinstance(child, (QLineEdit, QPlainTextEdit)):
                 child.setReadOnly(True)
-            elif child is self.rules_combo or (isinstance(child, QPushButton)
-                                               and child.text() in ("Show the shared prompt…", "Fit to window",
+            elif child in (self.rules_page.show_btn, self.rules_page.modules_btn) or (isinstance(child, QPushButton)
+                                               and child.text() in ("Fit to window",
                                                                     "Variable categories (all data packs)…")):
-                continue                       # choosing which rules to look at; fitting the map
+                continue                       # looking at things: a prompt, the map, other tabs
             elif isinstance(child, (QCheckBox, QComboBox, QPushButton)):
                 child.setEnabled(False)
         for lst in widget.findChildren(QListWidget):

@@ -161,6 +161,17 @@ def test_windows():
         editor._move_rule(-1)
         assert editor.rules_items() == ["One row per soil sample.", "Controls get no rows.",
                                         "A depth profile is one set."]
+        page = editor.rules_page                     # the shared prompt laid out: the rules box at its slot
+        widgets = [page.parts.itemAt(i).widget() for i in range(page.parts.count())]
+        at = widgets.index(page.rules_box)
+        assert 0 < at < len(widgets) - 1 and page.rules_title.text().count("added here")
+        assert page.prompt_list.item(0).text().endswith("3 rules")                     # the list's count follows
+        whole = page.assembled("structure_planner")
+        assert "Rules for this research area" in whole and "Controls get no rows." in whole and "{{" not in whole
+        page.select("metadata")
+        page.add_rule("Give the journal's full name.", edit=False)
+        page.select("structure_planner")
+        assert editor.rules_items()[1] == "Controls get no rows."                   # each prompt keeps its own
         problems = editor.run_check()
         assert any("normalize_species" in p.message for p in problems)              # needs the chemistry step
         with patch("parameter_extractor.gui.pack_windows.QMessageBox.warning", lambda *a, **k: None):
@@ -172,11 +183,16 @@ def test_windows():
         assert spec["trigger"] == {"always": True, "keywords": ["soil", "depth"]}
         assert d.rules["structure_planner"] == ("- One row per soil sample.\n- Controls get no rows.\n"
                                                 "- A depth profile is one set.\n")
+        assert d.rules["metadata"] == "- Give the journal's full name.\n"
         assert spec["parameters"][0].get("uncertainties") is True                   # untouched fields kept
 
         built_in = PackEditor(packs.available()["prebiotic_chemistry"].folder)
         assert built_in.read_only and not built_in.save_btn.isEnabled() and built_in.label_edit.isReadOnly()
-        assert built_in.rules_combo.isEnabled()                                     # its rules can be looked at
+        page = built_in.rules_page                                                  # its rules can be looked at
+        assert page.prompt_list.isEnabled() and page.show_btn.isEnabled()
+        page.select("structure_planner")                       # its own whole row prompt has no place for rules
+        assert page.note.text() and "aren't used" in page.note.text()
+        assert "Rules for this research area" not in page.assembled("structure_planner")
 
 
 def test_compound_and_analysis_tabs():
