@@ -23,9 +23,13 @@ _KEEP = {"pH", "DOI", "ID", "UV", "IR", "NMR", "HPLC", "MS", "GC", "LC", "pKa", 
 def readable(column: str, pack_id: str = "") -> str:
     """The column in words, without its unit: the pack's own label for it (an archive's 'Orbital Period [days]'),
     else read from the naming scheme."""
-    label = _template_labels(pack_id).get(column, "") if pack_id else ""
+    labels = _template_labels(pack_id) if pack_id else {}
+    label = labels.get(column, "")
     if label:
-        return re.sub(r"\s*\[[^\]]*\]\s*$", "", label).strip()
+        return _without_brackets(label)
+    derived = _derived(column, labels)
+    if derived:
+        return derived
     m = _COMPOUND.match(column)
     if m:
         role, name, phase, measure = m.groups()
@@ -80,3 +84,44 @@ def _template_labels(pack_id: str) -> Dict[str, str]:
         return dict(data.get("descriptions") or {})
     except Exception:                                 # noqa: BLE001
         return {}
+
+
+def _without_brackets(label: str) -> str:
+    """'Planet Mass [Jupiter Mass] Upper Unc.' -> 'Planet Mass Upper Unc.' (the unit is shown beside the value)."""
+    return re.sub(r"\s+", " ", re.sub(r"\s*\[[^\]]*\]", "", label)).strip()
+
+
+# an archive column made from a labelled one ('pl_orbincl' + 'mode1err1'): its parts in words
+_DERIVED = [(re.compile(r"^_?modal_flag$"), "has several solutions (modes)"),
+            (re.compile(r"^mode(\d+)err1$"), "mode {0}, upper unc."), (re.compile(r"^mode(\d+)err2$"), "mode {0}, lower unc."),
+            (re.compile(r"^mode(\d+)desc$"), "mode {0}, description"), (re.compile(r"^mode(\d+)$"), "mode {0}"),
+            (re.compile(r"^err1$"), "upper unc."), (re.compile(r"^err2$"), "lower unc."), (re.compile(r"^lim$"), "limit flag")]
+
+
+def _derived(column: str, labels: Dict[str, str]) -> str:
+    bases = [b for b in labels if len(b) >= 4 and column.startswith(b) and column != b]
+    if not bases:
+        return ""
+    base = max(bases, key=len)
+    rest = column[len(base):]
+    for pattern, words in _DERIVED:
+        m = pattern.match(rest)
+        if m:
+            return f"{_without_brackets(labels[base])}, {words.format(*m.groups())}"
+    return ""
+
+
+def unit(column: str, pack_id: str = "") -> str:
+    """The unit the pack's template label gives a column ('Orbital Period [days]' -> 'days'; a derived column its
+    base's, a flag or a description none) -- for showing beside a value that has no unit of its own."""
+    labels = _template_labels(pack_id) if pack_id else {}
+    label = labels.get(column, "")
+    if not label:
+        bases = [b for b in labels if len(b) >= 4 and column.startswith(b) and column != b]
+        if not bases or re.search(r"(flag|desc|lim)$", column):
+            return ""
+        label = labels[max(bases, key=len)]
+    if re.search(r"flag\b|limit", label, re.IGNORECASE):
+        return ""
+    m = re.search(r"\[([^\]]+)\]", label)
+    return m.group(1).strip() if m else ""

@@ -55,6 +55,12 @@ def test_column_names_in_words():
     assert readable("sampled_Gly-Gly_aq_%yield") == "Gly-Gly yield (measured, dissolved)"
     assert readable("initial_temperature_C") == "Initial temperature" and readable("initial_pH") == "Initial pH"
     assert readable("pl_orbper", "exoplanets") == "Orbital Period"            # the archive's own label
+    from parameter_extractor.column_labels import unit
+    assert unit("pl_orbper", "exoplanets") == "days" and unit("pl_orbperlim", "exoplanets") == ""
+    assert readable("pl_bmassjerr1", "exoplanets").endswith("Upper Unc.") and "[" not in readable("pl_bmassjerr1",
+                                                                                                   "exoplanets")
+    assert readable("pl_orbinclmode1err1", "exoplanets") == "Inclination, mode 1, upper unc."   # made from its base
+    assert unit("pl_orbinclmode1err1", "exoplanets") == "deg" and unit("pl_orbinclmode1desc", "exoplanets") == ""
     from parameter_extractor.gui.record_view import RecordView
     assert RecordView.title_for(packs.available()["prebiotic_chemistry"]) == "Experiment sets"
     exo = packs.available()["exoplanets"]
@@ -133,6 +139,42 @@ def test_the_experiment_sets_tab_shows_and_corrects():
         assert _cells(result.csv_path, "initial_temperature_C") == before
         assert "corrected" not in _values(view)["initial_temperature_C"].text(3)
         w.close()
+
+
+def test_exoplanet_rows_are_planets_or_fit_solutions():
+    """A planet with several fit solutions is a run ('planet') of 'fit solution' rows; a planet alone is a 'planet'."""
+    from types import SimpleNamespace
+    from parameter_extractor import record_tree
+    from parameter_extractor.column_order import ColumnOrder
+    from parameter_extractor.gui.record_view import RecordView
+    from parameter_extractor.ingestion.observations import Observation
+    packs.activate("exoplanets")
+    try:
+        obs = [Observation(full_id=f, set_id=f[:6], sample_id=f[6:], entry_number=int(f[6:]), column="pl_orbper",
+                           value=v, source=f"row {f}") for f, v in (("001001001", 10.0), ("001001002", 10.2),
+                                                                   ("001002001", 3.0))]
+        runs = {"001001001": "HD 1 b", "001001002": "HD 1 b"}
+        facets = record_tree.Facets(ColumnOrder(), record_tree.levels(runs=True))
+        assert [(lv.label, lv.alone) for lv in facets.levels][2:] == [("planet", ""), ("fit solution", "planet")]
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "x_record.json"
+            path.write_text(json.dumps(record_tree.to_json(record_tree.build(obs, facets, None, runs), facets,
+                                                           {"data_pack": "exoplanets"})))
+            view = RecordView()
+            view.show_result(SimpleNamespace(record_path=path, row_flags={}, run_dir=None, pack="exoplanets"))
+            paper = view.tree.topLevelItem(0)
+            s1, s2 = paper.child(0), paper.child(1)
+            assert s1.text(0).endswith("(2 fit solutions)") and s1.child(0).text(0).startswith("Planet 1")
+            assert s1.child(0).child(0).text(0).startswith("Fit solution 1")
+            assert s2.text(0).endswith("(1 planet)") and s2.child(0).text(0).startswith("Planet 1")
+            assert "3 rows" in view.intro.text()
+            view.tree.setCurrentItem(s2.child(0))
+            period = next(view.values.topLevelItem(i) for i in range(view.values.topLevelItemCount())
+                          if view.values.topLevelItem(i).data(0, 257) and view.values.topLevelItem(i).data(0, 257)[0]
+                          == "pl_orbper")
+            assert period.text(0) == "Orbital Period" and period.text(2) == "days" and period.text(3) == "this planet"
+    finally:
+        packs.activate("prebiotic_chemistry")
 
 
 def test_an_opened_older_run_gets_its_record():

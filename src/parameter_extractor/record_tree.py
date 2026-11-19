@@ -41,6 +41,7 @@ PAYLOAD = ("value", "unit", "origin", "source", "page", "quote", "quote_in_paper
 class Level:
     id: str
     label: str
+    alone: str = ""          # the row word for a row that isn't in a run ('planet'; 'fit solution' within one)
 
 
 def check_levels(levels: List[dict], limit: int = 0) -> List[str]:
@@ -80,7 +81,7 @@ def levels(pack=None, runs: bool = False) -> List[Level]:
         units = manifest.units or {}
         out.insert(2, Level(RUN, units.get("run", "run")))
         if units.get("run_row"):                     # what a row is within a run ('fit solution' of a planet)
-            out[-1] = Level(out[-1].id, units["run_row"])
+            out[-1] = Level(out[-1].id, units["run_row"], alone=out[-1].label)
     return out
 
 
@@ -364,7 +365,8 @@ def node_json(node: Node, facets) -> dict:
 def to_json(paper: Node, facets: Facets, about: Optional[dict] = None) -> dict:
     """The nested record: its format, the levels and facets it uses, then the paper with its sets and rows."""
     return {"format": FORMAT, "format_version": FORMAT_VERSION, **(about or {}),
-            "levels": [{"id": lv.id, "label": lv.label} for lv in facets.levels],
+            "levels": [{"id": lv.id, "label": lv.label, **({"alone": lv.alone} if lv.alone else {})}
+                       for lv in facets.levels],
             "facets": facets.described(),
             "paper": node_json(paper, facets)}
 

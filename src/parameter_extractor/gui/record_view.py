@@ -144,6 +144,9 @@ class RecordView(QWidget):
         self._facet_labels = {f["id"]: f.get("label", f["id"]) for f in self._data.get("facets", [])}
         self._facet_order = [f["id"] for f in self._data.get("facets", [])]
         self._words = [lv["label"] for lv in self._data.get("levels", [])]
+        levels = self._data.get("levels", [])
+        self._alone = levels[-1].get("alone", "") if levels else ""       # a row outside a run ('planet')
+        self._run_level = next((i for i, lv in enumerate(levels) if lv["id"] == "run"), None)
 
     def _make_record(self) -> dict:
         import csv
@@ -192,7 +195,20 @@ class RecordView(QWidget):
         return sum(len(flags.get(leaf.id, [])) for leaf in self._rows_under(node))
 
     def _word(self, node) -> str:
+        if not node.children and self._alone:          # a row: 'fit solution' within a run, 'planet' outside one
+            parent = self._parent.get(id(node))
+            if parent is None or parent.level != self._run_level:
+                return self._alone
         return self._words[node.level] if node.level < len(self._words) else "item"
+
+    def _rows_word(self, node) -> str:
+        """What the rows under a node are called: their one word, or 'row' when they're called differently."""
+        words = {self._word(leaf) for leaf in self._rows_under(node)}
+        return words.pop() if len(words) == 1 else "row"
+
+    def _rows_text(self, node) -> str:
+        n = len(self._rows_under(node))
+        return f"{n} {plural(self._rows_word(node), n)}"
 
     def _title(self) -> str:
         meta = self._paper.values.get("paper_title")
@@ -205,7 +221,7 @@ class RecordView(QWidget):
             paper = self._paper
             rows = self._rows_under(paper)
             set_word = self._words[1] if len(self._words) > 2 else ""
-            row_word = self._words[-1] if self._words else "row"
+            row_word = self._rows_word(paper)
             sets = paper.children if set_word else []
             top = QTreeWidgetItem([f"Paper: {self._title()}"])
             top.setData(0, NODE_ROLE, paper)
@@ -227,11 +243,10 @@ class RecordView(QWidget):
             current = add(top, paper) or current
             top.setExpanded(True)
             if sets:
-                what = (f"the paper, its {len(sets)} {plural(set_word, len(sets))} and their {len(rows)} "
-                        f"{plural(row_word, len(rows))}")
+                what = f"the paper, its {len(sets)} {plural(set_word, len(sets))} and their {self._rows_text(paper)}"
                 shared = f"A value recorded for {_a(set_word)} applies to every {row_word} in it."
             else:
-                what = f"the paper and its {len(rows)} {plural(row_word, len(rows))}"
+                what = f"the paper and its {self._rows_text(paper)}"
                 shared = ""
             self.intro.setText(
                 f"<b>{html.escape(_cap(what))}.</b> {html.escape(shared)} <span style='color:gray'>Select one to see "
@@ -248,8 +263,7 @@ class RecordView(QWidget):
         else:
             text = f"{word} {n}" + (f": {node.label}" if node.label else "")
         if node.children:
-            k = len(self._rows_under(node))
-            text += f"  ({k} {plural(self._words[-1], k)})"
+            text += f"  ({self._rows_text(node)})"
         flags = self._flags(node)
         if flags:
             text += f"  -- {flags} to check"
@@ -276,7 +290,7 @@ class RecordView(QWidget):
     def _recorded_for(self, holder, selected, payload: Optional[dict] = None) -> str:
         from parameter_extractor import record_tree
         n = len(self._rows_under(holder))
-        row_word = self._words[-1] if self._words else "row"
+        row_word = self._word(selected) if not selected.children else self._rows_word(holder)
         payload = payload or {}
         mine = self._seen(payload, selected)
         if not selected.children and record_tree._is_assumed(mine):
@@ -286,7 +300,7 @@ class RecordView(QWidget):
         if holder.level == 0:
             text = f"the paper (every {row_word})" if n > 1 else "the paper"
         else:
-            text = f"{'this' if holder is selected else 'its'} {self._word(holder)} (all {n} {plural(row_word, n)})"
+            text = f"{'this' if holder is selected else 'its'} {self._word(holder)} (all {self._rows_text(holder)})"
         assumed = payload.get(record_tree.ASSUMED)
         if assumed and selected.children:
             k = len([r for r in assumed["rows"] if r in {x.id for x in self._rows_under(selected)}])
@@ -306,13 +320,13 @@ class RecordView(QWidget):
             self.source.clear()
             word = _cap(self._word(node))
             n_rows = len(self._rows_under(node))
-            row_word = self._words[-1] if self._words else "row"
+            row_word = self._word(node) if not node.children else self._rows_word(node)
             if node.level == 0:
                 lead = f"<b>The paper</b>: {html.escape(self._title())}"
                 note = f"Values recorded once for the whole paper; select a {html.escape(self._words[1] if len(self._words) > 2 else row_word)} for more."
             elif node.children:
                 lead = f"<b>{html.escape(word)}</b>" + (f": {html.escape(node.label)}" if node.label else "")
-                note = (f"{n_rows} {plural(row_word, n_rows)}. Shown: what applies to all of them; what differs "
+                note = (f"{self._rows_text(node)}. Shown: what applies to all of them; what differs "
                         f"between them is listed under each {html.escape(row_word)}.")
             else:
                 lead = f"<b>{html.escape(word)}</b>" + (f": {html.escape(node.label)}" if node.label else "")
@@ -345,7 +359,8 @@ class RecordView(QWidget):
                     shown = _text(payload.get("value"))
                     if column == "set_independent_variable":     # a column's name: in words
                         shown = ", ".join(column_labels.readable(c.strip(), pack_id) for c in shown.split(",") if c)
-                    item = QTreeWidgetItem([name, shown, payload.get("unit", "") or "",
+                    shown_unit = payload.get("unit", "") or column_labels.unit(column, pack_id)   # archive labels
+                    item = QTreeWidgetItem([name, shown, shown_unit,
                                             self._recorded_for(holder, node, held)])
                     item.setData(0, VALUE_ROLE, (column, holder))
                     item.setToolTip(0, column)
@@ -402,7 +417,7 @@ class RecordView(QWidget):
         if p.get("confidence"):
             parts.append(f"<b>Confidence:</b> {html.escape(str(p['confidence']))}")
         from parameter_extractor import record_tree
-        row_word = self._words[-1] if self._words else "row"
+        row_word = self._word(node) if not node.children else self._rows_word(node)
         if record_tree._is_assumed(p):
             parts.append(f"<b>Assumed</b>: the paper doesn't state it for this {html.escape(row_word)}; the "
                          f"{html.escape(plural(row_word))} around it that do all give this value, so it is assumed "
@@ -443,7 +458,7 @@ class RecordView(QWidget):
         here = [leaf.id for leaf in self._rows_under(node) if leaf.id in shared]
         if len(shared) <= 1 or set(here) == set(shared):
             return shared
-        row_word = self._words[-1] if self._words else "row"
+        row_word = self._rows_word(holder)
         box = QMessageBox(self)
         box.setWindowTitle("Change a shared value")
         box.setText(f"This value is shared by {len(shared)} {plural(row_word, len(shared))}.")
