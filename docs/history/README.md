@@ -158,3 +158,4 @@ current month's file (start `YYYY-MM.md` in a new month), with one line here.
 - Branch levels-and-facets: runs for exoplanets (from labels) and drafted packs (measured); fuchida2014 settled (2026-11-18, Mickey)
 - Branch levels-and-facets: an exoplanet paper and a queue in the sets tab; row words, archive units and names (2026-11-18, Mickey)
 - Branch levels-and-facets: visual pass 1 -- the results area glides up, levels divided by tier, older runs' labels (2026-11-18, Mickey)
+- Branch levels-and-facets: visual pass 2 -- tier spacing in the sets tab (2026-11-19, Mickey)

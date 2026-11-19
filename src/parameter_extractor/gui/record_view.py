@@ -20,7 +20,7 @@ import json
 from pathlib import Path
 from typing import Dict, List, Optional
 
-from PySide6.QtCore import QPointF, QSize, Qt, Signal
+from PySide6.QtCore import QPointF, QRect, QSize, Qt, Signal
 from PySide6.QtGui import QColor, QFont, QPalette, QPen
 from PySide6.QtWidgets import (QAbstractItemView, QHeaderView, QInputDialog, QLabel, QMenu, QMessageBox, QSplitter,
                                QStyledItemDelegate, QTextBrowser, QTreeWidget, QTreeWidgetItem, QVBoxLayout, QWidget)
@@ -31,40 +31,95 @@ VALUE_ROLE = Qt.ItemDataRole.UserRole + 1
 MADE_FROM = "observations and row plan"
 TIER_ROLE = Qt.ItemDataRole.UserRole + 2      # how strongly an item is set off from the one above it (TIERS)
 
-# Spacing above an item and the line over it, by how high it stands (Mickey, 2026-11-18: levels divided more clearly
-# the higher they are; the rows themselves as before). The values panel's kind-of-value headings use the set's.
-TIERS = {"paper": (18, 2, 150), "set": (10, 1, 90), "run": (4, 1, 45), "row": (0, 0, 0), "note": (6, 0, 0)}
+# Space above and below an item's text and the line over it, by how high it stands (Mickey, 2026-11-18/19: levels
+# divided more clearly the higher they are; a level's name close to what it holds; the rows themselves as before).
+# tier: (space above the text, space below it, line width, line opacity). The values panel's headings use the set's.
+TIERS = {"paper": (14, 3, 2, 150), "set": (8, 1, 1, 90), "run": (4, 1, 1, 45), "row": (0, 0, 0, 0), "note": (6, 0, 0, 0)}
+# below the last row before a line: about the space between that line and the next item's text
+BLOCK_END = {"paper": 10, "set": 7, "run": 3}
+
+
+def _tier_name(index) -> str:
+    return index.sibling(index.row(), 0).data(TIER_ROLE) or "row"
+
+
+def _next_shown(view, index):
+    """The item drawn right below this one: its first child when it's open, else the next one at its level or
+    further up."""
+    first = index.sibling(index.row(), 0)
+    model = first.model()
+    if model.rowCount(first) and view.isExpanded(first):
+        return model.index(0, 0, first)
+    while first.isValid():
+        nxt = first.sibling(first.row() + 1, 0)
+        if nxt.isValid():
+            return nxt
+        first = first.parent()
+    return first
+
+
+def tier_pads(view, index) -> tuple:
+    """(space above the text, space below it) for a row: its tier's, and room before the line under it when the
+    next row starts a block."""
+    tier = _tier_name(index)
+    top, bottom = TIERS.get(tier, TIERS["row"])[:2]
+    if index.row() == 0 and not index.parent().isValid():
+        top = min(top, 2)                              # the tree's first row: nothing above it
+    nxt = _next_shown(view, index)
+    if nxt.isValid():
+        bottom += BLOCK_END.get(_tier_name(nxt), 0)
+    return top, bottom
 
 
 class TierDelegate(QStyledItemDelegate):
-    """Rows of a tree a little taller and with a line over them by their tier (TIER_ROLE on the first column): the
-    item's text stays centred, the line sits at the top of the row, across every column. The tree's first row has
-    no line (nothing above it to divide from)."""
+    """Rows of a tree a little taller and with a line over them by their tier (TIER_ROLE on the first column, TIERS):
+    the text sits in the row's middle part (more space above than below), the line at the top of the row across
+    every column, none over the tree's first row; a row before a new block keeps room above that block's line."""
 
-    def _tier(self, index):
-        first = index.sibling(index.row(), 0)
-        return TIERS.get(first.data(TIER_ROLE) or "row", TIERS["row"])
+    def __init__(self, view):
+        super().__init__(view)
+        self.view = view
 
     def sizeHint(self, option, index):
         size = super().sizeHint(option, index)
-        pad = self._tier(index)[0]
-        return QSize(size.width(), size.height() + pad) if pad else size
+        top, bottom = tier_pads(self.view, index)
+        return QSize(size.width(), size.height() + top + bottom)
 
     def paint(self, painter, option, index):
-        super().paint(painter, option, index)
-        _pad, width, alpha = self._tier(index)
+        from PySide6.QtWidgets import QStyle, QStyleOptionViewItem
+        top, bottom = tier_pads(self.view, index)
+        full = QRect(option.rect)
+        if option.state & QStyle.StateFlag.State_Selected:      # the whole row highlighted, padding too
+            group = QPalette.ColorGroup.Active if option.state & QStyle.StateFlag.State_Active \
+                else QPalette.ColorGroup.Inactive                  # grey when the list isn't focused, as the row
+            painter.fillRect(full, option.palette.color(group, QPalette.ColorRole.Highlight))
+        inner = QStyleOptionViewItem(option)
+        inner.rect = full.adjusted(0, top, 0, -bottom)
+        super().paint(painter, inner, index)
+        _t, _b, width, alpha = TIERS.get(_tier_name(index), TIERS["row"])
         if not width or (index.row() == 0 and not index.parent().isValid()):
             return
         color = QColor(option.palette.color(QPalette.ColorRole.Text))
         color.setAlpha(alpha)
         painter.save()
         painter.setPen(QPen(color, width))
-        y = option.rect.top() + width / 2
-        left = option.rect.left()
-        if index.column() == 0:                    # under the branch arrows too, from the tree's left edge
-            left = 0
-        painter.drawLine(QPointF(left, y), QPointF(option.rect.right() + 1, y))
+        y = full.top() + width / 2
+        left = 0 if index.column() == 0 else full.left()       # under the branch arrows too
+        painter.drawLine(QPointF(left, y), QPointF(full.right() + 1, y))
         painter.restore()
+
+
+class TierTree(QTreeWidget):
+    """A tree whose branch arrows sit level with their item's text (TierDelegate moves the text off the row's
+    middle)."""
+
+    def drawBranches(self, painter, rect, index):
+        top, bottom = tier_pads(self, index)
+        if self.selectionModel() is not None and self.selectionModel().isSelected(index):
+            group = QPalette.ColorGroup.Active if self.hasFocus() and self.isActiveWindow() \
+                else QPalette.ColorGroup.Inactive                  # the same colour as the rest of the row
+            painter.fillRect(rect, self.palette().color(group, QPalette.ColorRole.Highlight))
+        super().drawBranches(painter, rect.adjusted(0, top, 0, -bottom), index)
 
 
 def _cap(word: str) -> str:
@@ -103,7 +158,7 @@ class RecordView(QWidget):
         self.intro = QLabel(wordWrap=True, textFormat=Qt.TextFormat.RichText)
         v.addWidget(self.intro)
         split = QSplitter(Qt.Orientation.Horizontal)
-        self.tree = QTreeWidget()
+        self.tree = TierTree()
         self.tree.setHeaderHidden(True)
         self.tree.currentItemChanged.connect(lambda cur, _prev: self._show_node(cur))
         self.tree.setItemDelegate(TierDelegate(self.tree))
@@ -113,7 +168,7 @@ class RecordView(QWidget):
         rv.setContentsMargins(0, 0, 0, 0)
         self.heading = QLabel(wordWrap=True, textFormat=Qt.TextFormat.RichText)
         rv.addWidget(self.heading)
-        self.values = QTreeWidget()
+        self.values = TierTree()
         self.values.setHeaderLabels(["Value", "Amount", "Unit", "Recorded for"])
         self.values.setRootIsDecorated(False)
         self.values.setItemDelegate(TierDelegate(self.values))
