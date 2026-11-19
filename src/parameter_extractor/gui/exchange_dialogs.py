@@ -50,12 +50,12 @@ def explain_export(parent, folder: Path, folders: List[Path], problems: List[tup
     lines = []
     if folders:
         lines.append(f"{len(folders)} package(s) written to {folder}:\n" + "\n".join(f"  • {f.name}" for f in folders))
-        lines.append("Give a package folder to the assistant you use -- point an agent at the folder, or open its "
-                     "INSTRUCTIONS.md in a chat with the files. It answers the requests in order and writes its answers "
-                     "into the package's answers/ folder, with answers/about.json naming the model.\n\n"
-                     "Then: File > Import answers from another assistant…\n\n"
-                     "Nothing was sent anywhere. Using your assistant is under its provider's terms; the paper's text "
-                     "and images go to that provider when you share them.")
+        from parameter_extractor.exchange import CAVEATS
+        lines.append("Give a package folder to the assistant you use -- point an agent at the folder (its "
+                     "INSTRUCTIONS.md says what to do). It answers the requests in order and writes its answers into "
+                     "the package's answers/ folder, with answers/about.json naming the model. Nothing was sent "
+                     "anywhere.\n\nThen: File > Import answers from another assistant…")
+        lines.append("Good to know:\n" + "\n".join(f"  • {c}" for c in CAVEATS))
     if problems:
         lines.append("Not prepared:\n" + "\n".join(f"  • {name}: {why}" for name, why in problems))
     box = QMessageBox(QMessageBox.Icon.Information if folders else QMessageBox.Icon.Warning,

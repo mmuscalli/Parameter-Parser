@@ -42,6 +42,7 @@ PACKAGE_FILE = "package.json"
 INSTRUCTIONS_FILE = "INSTRUCTIONS.md"
 ABOUT_FILE = "about.json"
 ROW_PLAN_MARK = "[[ROW PLAN]]"
+ROW_PLAN_ANSWER_MARK = "[[ROW PLAN AS ANSWERED]]"
 FORMAT = 1
 NAMES = {"structure_planner": "row-plan", "metadata": "paper-details"}
 _lock = threading.Lock()
@@ -79,11 +80,13 @@ def _safe(name: str) -> str:
 def answer(ctx, stage: str, system_prompt: str, content, response_model):
     """api_client's stand-in for a request in an exchange run: export records it (the row plan gets a stand-in
     answer so the steps are made too); import answers it from the package."""
+    from parameter_extractor import api_client
     cfg = ctx.config
     folder = Path(cfg.exchange_dir)
+    name = (getattr(api_client._streamed, "request_name", "") or stage).removesuffix(".retry")
     if cfg.exchange_mode == "export":
-        return _record(ctx, folder, stage, system_prompt, content, response_model)
-    return _answer_from_package(folder, stage, response_model)
+        return _record(ctx, folder, stage, name, system_prompt, content, response_model)
+    return _answer_from_package(folder, stage, name, response_model)
 
 
 def _texts_and_images(folder: Path, content):
@@ -117,7 +120,15 @@ def _texts_and_images(folder: Path, content):
 PAPER_MARK = "[[THE PAPER'S TEXT: read it in paper.txt]]"
 
 
-def _record(ctx, folder: Path, stage: str, system_prompt: str, content, response_model):
+def _stand_in_plan():
+    """The row plan the export answers itself with (the steps and figures are made with it, then its place marked)."""
+    from parameter_extractor.schemas.structure_plan import StructurePlan
+    return StructurePlan.model_validate({"kind": "experimental", "n_rows": 1, "excluded": [], "notes": "",
+                                         "sets": [{"set": "(a set)", "type": "Independent", "varies": "",
+                                                   "src": "", "samples": [{"label": "(a sample)"}]}]})
+
+
+def _record(ctx, folder: Path, stage: str, name: str, system_prompt: str, content, response_model):
     folder.mkdir(parents=True, exist_ok=True)
     texts, images = _texts_and_images(folder, content)
     paper = getattr(getattr(ctx, "paper", None), "text", "") or ""
@@ -125,27 +136,28 @@ def _record(ctx, folder: Path, stage: str, system_prompt: str, content, response
         with _lock:
             (folder / "paper.txt").write_text(paper)
         texts = [t.replace(paper, PAPER_MARK) for t in texts]
-    request = {"stage": stage, "instructions": system_prompt, "texts": texts, "images": images,
+    whole = _stand_in_plan().model_dump_json(indent=2)  # a figure's suggestions get the plan as answered
+    texts = [t.replace(whole, ROW_PLAN_ANSWER_MARK) for t in texts]
+    request = {"stage": stage, "name": name, "instructions": system_prompt, "texts": texts, "images": images,
                "schema": response_model.model_json_schema(by_alias=True)}
     with _lock:
-        _recorded.setdefault(str(folder), {})[stage] = request
+        _recorded.setdefault(str(folder), {})[name] = request
     if stage == "structure_planner":                 # a stand-in plan: the steps that need one are made too
-        from parameter_extractor.schemas.structure_plan import StructurePlan
-        plan = StructurePlan.model_validate({"kind": "experimental", "n_rows": 1, "excluded": [], "notes": "",
-                                             "sets": [{"set": "(a set)", "type": "Independent", "varies": "",
-                                                       "src": "", "samples": [{"label": "(a sample)"}]}]})
+        plan = _stand_in_plan()
         return SimpleNamespace(id="export-plan", stop_reason="end_turn", parsed_output=plan,
                                content=[SimpleNamespace(type="text", text=plan.model_dump_json(by_alias=True))],
                                usage=SimpleNamespace(input_tokens=0, output_tokens=0))
     raise RequestsRecorded(folder, [stage])
 
 
-def _answer_from_package(folder: Path, stage: str, response_model):
+def _answer_from_package(folder: Path, stage: str, name: str, response_model):
     manifest = json.loads((folder / PACKAGE_FILE).read_text())
-    entry = next((r for r in manifest["requests"] if r["stage"] == stage), None)
-    if entry is None and stage == "figure_planner":
-        raise PipelineError("Figure suggestions aren't part of a package for another assistant: digitize the figure "
-                            "by hand (its axes and series), or skip it.")
+    entry = next((r for r in manifest["requests"] if r.get("name", r["stage"]) == name), None) or \
+        next((r for r in manifest["requests"] if r["stage"] == stage and stage != "figure_planner"), None)
+    if stage == "figure_planner" and (entry is None or not (folder / entry["answer"]).is_file()):
+        raise PipelineError("The package has no suggestions for this figure (its assistant didn't answer that "
+                            "request, or the figure wasn't in it): digitize it by hand -- its axes and series -- or "
+                            "skip it.")
     if entry is None:
         raise PipelineError(f"The package in {folder} has no request for the step '{stage}' this paper needs: export "
                             f"the paper again (the data pack or its settings may have changed).")
@@ -223,18 +235,27 @@ def export_package(item, config, out_dir, on_progress=None) -> Path:
     patches.append(patch.object(optional.StageSpec, "triggered", triggered))
     for p in patches:
         p.start()
+    figures = []
     try:
-        pipeline.run_pipeline(item, cfg, on_progress=on_progress)
-    except RequestsRecorded:
-        pass
+        ex = pipeline.read_paper(item, cfg, on_progress=on_progress)
+        try:
+            pipeline.extract_steps(ex)
+        except RequestsRecorded:
+            pass
+        for fig in ex.figures:                       # suggestions for digitizing each figure: optional answers
+            try:
+                pipeline.plan_figure(ex, fig)
+            except RequestsRecorded:
+                figures.append(fig)
     finally:
         for p in patches:
             p.stop()
     requests = _recorded.pop(str(folder), {})
+    about = {f"figure_planner.fig{f.tag}": f for f in figures}
     if "structure_planner" not in requests:
         shutil.rmtree(folder, ignore_errors=True)
         raise PipelineError("The paper couldn't be prepared for another assistant: no requests were made.")
-    _write_package(folder, item, config, requests, conditional, work)
+    _write_package(folder, item, config, requests, conditional, work, about)
     shutil.rmtree(work, ignore_errors=True)
     return folder
 
@@ -245,28 +266,42 @@ def _condition(spec) -> str:
             f'{{"skipped": true}} as its answer.')
 
 
-def _write_package(folder: Path, item, config, requests: Dict[str, dict], conditional: Dict[str, str], work: Path):
+def _write_package(folder: Path, item, config, requests: Dict[str, dict], conditional: Dict[str, str], work: Path,
+                   figures: Optional[dict] = None):
     from parameter_extractor import __version__, packs
     from parameter_extractor.pipeline import stage_label, stage_order
     from parameter_extractor.schemas.structure_plan import ID_NOTE
     order = stage_order()
-    stages = sorted(requests, key=lambda s: order.index(s) if s in order else len(order))
+    figures = figures or {}
+    stages = sorted(requests, key=lambda s: (s in figures, order.index(requests[s]["stage"])
+                                             if requests[s]["stage"] in order else len(order), s))
     (folder / "requests").mkdir(exist_ok=True)
     (folder / "answers").mkdir(exist_ok=True)
     entries = []
-    for n, stage in enumerate(stages, 1):
-        r = requests[stage]
-        name = f"{n:02d}-{NAMES.get(stage, stage.replace('_', '-'))}"
-        label = "Plan the rows" if stage == "structure_planner" else stage_label(stage)
-        uses_plan = any(ROW_PLAN_MARK in t for t in r["texts"])
+    for n, key in enumerate(stages, 1):
+        r = requests[key]
+        stage = r["stage"]
+        fig = figures.get(key)
+        name = f"{n:02d}-figure-{fig.tag}" if fig else \
+            f"{n:02d}-{NAMES.get(stage, stage.replace('_', '-'))}"
+        label = (f"Suggestions for digitizing {fig.figure_id} (page {fig.page_label or fig.page})" if fig else
+                 "Plan the rows" if stage == "structure_planner" else stage_label(stage))
+        uses_plan = any(ROW_PLAN_MARK in t or ROW_PLAN_ANSWER_MARK in t for t in r["texts"])
         parts = [f"# Request {n:02d}: {label}", "",
                  f"**Write your answer to:** `answers/{name}.json` -- ONE JSON object in the answer format at the end.",
                  ""]
         if stage in conditional:
             parts += [f"**Conditional.** {conditional[stage]}", ""]
-        if uses_plan:
+        if fig:
+            parts += ["**Optional.** Suggestions for digitizing this figure in the app (which columns its axes and "
+                      "series go into); the app also uses them to digitize simple plots by itself. Skip it if you "
+                      "can't answer it -- the figure is then digitized by hand.", ""]
+        if any(ROW_PLAN_MARK in t for t in r["texts"]):
             parts += [f"**Uses your row plan.** Where the task says `{ROW_PLAN_MARK}`, use your answer to request 01 "
                       "(see INSTRUCTIONS.md: the sets numbered S1, S2 ..., their samples S1.1, S1.2 ...).", ""]
+        if any(ROW_PLAN_ANSWER_MARK in t for t in r["texts"]):
+            parts += [f"**Uses your row plan as you wrote it.** Where the task says `{ROW_PLAN_ANSWER_MARK}`, put "
+                      "your answer to request 01 exactly as you wrote it.", ""]
         parts += ["## Instructions", "", r["instructions"].strip(), "", "## Inputs", "",
                   "- The paper's text: `paper.txt`" if (folder / "paper.txt").is_file() else "- (no separate text)"]
         parts += [f"- Image: `{img}`" + (f" -- {lab}" if lab else "") for img, lab in r["images"]]
@@ -275,9 +310,9 @@ def _write_package(folder: Path, item, config, requests: Dict[str, dict], condit
         parts += ["", "## Task", ""] + task + ["", "## Answer format (JSON Schema)", "", "```json",
                                                 json.dumps(r["schema"], indent=1, ensure_ascii=False), "```", ""]
         (folder / "requests" / f"{name}.md").write_text("\n".join(parts))
-        entries.append({"n": n, "stage": stage, "label": label, "request": f"requests/{name}.md",
-                        "answer": f"answers/{name}.json", "conditional": stage in conditional,
-                        "uses_row_plan": uses_plan})
+        entries.append({"n": n, "stage": stage, "name": key, "label": label, "request": f"requests/{name}.md",
+                        "answer": f"answers/{name}.json", "conditional": stage in conditional and not fig,
+                        "figure": fig.figure_id if fig else "", "uses_row_plan": uses_plan})
     pdf = None
     source = Path(str(item))
     if source.suffix.lower() == ".pdf" and source.is_file():
@@ -316,7 +351,9 @@ def _instructions(entries: List[dict], pack, id_note: str) -> str:
         "   ```", "",
         f"   {id_note}", "",
         "4. A request marked **Conditional** applies only to some papers: answer it if its condition fits this paper "
-        '(your row plan), else write `{"skipped": true}` as its answer.',
+        '(your row plan), else write `{"skipped": true}` as its answer. Requests marked **Optional** (suggestions '
+        "for digitizing a figure) come last: answer them if you can read the figure's image; the app's import "
+        "doesn't need them.",
         f"5. Last, write `answers/{ABOUT_FILE}` saying who answered:", "",
         "   ```json",
         '   {"model": "<the model\'s name and version>", "provider": "<who provides it>", '
@@ -327,11 +364,28 @@ def _instructions(entries: List[dict], pack, id_note: str) -> str:
         "fix it and import again.", "",
         "## The requests", ""]
     for e in entries:
-        notes = [x for x, on in (("conditional", e["conditional"]), ("uses your row plan", e["uses_row_plan"])) if on]
+        notes = [x for x, on in (("conditional", e["conditional"]), ("optional", bool(e.get("figure"))),
+                                 ("uses your row plan", e["uses_row_plan"])) if on]
         lines.append(f"- `{e['request']}` -> `{e['answer']}`: {e['label']}" + (f" ({', '.join(notes)})" if notes else ""))
     lines += ["", f"In this research area one row of the dataset is one {units.get('sample', 'sample')}, and a set "
-                  f"is one {units.get('set', 'set')}.", ""]
+                  f"is one {units.get('set', 'set')}.", "",
+              "## For the person using this package", "",
+              *[f"- {c}" for c in CAVEATS], ""]
     return "\n".join(lines)
+
+
+# what the person is told with every package (the app's export message, INSTRUCTIONS.md)
+CAVEATS = [
+    "Best with an assistant that can read and write the files in this folder and look at images (an agent "
+    "with file access). A chat-only assistant may struggle with requests this long and exact.",
+    "The app hasn't been tried with your model or assistant and can't vouch for its answers: on import it checks only "
+    "that each answer fits its format. Review the results against the paper -- you can ask your assistant to check "
+    "them too.",
+    "Each step is answered once (the app's own runs can read a step several times and vote).",
+    "Good for trying a few papers or tuning a data pack without a full-cost run.",
+    "Using your assistant is under its provider's terms; the paper's text and images go to that provider when you "
+    "share this folder with it.",
+]
 
 
 # ---- import --------------------------------------------------------------------------------------------------------
@@ -354,8 +408,7 @@ def import_config(folder, config):
     settings = manifest.get("settings", {})
     return replace(config, exchange_dir=Path(folder), exchange_mode="import", pack=manifest["data_pack"], passes=1,
                    batch_mode=False, prompt_caching=False, shared_instructions=False, equations_to_latex=False,
-                   auto_digitize_figures=False,
-                   handoff_dir=None, rows_from_text=settings.get("rows_from_text", False),
+                          handoff_dir=None, rows_from_text=settings.get("rows_from_text", False),
                    paper_prefix=settings.get("paper_prefix", "") or getattr(config, "paper_prefix", ""))
 
 
@@ -370,7 +423,7 @@ def missing_answers(folder) -> List[str]:
     against the row plan's sets)."""
     folder = Path(folder)
     return [Path(r["answer"]).stem for r in read_package(folder)["requests"]
-            if not r.get("conditional") and not (folder / r["answer"]).is_file()]
+            if not r.get("conditional") and not r.get("figure") and not (folder / r["answer"]).is_file()]
 
 
 def import_package(folder, config, on_progress=None, cancel_event=None):

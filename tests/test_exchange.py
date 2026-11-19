@@ -34,6 +34,8 @@ def _answer_like_the_reference(folder: Path, skip_conditional: bool = True) -> N
     """The recorded answers of the reference run, as another assistant would have written them."""
     from parameter_extractor.stages.conditions_migration import conditions_from_methodology
     for r in exchange.read_package(folder)["requests"]:
+        if r["figure"]:                                      # suggestions for figures: optional, not answered
+            continue
         src = REPLAY_DIR / f"{r['stage']}.output.json"
         if r["stage"] == "experimental_conditions":        # recorded under the step's earlier name
             text = json.dumps(conditions_from_methodology(json.loads((REPLAY_DIR / "methodology.output.json")
@@ -63,8 +65,9 @@ def test_export_writes_a_package_nothing_is_sent():
             text = (folder / r["request"]).read_text()
             assert r["answer"] in text and "Answer format (JSON Schema)" in text
             assert "(a set)" not in text and "(a sample)" not in text           # the stand-in plan never shows
-            assert (exchange.ROW_PLAN_MARK in text) == r["uses_row_plan"]
-            assert exchange.PAPER_MARK in text or r["stage"] == "metadata"      # the paper once, in paper.txt
+            marks = exchange.ROW_PLAN_MARK in text or exchange.ROW_PLAN_ANSWER_MARK in text
+            assert marks == r["uses_row_plan"]
+            assert exchange.PAPER_MARK in text or r["stage"] in ("metadata", "figure_planner")   # once, in paper.txt
             assert not BRANDS.search(text)
         assert all(r["uses_row_plan"] for r in m["requests"][2:])
         guide = (folder / exchange.INSTRUCTIONS_FILE).read_text()
@@ -83,7 +86,8 @@ def test_import_reproduces_the_run_and_says_who_answered():
             exchange.import_package(folder, _config(Path(tmp) / "imp"))
             raise AssertionError("imported without answers")
         except AnswersNeededError as e:
-            assert set(e.keys) == {Path(r["answer"]).stem for r in m["requests"] if not r["conditional"]}
+            assert set(e.keys) == {Path(r["answer"]).stem for r in m["requests"]
+                                   if not r["conditional"] and not r["figure"]}
         _answer_like_the_reference(folder)
         broken = folder / m["requests"][1]["answer"]                    # an answer that doesn't fit its format
         good = broken.read_text()
@@ -102,6 +106,37 @@ def test_import_reproduces_the_run_and_says_who_answered():
         flags = [f for f in result.paper_flags if f.kind == "other_assistant"]
         assert flags and "example-model 2" in flags[0].message
         assert json.loads((result.run_dir / "run_config.json").read_text())["config"]["exchange_dir"] == str(folder)
+
+
+def test_figures_are_optional_requests():
+    """Each figure the paper has: an optional request for digitizing suggestions (after the steps), answered from the
+    package on import when its assistant answered it, else 'digitize it by hand'."""
+    riggi = Path(__file__).resolve().parents[2] / "Paper Files" / "Test Paper List" / "Riggi2023.pdf"
+    if not riggi.is_file():
+        print(f"SKIP: needs {riggi}"); return
+    from parameter_extractor.errors import PipelineError
+    from parameter_extractor.schemas.figures import FigurePlan
+    with tempfile.TemporaryDirectory() as tmp:
+        folder = exchange.export_package(riggi, _no_key(Path(tmp) / "runs"), Path(tmp) / "out")
+        m = exchange.read_package(folder)
+        figures = [r for r in m["requests"] if r["figure"]]
+        steps = [r for r in m["requests"] if not r["figure"]]
+        assert figures and m["requests"][-len(figures):] == figures and not any(r["conditional"] for r in figures)
+        text = (folder / figures[0]["request"]).read_text()
+        assert exchange.ROW_PLAN_ANSWER_MARK in text and "(a set)" not in text and "**Optional.**" in text
+        assert "images/" in text and Path(figures[0]["request"]).name.startswith(f"{figures[0]['n']:02d}-figure-")
+        missing = exchange.missing_answers(folder)
+        assert set(missing) == {Path(r["answer"]).stem for r in steps if not r["conditional"]}   # figures: never
+        answer = FigurePlan(figure_id=figures[0]["figure"], is_data_plot=False, plot_kind="other",
+                            duplicates_tabulated_data=False)
+        (folder / figures[0]["answer"]).write_text(answer.model_dump_json(by_alias=True))
+        got = exchange._answer_from_package(folder, "figure_planner", figures[0]["name"], FigurePlan)
+        assert got.parsed_output.figure_id == figures[0]["figure"]
+        try:
+            exchange._answer_from_package(folder, "figure_planner", figures[1]["name"], FigurePlan)
+            raise AssertionError("an unanswered figure gave suggestions")
+        except PipelineError as e:
+            assert "digitize it by hand" in str(e)
 
 
 def test_cli_and_window():

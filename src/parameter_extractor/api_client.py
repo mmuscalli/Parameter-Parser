@@ -640,6 +640,7 @@ def call_structured(
     model = "claude-code-handoff" if ctx.config.handoff_dir else _exchange_model(ctx) if ctx.config.exchange_dir \
         else ctx.config.model_for(stage)
     name = (audit_name or stage) + (getattr(_streamed, "pass_suffix", "") or "")   # '.pass2' with several passes
+    _streamed.request_name = name          # which request it is (a figure's suggestions: exchange.py's packages)
     fingerprint = request_fingerprint(model, system_prompt, user_content, cached_prefix, image_paths, response_model)
     if getattr(ctx.config, "resume_from", None):        # an earlier run's saved answer (resume.py, W1)
         from parameter_extractor import resume
