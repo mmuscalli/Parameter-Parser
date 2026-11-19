@@ -150,6 +150,11 @@ def test_cli_and_window():
     texts = [a.text() for a in w.menuBar().actions()[0].menu().actions()]
     assert "Export requests for another assistant…" in texts and "Import answers from another assistant…" in texts
     assert not any(BRANDS.search(t) for t in texts)
+    from PySide6.QtWidgets import QApplication
+    from parameter_extractor.gui.exchange_dialogs import copy_paths
+    with tempfile.TemporaryDirectory() as tmp:                 # the new package's path, ready to paste
+        assert copy_paths([Path(tmp) / "eder1994"]) == str((Path(tmp) / "eder1994").resolve())
+        assert QApplication.clipboard().text() == str((Path(tmp) / "eder1994").resolve())
     w.close()
 
 

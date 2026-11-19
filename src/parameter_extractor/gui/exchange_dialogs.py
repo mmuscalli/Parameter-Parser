@@ -8,9 +8,9 @@ import threading
 from pathlib import Path
 from typing import List
 
-from PySide6.QtCore import QObject, QUrl, Signal
+from PySide6.QtCore import QObject, Qt, QUrl, Signal
 from PySide6.QtGui import QDesktopServices
-from PySide6.QtWidgets import QMessageBox
+from PySide6.QtWidgets import QDialog, QHBoxLayout, QLabel, QLineEdit, QPushButton, QVBoxLayout
 
 
 class ExportTask(QObject):
@@ -45,23 +45,61 @@ class ExportTask(QObject):
         self.finished.emit(self.folders, self.problems)
 
 
-def explain_export(parent, folder: Path, folders: List[Path], problems: List[tuple]) -> None:
-    """Where the packages are and what to do next; Open folder."""
-    lines = []
-    if folders:
-        lines.append(f"{len(folders)} package(s) written to {folder}:\n" + "\n".join(f"  • {f.name}" for f in folders))
+def copy_paths(folders: List[Path]) -> str:
+    """The package folders' full paths, one a line, put on the clipboard (Mickey, 2026-11-19); returns them."""
+    from PySide6.QtWidgets import QApplication
+    text = "\n".join(str(Path(f).resolve()) for f in folders)
+    if text:
+        QApplication.clipboard().setText(text)
+    return text
+
+
+class ExportDone(QDialog):
+    """Where the packages are (each path selectable, with Copy; all of them already on the clipboard), what to do
+    next, what to know; Open folder."""
+
+    def __init__(self, folder: Path, folders: List[Path], problems: List[tuple], parent=None):
         from parameter_extractor.exchange import CAVEATS
-        lines.append("Give a package folder to the assistant you use -- point an agent at the folder (its "
-                     "INSTRUCTIONS.md says what to do). It answers the requests in order and writes its answers into "
-                     "the package's answers/ folder, with answers/about.json naming the model. Nothing was sent "
-                     "anywhere.\n\nThen: File > Import answers from another assistant…")
-        lines.append("Good to know:\n" + "\n".join(f"  • {c}" for c in CAVEATS))
-    if problems:
-        lines.append("Not prepared:\n" + "\n".join(f"  • {name}: {why}" for name, why in problems))
-    box = QMessageBox(QMessageBox.Icon.Information if folders else QMessageBox.Icon.Warning,
-                      "Requests for another assistant", "\n\n".join(lines), parent=parent)
-    open_btn = box.addButton("Open folder", QMessageBox.ButtonRole.ActionRole) if folders else None
-    box.addButton(QMessageBox.StandardButton.Close)
-    box.exec()
-    if open_btn is not None and box.clickedButton() is open_btn:
-        QDesktopServices.openUrl(QUrl.fromLocalFile(str(folder)))
+        super().__init__(parent)
+        self.setWindowTitle("Requests for another assistant")
+        self.setMinimumWidth(640)
+        v = QVBoxLayout(self)
+        copy_paths(folders)
+        if folders:
+            head = QLabel(f"{len(folders)} package{'s' if len(folders) > 1 else ''} written -- "
+                          f"{'their paths are' if len(folders) > 1 else 'its path is'} on the clipboard, ready to "
+                          f"paste where your assistant asks for a folder.", wordWrap=True)
+            head.setStyleSheet("font-weight: bold;")
+            v.addWidget(head)
+            self.path_edits = []
+            for f in folders:
+                row = QHBoxLayout()
+                edit = QLineEdit(str(Path(f).resolve()), readOnly=True)
+                edit.setCursorPosition(0)
+                self.path_edits.append(edit)
+                row.addWidget(edit, 1)
+                row.addWidget(QPushButton("Copy", clicked=lambda _c=False, e=edit: copy_paths([Path(e.text())])))
+                v.addLayout(row)
+            v.addWidget(QLabel("Give the folder to the assistant you use -- point an agent at it (its INSTRUCTIONS.md "
+                               "says what to do). It answers the requests in order and writes its answers into the "
+                               "package's answers/ folder, with answers/about.json naming the model. Nothing was sent "
+                               "anywhere.\n\nThen: File > Import answers from another assistant…", wordWrap=True))
+            notes = QLabel("<b>Good to know</b><ul style='margin-left: -20px'>" +
+                           "".join(f"<li>{c}</li>" for c in CAVEATS) + "</ul>", wordWrap=True,
+                           textFormat=Qt.TextFormat.RichText)
+            notes.setStyleSheet("color: palette(placeholder-text);")
+            v.addWidget(notes)
+        if problems:
+            v.addWidget(QLabel("Not prepared:\n" + "\n".join(f"  • {n}: {why}" for n, why in problems), wordWrap=True))
+        buttons = QHBoxLayout()
+        if folders:
+            buttons.addWidget(QPushButton("Open folder", clicked=lambda: QDesktopServices.openUrl(
+                QUrl.fromLocalFile(str(folders[0] if len(folders) == 1 else folder)))))
+        buttons.addStretch(1)
+        close = QPushButton("Close", clicked=self.accept, default=True)
+        buttons.addWidget(close)
+        v.addLayout(buttons)
+
+
+def explain_export(parent, folder: Path, folders: List[Path], problems: List[tuple]) -> None:
+    ExportDone(folder, folders, problems, parent).exec()
