@@ -404,7 +404,9 @@ class PackEditor(QDialog):
         self.tabs = QTabWidget()
         # the order says how a pack is put together (2026-11-09): what happens to a paper; the pack's own parts;
         # the shared modules it links and this pack's settings for them; the check
-        tabs = (("Overview", self._overview_tab(), "What happens to each paper with this data pack: every request to "
+        tabs = (("Map", self._map_tab(), "This data pack as a picture: the steps that read a paper, the kinds of value "
+                 "they fill, and the levels those are recorded for. Hover over a step or a kind of value to follow it."),
+                ("Overview", self._overview_tab(), "What happens to each paper with this data pack: every request to "
                  "the AI model (and where it comes from) and every calculation done on your computer."),
                 ("General", self._general_tab(), "This data pack's name, row words, built-in steps and calculations."),
                 ("Structure", self._structure_tab(), "How this data pack's data is organised: a paper, its groups "
@@ -867,6 +869,27 @@ class PackEditor(QDialog):
         return self.structure_page
 
     # ---- Overview (what happens to each paper) and module settings (2026-11-09) ------------------------------------
+
+    def _map_tab(self) -> QWidget:
+        """The pack's structure as a picture (structure_canvas.py), as saved -- Save updates it."""
+        from parameter_extractor.gui.structure_canvas import StructureCanvas
+        w = QWidget()
+        v = QVBoxLayout(w)
+        bar = QHBoxLayout()
+        bar.addWidget(_hint("As saved -- Save updates it. Hover over a step or a kind of value to follow it; pinch or "
+                            "Ctrl+scroll to zoom, drag to move."), 1)
+        self.map_canvas = StructureCanvas()
+        bar.addWidget(QPushButton("Fit to window", clicked=lambda: self.map_canvas.fit()))
+        v.addLayout(bar)
+        v.addWidget(self.map_canvas, 1)
+        self._refresh_map()
+        return w
+
+    def _refresh_map(self) -> None:
+        try:
+            self.map_canvas.show_pack(packs.Pack(self.draft.folder))
+        except Exception:                           # a pack that can't load as saved: the Check tab says why
+            self.map_canvas.setScene(None)
 
     def _overview_tab(self) -> QWidget:
         from PySide6.QtWidgets import QTextBrowser
@@ -2357,6 +2380,7 @@ class PackEditor(QDialog):
             return False
         self.setWindowTitle(f"Data pack: {self.draft.manifest.get('label', '')}")
         self._refresh_overview()
+        self._refresh_map()
         self._fill_builtin_list()           # modules linked or unlinked: their built-in steps
         self.saved.emit(self.draft.manifest.get("id", ""))
         return True
@@ -2403,8 +2427,8 @@ class PackEditor(QDialog):
             if isinstance(child, (QLineEdit, QPlainTextEdit)):
                 child.setReadOnly(True)
             elif child is self.rules_combo or (isinstance(child, QPushButton)
-                                               and child.text() == "Show the shared prompt…"):
-                continue                       # choosing which rules to look at
+                                               and child.text() in ("Show the shared prompt…", "Fit to window")):
+                continue                       # choosing which rules to look at; fitting the map
             elif isinstance(child, (QCheckBox, QComboBox, QPushButton)):
                 child.setEnabled(False)
         for lst in widget.findChildren(QListWidget):

@@ -48,6 +48,38 @@ def test_the_structure_of_the_apps_packs():
     packs.activate("prebiotic_chemistry")
 
 
+def test_hovering_highlights_a_step_and_what_it_fills():
+    from parameter_extractor.gui.structure_canvas import FADED, KEY, TAGS, StructureCanvas
+    pack = packs.activate("prebiotic_chemistry")
+    canvas = StructureCanvas(pack)
+    scene = canvas.scene()
+    key = "step:metadata"
+    related = scene.relations[key]
+    assert "kind:metadata" in related
+    canvas.highlight(key)
+    for item in scene.items():
+        own, tags = item.data(KEY), item.data(TAGS)
+        if own == key or own in related:
+            assert item.opacity() == 1.0
+        elif tags and key in tags:
+            assert item.opacity() == 1.0                                   # its lines stay
+        elif own or tags:
+            assert item.opacity() == FADED                                 # everything else fades
+    canvas.highlight(None)
+    assert all(item.opacity() == 1.0 for item in scene.items())
+
+
+def test_the_pack_editor_has_a_map():
+    from parameter_extractor.gui.pack_windows import PackEditor
+    import shutil
+    with tempfile.TemporaryDirectory() as tmp:
+        folder = Path(tmp) / "mine"
+        shutil.copytree(packs.available()["exoplanets"].folder, folder)
+        editor = PackEditor(folder)
+        assert editor.map_canvas.scene() is not None and editor.map_canvas.scene().items()
+        editor.close()
+
+
 if __name__ == "__main__":
     for name, fn in list(globals().items()):
         if name.startswith("test_") and callable(fn):

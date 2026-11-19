@@ -191,7 +191,7 @@ def test_modules_tab_settings():
         pack = _pack(Path(tmp), ["kinetics"])
         e = PackEditor(pack.folder)
         names = [e.tabs.tabText(i) for i in range(e.tabs.count())]
-        assert names[0] == "Overview" and "Modules" in names and "Module settings" not in names and names[-1] == "Check"
+        assert names[:2] == ["Map", "Overview"] and "Modules" in names and "Module settings" not in names and names[-1] == "Check"
         assert "Kinetics" in e.overview.toPlainText()
         t = e.module_table
         rows = {t.item(r, 0).data(Qt.ItemDataRole.UserRole): r for r in range(t.rowCount())}
