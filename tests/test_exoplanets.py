@@ -122,6 +122,27 @@ def test_compared_with_the_archive_export():
         assert "couldn't be reached" in down["error"]
 
 
+def test_catalogue_facts_filled_from_the_archive():
+    """archive_values: empty catalogue columns no step asks for (names, position, brightness, detection flags) from
+    the planet's parameter set -- this paper's, else the default; never planet or star parameters."""
+    sets = [{"pl_name": "11 Com b", "pl_refname": "Liu et al. 2008", "default_flag": "1", "hip_name": "HIP 60202",
+             "tic_id": "TIC 72437047", "ra": "185.1787793", "sy_vmag": "4.723", "rv_flag": "1", "st_teff": "4742",
+             "disc_locale": "Ground"},
+            {"pl_name": "11 Com b", "pl_refname": "<a href='x'>Teng et al. 2023</a>", "default_flag": "0",
+             "hip_name": "HIP 60202", "ra": "185.1787793", "sy_vmag": "4.74", "st_teff": "4874"}]
+    columns = [c for c in ("hip_name", "tic_id", "ra", "sy_vmag", "rv_flag", "st_teff", "disc_locale")
+               if archive.fillable(c)]
+    assert "st_teff" not in columns and "sy_vmag" in columns and archive.fillable("sy_kmagerr1")
+    records = [{"pl_name": "11 Com b", "sy_vmag": 4.8}, {"pl_name": "Elsewhere b"}]
+    filled = archive.fill_values(records, sets, "Teng et al. 2023", columns)
+    got = {c: (v, ref) for i, c, v, ref in filled if i == 0}
+    assert got["hip_name"] == ("HIP 60202", "Teng et al. 2023") and got["ra"][0] == 185.1787793   # this paper's set
+    assert "sy_vmag" not in got and "tic_id" not in got                     # the row's own kept; the set has none
+    assert not [f for f in filled if f[0] == 1]                             # a planet the archive doesn't know
+    default = archive.fill_values(records, sets, "Somebody 2030", columns)  # no set from this paper: the default's
+    assert {c: v for i, c, v, _r in default if i == 0}["tic_id"] == "TIC 72437047"
+
+
 def test_archive_names_angles_and_padding():
     assert archive.archive_name("ε  Tau b") == "eps Tau b" and archive.archive_name("o UMa b") == "omi UMa b"
     assert archive.archive_name("ν Oph c") == "nu Oph c" and archive.archive_name("HD 5608 b") == "HD 5608 b"

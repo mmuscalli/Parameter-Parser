@@ -16,6 +16,11 @@
   "category_fill": {"methodology": "paper", "flow_reactor": "set", "mineral_surfaces": "set"},
   "fill_columns": {"reagent_suppliers": "paper", "pH_buffer": "paper", "set_type": "none", "duration_hr": "none", "cycle_number": "none"},
   "column_pairs": [["sampled_temperature_C", "initial_temperature_C"], ["sampled_pressure_bar", "initial_pressure_bar"], ["residence_time_hr", "duration_hr"]],
+  "formulas": [
+    {"column": "total_sampled_peptides_mM", "expression": "sum_of(\"^sampled_(cyclo_)?(\\([A-Z][a-z]{2}\\)\\d+|[A-Z][a-z]{2}(-[A-Z][a-z]{2})+)_(aq|s|gas)_mM$\")", "description": "the sum of the row's sampled peptide concentrations (sequences and (X)n homopolymers, cyclic ones too -- the peptides the yield total counts)"},
+    {"column": "is_last_sample", "expression": "duration_hr == series_max(duration_hr)", "description": "1 for the last time point of its experiment series (its set, or its run), else 0; every row of an Independent set is its own experiment"},
+    {"column": "is_max_peptide_yield", "expression": "total_sampled_peptides_yield == series_max(total_sampled_peptides_yield)", "description": "1 for the row with the highest total peptide yield of its experiment series, else 0"}
+  ],
   "label_columns": {"temperature": "initial_temperature_C", "time": "duration_hr", "pressure": "initial_pressure_bar", "pH": "initial_pH"},
   "variable_categories": [
     {"id": "starting_species", "level": "set", "table_order": 60, "label": "Starting Species", "sources": ["species:initial", "species"], "value_type": "number",

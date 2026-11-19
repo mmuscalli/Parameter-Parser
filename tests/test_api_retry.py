@@ -25,6 +25,7 @@ sys.path.insert(0, str(ROOT / "src"))
 from pydantic import ValidationError
 
 from parameter_extractor import api_client, errors, packs
+from parameter_extractor.validation import exoplanet_archive
 from parameter_extractor.config.run_config import RunConfig
 from parameter_extractor.pipeline import run_pipeline
 from test_pipeline_offline import make_replay
@@ -57,9 +58,11 @@ def test_a_broken_answer_is_retried_once():
     try:
         for how in ("cut off", "broken JSON"):
             send, seen = _flaky(1, how)
-            with tempfile.TemporaryDirectory() as tmp, patch.object(api_client, "_send", send):
+            saved = json.loads((REF / "archive_rows.json").read_text())      # the archive as the reference had it
+            with tempfile.TemporaryDirectory() as tmp, patch.object(api_client, "_send", send), \
+                    patch.object(exoplanet_archive, "fetch_parameter_sets", lambda names, ref: saved):
                 result = run_pipeline(PDF, RunConfig.from_settings(api_key="x", output_dir=Path(tmp),
-                                                                   pack="exoplanets"))
+                                                                   pack="exoplanets", online_checks=True))
                 assert result.csv_path.read_text() == (REF / "nielsen2019_extracted.csv").read_text()
                 # first try: the stage's own (small) budget; retry: twice that
                 from parameter_extractor.schemas.structure_plan import StructurePlan
@@ -111,8 +114,11 @@ def test_an_answer_that_reports_failure_is_asked_again():
                 return SimpleNamespace(**{**vars(out), "parsed_output": broken})
         return out
     try:
-        with tempfile.TemporaryDirectory() as tmp, patch.object(api_client, "_send", send):
-            result = run_pipeline(PDF, RunConfig.from_settings(api_key="x", output_dir=Path(tmp), pack="exoplanets"))
+        saved = json.loads((REF / "archive_rows.json").read_text())          # the archive as the reference had it
+        with tempfile.TemporaryDirectory() as tmp, patch.object(api_client, "_send", send), \
+                patch.object(exoplanet_archive, "fetch_parameter_sets", lambda names, ref: saved):
+            result = run_pipeline(PDF, RunConfig.from_settings(api_key="x", output_dir=Path(tmp), pack="exoplanets",
+                                                               online_checks=True))
             assert len(calls) == 2
             assert result.csv_path.read_text() == (REF / "nielsen2019_extracted.csv").read_text()
     finally:

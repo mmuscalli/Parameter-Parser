@@ -169,3 +169,4 @@ current month's file (start `YYYY-MM.md` in a new month), with one line here.
 - Branch levels-and-facets: the Rules tab rebuilt -- each shared prompt laid out with the rules where they go (2026-11-19, Mickey)
 - Branch levels-and-facets: a {{PACK_RULES}} slot in the prebiotic pack's own row-plan prompt (2026-11-19, Mickey)
 - Branch levels-and-facets: the sets tab's values panel keeps its place between samples (2026-11-19, Mickey)
+- Branch levels-and-facets: 'Filled by' names the real source; catalogue facts from the archive; prebiotic leftovers as formulas (2026-11-19, Mickey)

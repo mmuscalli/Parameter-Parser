@@ -804,7 +804,7 @@ class PackEditor(QDialog):
     def _remove_category(self, cid: str) -> None:
         """A kind of value of this pack's own removed; its columns go to Other."""
         header = self._category_header(cid)
-        n = header.childCount() if header is not None else 0
+        n = len(self._column_children(header)) if header is not None else 0
         if n and QMessageBox.question(self, "Remove this kind of value?", f"Its {n} column(s) move to Other. "
                                       "Remove it?") != QMessageBox.StandardButton.Yes:
             return
@@ -820,10 +820,10 @@ class PackEditor(QDialog):
         header = self._category_header(cid)
         if header is not None:
             other = self._category_header("other")
-            children = header.takeChildren()
+            children = [c for c in header.takeChildren() if not c.data(0, self.SUBHEADER)]
             if other is not None and children:
                 other.addChildren(children)
-                other.setText(1, f"{other.childCount()} columns")
+                other.setText(1, f"{len(self._column_children(other))} columns")
             self.column_tree.takeTopLevelItem(self.column_tree.indexOfTopLevelItem(header))
         self.category_panel.show_category(None)
 
@@ -840,7 +840,7 @@ class PackEditor(QDialog):
         tree = self.column_tree
         tree.clear()
         groups: Dict[str, QTreeWidgetItem] = {}
-        fills = self.draft.stage_columns()
+        fills = self._column_fills()
         header_font = QFont(tree.font())
         header_font.setBold(True)
         header_font.setPointSizeF(header_font.pointSizeF() + 1)
@@ -862,6 +862,7 @@ class PackEditor(QDialog):
             for cat in order.display:                    # every category, so columns can be moved into an empty one
                 groups[cat.id] = header(cat.id, cat.label, True)
         ordered = order.ordered(columns) if order else list(columns)
+        members: Dict[str, List[str]] = {}
         for c in ordered:
             if order is None:
                 key, label = "", "Columns"
@@ -870,9 +871,22 @@ class PackEditor(QDialog):
                 key = {IDENTIFIERS_LABEL: "__row__", PROVENANCE_LABEL: "__provenance__"}.get(label, order.category_of(c))
             if key not in groups:
                 groups[key] = header(key, label, not key.startswith("__"))
-            self._column_item(groups[key], c, unit_for_column(c), fills.get(c))
+            members.setdefault(key, []).append(c)
+        # in each kind of value the columns something fills, then the ones nothing fills automatically (kept for the
+        # dataset's layout), set apart and greyed (Mickey, 2026-11-19)
+        for key, cols in members.items():
+            filled = [c for c in cols if fills.get(c)]
+            empty = [c for c in cols if not fills.get(c)]
+            if empty and filled:
+                self._subheader(groups[key], f"Filled automatically ({len(filled)})")
+            for c in filled:
+                self._column_item(groups[key], c, unit_for_column(c), fills.get(c))
+            if empty:
+                self._subheader(groups[key], f"Not filled automatically ({len(empty)})")
+            for c in empty:
+                self._column_item(groups[key], c, unit_for_column(c), None)
         for key, item in groups.items():                 # counts; empty categories say so
-            n = item.childCount()
+            n = len(self._column_children(item))
             item.setText(1, f"{n} column{'s' if n != 1 else ''}" if n else "empty")
             if not n:
                 item.setToolTip(0, "No columns yet: drag columns here to put them in this category.")
@@ -883,36 +897,66 @@ class PackEditor(QDialog):
                 tree.insertTopLevelItem(index, tree.takeTopLevelItem(tree.indexOfTopLevelItem(groups[key])))
                 groups[key].setExpanded(True)
 
+    SUBHEADER = Qt.ItemDataRole.UserRole + 1       # a 'Filled / Not filled automatically' line among the columns
+
+    def _column_fills(self) -> Dict[str, List[str]]:
+        """{column: what fills it} (column_sources.py: steps, built-in steps, the row plan, calculations, ...)."""
+        from parameter_extractor import column_sources
+        try:
+            return column_sources.sources(self.draft)
+        except Exception:                            # noqa: BLE001 -- never in the way of editing: the own steps
+            return self.draft.stage_columns()
+
+    def _subheader(self, parent: QTreeWidgetItem, text: str) -> QTreeWidgetItem:
+        item = QTreeWidgetItem([text])
+        item.setData(0, self.SUBHEADER, True)
+        item.setFlags(Qt.ItemFlag.ItemIsEnabled)
+        font = QFont(self.column_tree.font())
+        font.setItalic(True)
+        item.setFont(0, font)
+        item.setForeground(0, QBrush(self.column_tree.palette().color(QPalette.ColorRole.PlaceholderText)))
+        parent.addChild(item)
+        item.setFirstColumnSpanned(True)
+        return item
+
+    def _column_children(self, group: QTreeWidgetItem) -> List[QTreeWidgetItem]:
+        """A category's column items (not its subheaders)."""
+        return [group.child(j) for j in range(group.childCount()) if not group.child(j).data(0, self.SUBHEADER)]
+
     def _column_item(self, parent: QTreeWidgetItem, column: str, unit: str, stages) -> QTreeWidgetItem:
-        item = QTreeWidgetItem([column, unit or "", ", ".join(stages) if stages else ""])
+        from parameter_extractor.column_sources import NOTHING
+        item = QTreeWidgetItem([column, unit or "", ", ".join(stages) if stages else NOTHING])
         item.setFlags(Qt.ItemFlag.ItemIsEnabled | Qt.ItemFlag.ItemIsSelectable | Qt.ItemFlag.ItemIsEditable
                       | Qt.ItemFlag.ItemIsDragEnabled)
-        item.setToolTip(0, f"Filled by: {', '.join(stages)}" if stages else "No step fills this column yet.")
+        item.setToolTip(0, f"Filled by: {', '.join(stages)}" if stages else
+                        "Nothing fills this column automatically: it stays in the dataset's layout, filled only by "
+                        "your corrections, a digitized figure or a step's 'other values' answer.")
         if not stages:
+            muted = QBrush(self.column_tree.palette().color(QPalette.ColorRole.PlaceholderText))
+            for col in (0, 1):
+                item.setForeground(col, muted)
             item.setForeground(2, QBrush(self.column_tree.palette().color(QPalette.ColorRole.PlaceholderText)))
-            item.setText(2, "not filled by a step")
         parent.addChild(item)
         return item
 
     def _refresh_column_fills(self) -> None:
-        """'Filled by' after the stages changed."""
-        fills = self.draft.stage_columns()
+        """'Filled by' after the steps changed (in place: the columns move between the parts at the next Save)."""
+        from parameter_extractor.column_sources import NOTHING
+        fills = self._column_fills()
         muted = QBrush(self.column_tree.palette().color(QPalette.ColorRole.PlaceholderText))
         for i in range(self.column_tree.topLevelItemCount()):
-            group = self.column_tree.topLevelItem(i)
-            for j in range(group.childCount()):
-                item = group.child(j)
+            for item in self._column_children(self.column_tree.topLevelItem(i)):
                 stages = fills.get(item.text(0).strip())
-                item.setText(2, ", ".join(stages) if stages else "not filled by a step")
-                item.setForeground(2, QBrush() if stages else muted)
-                item.setToolTip(0, f"Filled by: {', '.join(stages)}" if stages else "No step fills this column yet.")
+                item.setText(2, ", ".join(stages) if stages else NOTHING)
+                for col in (0, 1, 2):
+                    item.setForeground(col, QBrush() if stages else muted)
 
     def _tree_columns(self) -> List[str]:
         """The columns as the tree lists them (category by category)."""
         out = []
         for i in range(self.column_tree.topLevelItemCount()):
             group = self.column_tree.topLevelItem(i)
-            out += [group.child(j).text(0).strip() for j in range(group.childCount()) if group.child(j).text(0).strip()]
+            out += [c.text(0).strip() for c in self._column_children(group) if c.text(0).strip()]
         return out
 
     def _moved_categories(self) -> Dict[str, str]:
@@ -923,8 +967,8 @@ class PackEditor(QDialog):
             key = group.data(0, Qt.ItemDataRole.UserRole) or ""
             if not key or key.startswith("__"):
                 continue
-            for j in range(group.childCount()):
-                col = group.child(j).text(0).strip()
+            for child in self._column_children(group):
+                col = child.text(0).strip()
                 home = self._home_category.get(col)
                 if col and (home is None and self._column_order is not None
                             and self._column_order.category_of(col) != key or home is not None and home != key):
@@ -1734,7 +1778,7 @@ class PackEditor(QDialog):
                          tree.topLevelItem(max(0, tree.topLevelItemCount() - 1)))
         if group is None:
             return
-        item = self._column_item(group, name, unit_for_column(name), self.draft.stage_columns().get(name))
+        item = self._column_item(group, name, unit_for_column(name), self._column_fills().get(name))
         group.setExpanded(True)
         tree.setCurrentItem(item)
         tree.scrollToItem(item)
@@ -2212,7 +2256,7 @@ class PackEditor(QDialog):
 
     def _formula_columns(self) -> QWidget:
         """Every column of the data pack; a click types the name into the formula being written."""
-        box = QGroupBox("Columns (click to insert)")
+        box = QGroupBox("Columns" if self.read_only else "Columns (click to insert)")
         box.setMaximumWidth(330)                         # names, not prose: the reference beside it gets the room
         v = QVBoxLayout(box)
         self.f_column_filter = QLineEdit(placeholderText="filter", clearButtonEnabled=True)
@@ -2247,7 +2291,10 @@ class PackEditor(QDialog):
             item.setHidden(bool(text) and text not in item.text().lower())
 
     def insert_formula_column(self, column: str) -> None:
-        """Into the open Formula cell at its cursor; else at the end of the selected formula."""
+        """Into the open Formula cell at its cursor; else at the end of the selected formula. Not on a read-only data
+        pack (the list is to look through there)."""
+        if self.read_only:
+            return
         token = column if column.isidentifier() else f"`{column}`"
         editor = self._formula_editor
         if editor is not None:

@@ -121,29 +121,43 @@ def _same_reference(archive_ref: str, reference: str) -> bool:
     return _strip_html(archive_ref).lower() == reference.strip().lower()
 
 
+def papers_planets(records: List[dict], archive_rows: List[dict], reference: str) -> List[dict]:
+    """The archive's parameter sets from this paper for planets the rows don't name (filed under another name)."""
+    named = {_key(r.get("pl_name")) for r in records if r.get("pl_name")}
+    return [a for a in archive_rows if _same_reference(a.get("pl_refname", ""), reference)
+            and _key(a.get("pl_name")) not in named]
+
+
+def planet_sets(rec: dict, archive_rows: List[dict], from_paper: List[dict]):
+    """(the archive's parameter sets of the row's planet, found by its orbital period): by name; else -- a planet the
+    archive files under another name -- the one of this paper's planets with the same period (within 1%)."""
+    name = rec.get("pl_name")
+    sets = [a for a in archive_rows if _key(a.get("pl_name")) == _key(name)] if name else []
+    period = _number(rec.get("pl_orbper"))
+    if not sets and period:
+        alias = [a for a in from_paper if _number(a.get("pl_orbper"))
+                 and abs(_number(a["pl_orbper"]) - period) <= PERIOD_MATCH * period]
+        if len(alias) == 1:
+            return [a for a in archive_rows if a.get("pl_name") == alias[0]["pl_name"]], True
+    return sets, False
+
+
 def compare(records: List[dict], archive_rows: List[dict], reference: str) -> List[dict]:
     """Per extracted row: which archive parameter set it was compared with, and each
     column's outcome (match / differs / not extracted)."""
     report = []
-    named = {_key(r.get("pl_name")) for r in records if r.get("pl_name")}
-    from_paper = [a for a in archive_rows if _same_reference(a.get("pl_refname", ""), reference)
-                  and _key(a.get("pl_name")) not in named]           # this paper's planets under other names
+    from_paper = papers_planets(records, archive_rows, reference)      # this paper's planets under other names
     for rec in records:
         name = rec.get("pl_name")
         if not name:
             continue
-        sets = [a for a in archive_rows if _key(a.get("pl_name")) == _key(name)]
         entry = {"pl_name": name, "reference": reference}
         if rec.get("pl_fitlabel"):                      # one row per solution: each is compared
             entry["solution"] = rec["pl_fitlabel"]
-        period = _number(rec.get("pl_orbper"))
-        if not sets and period:
-            alias = [a for a in from_paper if _number(a.get("pl_orbper"))
-                     and abs(_number(a["pl_orbper"]) - period) <= PERIOD_MATCH * period]
-            if len(alias) == 1:
-                sets = [a for a in archive_rows if a.get("pl_name") == alias[0]["pl_name"]]
-                entry["archive_name"] = alias[0]["pl_name"]
-                entry["matched_by"] = "orbital period"
+        sets, by_period = planet_sets(rec, archive_rows, from_paper)
+        if by_period:
+            entry["archive_name"] = sets[0]["pl_name"]
+            entry["matched_by"] = "orbital period"
         if sets and sets[0]["pl_name"] != name:
             entry.setdefault("archive_name", sets[0]["pl_name"])
         chosen = next((a for a in sets if _same_reference(a.get("pl_refname", ""), reference)), None)
@@ -284,4 +298,48 @@ def check(records: List[dict], reference: str, run_dir, fetch: Optional[Callable
         return {"report": [], "error": f"the NASA Exoplanet Archive couldn't be reached ({type(e).__name__}: {e})"}
     report = compare(records, archive_rows, reference)
     (run_dir / "archive_validation.json").write_text(json.dumps(report, indent=1, ensure_ascii=False))
-    return {"report": report, "error": ""}
+    return {"report": report, "error": "", "rows": archive_rows}
+
+
+# ---- catalogue facts filled from the archive (calculation 'archive_values'; Mickey, 2026-11-19) ---------------------
+# What the archive knows about a planet and its star that papers seldom state and no step asks for: catalogue names,
+# position, motion and brightness, the detection-method flags, where and when the discovery was published. Fetched
+# for the check anyway (archive_rows.json), so filled where a row has none -- marked as the archive's, never the
+# paper's. Planet and star parameters are not: those are the paper's to give (and the check's to compare).
+FILL_COLUMNS = {"hd_name", "hip_name", "tic_id", "gaia_dr2_id", "gaia_dr3_id", "ra", "rastr", "dec", "decstr",
+                "glat", "glon", "elat", "elon", "cb_flag", "disc_pubdate", "disc_locale", "rv_flag", "pul_flag",
+                "ptv_flag", "tran_flag", "ast_flag", "obm_flag", "micro_flag", "etv_flag", "ima_flag", "dkin_flag",
+                "ttv_flag", "sy_refname"}
+_FILL_PATTERN = re.compile(r"^sy_(?:pm|pmra|pmdec|[a-z0-9]+mag)(?:err[12])?$")       # proper motion, magnitudes
+
+
+def fillable(column: str) -> bool:
+    """A column the archive fills when no step does (FILL_COLUMNS, sy_ magnitudes and proper motions)."""
+    return column in FILL_COLUMNS or bool(_FILL_PATTERN.match(column))
+
+
+def source_set(rec: dict, archive_rows: List[dict], reference: str, from_paper: List[dict]) -> Optional[dict]:
+    """The parameter set to take a row's catalogue facts from: this paper's, else the archive's default, else any."""
+    sets, _ = planet_sets(rec, archive_rows, from_paper)
+    return next((a for a in sets if _same_reference(a.get("pl_refname", ""), reference)), None) or \
+        next((a for a in sets if str(a.get("default_flag")) == "1"), None) or (sets[0] if sets else None)
+
+
+def fill_values(records: List[dict], archive_rows: List[dict], reference: str, columns: List[str]) -> List[tuple]:
+    """[(row index, column, value, the set's reference)] for each empty cell of `columns` the archive has a value for:
+    numbers as numbers, text without its HTML."""
+    from_paper = papers_planets(records, archive_rows, reference)
+    out = []
+    for i, rec in enumerate(records):
+        chosen = source_set(rec, archive_rows, reference, from_paper)
+        if chosen is None:
+            continue
+        for column in columns:
+            archived = chosen.get(column)
+            if rec.get(column) not in (None, "") or archived in (None, ""):
+                continue
+            number = _number(archived)
+            out.append((i, column, number if number is not None and column not in ("hd_name", "hip_name", "tic_id",
+                                                                                    "gaia_dr2_id", "gaia_dr3_id")
+                        else _strip_html(archived), _strip_html(chosen.get("pl_refname", ""))))
+    return out

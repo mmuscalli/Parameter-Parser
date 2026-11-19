@@ -974,6 +974,29 @@ def _archive_check(rows, ex: "Extraction", ctx: RunContext) -> dict:
     return {**exoplanet_archive.check(records, reference, ctx.run_dir), "reference": reference}
 
 
+def _archive_values(rows, archive: dict, pack) -> List[Flag]:
+    """Empty catalogue columns no step fills (names, position, brightness, detection flags) from the archive's
+    parameter set -- marked as the archive's, with one flag saying so (exoplanet_archive.fill_values)."""
+    from parameter_extractor.ingestion.flatten_to_template import row_to_template_dict, set_row_value
+    from parameter_extractor.schemas.row_schema import CellSource
+    from parameter_extractor.stages.optional import load_specs
+    if archive.get("error") or not archive.get("rows"):
+        return []
+    asked = {c for spec in load_specs(pack).values() for c in spec.columns}
+    columns = [c for c in pack.template_columns if exoplanet_archive.fillable(c) and c not in asked]
+    records = [row_to_template_dict(r) for r in rows]
+    filled = exoplanet_archive.fill_values(records, archive["rows"], archive.get("reference", ""), columns)
+    for i, column, value, ref in filled:
+        set_row_value(rows[i], column, value, CellSource(
+            origin="NASA Exoplanet Archive", source=f"the archive's parameter set {ref}".strip()))
+    if not filled:
+        return []
+    kinds = sorted({c for _i, c, _v, _r in filled})
+    return [Flag("archive_check", f"{len(filled)} value(s) filled from the NASA Exoplanet Archive, not from the paper "
+                                  f"(catalogue names, position, brightness, detection flags the paper doesn't give): "
+                                  f"{', '.join(kinds[:12])}{' ...' if len(kinds) > 12 else ''}.")]
+
+
 def archive_flags(archive: dict) -> List[Flag]:
     """One flag per planet: how its values compare with the archive's parameter set for this paper."""
     if archive.get("error"):
@@ -1529,9 +1552,12 @@ def finish(
         from parameter_extractor.formulas import apply_formulas, formula_flags
         paper_flags += formula_flags(apply_formulas(rows, pack.manifest.formulas))
     archive = None
-    if pack.uses("archive_validation") and config.online_checks:
+    if (pack.uses("archive_validation") or pack.uses("archive_values")) and config.online_checks:
         archive = _archive_check(rows, ex, ctx)
-        paper_flags += archive_flags(archive)
+        if pack.uses("archive_validation"):
+            paper_flags += archive_flags(archive)
+        if pack.uses("archive_values"):              # catalogue facts the paper doesn't give, from the same lookup
+            paper_flags += _archive_values(rows, archive, pack)
     row_flags = {r.full_id: f for r in rows if (f := check_row(r, **thresholds))}
     # a Paper summary row with reactants of different experiments, on their cells (calculators/summary_checks.py)
     from parameter_extractor.calculators.summary_checks import summary_mixed_flags

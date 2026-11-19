@@ -6,7 +6,7 @@
   "template": "template.json",
   "standard_columns": "standard_columns.json",
   "builtin_stages": ["fit_models"],
-  "postprocess": ["row_labels", "exoplanet_masses", "reference_names", "archive_validation"],
+  "postprocess": ["row_labels", "exoplanet_masses", "reference_names", "archive_validation", "archive_values"],
   "units": {"set": "planetary system", "sample": "planet", "row": "object model instance", "run": "planet", "run_row": "fit solution"},
   "runs_from_labels": true,
   "compact_text": true,

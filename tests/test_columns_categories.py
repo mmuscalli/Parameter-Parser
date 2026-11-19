@@ -97,6 +97,53 @@ def test_the_map_opens_the_tab_where_a_part_is_edited():
     e.close()
 
 
+def test_filled_by_names_the_real_source():
+    """column_sources.py: the steps (own and modules'), uncertainties with their value, the built-in steps, the row
+    plan, calculations, formulas, the archive -- 'nothing fills this automatically' only when none does."""
+    from parameter_extractor import column_sources as cs
+    from parameter_extractor.pack_editing import PackDraft
+    prebiotic = PackDraft.load(packs.available()["prebiotic_chemistry"].folder)
+    found = cs.sources(prebiotic)
+    assert any("built-in" in x for x in found["initial_NaCl_aq_mM"])
+    assert found["paper_title"] == ["the paper's details (the app)"] and "the row plan (the app)" in found["set_type"]
+    for f in prebiotic.manifest.get("formulas", []):
+        assert any(x.startswith("formula:") for x in found[f["column"]])
+    nothing = [c for c in prebiotic.columns if not found.get(c)]
+    assert nothing and all(c not in prebiotic.stage_columns() for c in nothing)
+    exo = PackDraft.load(packs.available()["exoplanets"].folder)
+    found = cs.sources(exo)
+    filled_with = {c for spec in exo.stages.values() for p in spec.get("parameters", []) if p.get("uncertainties")
+                   for c in (p["column"] + "err1",)}
+    assert filled_with and all(found.get(c) for c in filled_with)               # written with their value
+    assert any("Archive" in x for x in found.get("sy_vmag", []))
+    assert any(x.startswith("calculated") for x in found.get("pl_masse", []))
+    assert not found.get("rowupdate")                                          # the archive's own bookkeeping
+
+
+def test_columns_nothing_fills_are_set_apart():
+    with tempfile.TemporaryDirectory() as tmp, patch.object(packs, "user_packs_dir", lambda: Path(tmp)):
+        pack, e = _editor(tmp)
+        tree = e.column_tree
+        before = list(e.draft.columns)
+        parts = []
+        for i in range(tree.topLevelItemCount()):
+            group = tree.topLevelItem(i)
+            kids = [group.child(j) for j in range(group.childCount())]
+            subs = [k.text(0) for k in kids if k.data(0, e.SUBHEADER)]
+            columns = e._column_children(group)
+            empty = [k for k in columns if k.text(2) == "nothing fills this automatically"]
+            if empty:
+                assert subs and subs[-1].startswith("Not filled automatically")
+                at = kids.index(empty[0])                                     # after the filled ones, greyed
+                assert all(k.text(2) != "nothing fills this automatically" for k in columns[:columns.index(empty[0])])
+                assert kids[at - 1].data(0, e.SUBHEADER)
+                assert empty[0].foreground(0).color() == tree.palette().color(tree.palette().ColorRole.PlaceholderText)
+                parts.append(group.text(0))
+        assert parts                                                          # the exoplanet pack has some
+        assert sorted(e._tree_columns()) == sorted(before)                    # subheaders aren't columns
+        e.close()
+
+
 def test_the_categories_window_refills_without_leftovers():
     """Choosing another data pack in the Variable categories window: only the new rows' controls are shown (the
     replaced ones used to stay drawn while the window was open from another window)."""

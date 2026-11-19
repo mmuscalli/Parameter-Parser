@@ -20,6 +20,12 @@ The expression language -- parsed with Python's `ast` and evaluated by a whiteli
                    sum_of("regex"), mean_of, max_of, min_of, count_of
                                             over the row's columns whose NAME matches the pattern
                                             (e.g. sum_of("^sampled_.*_aq_%yield$"))
+                   series_max(x), series_min, series_sum, series_mean, series_count
+                                            x (a column or an expression) over the rows of the row's experiment
+                                            series: its set's rows -- its run's, in a set with runs -- or the row
+                                            alone in an Independent set (each row its own experiment). E.g.
+                                            duration_hr == series_max(duration_hr): the series' last sample
+                                            (2026-11-19: the prebiotic dataset's is_last_sample, is_max_peptide_yield)
 A column without a numeric value is MISSING: the result is missing too (the cell stays empty), except inside
 first() / count_of() and the aggregates (which skip missing columns). Text values ('detected') count as missing.
 
@@ -52,8 +58,10 @@ class FormulaError(ValueError):
 
 
 _BACKTICK = re.compile(r"`([^`]+)`")
+_SERIES = {"series_max", "series_min", "series_sum", "series_mean", "series_count"}
+SERIES = "\x00series"          # a row's values: its experiment series' rows' values, for the series_ functions
 _FUNCTIONS = {"abs", "min", "max", "round", "sqrt", "exp", "ln", "log10", "first", "ifelse",
-              "sum_of", "mean_of", "max_of", "min_of", "count_of", "col"}
+              "sum_of", "mean_of", "max_of", "min_of", "count_of", "col"} | _SERIES
 _AGGREGATES = {"sum_of", "mean_of", "max_of", "min_of", "count_of"}
 _CONSTANTS = {"pi": math.pi, "e": math.e}
 FUNCTION_HELP = [            # (what to write, what it does): the editor's reference, one entry per line
@@ -74,13 +82,21 @@ FUNCTION_HELP = [            # (what to write, what it does): the editor's refer
     ('mean_of("pattern")', "their average"),
     ('max_of("pattern")   min_of(...)', "their largest, smallest"),
     ('count_of("pattern")', "how many of them have a value"),
+    ("series_max(x)   series_min(x)", "largest, smallest of x over the row's experiment series (its set or run)"),
+    ("series_sum(x)   series_mean(x)   series_count(x)", "their sum, average, how many have a value"),
     ("`name-with-%`", "a column name with - % ( ) goes in backticks"),
 ]
 
 
+_QUOTED = re.compile(r"""(?<![\w'"])(["'])((?:(?!\1).)*)\1""")
+
+
 def _prepare(expression: str) -> str:
-    """Backtick names -> col("...") calls (identifiers can't hold - % ( ))."""
-    return _BACKTICK.sub(lambda m: f"col({m.group(1)!r})", expression or "")
+    """Quoted text taken as written -- a pattern's backslashes are the pattern's (a backslash-bracket is a
+    bracket, not an escape Python warns about); then backtick names -> col("...") calls (identifiers can't hold
+    - % ( ))."""
+    text = _QUOTED.sub(lambda m: f"r{m.group(1)}{m.group(2)}{m.group(1)}", expression or "")
+    return _BACKTICK.sub(lambda m: f"col({m.group(1)!r})", text)
 
 
 @dataclass
@@ -138,6 +154,11 @@ def parse(expression: str) -> ast.AST:
                         raise FormulaError(f"{node.func.id}(): not a valid pattern ({e})") from None
             if node.func.id == "ifelse" and len(node.args) != 3:
                 raise FormulaError("ifelse() takes three values: test, then, else")
+            if node.func.id in _SERIES:
+                if len(node.args) != 1:
+                    raise FormulaError(f"{node.func.id}() takes one value: a column or an expression")
+                if any(isinstance(n, ast.Call) and getattr(n.func, "id", "") in _SERIES for n in ast.walk(node.args[0])):
+                    raise FormulaError(f"{node.func.id}() can't hold another series_ function")
         elif isinstance(node, (ast.Expression, ast.BinOp, ast.UnaryOp, ast.BoolOp, ast.Compare, ast.Name, ast.Load,
                                ast.operator, ast.unaryop, ast.boolop, ast.cmpop)):
             pass
@@ -235,13 +256,23 @@ def _eval(node, values):
             return _number(values.get(node.args[0].value))
         if name in _AGGREGATES:
             pattern = re.compile(node.args[0].value)
-            nums = [n for c, v in values.items() if pattern.search(c) and (n := _number(v)) is not MISSING]
+            nums = [n for c, v in values.items() if c != SERIES and pattern.search(c)
+                    and (n := _number(v)) is not MISSING]
             if name == "count_of":
                 return float(len(nums))
             if not nums:
                 return MISSING
             return {"sum_of": sum(nums), "mean_of": sum(nums) / len(nums), "max_of": max(nums),
                     "min_of": min(nums)}[name]
+        if name in _SERIES:                     # the argument on every row of the series (just this row alone)
+            nums = [n for rec in values.get(SERIES) or [values]
+                    if (n := _eval(node.args[0], rec)) is not MISSING and not isinstance(n, str)]
+            if name == "series_count":
+                return float(len(nums))
+            if not nums:
+                return MISSING
+            return {"series_max": max(nums), "series_min": min(nums), "series_sum": sum(nums),
+                    "series_mean": sum(nums) / len(nums)}[name]
         if name == "first":
             for arg in node.args:
                 v = _eval(arg, values)
@@ -280,6 +311,15 @@ class FormulaOutcome:
     failed: List[Tuple[str, str]] = field(default_factory=list)          # (full_id, why)
 
 
+def series_key(row, record: dict) -> tuple:
+    """A row's experiment series: the rows of its set (of its run, in a set with runs); in an Independent set
+    without runs, the row alone -- each row there is a separate experiment."""
+    run = record.get("run") or ""
+    if not run and (getattr(row, "set_type", "") or "").lower() == "independent":
+        return ("row", row.full_id)
+    return ("set", row.set_id, run)
+
+
 def apply_formulas(rows, formulas: List[dict]) -> List[FormulaOutcome]:
     """Fill each formula's column on the rows (see the module docstring); returns what each formula did."""
     from parameter_extractor.ingestion.flatten_to_template import row_to_template_dict, set_row_value
@@ -296,10 +336,14 @@ def apply_formulas(rows, formulas: List[dict]) -> List[FormulaOutcome]:
             outcome.failed.append(("", str(e)))
             continue
         inputs = f.inputs()
+        records = {row.full_id: row_to_template_dict(row) for row in rows}    # as earlier formulas left them
+        series: Dict[tuple, list] = {}
         for row in rows:
-            record = row_to_template_dict(row)
+            series.setdefault(series_key(row, records[row.full_id]), []).append(records[row.full_id])
+        for row in rows:
+            record = records[row.full_id]
             try:
-                value = evaluate(tree, record)
+                value = evaluate(tree, {**record, SERIES: series[series_key(row, record)]})
             except (ZeroDivisionError, ValueError, OverflowError, TypeError) as e:
                 outcome.failed.append((row.full_id, "division by zero" if isinstance(e, ZeroDivisionError) else str(e)))
                 continue

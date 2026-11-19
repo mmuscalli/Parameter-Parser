@@ -24,6 +24,7 @@ sys.path.insert(0, str(ROOT / "src"))
 
 import pack_facts as pf  # noqa: E402
 from parameter_extractor import api_client, packs
+from parameter_extractor.validation import exoplanet_archive
 from parameter_extractor.config.run_config import RunConfig
 from parameter_extractor.pipeline import run_pipeline
 from parameter_extractor.pricing import request_cost
@@ -47,8 +48,11 @@ def _run(tmp, **kw):
                                         cache_creation_input_tokens=30000 if first else 0,
                                         cache_read_input_tokens=0 if first else 30000)
         return out
-    with patch.object(api_client, "_send", send):
-        result = run_pipeline(PDF, RunConfig.from_settings(api_key="x", output_dir=Path(tmp), pack="exoplanets", **kw))
+    saved = json.loads((REF / "archive_rows.json").read_text())          # the archive as the reference had it
+    with patch.object(api_client, "_send", send), \
+            patch.object(exoplanet_archive, "fetch_parameter_sets", lambda names, ref: saved):
+        result = run_pipeline(PDF, RunConfig.from_settings(api_key="x", output_dir=Path(tmp), pack="exoplanets",
+                                                           **{"online_checks": True, **kw}))
     return result, sent
 
 

@@ -47,6 +47,8 @@ CALCULATIONS = {
     "exoplanet_masses": ("Planet masses in Earth and Jupiter masses (exoplanets).", ""),
     "reference_names": ("Reference names like 'Teng et al. 2023' (exoplanets).", ""),
     "archive_validation": ("Compares values with the NASA Exoplanet Archive (exoplanets).", ""),
+    "archive_values": ("Catalogue facts the paper doesn't give (names, position, brightness, detection flags) from "
+                       "the NASA Exoplanet Archive (exoplanets).", ""),
 }
 # the built-in step each calculation was written alongside: the editor lists those of the area's steps first and
 # the rest under "Other calculations" (2026-11-05)
@@ -54,7 +56,7 @@ CALCULATION_STEP = {**{n: "chemistry" for n in ("normalize_species", "mixing", "
                                                 "peptide_totals", "oligomer_totals", "water_type", "result_basis", "ambient_conditions",
                                                 "atmospheric_start", "results_check")},
                     **{n: "fit_models" for n in ("row_labels", "exoplanet_masses", "reference_names",
-                                                 "archive_validation")}}
+                                                 "archive_validation", "archive_values")}}
 # what each calculation needs to do anything: shown in the editor's Requirements column (2026-11-06)
 CALCULATION_NEEDS = {
     "normalize_species": "The chemistry step's compounds; online lookups on for PubChem.",
@@ -72,6 +74,7 @@ CALCULATION_NEEDS = {
     "exoplanet_masses": "pl_bmassj / pl_masse / pl_msinij-style mass columns.",
     "reference_names": "pl_refname / st_refname / disc_refname columns; the paper's authors and year.",
     "archive_validation": "pl_name rows and online lookups on (NASA Exoplanet Archive).",
+    "archive_values": "pl_name rows, the archive's catalogue columns (sy_vmag, ra, tic_id, ...) and online lookups on.",
 }
 # shared prompts a pack can add rules to (prompts/<name>.rules.md): what they do
 RULE_PROMPTS = {

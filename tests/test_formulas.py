@@ -87,6 +87,57 @@ def test_rows_filled_checked_and_flagged():
     assert row_to_template_dict(rows[1])["temperature_K"] == 373.15
 
 
+def test_series_functions_and_the_prebiotic_formulas():
+    """series_max & co. over a row's experiment series: its set (its run's rows, in a set with runs); an Independent
+    set's rows each alone. The prebiotic pack's is_last_sample / is_max_peptide_yield / total_sampled_peptides_mM."""
+    import json
+    from parameter_extractor.ingestion.flatten_to_template import row_to_template_dict, set_row_value
+    from parameter_extractor.schemas.row_schema import ExtractedRow
+    packs.activate("prebiotic_chemistry")
+    with pytest_raises(FormulaError):
+        parse("series_max(series_min(duration_hr))")
+    with pytest_raises(FormulaError):
+        parse("series_max(a, b)")
+
+    def row(i, set_id, set_type, hours, total, run="", peptides=()):
+        r = ExtractedRow(full_id=f"{set_id}{i:03d}", set_id=set_id, sample_id=f"{i:03d}", set_type=set_type,
+                         entry_number=i, paper_title="t", authors=["A"], year_published=2024, journal_published="j",
+                         experiment_type="Batch", solution_type="Wet", duration_hr=hours)
+        set_row_value(r, "total_sampled_peptides_yield", total)
+        for column, value in peptides:
+            set_row_value(r, column, value)
+        if run:
+            set_row_value(r, "run", run)
+        return r
+    rows = [row(1, "001001", "Time Series", 1, 0.5, peptides=[("sampled_Gly-Gly_aq_mM", 1.5),
+                                                              ("sampled_(Gly)3_aq_mM", 0.25), ("sampled_Gly_aq_mM", 9)]),
+            row(2, "001001", "Time Series", 24, 2.0), row(3, "001001", "Time Series", 48, 1.0),
+            row(1, "001002", "Independent", 24, 3.0), row(2, "001002", "Independent", 24, 1.0),
+            row(1, "001003", "Time Series", 2, 1.0, run="Run 1"), row(2, "001003", "Time Series", 4, 0.5, run="Run 1"),
+            row(3, "001003", "Time Series", 2, 0.2, run="Run 2")]
+    formulas = json.loads((packs.current().folder / "pack.json").read_text())["formulas"]
+    apply_formulas(rows, formulas)
+    got = [(r.full_id, row_to_template_dict(r).get("is_last_sample"), row_to_template_dict(r).get("is_max_peptide_yield"))
+           for r in rows]
+    assert [g[1] for g in got] == [0, 0, 1, 1, 1, 0, 1, 1], got        # each Independent row its own; each run its own
+    assert [g[2] for g in got] == [0, 1, 0, 1, 1, 1, 0, 1], got
+    assert row_to_template_dict(rows[0])["total_sampled_peptides_mM"] == 1.75      # peptides only, not Gly itself
+    assert "total_sampled_peptides_mM" not in row_to_template_dict(rows[1])         # none to add: left empty
+
+
+def pytest_raises(error):
+    import contextlib
+
+    @contextlib.contextmanager
+    def raises():
+        try:
+            yield
+        except error:
+            return
+        raise AssertionError(f"{error.__name__} not raised")
+    return raises()
+
+
 def test_check_and_registry():
     from parameter_extractor.pack_editing import PackDraft, check
     from parameter_extractor.registry import VariableRegistry

@@ -188,6 +188,10 @@ def test_windows():
 
         built_in = PackEditor(packs.available()["prebiotic_chemistry"].folder)
         assert built_in.read_only and not built_in.save_btn.isEnabled() and built_in.label_edit.isReadOnly()
+        formulas = built_in._formulas_from_table()                     # a read-only pack's formulas: look only
+        built_in.f_table.setCurrentCell(0, 1)
+        built_in.insert_formula_column("duration_hr")
+        assert built_in._formulas_from_table() == formulas
         page = built_in.rules_page                                                  # its rules can be looked at
         assert page.prompt_list.isEnabled() and page.show_btn.isEnabled()
         page.select("structure_planner")                       # its own whole row prompt: rules where it says
