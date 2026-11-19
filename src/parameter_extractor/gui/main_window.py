@@ -1641,9 +1641,32 @@ class MainWindow(QMainWindow):
         self.open_folder_btn.setEnabled(True)
         self.open_csv_btn.setEnabled(True)
         self.tabs.setEnabled(True)
+        self._reveal_results()
         n_flags = len(result.paper_flags) + sum(len(f) for f in result.row_flags.values())
         self._update_flags_title()
         self.tabs.setCurrentIndex(1 if n_flags else 0)
+
+    RESULTS_SHARE = 0.75          # results loaded: the inputs take about a quarter of the height (Mickey, 2026-11-18)
+
+    def _reveal_results(self) -> None:
+        """Results just shown (a run finished, an earlier run opened, a queue's paper selected): the results area
+        glides up until the inputs take about a quarter of the height -- only when they take more (a layout made
+        smaller by hand is left alone)."""
+        from PySide6.QtCore import QEasingCurve, QVariantAnimation
+        sizes = self.main_split.sizes()
+        total = sum(sizes)
+        if total <= 0:
+            return
+        target = max(self.main_split.widget(0).minimumHeight(), int(total * (1 - self.RESULTS_SHARE)))
+        if sizes[0] <= target + 4:
+            return
+        anim = getattr(self, "_split_anim", None)
+        if anim is not None:
+            anim.stop()
+        self._split_anim = anim = QVariantAnimation(self, startValue=sizes[0], endValue=target, duration=450)
+        anim.setEasingCurve(QEasingCurve.Type.OutCubic)
+        anim.valueChanged.connect(lambda v: self.main_split.setSizes([int(v), total - int(v)]))
+        anim.start()
 
     def _fill_rows(self, result, from_record: bool = False) -> None:
         """Shows the CSV exactly as saved, minus columns that are empty in every row. The Experiment sets tab follows

@@ -20,13 +20,51 @@ import json
 from pathlib import Path
 from typing import Dict, List, Optional
 
-from PySide6.QtCore import Qt, Signal
-from PySide6.QtGui import QFont
+from PySide6.QtCore import QPointF, QSize, Qt, Signal
+from PySide6.QtGui import QColor, QFont, QPalette, QPen
 from PySide6.QtWidgets import (QAbstractItemView, QHeaderView, QInputDialog, QLabel, QMenu, QMessageBox, QSplitter,
-                               QTextBrowser, QTreeWidget, QTreeWidgetItem, QVBoxLayout, QWidget)
+                               QStyledItemDelegate, QTextBrowser, QTreeWidget, QTreeWidgetItem, QVBoxLayout, QWidget)
 
 NODE_ROLE = Qt.ItemDataRole.UserRole
 VALUE_ROLE = Qt.ItemDataRole.UserRole + 1
+# a record made here for a run from before records existed: from its observations file and row plan (2026-11-18)
+MADE_FROM = "observations and row plan"
+TIER_ROLE = Qt.ItemDataRole.UserRole + 2      # how strongly an item is set off from the one above it (TIERS)
+
+# Spacing above an item and the line over it, by how high it stands (Mickey, 2026-11-18: levels divided more clearly
+# the higher they are; the rows themselves as before). The values panel's kind-of-value headings use the set's.
+TIERS = {"paper": (18, 2, 150), "set": (10, 1, 90), "run": (4, 1, 45), "row": (0, 0, 0), "note": (6, 0, 0)}
+
+
+class TierDelegate(QStyledItemDelegate):
+    """Rows of a tree a little taller and with a line over them by their tier (TIER_ROLE on the first column): the
+    item's text stays centred, the line sits at the top of the row, across every column. The tree's first row has
+    no line (nothing above it to divide from)."""
+
+    def _tier(self, index):
+        first = index.sibling(index.row(), 0)
+        return TIERS.get(first.data(TIER_ROLE) or "row", TIERS["row"])
+
+    def sizeHint(self, option, index):
+        size = super().sizeHint(option, index)
+        pad = self._tier(index)[0]
+        return QSize(size.width(), size.height() + pad) if pad else size
+
+    def paint(self, painter, option, index):
+        super().paint(painter, option, index)
+        _pad, width, alpha = self._tier(index)
+        if not width or (index.row() == 0 and not index.parent().isValid()):
+            return
+        color = QColor(option.palette.color(QPalette.ColorRole.Text))
+        color.setAlpha(alpha)
+        painter.save()
+        painter.setPen(QPen(color, width))
+        y = option.rect.top() + width / 2
+        left = option.rect.left()
+        if index.column() == 0:                    # under the branch arrows too, from the tree's left edge
+            left = 0
+        painter.drawLine(QPointF(left, y), QPointF(option.rect.right() + 1, y))
+        painter.restore()
 
 
 def _cap(word: str) -> str:
@@ -68,6 +106,7 @@ class RecordView(QWidget):
         self.tree = QTreeWidget()
         self.tree.setHeaderHidden(True)
         self.tree.currentItemChanged.connect(lambda cur, _prev: self._show_node(cur))
+        self.tree.setItemDelegate(TierDelegate(self.tree))
         split.addWidget(self.tree)
         right = QWidget()
         rv = QVBoxLayout(right)
@@ -77,6 +116,7 @@ class RecordView(QWidget):
         self.values = QTreeWidget()
         self.values.setHeaderLabels(["Value", "Amount", "Unit", "Recorded for"])
         self.values.setRootIsDecorated(False)
+        self.values.setItemDelegate(TierDelegate(self.values))
         self.values.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
         self.values.itemDoubleClicked.connect(self._start_edit)
         self.values.itemChanged.connect(self._edited)
@@ -125,10 +165,13 @@ class RecordView(QWidget):
         from parameter_extractor import packs, record_tree
         r = self.result
         path = getattr(r, "record_path", None)
-        if path and Path(path).is_file():
-            self._data = json.loads(Path(path).read_text(encoding="utf-8"))
-        else:
-            self._data = self._make_record()
+        data = json.loads(Path(path).read_text(encoding="utf-8")) if path and Path(path).is_file() else None
+        # a record this tab made for an older run before it read the run's row plan (no labels, no runs): made again
+        obs = getattr(r, "observations_path", None)
+        if data is not None and "app_version" not in data and data.get("made_from") != MADE_FROM \
+                and getattr(r, "run_dir", None) and obs and Path(obs).is_file():
+            data = None
+        self._data = data if data is not None else self._make_record()
         self._paper = record_tree.from_json(self._data)
         self._parent = {}
         self._facet_of: Dict[str, str] = {}
@@ -172,8 +215,20 @@ class RecordView(QWidget):
                             if v not in ("", None) and c not in ("full_id", "set_id", "sample_id", "entry_number")]
         else:
             observations = rows_to_observations(r.rows)
-        data = record_tree.to_json(record_tree.build(observations, facets), facets,
-                                   {"paper": r.paper_id, "data_pack": pack.id})
+        labels, runs = {}, {}
+        plan_file = Path(r.run_dir) / "structure_planner.output.json" if r.run_dir else None
+        if plan_file is not None and plan_file.is_file():      # the run's own row plan: labels and runs
+            try:
+                from parameter_extractor.schemas.structure_plan import StructurePlan
+                plan = StructurePlan.model_validate_json(plan_file.read_text(encoding="utf-8"))
+                labels = record_tree.plan_labels(plan, observations)
+                runs = record_tree.plan_runs(plan, observations, bool(getattr(pack.manifest, "runs_from_labels", False)))
+            except Exception:                         # noqa: BLE001 -- labels are a courtesy
+                labels, runs = {}, {}
+        if runs:
+            facets = record_tree.Facets(order, record_tree.levels(pack, runs=True))
+        data = record_tree.to_json(record_tree.build(observations, facets, labels, runs), facets,
+                                   {"paper": r.paper_id, "data_pack": pack.id, "made_from": MADE_FROM})
         if r.run_dir and Path(r.run_dir).is_dir() and r.csv_path:
             r.record_path = Path(r.csv_path).with_name(Path(r.csv_path).name.replace("_extracted.csv", "_record.json"))
             r.record_path.write_text(json.dumps(data, indent=1, ensure_ascii=False) + "\n", encoding="utf-8")
@@ -201,6 +256,13 @@ class RecordView(QWidget):
                 return self._alone
         return self._words[node.level] if node.level < len(self._words) else "item"
 
+    def _tier(self, node) -> str:
+        if not node.children:
+            return "row"
+        if node.level == 0:
+            return "paper"
+        return "run" if node.level == self._run_level else "set"
+
     def _rows_word(self, node) -> str:
         """What the rows under a node are called: their one word, or 'row' when they're called differently."""
         words = {self._word(leaf) for leaf in self._rows_under(node)}
@@ -225,6 +287,7 @@ class RecordView(QWidget):
             sets = paper.children if set_word else []
             top = QTreeWidgetItem([f"Paper: {self._title()}"])
             top.setData(0, NODE_ROLE, paper)
+            top.setData(0, TIER_ROLE, "paper")
             bold = QFont()
             bold.setBold(True)
             top.setFont(0, bold)
@@ -269,6 +332,7 @@ class RecordView(QWidget):
             text += f"  -- {flags} to check"
         item = QTreeWidgetItem([text])
         item.setData(0, NODE_ROLE, node)
+        item.setData(0, TIER_ROLE, self._tier(node))
         item.setToolTip(0, f"{word} {node.id}" + (f" -- {flags} thing(s) to check (Things to check tab)" if flags
                                                   else ""))
         return item
@@ -348,6 +412,7 @@ class RecordView(QWidget):
                           provenance="Notes on how it was read")
             for facet in sorted(groups, key=lambda f: self._facet_order.index(f) if f in self._facet_order else 10**6):
                 head = QTreeWidgetItem([labels.get(facet, _cap(facet))])
+                head.setData(0, TIER_ROLE, "set")              # a kind of value: set off like a set on the left
                 head.setFont(0, bold)
                 head.setFlags(Qt.ItemFlag.ItemIsEnabled)
                 self.values.addTopLevelItem(head)
@@ -387,6 +452,7 @@ class RecordView(QWidget):
                 note = QTreeWidgetItem([f"Also {on_paper} value{'s' if on_paper != 1 else ''} recorded for the whole "
                                         f"paper (title, authors, ...): select the paper to see them."])
                 note.setForeground(0, self.palette().placeholderText())
+                note.setData(0, TIER_ROLE, "note")
                 note.setFlags(Qt.ItemFlag.ItemIsEnabled)
                 self.values.addTopLevelItem(note)
                 note.setFirstColumnSpanned(True)

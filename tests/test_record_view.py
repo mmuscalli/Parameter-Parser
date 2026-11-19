@@ -76,9 +76,24 @@ def test_the_experiment_sets_tab_shows_and_corrects():
         with patch.object(api_client, "_send", _replay_send):
             result = run_pipeline(PDF, _config(Path(tmp)))
         w = MainWindow()
-        w.show_result(result)
+        w.resize(1200, 900)
+        w.show()
         _pump()
+        w.main_split.setSizes([600, 300])                                     # the inputs taking most of it
+        w.show_result(result)
+        for _ in range(60):                                                   # the results area glides up
+            _pump(1)
+            time.sleep(0.01)
+        top, bottom = w.main_split.sizes()
+        assert top <= 0.27 * (top + bottom), (top, bottom)
         view = w.record_view
+        from parameter_extractor.gui.record_view import TIER_ROLE
+        paper_item = view.tree.topLevelItem(0)
+        assert paper_item.data(0, TIER_ROLE) == "paper" and paper_item.child(0).data(0, TIER_ROLE) == "set"
+        assert paper_item.child(0).child(0).data(0, TIER_ROLE) == "row"
+        tall = view.tree.visualItemRect(paper_item.child(0)).height()
+        plain = view.tree.visualItemRect(paper_item.child(0).child(0)).height()
+        assert tall > plain, (tall, plain)                                    # a set stands off more than a row
         index = w.tabs.indexOf(view)
         assert w.tabs.tabText(index) == "Experiment sets" and w.tabs.isTabEnabled(index)
         paper = view.tree.topLevelItem(0)
@@ -200,6 +215,18 @@ def test_an_opened_older_run_gets_its_record():
         assert w.tabs.isTabEnabled(w.tabs.indexOf(w.record_view))
         made = json.loads(result.record_path.read_text())
         assert len(made["paper"]["children"]) == len(expected["paper"]["children"])
+        assert made["made_from"] and made["paper"]["children"][0].get("label")      # labels from its row plan
+        # a record made by an earlier version of this tab (no labels, no mark): made again when the folder opens
+        stale = dict(made)
+        stale.pop("made_from")
+        for child in stale["paper"]["children"]:
+            child.pop("label", None)
+        result.record_path.write_text(json.dumps(stale))
+        w0 = MainWindow()
+        w0.show_result(run_folder.load_result(result.run_dir))
+        _pump()
+        assert w0.record_view.tree.topLevelItem(0).child(0).text(0).startswith("Experiment set 1: ")
+        w0.close()
         view = w.record_view
         view.tree.setCurrentItem(view.tree.topLevelItem(0).child(0).child(0))
         _pump()
