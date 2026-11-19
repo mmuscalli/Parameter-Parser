@@ -84,6 +84,11 @@ def test_clicking_opens_a_step_or_kind_in_place():
         canvas.toggle(key)
         assert key not in canvas.opened and height(key) == shut
     assert not any(i.toolTip() for i in canvas.scene().items())            # no tooltips over the picture
+    from parameter_extractor.gui.structure_canvas import OPEN_LINES, brief, opened_lines, _font
+    lines = opened_lines("A long description " * 20, ["8 columns · Level: Set", "Fills in: within each set"],
+                         _font(10), 160)
+    assert len(lines) <= OPEN_LINES and lines[0].endswith("…") and lines[-1].startswith("Fills in")
+    assert brief("Rate constants (kobs). More text.") == "Rate constants"
 
 
 def test_the_pack_editor_has_a_map():

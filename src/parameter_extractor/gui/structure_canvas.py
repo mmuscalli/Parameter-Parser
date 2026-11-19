@@ -179,11 +179,11 @@ def wrap(text: str, font: QFont, width: float, lines: int = 2) -> List[str]:
         if fm.horizontalAdvance(trial) <= width or not current:
             current = trial
             continue
+        if len(out) == lines - 1:                   # the last line: the rest, elided
+            current = " ".join([current] + words[i:])
+            break
         out.append(current)
         current = word
-        if len(out) == lines - 1:
-            current = " ".join(words[i:])
-            break
     out.append(current)
     return [fm.elidedText(line, Qt.TextElideMode.ElideRight, width) for line in out[:lines]]
 
@@ -270,7 +270,24 @@ class _Drawing:
 
 
 FILL_TEXT = {"set": "fills in per {set}", "paper": "fills in across the paper", "none": ""}
-MANY = 99                                        # an open node's text: every line
+MANY = 99                                        # every line (the header, a lane's note)
+LEVEL_WORDS = {"paper": "Whole paper", "set": "Set", "run": "Run", "sample": "Sample"}
+FILL_WORDS = {"set": "within each set", "paper": "across the whole paper"}
+OPEN_LINES = 3                                   # an opened node: at most this many lines under its name
+
+
+def brief(text: str) -> str:
+    """The first sentence of a description, without its asides in brackets (the other tabs have it whole)."""
+    import re
+    first = re.split(r"(?<=[.;])\s", (text or "").strip(), maxsplit=1)[0].rstrip(".;")
+    return re.sub(r"\s*\([^)]*\)", "", first).strip()
+
+
+def opened_lines(about: str, facts: List[str], font: QFont, width: float) -> List[str]:
+    """An opened node's lines: a brief description over its facts (a line each), OPEN_LINES at most."""
+    fact_lines = [line for fact in facts for line in wrap(fact, font, width, 2)]
+    about = about[:1].upper() + about[1:]
+    return (wrap(about, font, width, max(1, OPEN_LINES - len(fact_lines))) if about else []) + fact_lines
 
 
 def _card_fill(pal: QPalette) -> QColor:
@@ -333,13 +350,10 @@ def build_scene(pack, palette: Optional[QPalette] = None, opened: Optional[Set[s
     for st in s.steps:
         key = f"step:{st.name}"
         is_open = key in opened
-        source = "the app" if st.source == "app" else "this data pack" if st.source == "pack" \
-            else f"the {st.source} module"
-        name = wrap(st.label, name_font, STEP_W - 24, MANY if is_open else 2)
-        more = []
-        if is_open:
-            for part in (f"From {source}.", f"Runs for {st.when}.", st.what):
-                more += wrap(part, sub_font, STEP_W - 24, MANY) if part else []
+        source = "App" if st.source == "app" else "Data pack" if st.source == "pack" else f"{st.source} module"
+        runs = "Always" if st.when.startswith("every paper") else "Conditional"
+        name = wrap(st.label, name_font, STEP_W - 24, 2)
+        more = opened_lines(brief(st.what), [f"Runs: {runs} · {source}"], sub_font, STEP_W - 24) if is_open else []
         height = 12 + len(name) * name_h + (len(more) * sub_h + 4 if more else 0)
         rect = QRectF(COL_STEPS, y, STEP_W, height)
         col = colors.get(st.source, text)
@@ -364,7 +378,7 @@ def build_scene(pack, palette: Optional[QPalette] = None, opened: Optional[Set[s
             if key in opened:
                 d.box(QRectF(COL_STEPS, y + 4, 7, 7), col, col, 3.5, key=key)
                 d.text(label, COL_STEPS + 14, y, text, 10, True, key)
-                y = d.lines(wrap(what, sub_font, CALCS_W - 14, MANY), COL_STEPS + 14, y + 15, muted, SUB_PT,
+                y = d.lines(wrap(brief(what), sub_font, CALCS_W - 14, 2), COL_STEPS + 14, y + 15, muted, SUB_PT,
                             False, key) + 5
                 continue
             if x + w > COL_STEPS + CALCS_W and x > COL_STEPS:
@@ -387,20 +401,15 @@ def build_scene(pack, palette: Optional[QPalette] = None, opened: Optional[Set[s
         is_open = f"kind:{k.id}" in opened
         full, other = fillers(k)
         dots = min(len(full or other), 6)
-        name = wrap(k.label, name_font, CARD_W - 22 - 9 * dots, MANY if is_open else 2)
+        name = wrap(k.label, name_font, CARD_W - 22 - 9 * dots, 2)
         count = f"{k.columns} column{'s' if k.columns != 1 else ''}" if k.columns else "no columns yet"
         fill = FILL_TEXT.get(k.fill, "").format(set=set_word)
         if not is_open:
             return name, wrap(" · ".join(x for x in (count, fill) if x), sub_font, CARD_W - 18, 2)
-        parts = [k.description, f"Recorded for each {lane.lower()}" + (f"; {fill}." if fill else "."),
-                 f"{count[:1].upper()}{count[1:]}, from {k.origin}.",
-                 f"Filled by: {', '.join(st.label for st in full)}." if full else "",
-                 f"Only through the 'other values' answers of: {', '.join(st.label for st in other)}."
-                 if other else ""]
-        out: List[str] = []
-        for part in parts:
-            out += wrap(part, sub_font, CARD_W - 18, MANY) if part else []
-        return name, out
+        facts = [f"{count[:1].upper()}{count[1:]} · Level: {LEVEL_WORDS.get(k.level, k.level.title())}"]
+        if k.fill in FILL_WORDS:
+            facts.append(f"Fills in: {FILL_WORDS[k.fill]}")
+        return name, opened_lines(brief(k.description), facts, sub_font, CARD_W - 18)
 
     for i, (lid, label, note) in enumerate(s.levels):
         cards = [k for k in s.kinds if k.level == lid]
