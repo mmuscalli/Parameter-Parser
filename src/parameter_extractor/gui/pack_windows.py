@@ -23,7 +23,8 @@ from typing import Dict, List, Optional, Tuple
 from PySide6.QtCore import QObject, Qt, QUrl, Signal
 from PySide6.QtCore import QSize
 from PySide6.QtGui import QBrush, QColor, QDesktopServices, QFont, QPalette
-from PySide6.QtWidgets import (QAbstractItemView, QCheckBox, QComboBox, QDialog, QDialogButtonBox, QFormLayout,
+from PySide6.QtWidgets import (QAbstractItemView, QCheckBox, QComboBox, QDialog, QDialogButtonBox, QFileDialog,
+                               QFormLayout,
                                QGridLayout,
                                QGroupBox, QHBoxLayout, QHeaderView, QInputDialog, QLabel, QLineEdit, QListWidget,
                                QListWidgetItem, QMessageBox, QPlainTextEdit, QProgressBar, QPushButton, QScrollArea, QSplitter,
@@ -820,7 +821,8 @@ class PackEditor(QDialog):
         header = self._category_header(cid)
         if header is not None:
             other = self._category_header("other")
-            children = [c for c in header.takeChildren() if not c.data(0, self.SUBHEADER)]
+            children = [c for c in header.takeChildren() if not c.data(0, self.SUBHEADER)
+                        and not c.data(0, self.MODULE_COLUMN)]
             if other is not None and children:
                 other.addChildren(children)
                 other.setText(1, f"{len(self._column_children(other))} columns")
@@ -872,15 +874,43 @@ class PackEditor(QDialog):
             if key not in groups:
                 groups[key] = header(key, label, not key.startswith("__"))
             members.setdefault(key, []).append(c)
-        # in each kind of value the columns something fills, then the ones nothing fills automatically (kept for the
-        # dataset's layout), set apart and greyed (Mickey, 2026-11-19)
-        for key, cols in members.items():
+        # the linked modules' columns too, in their kinds of value, read-only (2026-11-19: the Map counted them and
+        # the tab didn't show them -- Mineral surfaces '6 columns', none here)
+        module_of = self._module_columns()
+        step_of = {c: f"this data pack's step '{names[0]}'" for c, names in self.draft.stage_columns().items()
+                   if c not in set(columns) and c not in module_of}      # filled by a step, not in the list
+        from_modules: Dict[str, List[str]] = {}
+        from_steps: Dict[str, List[str]] = {}
+        for found, into in ((module_of, from_modules), (step_of, from_steps)):
+            for c in found:
+                if c in set(columns) or order is None:
+                    continue
+                key = order.category_of(c)
+                if key not in groups:
+                    groups[key] = header(key, order.label_of(c), True)
+                into.setdefault(key, []).append(c)
+        module_of = {**module_of, **step_of}
+        # in each kind of value the columns something fills, the modules' columns, then the ones nothing fills
+        # automatically (kept for the dataset's layout), set apart and greyed (Mickey, 2026-11-19)
+        for key in list(dict.fromkeys(list(members) + list(from_modules) + list(from_steps))):
+            cols = members.get(key, [])
             filled = [c for c in cols if fills.get(c)]
             empty = [c for c in cols if not fills.get(c)]
-            if empty and filled:
+            stepped, modular = from_steps.get(key, []), from_modules.get(key, [])
+            parts = [p for p in (filled, stepped, modular, empty) if p]
+            if filled and len(parts) > 1:
                 self._subheader(groups[key], f"Filled automatically ({len(filled)})")
             for c in filled:
                 self._column_item(groups[key], c, unit_for_column(c), fills.get(c))
+            for extra, title, where in ((stepped, "Added by this data pack's steps", "the Steps tab"),
+                                        (modular, "From linked modules", "the module (Modules tab)")):
+                if extra:
+                    self._subheader(groups[key], f"{title} ({len(extra)}) -- edited in {where}")
+                for c in extra:
+                    item = self._column_item(groups[key], c, unit_for_column(c), fills.get(c) or [module_of[c]])
+                    item.setData(0, self.MODULE_COLUMN, module_of[c])
+                    item.setFlags(Qt.ItemFlag.ItemIsEnabled | Qt.ItemFlag.ItemIsSelectable)   # not renamed or moved
+                    item.setToolTip(0, f"Filled by {module_of[c]}: change it in {where}.")
             if empty:
                 self._subheader(groups[key], f"Not filled automatically ({len(empty)})")
             for c in empty:
@@ -898,6 +928,21 @@ class PackEditor(QDialog):
                 groups[key].setExpanded(True)
 
     SUBHEADER = Qt.ItemDataRole.UserRole + 1       # a 'Filled / Not filled automatically' line among the columns
+    MODULE_COLUMN = Qt.ItemDataRole.UserRole + 2   # a linked module's column: shown, not the pack's to save
+
+    def _module_columns(self) -> Dict[str, str]:
+        """{column: 'the <label> module'} for the columns the linked modules bring (as this pack's settings name
+        them)."""
+        out: Dict[str, str] = {}
+        try:
+            for mod, spec in self.draft.module_specs():
+                for c in spec.columns:
+                    out.setdefault(c, f"the {mod.label} module")
+            for c in self.draft.module_columns():
+                out.setdefault(c, "a linked module")
+        except Exception:                            # noqa: BLE001 -- a module that can't load: none shown
+            return {}
+        return out
 
     def _column_fills(self) -> Dict[str, List[str]]:
         """{column: what fills it} (column_sources.py: steps, built-in steps, the row plan, calculations, ...)."""
@@ -956,7 +1001,8 @@ class PackEditor(QDialog):
         out = []
         for i in range(self.column_tree.topLevelItemCount()):
             group = self.column_tree.topLevelItem(i)
-            out += [c.text(0).strip() for c in self._column_children(group) if c.text(0).strip()]
+            out += [c.text(0).strip() for c in self._column_children(group)
+                    if c.text(0).strip() and not c.data(0, self.MODULE_COLUMN)]      # a module's: not the pack's
         return out
 
     def _moved_categories(self) -> Dict[str, str]:
@@ -968,6 +1014,8 @@ class PackEditor(QDialog):
             if not key or key.startswith("__"):
                 continue
             for child in self._column_children(group):
+                if child.data(0, self.MODULE_COLUMN):
+                    continue
                 col = child.text(0).strip()
                 home = self._home_category.get(col)
                 if col and (home is None and self._column_order is not None
@@ -1035,6 +1083,10 @@ class PackEditor(QDialog):
         self.map_canvas = StructureCanvas()
         self.map_canvas.actions_for = self._map_actions
         bar.addWidget(QPushButton("Fit to window", clicked=lambda: self.map_canvas.fit()))
+        export = QPushButton("Export image…", clicked=lambda: self.export_map())
+        export.setToolTip("The map as an image for a figure: PNG with a transparent background, or SVG (vector), with "
+                          "dark text for a white page. Opened nodes are exported opened.")
+        bar.addWidget(export)
         v.addLayout(bar)
         v.addWidget(self.map_canvas, 1)
         self._refresh_map()
@@ -1096,6 +1148,25 @@ class PackEditor(QDialog):
             if item is not None and item.data(Qt.ItemDataRole.UserRole) == mid:
                 self.module_table.setCurrentCell(r, 0)
                 return
+
+    def export_map(self, path: Optional[Path] = None) -> Optional[Path]:
+        """The Map as an image file (structure_canvas.export_image): PNG with no background, or SVG."""
+        from parameter_extractor.gui.structure_canvas import export_image
+        if path is None:
+            name = f"{self.draft.manifest.get('id') or 'data_pack'}_map.png"
+            chosen, _f = QFileDialog.getSaveFileName(self, "Export the map", str(Path.home() / name),
+                                                     "PNG image, transparent (*.png);;SVG vector image (*.svg)")
+            if not chosen:
+                return None
+            path = Path(chosen)
+        if path.suffix.lower() not in (".png", ".svg"):
+            path = path.with_suffix(".png")
+        try:
+            export_image(packs.Pack(self.draft.folder), path, opened=set(self.map_canvas.opened))
+        except Exception as e:                       # noqa: BLE001 -- say why, never crash the editor
+            QMessageBox.warning(self, "Not exported", f"The map couldn't be exported: {e}")
+            return None
+        return path
 
     def _refresh_map(self) -> None:
         try:
@@ -1791,7 +1862,7 @@ class PackEditor(QDialog):
 
     def _remove_column(self) -> None:
         for item in self.column_tree.selectedItems():
-            if item.parent() is not None:
+            if item.parent() is not None and not item.data(0, self.MODULE_COLUMN):   # a module's: not here
                 item.parent().removeChild(item)
 
     # ---- Stages -------------------------------------------------------------------------
@@ -2580,7 +2651,7 @@ class PackEditor(QDialog):
             if isinstance(child, (QLineEdit, QPlainTextEdit)):
                 child.setReadOnly(True)
             elif child in (self.rules_page.show_btn, self.rules_page.modules_btn) or (isinstance(child, QPushButton)
-                                               and child.text() in ("Fit to window",
+                                               and child.text() in ("Fit to window", "Export image…",
                                                                     "Variable categories (all data packs)…")):
                 continue                       # looking at things: a prompt, the map, other tabs
             elif isinstance(child, (QCheckBox, QComboBox, QPushButton)):

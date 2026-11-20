@@ -174,3 +174,4 @@ current month's file (start `YYYY-MM.md` in a new month), with one line here.
 - Branch levels-and-facets: figure suggestions in packages for another assistant; the caveats (2026-11-19, Mickey)
 - Branch levels-and-facets: the export's window gives the package's path, copied (2026-11-19, Mickey)
 - Branch levels-and-facets: lighter packages for another assistant -- shared parts once, work economically (2026-11-19, Mickey)
+- Branch levels-and-facets: the Map exports as an image; its column counts are the Columns tab's (2026-11-19, Mickey)

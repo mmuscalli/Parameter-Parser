@@ -71,8 +71,10 @@ class Kind:
     level: str                  # level id
     fill: str                   # "set", "paper" or "none"
     origin: str                 # "this data pack", "module: …", "every data pack"
-    columns: int = 0
+    columns: int = 0                # as the Columns tab lists them: the pack's own and its modules'
     description: str = ""
+    module_columns: int = 0         # of those, the ones a linked module brings
+    step_columns: int = 0           # and the ones the pack's own steps fill without them being in its list
 
 
 @dataclass
@@ -104,7 +106,6 @@ def structure_of(pack) -> Structure:
     from parameter_extractor import pack_overview, record_tree, variable_categories as vc
     from parameter_extractor.calculators.shared_values import fill_choices
     from parameter_extractor.column_order import ColumnOrder
-    from parameter_extractor.registry import standard_columns
     from parameter_extractor.stages.optional import load_specs
     order = ColumnOrder(pack=pack)
     specs = load_specs(pack)
@@ -124,10 +125,23 @@ def structure_of(pack) -> Structure:
     cats, _cols = fill_choices(pack)
     own = {c.get("id") for c in pack.own_manifest.variable_categories}
     module_of = {c.get("id"): m.label for m in getattr(pack, "modules", []) for c in m.manifest.variable_categories}
-    known = set(pack.template_columns) | set(standard_columns(pack)) | {c for s in specs.values() for c in s.columns}
+    # the columns the Columns tab lists: the pack's own, then its linked modules' (2026-11-19: counting every
+    # column a step could fill -- uncertainties, modes, other estimates -- gave 849 'Planet parameters' columns
+    # against the tab's 123, and module columns the tab didn't show at all)
+    from parameter_extractor.pack_editing import PackDraft
+    draft = PackDraft.load(pack.folder)
+    listed = set(draft.columns)
+    from_modules = [c for c in dict.fromkeys(draft.module_columns()) if c not in listed]
+    from_steps = [c for c in draft.stage_columns() if c not in listed and c not in set(from_modules)]
     per_cat: Dict[str, int] = {}
-    for c in known:
-        per_cat[order.category_of(c)] = per_cat.get(order.category_of(c), 0) + 1
+    per_cat_modules: Dict[str, int] = {}
+    per_cat_steps: Dict[str, int] = {}
+    from parameter_extractor.column_order import IDENTIFIERS_LABEL, PROVENANCE_LABEL
+    for counts, cols in ((per_cat, draft.columns), (per_cat_modules, from_modules), (per_cat_steps, from_steps)):
+        for c in cols:
+            if order.label_of(c) in (IDENTIFIERS_LABEL, PROVENANCE_LABEL):   # the tab's Row / Provenance blocks
+                continue
+            counts[order.category_of(c)] = counts.get(order.category_of(c), 0) + 1
     kinds = []
     for c in vc.categories(pack):
         if c.id in ("figure", "assumed"):
@@ -135,8 +149,9 @@ def structure_of(pack) -> Structure:
         level = facets.levels[facets.caps.get(c.id, facets.row)].id
         origin = "this data pack" if c.id in own else f"module: {module_of[c.id]}" if c.id in module_of \
             else "every data pack"
-        kinds.append(Kind(c.id, c.label, level, cats.get(c.id) or "none", origin, per_cat.get(c.id, 0),
-                          c.description))
+        kinds.append(Kind(c.id, c.label, level, cats.get(c.id) or "none", origin,
+                          per_cat.get(c.id, 0) + per_cat_modules.get(c.id, 0) + per_cat_steps.get(c.id, 0),
+                          c.description, per_cat_modules.get(c.id, 0), per_cat_steps.get(c.id, 0)))
 
     steps, calcs = [], []
     for f in pack_overview.paper_flow(pack):
@@ -434,6 +449,10 @@ def build_scene(pack, palette: Optional[QPalette] = None, opened: Optional[Set[s
         dots = min(len(full or other), 6)
         name = wrap(k.label, name_font, CARD_W - 22 - 9 * dots, 2)
         count = f"{k.columns} column{'s' if k.columns != 1 else ''}" if k.columns else "no columns yet"
+        extra = [f"{n} {what}" for n, what in ((k.module_columns, "from modules"), (k.step_columns, "added by steps"))
+                 if n]                                # the Columns tab lists them under these headings
+        if extra:
+            count += f" ({', '.join(extra)})"
         fill = FILL_TEXT.get(k.fill, "").format(set=set_word)
         if not is_open:
             return name, wrap(" · ".join(x for x in (count, fill) if x), sub_font, CARD_W - 18, 2)
@@ -735,3 +754,49 @@ def render_png(pack, path, palette: Optional[QPalette] = None, scale: float = 2.
     scene.render(painter, QRectF(0, 0, image.width(), image.height()), rect)
     painter.end()
     image.save(str(path))
+
+
+# ---- the map as a figure (Mickey, 2026-11-19: "export a .png ... with no window background ... for building
+# figures") -----------------------------------------------------------------------------------------------------------
+
+def print_palette() -> QPalette:
+    """The colours of an exported map, whatever the window's theme: dark text and white cards, for a white page."""
+    pal = QPalette()
+    for role, color in ((QPalette.ColorRole.Window, "#ffffff"), (QPalette.ColorRole.Base, "#ffffff"),
+                        (QPalette.ColorRole.Text, "#1d1d1f"), (QPalette.ColorRole.WindowText, "#1d1d1f"),
+                        (QPalette.ColorRole.Highlight, "#0a64d6")):
+        pal.setColor(role, QColor(color))
+    return pal
+
+
+def export_image(pack, path, opened: Optional[Set[str]] = None, scale: float = 3.0,
+                 palette: Optional[QPalette] = None):
+    """The map to `path` with no background: a PNG (transparent, `scale` x its size on screen) or, for a .svg path, a
+    vector image that stays sharp at any size. The nodes in `opened` drawn opened, as on screen."""
+    from pathlib import Path
+    from PySide6.QtCore import QSize
+    from PySide6.QtGui import QImage
+    path = Path(path)
+    scene = build_scene(pack, palette or print_palette(), opened)
+    scene.setBackgroundBrush(QBrush(Qt.BrushStyle.NoBrush))
+    rect = scene.sceneRect()
+    if path.suffix.lower() == ".svg":
+        from PySide6.QtSvg import QSvgGenerator
+        svg = QSvgGenerator()
+        svg.setFileName(str(path))
+        svg.setSize(QSize(int(rect.width()), int(rect.height())))
+        svg.setViewBox(QRectF(0, 0, rect.width(), rect.height()))
+        svg.setTitle(f"{pack.manifest.label}: data pack map")
+        painter = QPainter(svg)
+        painter.setRenderHints(QPainter.RenderHint.Antialiasing | QPainter.RenderHint.TextAntialiasing)
+        scene.render(painter, QRectF(0, 0, rect.width(), rect.height()), rect)
+        painter.end()
+        return path
+    image = QImage(int(rect.width() * scale), int(rect.height() * scale), QImage.Format.Format_ARGB32_Premultiplied)
+    image.fill(Qt.GlobalColor.transparent)
+    painter = QPainter(image)
+    painter.setRenderHints(QPainter.RenderHint.Antialiasing | QPainter.RenderHint.TextAntialiasing)
+    scene.render(painter, QRectF(0, 0, image.width(), image.height()), rect)
+    painter.end()
+    image.save(str(path))
+    return path

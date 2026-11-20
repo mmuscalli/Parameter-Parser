@@ -144,6 +144,43 @@ def test_columns_nothing_fills_are_set_apart():
         e.close()
 
 
+def test_the_map_counts_what_the_columns_tab_lists():
+    """Each kind of value's count on the Map = the columns the Columns tab lists under it: the pack's own, its steps'
+    unlisted ones and its linked modules' (read-only there, never saved into the pack)."""
+    from parameter_extractor.gui.pack_windows import PackEditor
+    from parameter_extractor.gui.structure_canvas import structure_of
+    for pid in ("prebiotic_chemistry", "exoplanets"):
+        pack = packs.activate(pid)
+        e = PackEditor(pack.folder)
+        listed = {e.column_tree.topLevelItem(i).data(0, 256): len(e._column_children(e.column_tree.topLevelItem(i)))
+                  for i in range(e.column_tree.topLevelItemCount())}
+        for k in structure_of(pack).kinds:
+            assert k.columns == listed.get(k.id, 0), (pid, k.id, k.columns, listed.get(k.id))
+        shown = [c for i in range(e.column_tree.topLevelItemCount())
+                 for c in e._column_children(e.column_tree.topLevelItem(i)) if c.data(0, e.MODULE_COLUMN)]
+        import pack_facts as pf
+        assert bool(shown) == bool(pf.module_ids(pid) or set(e.draft.stage_columns()) - set(e.draft.columns))
+        assert not any(c.flags() & c.flags().ItemIsEditable for c in shown)
+        assert e._tree_columns() == [c for c in e._tree_columns() if c in set(e.draft.columns)]   # not the pack's
+        assert sorted(e._tree_columns()) == sorted(e.draft.columns)
+        e.close()
+    packs.activate("prebiotic_chemistry")
+
+
+def test_the_map_exports_as_an_image():
+    from PySide6.QtGui import QImage
+    from parameter_extractor.gui.pack_windows import PackEditor
+    e = PackEditor(packs.available()["exoplanets"].folder)               # a read-only pack exports too
+    with tempfile.TemporaryDirectory() as tmp:
+        png = e.export_map(Path(tmp) / "map.png")
+        img = QImage(str(png))
+        assert img.width() > 2000 and img.pixelColor(1, 1).alpha() == 0      # no background
+        svg = e.export_map(Path(tmp) / "map.svg")
+        assert svg.read_text()[:400].count("<svg") == 1 and "Exoplanets" in svg.read_text()
+        assert e.export_map(Path(tmp) / "map").suffix == ".png"
+    e.close()
+
+
 def test_the_categories_window_refills_without_leftovers():
     """Choosing another data pack in the Variable categories window: only the new rows' controls are shown (the
     replaced ones used to stay drawn while the window was open from another window)."""
