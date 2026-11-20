@@ -70,10 +70,38 @@ def test_export_writes_a_package_nothing_is_sent():
             assert exchange.PAPER_MARK in text or r["stage"] in ("metadata", "figure_planner")   # once, in paper.txt
             assert not BRANDS.search(text)
         assert all(r["uses_row_plan"] for r in m["requests"][2:])
+        shared = {f: (folder / f).read_text() for f in (exchange.SHARED_FILE, exchange.SHARED_OPTIONAL_FILE)
+                  if (folder / f).is_file()}
+        assert m["shared"] == sorted(shared) and exchange.SHARED_FILE in shared
+        for r in m["requests"]:                                  # every pointer has its section
+            exchange.expand_shared((folder / r["request"]).read_text(), shared)
         guide = (folder / exchange.INSTRUCTIONS_FILE).read_text()
+        assert "Work economically" in guide and exchange.SHARED_FILE in guide
         assert "in their numbered order" in guide and exchange.ROW_PLAN_MARK in guide and "about.json" in guide
         assert not BRANDS.search(guide)
         assert not list((folder / "answers").glob("*.json"))
+
+
+def test_repeated_text_is_shared_and_reads_back_exactly():
+    """share_blocks on any requests: repeated paragraphs and runs of list items go to SHARED.md (or
+    SHARED-OPTIONAL.md when only optional requests use them); expanding the pointers gives each request back exactly."""
+    rules = ["- Only values the paper states, never a typical value; " + "x" * 160,
+             "- Keep every quote to the shortest span that shows the value; " + "y" * 160]
+    big = "BIG BLOCK " + "z" * 400
+    docs = {"requests/01-a.md": "# A\n\nRules:\n" + "\n".join(rules + ["- A's own rule"]) + "\n\n" + big,
+            "requests/02-b.md": "# B\n\nRules:\n" + "\n".join(["- B's own rule"] + rules) + "\n\n" + big,
+            "requests/03-c.md": "# C\n\nshort text",
+            "requests/04-fig.md": "# F\n\n" + "FIG " + "f" * 400,
+            "requests/05-fig.md": "# G\n\n" + "FIG " + "f" * 400}
+    out, shared = exchange.share_blocks(docs, optional={"requests/04-fig.md", "requests/05-fig.md"})
+    assert set(shared) == {exchange.SHARED_FILE, exchange.SHARED_OPTIONAL_FILE}
+    assert "BIG BLOCK" in shared[exchange.SHARED_FILE] and "FIG" in shared[exchange.SHARED_OPTIONAL_FILE]
+    assert "BIG BLOCK" not in out["requests/01-a.md"] and out["requests/03-c.md"] == docs["requests/03-c.md"]
+    assert "A's own rule" in out["requests/01-a.md"] and "Only values" not in out["requests/02-b.md"]
+    for path, text in docs.items():
+        assert exchange.expand_shared(out[path], shared) == text, path
+    assert exchange.share_blocks({"requests/01-a.md": "nothing repeats " * 40}) == \
+        ({"requests/01-a.md": "nothing repeats " * 40}, {})
 
 
 def test_import_reproduces_the_run_and_says_who_answered():
@@ -122,7 +150,9 @@ def test_figures_are_optional_requests():
         figures = [r for r in m["requests"] if r["figure"]]
         steps = [r for r in m["requests"] if not r["figure"]]
         assert figures and m["requests"][-len(figures):] == figures and not any(r["conditional"] for r in figures)
-        text = (folder / figures[0]["request"]).read_text()
+        shared = {f: (folder / f).read_text() for f in m["shared"]}
+        text = exchange.expand_shared((folder / figures[0]["request"]).read_text(), shared)
+        assert exchange.SHARED_OPTIONAL_FILE in m["shared"]                 # parts only figures use: apart
         assert exchange.ROW_PLAN_ANSWER_MARK in text and "(a set)" not in text and "**Optional.**" in text
         assert "images/" in text and Path(figures[0]["request"]).name.startswith(f"{figures[0]['n']:02d}-figure-")
         missing = exchange.missing_answers(folder)

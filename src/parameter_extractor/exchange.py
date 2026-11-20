@@ -277,7 +277,7 @@ def _write_package(folder: Path, item, config, requests: Dict[str, dict], condit
                                              if requests[s]["stage"] in order else len(order), s))
     (folder / "requests").mkdir(exist_ok=True)
     (folder / "answers").mkdir(exist_ok=True)
-    entries = []
+    entries, docs = [], {}
     for n, key in enumerate(stages, 1):
         r = requests[key]
         stage = r["stage"]
@@ -294,8 +294,8 @@ def _write_package(folder: Path, item, config, requests: Dict[str, dict], condit
             parts += [f"**Conditional.** {conditional[stage]}", ""]
         if fig:
             parts += ["**Optional.** Suggestions for digitizing this figure in the app (which columns its axes and "
-                      "series go into); the app also uses them to digitize simple plots by itself. Skip it if you "
-                      "can't answer it -- the figure is then digitized by hand.", ""]
+                      "series go into). Answer it only if the person asked for figure suggestions; otherwise leave it "
+                      "unanswered -- the figure is then digitized by hand, or not at all.", ""]
         if any(ROW_PLAN_MARK in t for t in r["texts"]):
             parts += [f"**Uses your row plan.** Where the task says `{ROW_PLAN_MARK}`, use your answer to request 01 "
                       "(see INSTRUCTIONS.md: the sets numbered S1, S2 ..., their samples S1.1, S1.2 ...).", ""]
@@ -308,11 +308,24 @@ def _write_package(folder: Path, item, config, requests: Dict[str, dict], condit
         task = [re.sub(r"Answer by calling the `[\w-]+` tool\.", "Answer with ONE JSON object in the format below.",
                        t.strip()) for t in r["texts"]]
         parts += ["", "## Task", ""] + task + ["", "## Answer format (JSON Schema)", "", "```json",
-                                                json.dumps(r["schema"], indent=1, ensure_ascii=False), "```", ""]
-        (folder / "requests" / f"{name}.md").write_text("\n".join(parts))
+                                                json.dumps(r["schema"], ensure_ascii=False, separators=(",", ":")),
+                                                "```", ""]
+        docs[f"requests/{name}.md"] = "\n".join(parts)
         entries.append({"n": n, "stage": stage, "name": key, "label": label, "request": f"requests/{name}.md",
                         "answer": f"answers/{name}.json", "conditional": stage in conditional and not fig,
                         "figure": fig.figure_id if fig else "", "uses_row_plan": uses_plan})
+    shared_docs, shared = share_blocks(docs, optional={f"requests/{Path(e['request']).name}" for e in entries
+                                                       if e.get("figure")})
+    try:                                        # each request reads back exactly, or the package isn't shared
+        same = all(expand_shared(shared_docs[p], shared) == text for p, text in docs.items())
+    except KeyError:
+        same = False
+    if same:
+        docs = shared_docs
+    else:
+        shared = {}
+    for path, text in {**docs, **shared}.items():
+        (folder / path).write_text(text)
     pdf = None
     source = Path(str(item))
     if source.suffix.lower() == ".pdf" and source.is_file():
@@ -323,9 +336,98 @@ def _write_package(folder: Path, item, config, requests: Dict[str, dict], condit
                 "item": str(item), "pdf": pdf, "data_pack": pack.id, "data_pack_label": pack.label,
                 "settings": {"rows_from_text": bool(getattr(config, "rows_from_text", False)),
                              "paper_prefix": getattr(config, "paper_prefix", "") or ""},
-                "requests": entries}
+                "requests": entries, "shared": sorted(shared)}
     (folder / PACKAGE_FILE).write_text(json.dumps(manifest, indent=1, ensure_ascii=False))
     (folder / INSTRUCTIONS_FILE).write_text(_instructions(entries, pack, ID_NOTE))
+
+
+SHARED_FILE, SHARED_OPTIONAL_FILE = "SHARED.md", "SHARED-OPTIONAL.md"
+SHARED_HEAD = {SHARED_FILE: "# Shared parts of the requests\n\nRead this file once, before request 01. Where a request "
+                            "says [[SHARED §NN]], the section §NN below belongs there.",
+               SHARED_OPTIONAL_FILE: "# Shared parts of the optional requests\n\nRead this file once, only if you "
+                                     "answer the Optional requests. Where one says [[SHARED §NN]], the section §NN "
+                                     "below belongs there."}
+SHARED_MIN_CHARS = 300          # shorter repeats aren't worth a pointer
+SHARED_MIN_ITEM = 150           # a repeated list item (a rule) worth sharing
+SHARED_MARK_OPEN, SHARED_MARK_CLOSE = "[[SHARED ", "]]"
+
+
+def share_blocks(docs: Dict[str, str], optional=()):
+    """(docs, {shared file: text}): text repeated across requests written once -- as numbered sections of SHARED.md,
+    read once at the start (one file: an agent pays for every file it opens), or of SHARED-OPTIONAL.md when only
+    `optional` requests use it -- and replaced in each request by a one-line pointer. Two passes: a whole paragraph (text between blank lines -- a code block is one) of
+    at least SHARED_MIN_CHARS in two or more requests; then, inside the other paragraphs, a run of consecutive list
+    items ('- ' lines with their continuations, at least SHARED_MIN_ITEM chars each) that two or more requests share --
+    the rules every step repeats. Content-agnostic: whatever a data pack, its steps and modules repeat (answer formats,
+    column and compound lists, rules) is found the same way; nothing about a step is assumed."""
+    parted = {path: re.split(r"(\n\s*\n)", text) for path, text in docs.items()}   # paragraphs and the gaps between
+    split = {path: ps[0::2] for path, ps in parted.items()}
+    gaps = {path: ps[1::2] for path, ps in parted.items()}
+    order = list(docs)
+    blocks: Dict[str, str] = {}                   # repeated text -> shared file (numbered in reading order)
+
+    def users_of(units_by_doc):
+        users: Dict[object, List[str]] = {}
+        for path, units in units_by_doc.items():
+            for u in dict.fromkeys(units):
+                users.setdefault(u, []).append(path)
+        return users
+    # 1. whole paragraphs
+    paras = users_of({p: [x for x in ps if len(x.strip()) >= SHARED_MIN_CHARS] for p, ps in split.items()})
+    whole = {x for x, us in paras.items() if len(us) > 1}
+    # 2. runs of list items inside the rest: a run = consecutive items present in the same requests
+    items = {path: [re.split(r"\n(?=- )", x) for x in ps if x not in whole] for path, ps in split.items()}
+    item_users = users_of({p: [i for para in ps for i in para if len(i) >= SHARED_MIN_ITEM] for p, ps in items.items()})
+
+    def runs(para_items):
+        out, run, key = [], [], None
+        for it in para_items:
+            k = tuple(item_users.get(it, ())) if len(item_users.get(it, ())) > 1 else None
+            if k != key and run:
+                out.append((key, run))
+                run = []
+            key = k
+            run.append(it)
+        if run:
+            out.append((key, run))
+        return out
+    run_users = users_of({p: ["\n".join(r) for ps in pp for k, r in runs(ps) if k] for p, pp in items.items()})
+    shared_runs = {x for x, us in run_users.items() if len(us) > 1}
+    found = sorted(whole | shared_runs, key=lambda x: min(order.index(u) for u in (paras.get(x) or run_users[x])))
+    sections: Dict[str, List[str]] = {SHARED_FILE: [], SHARED_OPTIONAL_FILE: []}
+    for i, x in enumerate(found, 1):
+        blocks[x] = f"§{i:02d}"
+        users = paras.get(x) if x in whole else run_users[x]
+        file = SHARED_OPTIONAL_FILE if all(u in optional for u in users) else SHARED_FILE
+        sections[file].append(f"## §{i:02d} (in requests {', '.join(Path(u).stem[:2] for u in users)})\n\n{x}\n")
+    shared = {file: (SHARED_HEAD[file] + "\n\n" + "\n".join(parts)) for file, parts in sections.items() if parts}
+    pointer = lambda x: f"{SHARED_MARK_OPEN}{blocks[x]}{SHARED_MARK_CLOSE}"
+    out = {}
+    for path, ps in split.items():
+        new = []
+        for para in ps:
+            if para in whole:
+                new.append(pointer(para))
+                continue
+            chunks = []
+            for key, run in runs(re.split(r"\n(?=- )", para)):
+                text = "\n".join(run)
+                chunks.append(f"- {pointer(text)}" if key and text in blocks else text)
+            new.append("\n".join(chunks))
+        out[path] = "".join(part for pair in zip(new, gaps[path] + [""]) for part in pair)
+    return out, shared
+
+
+def expand_shared(text: str, shared: Dict[str, str]) -> str:
+    """A request with its [[SHARED §NN]] pointers replaced by the sections' text (`shared`: {file: its text}) -- the
+    request as it was before sharing (tests; anyone reading a request on its own)."""
+    sections = {}
+    for body in shared.values():
+        for m in re.finditer(r"^## (§\d+) \(in requests [^)]*\)\n\n(.*?)\n(?=\n## §|\Z)", body, re.S | re.M):
+            sections[m.group(1)] = m.group(2)
+    pattern = re.escape(SHARED_MARK_OPEN) + r"(§\d+)" + re.escape(SHARED_MARK_CLOSE)
+    text = re.sub(r"^- " + pattern + "$", lambda m: sections[m.group(1)], text, flags=re.M)
+    return re.sub(pattern, lambda m: sections[m.group(1)], text)
 
 
 def _instructions(entries: List[dict], pack, id_note: str) -> str:
@@ -335,9 +437,24 @@ def _instructions(entries: List[dict], pack, id_note: str) -> str:
         "This folder holds the requests a research tool (Parameter Extractor) needs answered to turn one scientific "
         "paper into rows of a dataset. Work through them yourself -- you are the assistant answering them. Nothing "
         "here needs a network connection or another program.", "",
+        "## Work economically", "",
+        "These requests are long; the person's usage allowance pays for every time a file is read again.", "",
+        "- Read `paper.txt` once, and each image once, the first time a request lists it. Note what you need from it "
+        "(a table's values, a figure's axes) instead of opening it again.",
+        f"- Read each request once, in full, then write its answer in one go. `{SHARED_FILE}` is read once at the "
+        "start; a pointer to a section means its text -- don't open the file again for it.",
+        "- Don't re-read a request or its answer format to check an answer you've written: the app checks every answer "
+        "when it imports the folder and says exactly what to fix.",
+        "- Don't print or list whole files when a part is enough, and skip the Optional requests unless the person "
+        "asked for them.",
+        "- Answer every request of this paper in one session, in order: the later ones build on your earlier answers.",
+        "",
         "## What to do", "",
         "1. Read the paper: `paper.txt` (its text as the tool read it; the PDF beside it is the original) "
         "and any image a request lists (paths are relative to this folder).",
+        f"   Then read `{SHARED_FILE}` once: the long parts several requests share (answer formats, rules, lists of "
+        f"columns or compounds), kept there once. Where a request says `{SHARED_MARK_OPEN}§NN{SHARED_MARK_CLOSE}`, that "
+        f"section belongs there. (`{SHARED_OPTIONAL_FILE}` does the same for the Optional requests.)",
         "2. Answer the requests in `requests/` **in their numbered order**, one at a time. Each says where its answer "
         "goes and gives its answer format (a JSON Schema). Write each answer as ONE JSON object to that file in "
         "`answers/`, using the schema's own short field names (`v`, `q`, `src`, ...). Report only what the paper "
@@ -352,8 +469,8 @@ def _instructions(entries: List[dict], pack, id_note: str) -> str:
         f"   {id_note}", "",
         "4. A request marked **Conditional** applies only to some papers: answer it if its condition fits this paper "
         '(your row plan), else write `{"skipped": true}` as its answer. Requests marked **Optional** (suggestions '
-        "for digitizing a figure) come last: answer them if you can read the figure's image; the app's import "
-        "doesn't need them.",
+        "for digitizing a figure) come last: answer them only if the person asked for figure suggestions; the "
+        "app's import doesn't need them.",
         f"5. Last, write `answers/{ABOUT_FILE}` saying who answered:", "",
         "   ```json",
         '   {"model": "<the model\'s name and version>", "provider": "<who provides it>", '
