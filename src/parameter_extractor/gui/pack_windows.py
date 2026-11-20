@@ -1084,8 +1084,9 @@ class PackEditor(QDialog):
         self.map_canvas.actions_for = self._map_actions
         bar.addWidget(QPushButton("Fit to window", clicked=lambda: self.map_canvas.fit()))
         export = QPushButton("Export image…", clicked=lambda: self.export_map())
-        export.setToolTip("The map as an image for a figure: PNG with a transparent background, or SVG (vector), with "
-                          "dark text for a white page. Opened nodes are exported opened.")
+        export.setToolTip("The map as an image for a figure: PNG with a transparent background, or SVG (vector); "
+                          "dark text for a white page or light text for a dark slide. Opened nodes are exported "
+                          "opened.")
         bar.addWidget(export)
         v.addLayout(bar)
         v.addWidget(self.map_canvas, 1)
@@ -1149,20 +1150,30 @@ class PackEditor(QDialog):
                 self.module_table.setCurrentCell(r, 0)
                 return
 
-    def export_map(self, path: Optional[Path] = None) -> Optional[Path]:
-        """The Map as an image file (structure_canvas.export_image): PNG with no background, or SVG."""
-        from parameter_extractor.gui.structure_canvas import export_image
+    MAP_EXPORTS = (("PNG, dark text for light pages (*.png)", "light"),
+                   ("PNG, light text for dark slides (*.png)", "dark"),
+                   ("SVG vector, dark text for light pages (*.svg)", "light"),
+                   ("SVG vector, light text for dark slides (*.svg)", "dark"))
+
+    def export_map(self, path: Optional[Path] = None, look: str = "light") -> Optional[Path]:
+        """The Map as an image file (structure_canvas.export_image): PNG with no background, or SVG; `look` 'light'
+        (dark text for a white page) or 'dark' (light text for a dark slide) -- chosen in the dialog's file types."""
+        from parameter_extractor.gui.structure_canvas import export_image, print_palette
         if path is None:
             name = f"{self.draft.manifest.get('id') or 'data_pack'}_map.png"
-            chosen, _f = QFileDialog.getSaveFileName(self, "Export the map", str(Path.home() / name),
-                                                     "PNG image, transparent (*.png);;SVG vector image (*.svg)")
+            chosen, kind = QFileDialog.getSaveFileName(self, "Export the map", str(Path.home() / name),
+                                                       ";;".join(f for f, _l in self.MAP_EXPORTS))
             if not chosen:
                 return None
             path = Path(chosen)
+            look = dict(self.MAP_EXPORTS).get(kind, "light")
+            if kind.startswith("SVG") and path.suffix.lower() != ".svg":
+                path = path.with_suffix(".svg")
         if path.suffix.lower() not in (".png", ".svg"):
             path = path.with_suffix(".png")
         try:
-            export_image(packs.Pack(self.draft.folder), path, opened=set(self.map_canvas.opened))
+            export_image(packs.Pack(self.draft.folder), path, opened=set(self.map_canvas.opened),
+                         palette=print_palette(look))
         except Exception as e:                       # noqa: BLE001 -- say why, never crash the editor
             QMessageBox.warning(self, "Not exported", f"The map couldn't be exported: {e}")
             return None

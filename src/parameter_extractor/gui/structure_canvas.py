@@ -759,13 +759,20 @@ def render_png(pack, path, palette: Optional[QPalette] = None, scale: float = 2.
 # ---- the map as a figure (Mickey, 2026-11-19: "export a .png ... with no window background ... for building
 # figures") -----------------------------------------------------------------------------------------------------------
 
-def print_palette() -> QPalette:
-    """The colours of an exported map, whatever the window's theme: dark text and white cards, for a white page."""
+PRINT_COLOURS = {     # an exported map's colours, whatever the window's theme (2026-11-19)
+    "light": (("Window", "#ffffff"), ("Base", "#ffffff"), ("Text", "#1d1d1f"), ("WindowText", "#1d1d1f"),
+              ("Highlight", "#0a64d6")),                       # dark text, white cards: for a white page
+    "dark": (("Window", "#1e1f22"), ("Base", "#2a2b2f"), ("Text", "#ececef"), ("WindowText", "#ececef"),
+             ("Highlight", "#5b9dff")),                        # light text, dark cards: for a dark slide
+}
+
+
+def print_palette(look: str = "light") -> QPalette:
+    """The colours of an exported map: 'light' (dark text for a white page) or 'dark' (light text for a dark
+    slide)."""
     pal = QPalette()
-    for role, color in ((QPalette.ColorRole.Window, "#ffffff"), (QPalette.ColorRole.Base, "#ffffff"),
-                        (QPalette.ColorRole.Text, "#1d1d1f"), (QPalette.ColorRole.WindowText, "#1d1d1f"),
-                        (QPalette.ColorRole.Highlight, "#0a64d6")):
-        pal.setColor(role, QColor(color))
+    for role, color in PRINT_COLOURS.get(look, PRINT_COLOURS["light"]):
+        pal.setColor(getattr(QPalette.ColorRole, role), QColor(color))
     return pal
 
 

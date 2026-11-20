@@ -178,6 +178,14 @@ def test_the_map_exports_as_an_image():
         svg = e.export_map(Path(tmp) / "map.svg")
         assert svg.read_text()[:400].count("<svg") == 1 and "Exoplanets" in svg.read_text()
         assert e.export_map(Path(tmp) / "map").suffix == ".png"
+        dark = QImage(str(e.export_map(Path(tmp) / "dark.png", look="dark")))   # light text for a dark slide
+
+        def mean_lightness(image):                                   # of what is drawn (no background)
+            seen = [image.pixelColor(x, y).lightness() for x in range(0, image.width(), 9)
+                    for y in range(0, image.height(), 9) if image.pixelColor(x, y).alpha() > 200]
+            return sum(seen) / len(seen)
+        assert dark.pixelColor(1, 1).alpha() == 0
+        assert mean_lightness(QImage(str(png))) > 180 > 90 > mean_lightness(dark)   # white cards / dark cards
     e.close()
 
 
