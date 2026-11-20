@@ -181,7 +181,14 @@ def test_cli_and_window():
     assert "Export requests for another assistant…" in texts and "Import answers from another assistant…" in texts
     assert not any(BRANDS.search(t) for t in texts)
     from PySide6.QtWidgets import QApplication
-    from parameter_extractor.gui.exchange_dialogs import copy_paths
+    from parameter_extractor.gui.exchange_dialogs import ExportDone, copy_paths
+    with tempfile.TemporaryDirectory() as tmp:                 # the window: a prompt with the path, on the clipboard
+        d = ExportDone(Path(tmp), [Path(tmp) / "eder1994"], [])
+        prompt = QApplication.clipboard().text()
+        assert prompt == exchange.agent_prompt(Path(tmp) / "eder1994") == d.prompt_edits[0].toPlainText()
+        assert str((Path(tmp) / "eder1994").resolve()) in prompt and exchange.INSTRUCTIONS_FILE in prompt
+        assert not BRANDS.search(prompt)
+        d.close()
     with tempfile.TemporaryDirectory() as tmp:                 # the new package's path, ready to paste
         assert copy_paths([Path(tmp) / "eder1994"]) == str((Path(tmp) / "eder1994").resolve())
         assert QApplication.clipboard().text() == str((Path(tmp) / "eder1994").resolve())

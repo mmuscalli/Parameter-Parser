@@ -187,6 +187,12 @@ def _answer_from_package(folder: Path, stage: str, name: str, response_model):
                            usage=SimpleNamespace(input_tokens=0, output_tokens=0))
 
 
+def agent_prompt(folder) -> str:
+    """A short prompt to give the assistant (Mickey, 2026-11-19): the package's full path and what to do with it."""
+    return (f"Please open the folder at '{Path(folder).resolve()}' and carry out all of the instructions in its "
+            f"{INSTRUCTIONS_FILE} file, in order.")
+
+
 def answered_by(folder) -> str:
     """'<model> (<assistant or tool>)' from answers/about.json, or '' when it isn't there."""
     path = Path(folder) / "answers" / ABOUT_FILE

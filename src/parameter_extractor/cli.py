@@ -327,8 +327,8 @@ def _exchange(args, config) -> int:
             folder = exchange.export_package(args.paper or args.pdf, replace(config, api_key=""),
                                              Path(args.export_requests), on_progress=print_progress)
             n = len(exchange.read_package(folder)["requests"])
-            print(f"\n{n} request(s) written to {folder}. Give that folder to the assistant you use (its "
-                  f"{exchange.INSTRUCTIONS_FILE} says what to do), then: parameter-extract --import-answers \"{folder}\"")
+            print(f"\n{n} request(s) written to {folder}. Give your assistant this prompt:\n\n  "
+                  f"{exchange.agent_prompt(folder)}\n\nThen: parameter-extract --import-answers \"{folder}\"")
             return 0
         result = exchange.import_package(Path(args.import_answers), config, on_progress=print_progress)
     except PipelineError as e:

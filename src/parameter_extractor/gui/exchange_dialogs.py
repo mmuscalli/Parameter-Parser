@@ -10,7 +10,7 @@ from typing import List
 
 from PySide6.QtCore import QObject, Qt, QUrl, Signal
 from PySide6.QtGui import QDesktopServices
-from PySide6.QtWidgets import QDialog, QHBoxLayout, QLabel, QLineEdit, QPushButton, QVBoxLayout
+from PySide6.QtWidgets import QDialog, QHBoxLayout, QLabel, QLineEdit, QPlainTextEdit, QPushButton, QVBoxLayout
 
 
 class ExportTask(QObject):
@@ -45,6 +45,16 @@ class ExportTask(QObject):
         self.finished.emit(self.folders, self.problems)
 
 
+def copy_prompts(folders: List[Path]) -> str:
+    """Each package's prompt for the assistant (exchange.agent_prompt), a blank line apart, put on the clipboard."""
+    from PySide6.QtWidgets import QApplication
+    from parameter_extractor.exchange import agent_prompt
+    text = "\n\n".join(agent_prompt(f) for f in folders)
+    if text:
+        QApplication.clipboard().setText(text)
+    return text
+
+
 def copy_paths(folders: List[Path]) -> str:
     """The package folders' full paths, one a line, put on the clipboard (Mickey, 2026-11-19); returns them."""
     from PySide6.QtWidgets import QApplication
@@ -55,33 +65,44 @@ def copy_paths(folders: List[Path]) -> str:
 
 
 class ExportDone(QDialog):
-    """Where the packages are (each path selectable, with Copy; all of them already on the clipboard), what to do
-    next, what to know; Open folder."""
+    """Each package's prompt for the assistant (copyable; all of them already on the clipboard) and its folder, what
+    to do next, what to know; Open folder."""
 
     def __init__(self, folder: Path, folders: List[Path], problems: List[tuple], parent=None):
-        from parameter_extractor.exchange import CAVEATS
+        from parameter_extractor.exchange import CAVEATS, agent_prompt
         super().__init__(parent)
         self.setWindowTitle("Requests for another assistant")
         self.setMinimumWidth(640)
         v = QVBoxLayout(self)
-        copy_paths(folders)
+        copy_prompts(folders)
         if folders:
-            head = QLabel(f"{len(folders)} package{'s' if len(folders) > 1 else ''} written -- "
-                          f"{'their paths are' if len(folders) > 1 else 'its path is'} on the clipboard, ready to "
-                          f"paste where your assistant asks for a folder.", wordWrap=True)
+            many = len(folders) > 1
+            head = QLabel(f"{len(folders)} package{'s' if many else ''} written. "
+                          f"{'Each package has a prompt' if many else 'A prompt for your assistant is'} below -- "
+                          f"{'all of them are' if many else 'it is'} on the clipboard already"
+                          f"{' (one session per package works best)' if many else ''}.", wordWrap=True)
             head.setStyleSheet("font-weight: bold;")
             v.addWidget(head)
-            self.path_edits = []
+            self.path_edits, self.prompt_edits = [], []
             for f in folders:
+                prompt = QPlainTextEdit(agent_prompt(f), readOnly=True)
+                prompt.setFixedHeight(int(prompt.fontMetrics().lineSpacing() * 4.4))
+                self.prompt_edits.append(prompt)
+                row = QHBoxLayout()
+                row.addWidget(prompt, 1)
+                row.addWidget(QPushButton("Copy prompt", clicked=lambda _c=False, f=f: copy_prompts([f])),
+                              alignment=Qt.AlignmentFlag.AlignTop)
+                v.addLayout(row)
                 row = QHBoxLayout()
                 edit = QLineEdit(str(Path(f).resolve()), readOnly=True)
                 edit.setCursorPosition(0)
                 self.path_edits.append(edit)
+                row.addWidget(QLabel("Folder:"))
                 row.addWidget(edit, 1)
-                row.addWidget(QPushButton("Copy", clicked=lambda _c=False, e=edit: copy_paths([Path(e.text())])))
+                row.addWidget(QPushButton("Copy path", clicked=lambda _c=False, e=edit: copy_paths([Path(e.text())])))
                 v.addLayout(row)
-            v.addWidget(QLabel("Give the folder to the assistant you use -- point an agent at it (its INSTRUCTIONS.md "
-                               "says what to do). It answers the requests in order and writes its answers into the "
+            v.addWidget(QLabel("Paste the prompt into the assistant you use (an agent that can read and write files "
+                               "works best). It answers the requests in order and writes its answers into the "
                                "package's answers/ folder, with answers/about.json naming the model. Nothing was sent "
                                "anywhere.\n\nThen: File > Import answers from another assistant…", wordWrap=True))
             notes = QLabel("<b>Good to know</b><ul style='margin-left: -20px'>" +
