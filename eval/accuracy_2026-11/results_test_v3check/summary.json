@@ -17,8 +17,8 @@
       "printed": 148
      },
      "methodology": {
-      "recall": 0.719,
-      "recall_close": 0.75,
+      "recall": 0.738,
+      "recall_close": 0.769,
       "printed": 496
      },
      "chemistry_in": {
@@ -32,8 +32,8 @@
       "printed": 61
      },
      "overall": {
-      "recall": 0.764,
-      "recall_close": 0.784,
+      "recall": 0.777,
+      "recall_close": 0.797,
       "printed": 763
      },
      "new_values": 480,
@@ -62,8 +62,8 @@
       "printed": 148
      },
      "methodology": {
-      "recall": 0.716,
-      "recall_close": 0.747,
+      "recall": 0.735,
+      "recall_close": 0.766,
       "printed": 496
      },
      "chemistry_in": {
@@ -77,8 +77,8 @@
       "printed": 61
      },
      "overall": {
-      "recall": 0.759,
-      "recall_close": 0.781,
+      "recall": 0.772,
+      "recall_close": 0.794,
       "printed": 763
      },
      "new_values": 94,

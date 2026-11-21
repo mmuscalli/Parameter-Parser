@@ -47,5 +47,21 @@
    "Sha2021",
    "Vila2025"
   ]
+ },
+ "model_standard": {
+  "P1": [
+   "Alargov2002",
+   "Bujdak1996",
+   "Gao2011",
+   "Halmann1968",
+   "Inoue1994",
+   "Islam2003",
+   "Sakata2014",
+   "iqubal2017",
+   "kumar2012",
+   "mitsuzawa2004",
+   "Chen2007",
+   "Rode1990"
+  ]
  }
 }

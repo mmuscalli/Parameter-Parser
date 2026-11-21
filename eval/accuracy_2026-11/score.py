@@ -53,7 +53,24 @@ _v2 = {"re": re, "math": math}
 _src = (STUDY_EVAL / "evaluate_v2.py").read_text()
 exec(_src[_src.index("# ---- what is compared"):_src.index("def paper_text")], _v2)
 NUMERIC, UNIT_AFTER, GROUPS, EXACT = _v2["NUMERIC"], _v2["UNIT_AFTER"], _v2["GROUPS"], _v2["EXACT"]
-num, words = _v2["num"], _v2["words"]
+num, _study_words = _v2["num"], _v2["words"]
+# names that mean the same compound (Mickey 2026-11-20: differences in wording aren't misses): a common name and its
+# formula. Exact equivalents only -- a mineral (quartz, corundum) is not the same as its oxide's name.
+SAME_NAMES = [("silica", "sio2"), ("alumina", "al2o3"), ("titania", "tio2"), ("zirconia", "zro2"),
+              ("magnesia", "mgo"), ("deuterium", "d2o"), ("argon", "ar"), ("nitrogen", "n2"), ("helium", "he")]
+
+
+def words(v):
+    """The study's word set (words of 3+ letters), plus a short name's own token ('Ar', 'N2', 'CO': the study's
+    words leave it out, so 'Ar' never matched 'Ar'), plus each name's equivalent (SAME_NAMES)."""
+    w = set(_study_words(v))
+    w |= {t for t in re.findall(r"[a-z0-9]+", str(v).lower()) if len(t) == 2 and any(c.isalpha() for c in t)}
+    for a, b in SAME_NAMES:
+        if a in w:
+            w.add(b)
+        if b in w:
+            w.add(a)
+    return w
 TEXT = {k: v for k, v in _v2["TEXT"].items() if k != "analysis"}
 GROUPS = {g: [k for k in ks if k != "analysis"] for g, ks in GROUPS.items()}
 GROUPS["methodology"].append("analysis")
@@ -103,7 +120,7 @@ def runs_of(folders, batch: str) -> dict:
                     out[_key_of(p["item"], batch)] = Path(p["run_folder"])
         elif (f / "run_config.json").is_file():
             cfg = json.loads((f / "run_config.json").read_text())
-            out[_key_of(str(cfg.get("paper", "")), batch)] = f
+            out[_key_of(str(cfg.get("item") or cfg.get("paper", "")), batch)] = f
     return out
 
 

@@ -1,0 +1,26 @@
+{
+ "hand_csv": "/Users/mickeymuscalli/Documents/EORE Data Project/PaperDataTemplate Archive/PaperDataTemplate_Nov15_2026.csv",
+ "out": "/Users/mickeymuscalli/Documents/EORE Data Project/extraction_pipeline/eval/accuracy_2026-11/results_mscheck",
+ "arms": {
+  "MS": {
+   "label": "model standard as an arm",
+   "batches": {
+    "P1": [
+     "/Users/mickeymuscalli/Documents/Parameter Extractor/accuracy_20261120/ms_P1/runs/Alargov2002_20261120-222633",
+     "/Users/mickeymuscalli/Documents/Parameter Extractor/accuracy_20261120/ms_P1/runs/Bujdak1996_20261120-222747",
+     "/Users/mickeymuscalli/Documents/Parameter Extractor/accuracy_20261120/ms_P1/runs/Chen2007_20261120-224102",
+     "/Users/mickeymuscalli/Documents/Parameter Extractor/accuracy_20261120/ms_P1/runs/Gao2011_20261120-222853",
+     "/Users/mickeymuscalli/Documents/Parameter Extractor/accuracy_20261120/ms_P1/runs/Halmann1968_20261120-223122",
+     "/Users/mickeymuscalli/Documents/Parameter Extractor/accuracy_20261120/ms_P1/runs/Inoue1994_20261120-223212",
+     "/Users/mickeymuscalli/Documents/Parameter Extractor/accuracy_20261120/ms_P1/runs/Islam2003_20261120-223326",
+     "/Users/mickeymuscalli/Documents/Parameter Extractor/accuracy_20261120/ms_P1/runs/Rode1990_20261120-224225",
+     "/Users/mickeymuscalli/Documents/Parameter Extractor/accuracy_20261120/ms_P1/runs/Sakata2014_20261120-223452",
+     "/Users/mickeymuscalli/Documents/Parameter Extractor/accuracy_20261120/ms_P1/runs/iqubal2017_20261120-223651",
+     "/Users/mickeymuscalli/Documents/Parameter Extractor/accuracy_20261120/ms_P1/runs/kumar2012_20261120-223802",
+     "/Users/mickeymuscalli/Documents/Parameter Extractor/accuracy_20261120/ms_P1/runs/mitsuzawa2004_20261120-223928"
+    ]
+   }
+  }
+ },
+ "model_standard": {}
+}
