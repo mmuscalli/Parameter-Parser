@@ -1,0 +1,622 @@
+{
+ "reviewed": {
+  "P1": {
+   "A": {
+    "label": "Standard, built-in pack",
+    "papers": 60,
+    "papers_with_rows": 59,
+    "cost_usd": 6.09,
+    "rows": 894,
+    "figure_rows_waiting": 0,
+    "hand": {
+     "papers": 50,
+     "hand_values_not_printed": 5578,
+     "metadata": {
+      "recall": 0.905,
+      "recall_close": 0.905,
+      "printed": 200
+     },
+     "methodology": {
+      "recall": 0.671,
+      "recall_close": 0.693,
+      "printed": 685
+     },
+     "chemistry_in": {
+      "recall": 0.885,
+      "recall_close": 0.885,
+      "printed": 80
+     },
+     "chemistry_out": {
+      "recall": 0.526,
+      "recall_close": 0.506,
+      "printed": 65
+     },
+     "overall": {
+      "recall": 0.724,
+      "recall_close": 0.739,
+      "printed": 1030
+     },
+     "all_papers": {
+      "papers": 50,
+      "recall": 0.724,
+      "recall_close": 0.739
+     },
+     "new_values": 479,
+     "new_confirmed": 113,
+     "new_unsupported": 0,
+     "new_unverified": 366
+    },
+    "model_standard": {
+     "papers": 12,
+     "recall": 0.844,
+     "recall_close": 0.844,
+     "precision": 0.857,
+     "precision_close": 0.857,
+     "cells_right": 0.955,
+     "cells_elsewhere": 0.0,
+     "cells_wrong": 0.036,
+     "cells_missing": 0.008,
+     "rows_paired": 0.987
+    }
+   },
+   "B": {
+    "label": "Economy x3, built-in pack",
+    "papers": 60,
+    "papers_with_rows": 59,
+    "cost_usd": 0.97,
+    "rows": 900,
+    "figure_rows_waiting": 0,
+    "hand": {
+     "papers": 50,
+     "hand_values_not_printed": 5578,
+     "metadata": {
+      "recall": 0.885,
+      "recall_close": 0.885,
+      "printed": 200
+     },
+     "methodology": {
+      "recall": 0.715,
+      "recall_close": 0.724,
+      "printed": 685
+     },
+     "chemistry_in": {
+      "recall": 0.923,
+      "recall_close": 0.923,
+      "printed": 80
+     },
+     "chemistry_out": {
+      "recall": 0.506,
+      "recall_close": 0.468,
+      "printed": 65
+     },
+     "overall": {
+      "recall": 0.759,
+      "recall_close": 0.764,
+      "printed": 1030
+     },
+     "all_papers": {
+      "papers": 50,
+      "recall": 0.759,
+      "recall_close": 0.764
+     },
+     "new_values": 646,
+     "new_confirmed": 123,
+     "new_unsupported": 2,
+     "new_unverified": 521
+    },
+    "model_standard": {
+     "papers": 12,
+     "recall": 0.841,
+     "recall_close": 0.842,
+     "precision": 0.801,
+     "precision_close": 0.801,
+     "cells_right": 0.898,
+     "cells_elsewhere": 0.001,
+     "cells_wrong": 0.09,
+     "cells_missing": 0.01,
+     "rows_paired": 0.987
+    }
+   },
+   "C": {
+    "label": "Standard, drafted pack",
+    "papers": 60,
+    "papers_with_rows": 60,
+    "cost_usd": 6.41,
+    "rows": 930,
+    "figure_rows_waiting": 0,
+    "hand": {
+     "papers": 50,
+     "hand_values_not_printed": 5578,
+     "metadata": {
+      "recall": 0.905,
+      "recall_close": 0.905,
+      "printed": 200
+     },
+     "methodology": {
+      "recall": 0.664,
+      "recall_close": 0.678,
+      "printed": 533
+     },
+     "chemistry_in": {
+      "recall": 0.905,
+      "recall_close": 0.905,
+      "printed": 80
+     },
+     "chemistry_out": {
+      "recall": 0.526,
+      "recall_close": 0.506,
+      "printed": 65
+     },
+     "overall": {
+      "recall": 0.734,
+      "recall_close": 0.742,
+      "printed": 878
+     },
+     "all_papers": {
+      "papers": 50,
+      "recall": 0.734,
+      "recall_close": 0.742
+     },
+     "new_values": 671,
+     "new_confirmed": 227,
+     "new_unsupported": 3,
+     "new_unverified": 441,
+     "drafted_from": {
+      "papers": 10,
+      "recall": 0.677
+     },
+     "held_out": {
+      "papers": 40,
+      "recall": 0.748
+     }
+    },
+    "model_standard": {
+     "papers": 12,
+     "recall": 0.726,
+     "recall_close": 0.728,
+     "precision": 0.775,
+     "precision_close": 0.775,
+     "cells_right": 0.922,
+     "cells_elsewhere": 0.001,
+     "cells_wrong": 0.068,
+     "cells_missing": 0.009,
+     "rows_paired": 0.991
+    }
+   },
+   "D": {
+    "label": "Economy x3, drafted pack",
+    "papers": 60,
+    "papers_with_rows": 59,
+    "cost_usd": 0.99,
+    "rows": 880,
+    "figure_rows_waiting": 0,
+    "hand": {
+     "papers": 50,
+     "hand_values_not_printed": 5578,
+     "metadata": {
+      "recall": 0.91,
+      "recall_close": 0.91,
+      "printed": 200
+     },
+     "methodology": {
+      "recall": 0.628,
+      "recall_close": 0.667,
+      "printed": 533
+     },
+     "chemistry_in": {
+      "recall": 0.905,
+      "recall_close": 0.905,
+      "printed": 80
+     },
+     "chemistry_out": {
+      "recall": 0.538,
+      "recall_close": 0.5,
+      "printed": 65
+     },
+     "overall": {
+      "recall": 0.718,
+      "recall_close": 0.744,
+      "printed": 878
+     },
+     "all_papers": {
+      "papers": 50,
+      "recall": 0.718,
+      "recall_close": 0.744
+     },
+     "new_values": 786,
+     "new_confirmed": 243,
+     "new_unsupported": 4,
+     "new_unverified": 539,
+     "drafted_from": {
+      "papers": 10,
+      "recall": 0.716
+     },
+     "held_out": {
+      "papers": 40,
+      "recall": 0.719
+     }
+    },
+    "model_standard": {
+     "papers": 12,
+     "recall": 0.701,
+     "recall_close": 0.706,
+     "precision": 0.72,
+     "precision_close": 0.72,
+     "cells_right": 0.913,
+     "cells_elsewhere": 0.003,
+     "cells_wrong": 0.082,
+     "cells_missing": 0.002,
+     "rows_paired": 0.855
+    }
+   },
+   "F": {
+    "label": "Standard, built-in pack, plots read automatically",
+    "papers": 60,
+    "papers_with_rows": 59,
+    "cost_usd": 10.68,
+    "rows": 1169,
+    "figure_rows_waiting": 115,
+    "hand": {
+     "papers": 50,
+     "hand_values_not_printed": 5578,
+     "metadata": {
+      "recall": 0.93,
+      "recall_close": 0.93,
+      "printed": 200
+     },
+     "methodology": {
+      "recall": 0.689,
+      "recall_close": 0.712,
+      "printed": 685
+     },
+     "chemistry_in": {
+      "recall": 0.916,
+      "recall_close": 0.919,
+      "printed": 80
+     },
+     "chemistry_out": {
+      "recall": 0.564,
+      "recall_close": 0.545,
+      "printed": 65
+     },
+     "overall": {
+      "recall": 0.743,
+      "recall_close": 0.76,
+      "printed": 1030
+     },
+     "all_papers": {
+      "papers": 50,
+      "recall": 0.743,
+      "recall_close": 0.76
+     },
+     "new_values": 525,
+     "new_confirmed": 113,
+     "new_unsupported": 10,
+     "new_unverified": 402
+    },
+    "model_standard": {
+     "papers": 12,
+     "recall": 0.844,
+     "recall_close": 0.844,
+     "precision": 0.808,
+     "precision_close": 0.81,
+     "cells_right": 0.906,
+     "cells_elsewhere": 0.0,
+     "cells_wrong": 0.043,
+     "cells_missing": 0.051,
+     "rows_paired": 0.987
+    }
+   }
+  }
+ },
+ "written": {
+  "P1": {
+   "A": {
+    "label": "Standard, built-in pack",
+    "papers": 60,
+    "papers_with_rows": 59,
+    "cost_usd": 6.09,
+    "rows": 894,
+    "figure_rows_waiting": 0,
+    "hand": {
+     "papers": 50,
+     "hand_values_not_printed": 5578,
+     "metadata": {
+      "recall": 0.905,
+      "recall_close": 0.905,
+      "printed": 200
+     },
+     "methodology": {
+      "recall": 0.666,
+      "recall_close": 0.688,
+      "printed": 685
+     },
+     "chemistry_in": {
+      "recall": 0.836,
+      "recall_close": 0.836,
+      "printed": 80
+     },
+     "chemistry_out": {
+      "recall": 0.487,
+      "recall_close": 0.487,
+      "printed": 65
+     },
+     "overall": {
+      "recall": 0.717,
+      "recall_close": 0.732,
+      "printed": 1030
+     },
+     "all_papers": {
+      "papers": 50,
+      "recall": 0.717,
+      "recall_close": 0.732
+     },
+     "new_values": 96,
+     "new_confirmed": 24,
+     "new_unsupported": 0,
+     "new_unverified": 72
+    },
+    "model_standard": {
+     "papers": 12,
+     "recall": 0.884,
+     "recall_close": 0.884,
+     "precision": 0.911,
+     "precision_close": 0.911,
+     "cells_right": 0.958,
+     "cells_elsewhere": 0.0,
+     "cells_wrong": 0.037,
+     "cells_missing": 0.005,
+     "rows_paired": 0.987
+    }
+   },
+   "B": {
+    "label": "Economy x3, built-in pack",
+    "papers": 60,
+    "papers_with_rows": 59,
+    "cost_usd": 0.97,
+    "rows": 900,
+    "figure_rows_waiting": 0,
+    "hand": {
+     "papers": 50,
+     "hand_values_not_printed": 5578,
+     "metadata": {
+      "recall": 0.885,
+      "recall_close": 0.885,
+      "printed": 200
+     },
+     "methodology": {
+      "recall": 0.709,
+      "recall_close": 0.717,
+      "printed": 685
+     },
+     "chemistry_in": {
+      "recall": 0.901,
+      "recall_close": 0.901,
+      "printed": 80
+     },
+     "chemistry_out": {
+      "recall": 0.468,
+      "recall_close": 0.468,
+      "printed": 65
+     },
+     "overall": {
+      "recall": 0.752,
+      "recall_close": 0.758,
+      "printed": 1030
+     },
+     "all_papers": {
+      "papers": 50,
+      "recall": 0.752,
+      "recall_close": 0.758
+     },
+     "new_values": 145,
+     "new_confirmed": 28,
+     "new_unsupported": 1,
+     "new_unverified": 116
+    },
+    "model_standard": {
+     "papers": 12,
+     "recall": 0.908,
+     "recall_close": 0.909,
+     "precision": 0.849,
+     "precision_close": 0.851,
+     "cells_right": 0.897,
+     "cells_elsewhere": 0.001,
+     "cells_wrong": 0.092,
+     "cells_missing": 0.01,
+     "rows_paired": 0.987
+    }
+   },
+   "C": {
+    "label": "Standard, drafted pack",
+    "papers": 60,
+    "papers_with_rows": 60,
+    "cost_usd": 6.41,
+    "rows": 930,
+    "figure_rows_waiting": 0,
+    "hand": {
+     "papers": 50,
+     "hand_values_not_printed": 5578,
+     "metadata": {
+      "recall": 0.905,
+      "recall_close": 0.905,
+      "printed": 200
+     },
+     "methodology": {
+      "recall": 0.659,
+      "recall_close": 0.672,
+      "printed": 533
+     },
+     "chemistry_in": {
+      "recall": 0.79,
+      "recall_close": 0.79,
+      "printed": 80
+     },
+     "chemistry_out": {
+      "recall": 0.42,
+      "recall_close": 0.425,
+      "printed": 65
+     },
+     "overall": {
+      "recall": 0.716,
+      "recall_close": 0.725,
+      "printed": 878
+     },
+     "all_papers": {
+      "papers": 50,
+      "recall": 0.716,
+      "recall_close": 0.725
+     },
+     "new_values": 214,
+     "new_confirmed": 115,
+     "new_unsupported": 5,
+     "new_unverified": 94,
+     "drafted_from": {
+      "papers": 10,
+      "recall": 0.667
+     },
+     "held_out": {
+      "papers": 40,
+      "recall": 0.728
+     }
+    },
+    "model_standard": {
+     "papers": 12,
+     "recall": 0.713,
+     "recall_close": 0.718,
+     "precision": 0.808,
+     "precision_close": 0.811,
+     "cells_right": 0.921,
+     "cells_elsewhere": 0.001,
+     "cells_wrong": 0.07,
+     "cells_missing": 0.008,
+     "rows_paired": 0.991
+    }
+   },
+   "D": {
+    "label": "Economy x3, drafted pack",
+    "papers": 60,
+    "papers_with_rows": 59,
+    "cost_usd": 0.99,
+    "rows": 880,
+    "figure_rows_waiting": 0,
+    "hand": {
+     "papers": 50,
+     "hand_values_not_printed": 5578,
+     "metadata": {
+      "recall": 0.91,
+      "recall_close": 0.91,
+      "printed": 200
+     },
+     "methodology": {
+      "recall": 0.624,
+      "recall_close": 0.664,
+      "printed": 533
+     },
+     "chemistry_in": {
+      "recall": 0.817,
+      "recall_close": 0.817,
+      "printed": 80
+     },
+     "chemistry_out": {
+      "recall": 0.433,
+      "recall_close": 0.437,
+      "printed": 65
+     },
+     "overall": {
+      "recall": 0.702,
+      "recall_close": 0.73,
+      "printed": 878
+     },
+     "all_papers": {
+      "papers": 50,
+      "recall": 0.702,
+      "recall_close": 0.73
+     },
+     "new_values": 212,
+     "new_confirmed": 113,
+     "new_unsupported": 5,
+     "new_unverified": 94,
+     "drafted_from": {
+      "papers": 10,
+      "recall": 0.706
+     },
+     "held_out": {
+      "papers": 40,
+      "recall": 0.701
+     }
+    },
+    "model_standard": {
+     "papers": 12,
+     "recall": 0.687,
+     "recall_close": 0.694,
+     "precision": 0.738,
+     "precision_close": 0.743,
+     "cells_right": 0.911,
+     "cells_elsewhere": 0.002,
+     "cells_wrong": 0.085,
+     "cells_missing": 0.001,
+     "rows_paired": 0.855
+    }
+   },
+   "F": {
+    "label": "Standard, built-in pack, plots read automatically",
+    "papers": 60,
+    "papers_with_rows": 59,
+    "cost_usd": 10.68,
+    "rows": 1169,
+    "figure_rows_waiting": 131,
+    "hand": {
+     "papers": 50,
+     "hand_values_not_printed": 5578,
+     "metadata": {
+      "recall": 0.93,
+      "recall_close": 0.93,
+      "printed": 200
+     },
+     "methodology": {
+      "recall": 0.684,
+      "recall_close": 0.707,
+      "printed": 685
+     },
+     "chemistry_in": {
+      "recall": 0.866,
+      "recall_close": 0.869,
+      "printed": 80
+     },
+     "chemistry_out": {
+      "recall": 0.526,
+      "recall_close": 0.526,
+      "printed": 65
+     },
+     "overall": {
+      "recall": 0.736,
+      "recall_close": 0.753,
+      "printed": 1030
+     },
+     "all_papers": {
+      "papers": 50,
+      "recall": 0.736,
+      "recall_close": 0.753
+     },
+     "new_values": 107,
+     "new_confirmed": 24,
+     "new_unsupported": 2,
+     "new_unverified": 81
+    },
+    "model_standard": {
+     "papers": 12,
+     "recall": 0.884,
+     "recall_close": 0.884,
+     "precision": 0.827,
+     "precision_close": 0.83,
+     "cells_right": 0.913,
+     "cells_elsewhere": 0.0,
+     "cells_wrong": 0.044,
+     "cells_missing": 0.044,
+     "rows_paired": 0.987
+    }
+   }
+  }
+ }
+}

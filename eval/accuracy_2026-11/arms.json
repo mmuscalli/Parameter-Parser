@@ -5,7 +5,9 @@
   "A": {
    "label": "Standard, built-in pack",
    "batches": {
-    "P1": [],
+    "P1": [
+     "/Users/mickeymuscalli/Documents/Parameter Extractor/accuracy_20261120/P1_A/queue_20261120-225036"
+    ],
     "P2": [],
     "P3": [],
     "E1": []
@@ -14,7 +16,9 @@
   "B": {
    "label": "Economy x3, built-in pack",
    "batches": {
-    "P1": [],
+    "P1": [
+     "/Users/mickeymuscalli/Documents/Parameter Extractor/accuracy_20261120/P1_B/queue_20261120-225036"
+    ],
     "P2": [],
     "P3": [],
     "E1": []
@@ -35,7 +39,9 @@
     "shanker2012"
    ],
    "batches": {
-    "P1": [],
+    "P1": [
+     "/Users/mickeymuscalli/Documents/Parameter Extractor/accuracy_20261120/P1_C/queue_20261120-225036"
+    ],
     "P2": [],
     "P3": [],
     "E1": []
@@ -56,7 +62,9 @@
     "shanker2012"
    ],
    "batches": {
-    "P1": [],
+    "P1": [
+     "/Users/mickeymuscalli/Documents/Parameter Extractor/accuracy_20261120/P1_D/queue_20261120-225036"
+    ],
     "P2": [],
     "P3": [],
     "E1": []
@@ -65,7 +73,9 @@
   "F": {
    "label": "Standard, built-in pack, plots read automatically",
    "batches": {
-    "P1": []
+    "P1": [
+     "/Users/mickeymuscalli/Documents/Parameter Extractor/accuracy_20261120/P1_A/queue_20261120-232408"
+    ]
    }
   },
   "L": {

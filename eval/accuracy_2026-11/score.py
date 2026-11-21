@@ -255,6 +255,62 @@ def _expected(aset: dict, reference: str) -> set:
     return out
 
 
+# a drafted exoplanet pack names its own columns (Phase 1, unit_system "astronomy"): the archive column each stands for,
+# and how its value becomes the archive's (Myr -> Gyr; L_sun -> the archive's log10 L_sun). Uncertainties follow
+# (_err_plus -> err1, _err_minus -> err2, negative).
+DRAFT_TO_ARCHIVE = {
+    "orbital_period_d": ("pl_orbper", None), "semi_major_axis_au": ("pl_orbsmax", None), "eccentricity": ("pl_orbeccen", None),
+    "orbital_inclination_deg": ("pl_orbincl", None), "impact_parameter": ("pl_imppar", None),
+    "argument_of_periastron_deg": ("pl_orblper", None), "rv_semi_amplitude_m_per_s": ("pl_rvamp", None),
+    "time_of_conjunction_BJD": ("pl_tranmid", None), "transit_duration_h": ("pl_trandur", None), "radius_ratio": ("pl_ratror", None),
+    "planet_mass_M_E": ("pl_bmasse", None), "planet_radius_R_E": ("pl_rade", None), "planet_density_g_per_cm3": ("pl_dens", None),
+    "equilibrium_temperature_K": ("pl_eqt", None), "insolation_S_E": ("pl_insol", None),
+    "stellar_effective_temperature_K": ("st_teff", None), "stellar_log_g_dex": ("st_logg", None), "stellar_metallicity_dex": ("st_met", None),
+    "stellar_mass_M_sun": ("st_mass", None), "stellar_radius_R_sun": ("st_rad", None), "stellar_luminosity_L_sun": ("st_lum", "log10"),
+    "stellar_density_g_per_cm3": ("st_dens", None), "stellar_age_Myr": ("st_age", 1e-3), "stellar_rotation_period_d": ("st_rotp", None),
+    "vsini_km_per_s": ("st_vsin", None), "stellar_distance_pc": ("sy_dist", None), "detection_method": ("discoverymethod", None),
+    "discovery_facility": ("disc_facility", None)}
+
+
+def row_labels(run_dir: Path) -> dict:
+    """{full_id: (set label, sample label)} from the run's record (<paper>_record.json)."""
+    out = {}
+    for f in Path(run_dir).glob("*_record.json"):
+        def walk(node, set_label=""):
+            if node.get("level") == "set":
+                set_label = node.get("label", "")
+            if not node.get("children") and node.get("level") not in ("paper", "set"):
+                out[node["id"]] = (set_label, node.get("label", ""))
+            for c in node.get("children", []):
+                walk(c, set_label)
+        walk(json.loads(f.read_text())["paper"])
+    return out
+
+
+def as_archive_columns(run: pd.DataFrame, run_dir: Path) -> pd.DataFrame:
+    """A drafted pack's rows in the archive's column names (DRAFT_TO_ARCHIVE), the planet named by its row label."""
+    if "pl_name" in run.columns or not any(c in run.columns for c in DRAFT_TO_ARCHIVE):
+        return run
+    labels = row_labels(run_dir)
+    out = pd.DataFrame(index=run.index)
+    out["pl_name"] = run.full_id.map(lambda i: re.sub(r"\s*[\(\[].*$", "", labels.get(i, ("", ""))[1]).strip())
+    for col, (arch, how) in DRAFT_TO_ARCHIVE.items():
+        for suffix, asuf, sign in (("", "", 1), ("_err_plus", "err1", 1), ("_err_minus", "err2", -1)):
+            c = col + suffix
+            if c not in run.columns:
+                continue
+            def conv(v, how=how, sign=sign, err=bool(suffix)):
+                x = num(v)
+                if x is None:
+                    return v
+                if how == "log10":
+                    return None if err or x <= 0 else math.log10(x)       # a linear uncertainty has no log equivalent here
+                x = x * how if how else x
+                return -abs(x) if sign < 0 else x
+            out[arch + asuf] = run[c].map(conv)
+    return out
+
+
 def archive_scores(run: pd.DataFrame, archive_rows: list) -> dict:
     refs = Counter(xa._strip_html(a.get("pl_refname", "")) for a in archive_rows)
     reference = refs.most_common(1)[0][0] if refs else ""
@@ -454,6 +510,7 @@ def score(config: dict) -> pd.DataFrame:
                 cost, seconds = cost_of(folder)
                 for mode in ("written", "reviewed"):
                     run = loaded[key] if mode == "written" else with_review(loaded[key], folder)
+                    run = as_archive_columns(run, folder)          # a drafted exoplanet pack's names -> the archive's
                     rec = {"arm": arm_id, "arm_label": arm.get("label", arm_id), "batch": batch, "paper": key,
                            "mode": mode, "cost_usd": cost, "seconds": seconds, "run_folder": str(folder),
                            "drafted_from": key in set(arm.get("drafted_from", [])), **row_counts(run)}
@@ -517,6 +574,11 @@ def summarize(df: pd.DataFrame) -> dict:
                 s["hand"][g] = {"recall": _paper_mean(h, [f"h_{k}_found" for k in keys], den),
                                 "recall_close": _paper_mean(h, [f"h_{k}_found_close" for k in keys], den),
                                 "printed": int(sum(h[c].sum() for c in den if c in h))}
+            # every paper with hand data, a paper without rows counting 0 (coverage; the 'with rows' mean hides it)
+            ha = sub[sub.get("hand_rows", 0) > 0]
+            den = [f"h_{k}_printed" for k in hand_keys]
+            s["hand"]["all_papers"] = {"papers": len(ha), "recall": _paper_mean(ha, [f"h_{k}_found" for k in hand_keys], den),
+                                       "recall_close": _paper_mean(ha, [f"h_{k}_found_close" for k in hand_keys], den)}
             s["hand"]["new_values"] = int(h.get("h_new_values", pd.Series([0])).sum())
             for k in ("h_new_confirmed", "h_new_unsupported", "h_new_unverified"):
                 s["hand"][k[2:]] = int(h.get(k, pd.Series([0])).sum())
@@ -558,14 +620,14 @@ def markdown(summary: dict) -> str:
     for mode in ("written", "reviewed"):
         for batch, arms in sorted(summary.get(mode, {}).items()):
             lines += [f"## {batch} ({mode})", "",
-                      "| Arm | Papers | Cost | Hand recall (close) | Archive recall (close) | MS recall | MS precision "
-                      "| Cells right | Figure rows waiting |", "|" + "---|" * 9]
+                      "| Arm | Papers (with rows) | Cost | Hand recall, papers with rows (close) | Hand recall, all hand papers "
+                      "| Archive recall (close) | MS recall | MS precision | Cells right | Figure rows waiting |", "|" + "---|" * 10]
             for arm, s in sorted(arms.items()):
                 h, x, m = s.get("hand", {}), s.get("archive", {}), s.get("model_standard", {})
                 ho, xo = h.get("overall", {}), x.get("overall", {})
                 lines.append(
-                    f"| {arm} {s['label']} | {s['papers']} | ${s['cost_usd']} | "
-                    f"{ho.get('recall', '–')} ({ho.get('recall_close', '–')}) | "
+                    f"| {arm} {s['label']} | {s['papers']} ({s['papers_with_rows']}) | ${s['cost_usd']} | "
+                    f"{ho.get('recall', '–')} ({ho.get('recall_close', '–')}) | {h.get('all_papers', {}).get('recall', '–')} | "
                     f"{xo.get('recall', '–')} ({xo.get('recall_close', '–')}) | {m.get('recall', '–')} | "
                     f"{m.get('precision', '–')} | {m.get('cells_right', '–')} | {s['figure_rows_waiting']} |")
             lines.append("")

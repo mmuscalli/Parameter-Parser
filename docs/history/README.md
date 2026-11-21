@@ -179,3 +179,4 @@ current month's file (start `YYYY-MM.md` in a new month), with one line here.
 - Accuracy evaluation, Phase 0; a resume that reads the plots (2026-11-20, Mickey)
 - Drafted packs keep their field's units; accuracy evaluation Phase 1 (2026-11-20, Mickey)
 - Accuracy evaluation, Phase 2: the model standard for P1 (2026-11-20, Mickey)
+- Accuracy evaluation, Phase 3 for P1: five arms (2026-11-20, Mickey)
