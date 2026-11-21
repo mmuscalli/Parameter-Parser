@@ -147,8 +147,16 @@ def saved_settings(old: Path) -> dict:
     return _read(Path(old) / CONFIG_FILE).get("config") or _read(Path(old) / "run_summary.json").get("config") or {}
 
 
-def config_for(old: Path, base: RunConfig, rebuild: bool = False) -> RunConfig:
-    """`base` (the current session's key, folders, registry) with the old run's settings, set to reuse its answers."""
+# settings a resume may turn on for the run it finishes, when asked (`turn_on`; the command line's --auto-figures with
+# --resume): the earlier run's answers, plus its plots read automatically -- only their figure suggestions are new
+# requests (Mickey, 2026-11-20: the accuracy evaluation's arm F). Everything else stays as the earlier run had it. A
+# rebuild asks the model nothing, so it can't turn them on.
+CAN_TURN_ON = ("auto_digitize_figures",)
+
+
+def config_for(old: Path, base: RunConfig, rebuild: bool = False, turn_on: Sequence[str] = ()) -> RunConfig:
+    """`base` (the current session's key, folders, registry) with the old run's settings, set to reuse its answers;
+    the settings named in `turn_on` (of CAN_TURN_ON) are on, unless this is a rebuild."""
     saved = saved_settings(old)
     known = {f.name for f in fields(RunConfig)} - _NOT_COPIED
     changes = {k: v for k, v in saved.items() if k in known and v is not None}
@@ -160,6 +168,11 @@ def config_for(old: Path, base: RunConfig, rebuild: bool = False) -> RunConfig:
         config = base
     config.resume_from = Path(old)
     config.rebuild = rebuild
+    for name in turn_on:
+        if name not in CAN_TURN_ON:
+            raise ValueError(f"a resume can't turn on {name!r} (only {', '.join(CAN_TURN_ON)})")
+        if not rebuild:
+            setattr(config, name, True)
     if rebuild:
         config.batch_mode = False                      # nothing is sent: no batches to wait for
     return config
@@ -225,17 +238,22 @@ def extract_again(old: Path, config: RunConfig, on_progress=None, cancel_event=N
     item = original_item(old)
     ex = read_paper(item, config, on_progress, cancel_event)
     digitized, skipped = saved_figures(old, ex.ctx.run_dir, [f.figure_id for f in ex.figures])
-    ex.no_figure_rows = not digitized
+    # figures still to be read automatically can become rows: the steps run for them (pipeline._extract_unattended)
+    ex.no_figure_rows = not digitized and not (config.auto_digitize_figures and skipped)
     return extract_steps(ex), digitized, skipped
 
 
 def resume_run(old: Path, base: RunConfig, rebuild: bool = False, on_progress=None, cancel_event=None,
-               review=None):
+               review=None, turn_on: Sequence[str] = ()):
     """Resume (or rebuild) the run in `old` into a new folder; `review` = the window's review for variables the old
-    run didn't decide (None: not added). Returns the RunResult."""
-    from parameter_extractor.pipeline import finish
-    config = config_for(old, base, rebuild)
+    run didn't decide (None: not added); `turn_on`: see CAN_TURN_ON. Returns the RunResult."""
+    from parameter_extractor.pipeline import auto_digitize_figures, finish
+    config = config_for(old, base, rebuild, turn_on)
     ex, digitized, skipped = extract_again(old, config, on_progress, cancel_event)
+    if config.auto_digitize_figures and skipped and not rebuild:
+        # the figures the earlier run didn't digitize, read from their suggestions (the ones it did are kept)
+        found, still = auto_digitize_figures(ex, only=set(skipped))
+        digitized, skipped = digitized + found, still
     return finish(ex, digitized, skipped, review=review_with_saved(old, review))
 
 

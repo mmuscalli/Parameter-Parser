@@ -1,0 +1,10 @@
+{"hand_csv": "/Users/mickeymuscalli/Documents/EORE Data Project/PaperDataTemplate Archive/PaperDataTemplate_Nov15_2026.csv",
+ "out": "/Users/mickeymuscalli/Documents/EORE Data Project/extraction_pipeline/eval/accuracy_2026-11/results",
+ "arms": {
+  "A": {"label": "Standard, built-in pack", "batches": {"P1": [], "P2": [], "P3": [], "E1": []}},
+  "B": {"label": "Economy x3, built-in pack", "batches": {"P1": [], "P2": [], "P3": [], "E1": []}},
+  "C": {"label": "Standard, drafted pack", "drafted_from": [], "batches": {"P1": [], "P2": [], "P3": [], "E1": []}},
+  "D": {"label": "Economy x3, drafted pack", "drafted_from": [], "batches": {"P1": [], "P2": [], "P3": [], "E1": []}},
+  "F": {"label": "Standard, built-in pack, plots read automatically", "batches": {"P1": []}},
+  "L": {"label": "qwen3.8:27b (local), built-in pack", "batches": {"P1": [], "E1": []}}},
+ "model_standard": {"P1": [], "P2": [], "P3": [], "E1": []}}

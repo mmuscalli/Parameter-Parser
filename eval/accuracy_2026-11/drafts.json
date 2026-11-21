@@ -1,0 +1,51 @@
+{
+ "P1": {
+  "pack": "accuracy_p1_drafted",
+  "name": "Accuracy test P1 (drafted)",
+  "papers": [
+   "Chen2007",
+   "Chung1971",
+   "Huber1998",
+   "Imai1998",
+   "Kawamura2009",
+   "Rode1990",
+   "Shen1990",
+   "Yamagata1997",
+   "lemke2009",
+   "shanker2012"
+  ]
+ },
+ "P2": {
+  "pack": "accuracy_p2_drafted",
+  "name": "Accuracy test P2 (drafted)",
+  "papers": [
+   "Caimi2024",
+   "CalacaSerrao2024",
+   "Cleaves2008",
+   "FerrisErtem1993",
+   "Song2024"
+  ]
+ },
+ "P3": {
+  "pack": "accuracy_p3_drafted",
+  "name": "Accuracy test P3 (drafted)",
+  "papers": [
+   "Burchell2020",
+   "Kazemi2021",
+   "Parnell2007",
+   "Takeuchi2020",
+   "Tingle1991"
+  ]
+ },
+ "E1": {
+  "pack": "accuracy_e1_drafted",
+  "name": "Accuracy test E1 (drafted)",
+  "papers": [
+   "Bennett2020",
+   "Lamontagne2026",
+   "Mantovan2026",
+   "Sha2021",
+   "Vila2025"
+  ]
+ }
+}

@@ -175,7 +175,9 @@ def main() -> int:
                         help="Also keep the images of figures that weren't digitized (normally removed)")
     parser.add_argument("--auto-figures", action="store_true",
                         help="Digitize easy figures automatically: request suggestions for every figure and keep "
-                             "the bar charts / scatter plots that parse cleanly (flagged for checking)")
+                             "the bar charts / scatter plots that parse cleanly (flagged for checking). With "
+                             "--resume: also for a run made without it -- its answers are reused, only the figures' "
+                             "suggestions are asked")
     parser.add_argument("--estimate-only", action="store_true",
                         help="Print the estimated cost and time of the run (or queue) with these settings, and stop "
                              "(nothing is sent)")
@@ -404,17 +406,22 @@ def _resume(args, config) -> int:
     from parameter_extractor.paper_queue import run_queue
     folder, rebuild = Path(args.resume or args.rebuild), bool(args.rebuild)
     what = "Rebuilding" if rebuild else "Resuming"
+    # settings the resume turns on although the earlier run had them off (resume.CAN_TURN_ON)
+    turn_on = ("auto_digitize_figures",) if args.auto_figures and not rebuild else ()
+    if args.auto_figures and rebuild:
+        print("Note: --auto-figures is ignored by --rebuild, which asks the model nothing (reading a plot needs its "
+              "figure suggestion); use --resume to read the plots.", file=sys.stderr)
     try:
         if resume.is_queue_folder(folder) and not (folder / resume.CONFIG_FILE).is_file():
             print(f"{what} the paper queue in {folder}")
             queue = run_queue([], config, on_change=_queue_progress(), parallel=args.parallel, resume_from=folder,
-                              rebuild=rebuild)
+                              rebuild=rebuild, turn_on=turn_on)
             finished = [p for p in queue.papers if p.result is not None]
             print(f"\n{len(finished)} of {len(queue.papers)} paper(s) assembled -> {queue.out_dir}")
             print(_queue_cost(queue))
             return 0 if finished else 1
         print(f"{what} {folder}")
-        result = resume.resume_run(folder, config, rebuild=rebuild, on_progress=print_progress)
+        result = resume.resume_run(folder, config, rebuild=rebuild, on_progress=print_progress, turn_on=turn_on)
     except PipelineError as e:
         print(f"\nError: {e}", file=sys.stderr)
         return 1

@@ -1796,12 +1796,14 @@ def _new_variable_flags(groups: List[VariableGroup]) -> List[Flag]:
     return flags
 
 
-def auto_digitize_figures(ex: "Extraction") -> Tuple[List[DigitizedFigure], List[str]]:
+def auto_digitize_figures(ex: "Extraction", only: Optional[set] = None) -> Tuple[List[DigitizedFigure], List[str]]:
     """Unattended runs with RunConfig.auto_digitize_figures (Mickey, 2026-11-03): suggestions for every figure of
-    the paper itself (not the supplement's), kept when they parse cleanly (digitizing/auto_figure.py). Returns
-    (digitized, skipped figure ids); why the others weren't is in ex.auto_figure_notes."""
+    the paper itself (not the supplement's), kept when they parse cleanly (digitizing/auto_figure.py); `only`: just
+    these figure ids (a resume: the figures the earlier run didn't digitize). Returns (digitized, skipped figure
+    ids); why the others weren't is in ex.auto_figure_notes."""
     from parameter_extractor.digitizing.auto_figure import auto_digitize, figure_for
-    figures = [fig for fig in ex.figures if not fig.supplement]
+    wanted = [fig for fig in ex.figures if only is None or fig.figure_id in only]
+    figures = [fig for fig in wanted if not fig.supplement]
 
     def one(fig):
         try:
@@ -1814,7 +1816,7 @@ def auto_digitize_figures(ex: "Extraction") -> Tuple[List[DigitizedFigure], List
     workers = max(1, min(len(figures), step_workers(ex.ctx.config))) if figures else 1
     with ThreadPoolExecutor(max_workers=workers, thread_name_prefix="figure") as pool:
         outcomes = list(pool.map(one, figures))
-    digitized, skipped = [], [fig.figure_id for fig in ex.figures if fig.supplement]
+    digitized, skipped = [], [fig.figure_id for fig in wanted if fig.supplement]
     for fig, (result, error) in zip(figures, outcomes):
         if error is not None:
             ex.auto_figure_notes.append(f"{fig.figure_id}: automatic digitizing failed ({error})")

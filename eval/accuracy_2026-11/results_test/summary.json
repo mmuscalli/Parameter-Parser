@@ -1,0 +1,116 @@
+{
+ "reviewed": {
+  "P1": {
+   "S": {
+    "label": "study curated, rebuilt 11-20",
+    "papers": 56,
+    "papers_with_rows": 45,
+    "cost_usd": 4.88,
+    "rows": 930,
+    "figure_rows_waiting": 89,
+    "hand": {
+     "papers": 37,
+     "hand_values_not_printed": 3044,
+     "metadata": {
+      "recall": 0.899,
+      "recall_close": 0.899,
+      "printed": 148
+     },
+     "methodology": {
+      "recall": 0.719,
+      "recall_close": 0.75,
+      "printed": 496
+     },
+     "chemistry_in": {
+      "recall": 0.94,
+      "recall_close": 0.94,
+      "printed": 58
+     },
+     "chemistry_out": {
+      "recall": 0.598,
+      "recall_close": 0.553,
+      "printed": 61
+     },
+     "overall": {
+      "recall": 0.764,
+      "recall_close": 0.784,
+      "printed": 763
+     },
+     "new_values": 480,
+     "new_confirmed": 480,
+     "new_unsupported": 0,
+     "new_unverified": 0
+    },
+    "model_standard": {
+     "papers": 56,
+     "recall": 1.0,
+     "recall_close": 1.0,
+     "precision": 1.0,
+     "precision_close": 1.0,
+     "cells_right": 1.0,
+     "cells_elsewhere": 0.0,
+     "cells_wrong": 0.0,
+     "cells_missing": 0.0,
+     "rows_paired": 1.0
+    }
+   }
+  }
+ },
+ "written": {
+  "P1": {
+   "S": {
+    "label": "study curated, rebuilt 11-20",
+    "papers": 56,
+    "papers_with_rows": 45,
+    "cost_usd": 4.88,
+    "rows": 930,
+    "figure_rows_waiting": 89,
+    "hand": {
+     "papers": 37,
+     "hand_values_not_printed": 3044,
+     "metadata": {
+      "recall": 0.899,
+      "recall_close": 0.899,
+      "printed": 148
+     },
+     "methodology": {
+      "recall": 0.716,
+      "recall_close": 0.747,
+      "printed": 496
+     },
+     "chemistry_in": {
+      "recall": 0.92,
+      "recall_close": 0.92,
+      "printed": 58
+     },
+     "chemistry_out": {
+      "recall": 0.553,
+      "recall_close": 0.553,
+      "printed": 61
+     },
+     "overall": {
+      "recall": 0.759,
+      "recall_close": 0.781,
+      "printed": 763
+     },
+     "new_values": 94,
+     "new_confirmed": 94,
+     "new_unsupported": 0,
+     "new_unverified": 0
+    },
+    "model_standard": {
+     "papers": 56,
+     "recall": 1.0,
+     "recall_close": 1.0,
+     "precision": 1.0,
+     "precision_close": 1.0,
+     "cells_right": 1.0,
+     "cells_elsewhere": 0.0,
+     "cells_wrong": 0.0,
+     "cells_missing": 0.0,
+     "rows_paired": 1.0
+    }
+   }
+  }
+ }
+}

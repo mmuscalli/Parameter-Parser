@@ -1,0 +1,4 @@
+{"hand_csv": "/Users/mickeymuscalli/Documents/EORE Data Project/PaperDataTemplate Archive/PaperDataTemplate_Nov15_2026.csv",
+ "out": "/Users/mickeymuscalli/Documents/EORE Data Project/extraction_pipeline/eval/accuracy_2026-11/results_test",
+ "arms": {"S": {"label": "study curated, rebuilt 11-20", "batches": {"P1": ["/Users/mickeymuscalli/Documents/Parameter Extractor/pack_study_20261114/runs_prebiotic_chemistry/queue_20261120-202956", "/Users/mickeymuscalli/Documents/Parameter Extractor/pack_study_20261114/scanned_prebiotic_chemistry/queue_20261120-203153"]}}},
+ "model_standard": {"P1": ["/Users/mickeymuscalli/Documents/Parameter Extractor/pack_study_20261114/runs_prebiotic_chemistry/queue_20261117-185808", "/Users/mickeymuscalli/Documents/Parameter Extractor/pack_study_20261114/scanned_prebiotic_chemistry/queue_20261117-190801"]}}

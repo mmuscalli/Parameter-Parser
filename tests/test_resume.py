@@ -230,6 +230,73 @@ def test_a_stopped_queue_resumes_into_a_new_queue_folder():
         assert rebuilt.papers[0].status == "finished"
 
 
+def _planning(log: list):
+    """pipeline.plan_figure recorded (the figure ids asked for) and answered with no suggestion, so nothing is sent
+    and no figure is easy: the dataset stays the replay's."""
+    def plan(ex, fig):
+        log.append(fig.figure_id)
+        return None
+    return plan
+
+
+def test_a_resume_can_turn_on_automatic_plot_reading():
+    """Mickey, 2026-11-20 (the accuracy evaluation's arm F): an earlier run's answers plus its plots read
+    automatically -- only the figures' suggestions are new requests; a rebuild asks nothing, so it can't."""
+    if not _have_inputs():
+        return
+    from parameter_extractor import pipeline
+    with tempfile.TemporaryDirectory() as tmp:
+        first = _finished(Path(tmp))
+        figures = [f["figure_id"] for f in json.loads((first.run_dir / "run_summary.json").read_text())
+                   .get("figures_not_digitized", [])] or None
+        planned = []
+        with patch.object(api_client, "_send", _no_send), patch.object(pipeline, "plan_figure", _planning(planned)):
+            again = resume.resume_run(first.run_dir, _config(Path(tmp)), turn_on=("auto_digitize_figures",))
+        assert planned, "the paper's figures should have been read"
+        assert figures is None or set(planned) <= set(figures), (planned, figures)
+        saved = json.loads((again.run_dir / resume.CONFIG_FILE).read_text())["config"]
+        assert saved["auto_digitize_figures"] is True          # the new folder says what it did
+        assert again.csv_path.read_text() == COMMITTED.read_text()
+        assert all(u.reused for u in again.usage)              # every step's answer reused
+        # a rebuild: nothing asked, the setting stays as the earlier run had it
+        planned.clear()
+        with patch.object(api_client, "_send", _no_send), patch.object(pipeline, "plan_figure", _planning(planned)):
+            rebuilt = resume.resume_run(first.run_dir, _config(Path(tmp)), rebuild=True,
+                                        turn_on=("auto_digitize_figures",))
+        assert planned == [] and json.loads((rebuilt.run_dir / resume.CONFIG_FILE).read_text())["config"][
+            "auto_digitize_figures"] is False
+        # without turn_on a resume keeps the earlier run's setting, whatever the current session's is
+        base = _config(Path(tmp))
+        base.auto_digitize_figures = True
+        assert resume.config_for(first.run_dir, base).auto_digitize_figures is False
+        try:
+            resume.config_for(first.run_dir, base, turn_on=("passes",))
+            raise AssertionError("only the settings in CAN_TURN_ON can be turned on")
+        except ValueError:
+            pass
+
+
+def test_a_resumed_queue_can_turn_on_automatic_plot_reading():
+    if not _have_inputs():
+        return
+    from parameter_extractor import pipeline
+    from parameter_extractor.paper_queue import run_queue
+    with tempfile.TemporaryDirectory() as tmp:
+        with patch.object(api_client, "_send", _replay_send):
+            old_queue = run_queue([PDF], _config(Path(tmp)))
+        planned = []
+        with patch.object(api_client, "_send", _no_send), patch.object(pipeline, "plan_figure", _planning(planned)):
+            queue = run_queue([], _config(Path(tmp)), resume_from=old_queue.out_dir,
+                              turn_on=("auto_digitize_figures",))
+        paper = queue.papers[0]
+        assert planned and paper.status == "finished" and paper.result.csv_path.read_text() == COMMITTED.read_text()
+        assert paper.extraction.ctx.config.auto_digitize_figures is True
+        planned.clear()
+        with patch.object(api_client, "_send", _no_send), patch.object(pipeline, "plan_figure", _planning(planned)):
+            plain = run_queue([], _config(Path(tmp)), resume_from=old_queue.out_dir)
+        assert planned == [] and plain.papers[0].status == "finished"
+
+
 def test_command_line_rebuild_writes_next_to_the_old_folder():
     if not _have_inputs():
         return

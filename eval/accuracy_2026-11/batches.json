@@ -1,0 +1,886 @@
+{
+ "P1": {
+  "Alargov2002": {
+   "pdf": "/Users/mickeymuscalli/Documents/EORE Data Project/Paper Files/Accuracy Test 2026-11/P1/Alargov2002/Alargov2002.pdf",
+   "source": "/Users/mickeymuscalli/Documents/EORE Data Project/Paper Files/Paper Lists/Initial Easy Papers/Alargov2002/alargov2002.pdf",
+   "si": "",
+   "hand_id": "001"
+  },
+  "Bujdak1994": {
+   "pdf": "/Users/mickeymuscalli/Documents/EORE Data Project/Paper Files/Accuracy Test 2026-11/P1/Bujdak1994/Bujdak1994.pdf",
+   "source": "/Users/mickeymuscalli/Documents/EORE Data Project/Paper Files/Paper Lists/Initial Easy Papers/Bujdak1994/Bujdak1994.pdf",
+   "si": "",
+   "hand_id": null
+  },
+  "Bujdak1996": {
+   "pdf": "/Users/mickeymuscalli/Documents/EORE Data Project/Paper Files/Accuracy Test 2026-11/P1/Bujdak1996/Bujdak1996.pdf",
+   "source": "/Users/mickeymuscalli/Documents/EORE Data Project/Paper Files/Paper Lists/Initial Easy Papers/Bujdak1996/Bujdak1996.pdf",
+   "si": "",
+   "hand_id": "011"
+  },
+  "Bujdak2000": {
+   "pdf": "/Users/mickeymuscalli/Documents/EORE Data Project/Paper Files/Accuracy Test 2026-11/P1/Bujdak2000/Bujdak2000.pdf",
+   "source": "/Users/mickeymuscalli/Documents/EORE Data Project/Paper Files/Paper Lists/Initial Easy Papers/Bujdak2000/Bujdak2000.pdf",
+   "si": "",
+   "hand_id": "046"
+  },
+  "Chang1969": {
+   "pdf": "/Users/mickeymuscalli/Documents/EORE Data Project/Paper Files/Accuracy Test 2026-11/P1/Chang1969/Chang1969.pdf",
+   "source": "/Users/mickeymuscalli/Documents/EORE Data Project/Paper Files/Paper Lists/Initial Easy Papers/Chang1969/Chang1969.pdf",
+   "si": "",
+   "hand_id": "026"
+  },
+  "Chen2007": {
+   "pdf": "/Users/mickeymuscalli/Documents/EORE Data Project/Paper Files/Accuracy Test 2026-11/P1/Chen2007/Chen2007.pdf",
+   "source": "/Users/mickeymuscalli/Documents/EORE Data Project/Paper Files/Paper Lists/Initial Easy Papers/Chen2007/Chen2007.pdf",
+   "si": "",
+   "hand_id": "042"
+  },
+  "Chung1971": {
+   "pdf": "/Users/mickeymuscalli/Documents/EORE Data Project/Paper Files/Accuracy Test 2026-11/P1/Chung1971/Chung1971.pdf",
+   "source": "/Users/mickeymuscalli/Documents/EORE Data Project/Paper Files/Paper Lists/Initial Easy Papers/Chung1971/Chung1971.pdf",
+   "si": "",
+   "hand_id": "035"
+  },
+  "Cleaves2009": {
+   "pdf": "/Users/mickeymuscalli/Documents/EORE Data Project/Paper Files/Accuracy Test 2026-11/P1/Cleaves2009/Cleaves2009.pdf",
+   "source": "/Users/mickeymuscalli/Documents/EORE Data Project/Paper Files/Paper Lists/Initial Easy Papers/Rodriguez-Garcia2015/Cleaves et al. - 2009 - An Evaluation of the Critical Parameters for Abiotic Peptide Synthesis in Submarine Hydrothermal Sys.pdf",
+   "si": "",
+   "hand_id": "009"
+  },
+  "Eder1992": {
+   "pdf": "/Users/mickeymuscalli/Documents/EORE Data Project/Paper Files/Accuracy Test 2026-11/P1/Eder1992/Eder1992.pdf",
+   "source": "/Users/mickeymuscalli/Documents/EORE Data Project/Paper Files/Paper Lists/Initial Easy Papers/Eder1992/Eder1992.pdf",
+   "si": "",
+   "hand_id": "030"
+  },
+  "Eder1994": {
+   "pdf": "/Users/mickeymuscalli/Documents/EORE Data Project/Paper Files/Accuracy Test 2026-11/P1/Eder1994/Eder1994.pdf",
+   "source": "/Users/mickeymuscalli/Documents/EORE Data Project/Paper Files/Paper Lists/Initial Easy Papers/Eder1994/eder1994.pdf",
+   "si": "",
+   "hand_id": "004"
+  },
+  "Flores1973": {
+   "pdf": "/Users/mickeymuscalli/Documents/EORE Data Project/Paper Files/Accuracy Test 2026-11/P1/Flores1973/Flores1973.pdf",
+   "source": "/Users/mickeymuscalli/Documents/EORE Data Project/Paper Files/Paper Lists/Initial Easy Papers/Flores1973/Flores1973.pdf",
+   "si": "",
+   "hand_id": "024"
+  },
+  "Fuchida2016": {
+   "pdf": "/Users/mickeymuscalli/Documents/EORE Data Project/Paper Files/Accuracy Test 2026-11/P1/Fuchida2016/Fuchida2016.pdf",
+   "source": "/Users/mickeymuscalli/Documents/EORE Data Project/Paper Files/Paper Lists/Initial Easy Papers/Fuchida2016/Fuchida2016.pdf",
+   "si": "",
+   "hand_id": "038"
+  },
+  "Gao2011": {
+   "pdf": "/Users/mickeymuscalli/Documents/EORE Data Project/Paper Files/Accuracy Test 2026-11/P1/Gao2011/Gao2011.pdf",
+   "source": "/Users/mickeymuscalli/Documents/EORE Data Project/Paper Files/Paper Lists/Initial Easy Papers/Gao2011/Gao2011.pdf",
+   "si": "",
+   "hand_id": "034"
+  },
+  "Gregoire2018": {
+   "pdf": "/Users/mickeymuscalli/Documents/EORE Data Project/Paper Files/Accuracy Test 2026-11/P1/Gregoire2018/Gregoire2018.pdf",
+   "source": "/Users/mickeymuscalli/Documents/EORE Data Project/Paper Files/Paper Lists/Initial Easy Papers/Grégoire et al. - 2018 - Peptide Formation on Layered Mineral Surfaces The Key Role of Brucite-like Minerals on the Enhanced.pdf",
+   "si": "",
+   "hand_id": "006"
+  },
+  "Halmann1968": {
+   "pdf": "/Users/mickeymuscalli/Documents/EORE Data Project/Paper Files/Accuracy Test 2026-11/P1/Halmann1968/Halmann1968.pdf",
+   "source": "/Users/mickeymuscalli/Documents/EORE Data Project/Paper Files/Paper Lists/Initial Easy Papers/Halmann1968/Halmann1968.pdf",
+   "si": "",
+   "hand_id": "031"
+  },
+  "Huber1998": {
+   "pdf": "/Users/mickeymuscalli/Documents/EORE Data Project/Paper Files/Accuracy Test 2026-11/P1/Huber1998/Huber1998.pdf",
+   "source": "/Users/mickeymuscalli/Documents/EORE Data Project/Paper Files/Paper Lists/Initial Easy Papers/Huber1998/Huber1998.pdf",
+   "si": "",
+   "hand_id": "022"
+  },
+  "Imai1998": {
+   "pdf": "/Users/mickeymuscalli/Documents/EORE Data Project/Paper Files/Accuracy Test 2026-11/P1/Imai1998/Imai1998.pdf",
+   "source": "/Users/mickeymuscalli/Documents/EORE Data Project/Paper Files/Paper Lists/Initial Easy Papers/Imai1998/Imai1998.pdf",
+   "si": "",
+   "hand_id": "010"
+  },
+  "Imai1999": {
+   "pdf": "/Users/mickeymuscalli/Documents/EORE Data Project/Paper Files/Accuracy Test 2026-11/P1/Imai1999/Imai1999.pdf",
+   "source": "/Users/mickeymuscalli/Documents/EORE Data Project/Paper Files/Paper Lists/Initial Easy Papers/Imai et al. - 1999 - Elongation of Oligopeptides in a Simulated Submarine Hydrothermal System.pdf",
+   "si": "",
+   "hand_id": "008"
+  },
+  "Inoue1993": {
+   "pdf": "/Users/mickeymuscalli/Documents/EORE Data Project/Paper Files/Accuracy Test 2026-11/P1/Inoue1993/Inoue1993.pdf",
+   "source": "/Users/mickeymuscalli/Documents/EORE Data Project/Paper Files/Paper Lists/Initial Easy Papers/Inoue1993/Inoue1993.pdf",
+   "si": "",
+   "hand_id": "043"
+  },
+  "Inoue1994": {
+   "pdf": "/Users/mickeymuscalli/Documents/EORE Data Project/Paper Files/Accuracy Test 2026-11/P1/Inoue1994/Inoue1994.pdf",
+   "source": "/Users/mickeymuscalli/Documents/EORE Data Project/Paper Files/Paper Lists/Initial Easy Papers/Inoue1994/Inoue1994.pdf",
+   "si": "",
+   "hand_id": "044"
+  },
+  "Islam2003": {
+   "pdf": "/Users/mickeymuscalli/Documents/EORE Data Project/Paper Files/Accuracy Test 2026-11/P1/Islam2003/Islam2003.pdf",
+   "source": "/Users/mickeymuscalli/Documents/EORE Data Project/Paper Files/Paper Lists/Initial Easy Papers/Islam2003/islam2003.pdf",
+   "si": "",
+   "hand_id": "003"
+  },
+  "Kawamura2009": {
+   "pdf": "/Users/mickeymuscalli/Documents/EORE Data Project/Paper Files/Accuracy Test 2026-11/P1/Kawamura2009/Kawamura2009.pdf",
+   "source": "/Users/mickeymuscalli/Documents/EORE Data Project/Paper Files/Paper Lists/Initial Easy Papers/Kawamura2009/Kawamura2009.pdf",
+   "si": "",
+   "hand_id": "040"
+  },
+  "Kitadai2017": {
+   "pdf": "/Users/mickeymuscalli/Documents/EORE Data Project/Paper Files/Accuracy Test 2026-11/P1/Kitadai2017/Kitadai2017.pdf",
+   "source": "/Users/mickeymuscalli/Documents/EORE Data Project/Paper Files/Paper Lists/Initial Easy Papers/Kitadai2017/kitadai2017.pdf",
+   "si": "",
+   "hand_id": null
+  },
+  "Leman2004": {
+   "pdf": "/Users/mickeymuscalli/Documents/EORE Data Project/Paper Files/Accuracy Test 2026-11/P1/Leman2004/Leman2004.pdf",
+   "source": "/Users/mickeymuscalli/Documents/EORE Data Project/Paper Files/Paper Lists/Initial Easy Papers/Leman2004/Leman2004.pdf",
+   "si": "",
+   "hand_id": "033"
+  },
+  "Leman2015": {
+   "pdf": "/Users/mickeymuscalli/Documents/EORE Data Project/Paper Files/Accuracy Test 2026-11/P1/Leman2015/Leman2015.pdf",
+   "source": "/Users/mickeymuscalli/Documents/EORE Data Project/Paper Files/Paper Lists/Initial Easy Papers/Leman2015/Leman2015.pdf",
+   "si": "",
+   "hand_id": "028"
+  },
+  "Matrajt2003": {
+   "pdf": "/Users/mickeymuscalli/Documents/EORE Data Project/Paper Files/Accuracy Test 2026-11/P1/Matrajt2003/Matrajt2003.pdf",
+   "source": "/Users/mickeymuscalli/Documents/EORE Data Project/Paper Files/Paper Lists/Initial Easy Papers/Matrajt2003/matrajt2003.pdf",
+   "si": "",
+   "hand_id": "014"
+  },
+  "Ming2007": {
+   "pdf": "/Users/mickeymuscalli/Documents/EORE Data Project/Paper Files/Accuracy Test 2026-11/P1/Ming2007/Ming2007.pdf",
+   "source": "/Users/mickeymuscalli/Documents/EORE Data Project/Paper Files/Paper Lists/Initial Easy Papers/Ming2007/Ming2007.pdf",
+   "si": "",
+   "hand_id": null
+  },
+  "Mizutani1981": {
+   "pdf": "/Users/mickeymuscalli/Documents/EORE Data Project/Paper Files/Accuracy Test 2026-11/P1/Mizutani1981/Mizutani1981.pdf",
+   "source": "/Users/mickeymuscalli/Documents/EORE Data Project/Paper Files/Paper Lists/Initial Easy Papers/Mizutani1981/Mizutani1981.pdf",
+   "si": "",
+   "hand_id": "029"
+  },
+  "Nagayama1989": {
+   "pdf": "/Users/mickeymuscalli/Documents/EORE Data Project/Paper Files/Accuracy Test 2026-11/P1/Nagayama1989/Nagayama1989.pdf",
+   "source": "/Users/mickeymuscalli/Documents/EORE Data Project/Paper Files/Paper Lists/Initial Easy Papers/Nagayama1989/Nagayama1989.pdf",
+   "si": "",
+   "hand_id": "025"
+  },
+  "Naka2006": {
+   "pdf": "/Users/mickeymuscalli/Documents/EORE Data Project/Paper Files/Accuracy Test 2026-11/P1/Naka2006/Naka2006.pdf",
+   "source": "/Users/mickeymuscalli/Documents/EORE Data Project/Paper Files/Paper Lists/Initial Easy Papers/Naka2006/Naka2006.pdf",
+   "si": "",
+   "hand_id": null
+  },
+  "Nooner1977": {
+   "pdf": "/Users/mickeymuscalli/Documents/EORE Data Project/Paper Files/Accuracy Test 2026-11/P1/Nooner1977/Nooner1977.pdf",
+   "source": "/Users/mickeymuscalli/Documents/EORE Data Project/Paper Files/Paper Lists/Initial Easy Papers/Nooner1977/Nooner1977.pdf",
+   "si": "",
+   "hand_id": "048"
+  },
+  "Ohara2007": {
+   "pdf": "/Users/mickeymuscalli/Documents/EORE Data Project/Paper Files/Accuracy Test 2026-11/P1/Ohara2007/Ohara2007.pdf",
+   "source": "/Users/mickeymuscalli/Documents/EORE Data Project/Paper Files/Paper Lists/Initial Easy Papers/Ohara2007/ohara2007.pdf",
+   "si": "",
+   "hand_id": null
+  },
+  "Okamoto1964": {
+   "pdf": "/Users/mickeymuscalli/Documents/EORE Data Project/Paper Files/Accuracy Test 2026-11/P1/Okamoto1964/Okamoto1964.pdf",
+   "source": "/Users/mickeymuscalli/Documents/EORE Data Project/Paper Files/Paper Lists/Initial Easy Papers/Okamoto1964/okamoto1964 en-US.pdf",
+   "si": "",
+   "hand_id": null
+  },
+  "Rabinowitz1969": {
+   "pdf": "/Users/mickeymuscalli/Documents/EORE Data Project/Paper Files/Accuracy Test 2026-11/P1/Rabinowitz1969/Rabinowitz1969.pdf",
+   "source": "/Users/mickeymuscalli/Documents/EORE Data Project/Paper Files/Paper Lists/Initial Easy Papers/Rabinowitz1969/Rabinowitz1969.pdf",
+   "si": "",
+   "hand_id": "027"
+  },
+  "Rabinowitz1970": {
+   "pdf": "/Users/mickeymuscalli/Documents/EORE Data Project/Paper Files/Accuracy Test 2026-11/P1/Rabinowitz1970/Rabinowitz1970.pdf",
+   "source": "/Users/mickeymuscalli/Documents/EORE Data Project/Paper Files/Paper Lists/Initial Easy Papers/Rabinowitz1970/Rabinowitz1970.pdf",
+   "si": "",
+   "hand_id": null
+  },
+  "Rabinowitz1978": {
+   "pdf": "/Users/mickeymuscalli/Documents/EORE Data Project/Paper Files/Accuracy Test 2026-11/P1/Rabinowitz1978/Rabinowitz1978.pdf",
+   "source": "/Users/mickeymuscalli/Documents/EORE Data Project/Paper Files/Paper Lists/Initial Easy Papers/Rabinowitz1978/Rabinowitz1978.pdf",
+   "si": "",
+   "hand_id": "050"
+  },
+  "Rabinowitz1985": {
+   "pdf": "/Users/mickeymuscalli/Documents/EORE Data Project/Paper Files/Accuracy Test 2026-11/P1/Rabinowitz1985/Rabinowitz1985.pdf",
+   "source": "/Users/mickeymuscalli/Documents/EORE Data Project/Paper Files/Paper Lists/Initial Easy Papers/Rabinowitz1985/Rabinowitz1985.pdf",
+   "si": "",
+   "hand_id": "045"
+  },
+  "Rishpon1982": {
+   "pdf": "/Users/mickeymuscalli/Documents/EORE Data Project/Paper Files/Accuracy Test 2026-11/P1/Rishpon1982/Rishpon1982.pdf",
+   "source": "/Users/mickeymuscalli/Documents/EORE Data Project/Paper Files/Paper Lists/Initial Easy Papers/Rishpon1982/Rishpon1982.pdf",
+   "si": "",
+   "hand_id": null
+  },
+  "Rode1990": {
+   "pdf": "/Users/mickeymuscalli/Documents/EORE Data Project/Paper Files/Accuracy Test 2026-11/P1/Rode1990/Rode1990.pdf",
+   "source": "/Users/mickeymuscalli/Documents/EORE Data Project/Paper Files/Paper Lists/Initial Easy Papers/Rode1990/BF01808134.pdf",
+   "si": "",
+   "hand_id": "005"
+  },
+  "Rodriguez-Garcia2015": {
+   "pdf": "/Users/mickeymuscalli/Documents/EORE Data Project/Paper Files/Accuracy Test 2026-11/P1/Rodriguez-Garcia2015/Rodriguez-Garcia2015.pdf",
+   "source": "/Users/mickeymuscalli/Documents/EORE Data Project/Paper Files/Paper Lists/Initial Easy Papers/Rodriguez-Garcia2015/Rodriguez-Garcia et al. - 2015 - Formation of oligopeptides in high yield under simple programmable conditions.pdf",
+   "si": "/Users/mickeymuscalli/Documents/EORE Data Project/Paper Files/Paper Lists/Initial Easy Papers/Rodriguez-Garcia2015/Rodriguez-Garcia2015_Supplemental.pdf",
+   "hand_id": "007"
+  },
+  "Sakata2010": {
+   "pdf": "/Users/mickeymuscalli/Documents/EORE Data Project/Paper Files/Accuracy Test 2026-11/P1/Sakata2010/Sakata2010.pdf",
+   "source": "/Users/mickeymuscalli/Documents/EORE Data Project/Paper Files/Paper Lists/Initial Easy Papers/Sakata2010/sakata2010.pdf",
+   "si": "",
+   "hand_id": "002"
+  },
+  "Sakata2014": {
+   "pdf": "/Users/mickeymuscalli/Documents/EORE Data Project/Paper Files/Accuracy Test 2026-11/P1/Sakata2014/Sakata2014.pdf",
+   "source": "/Users/mickeymuscalli/Documents/EORE Data Project/Paper Files/Paper Lists/Initial Easy Papers/Sakata2014/Sakata2014.pdf",
+   "si": "",
+   "hand_id": "037"
+  },
+  "Schwendinger1991": {
+   "pdf": "/Users/mickeymuscalli/Documents/EORE Data Project/Paper Files/Accuracy Test 2026-11/P1/Schwendinger1991/Schwendinger1991.pdf",
+   "source": "/Users/mickeymuscalli/Documents/EORE Data Project/Paper Files/Paper Lists/Initial Easy Papers/Schwendinger1991/Schwendinger1991.pdf",
+   "si": "",
+   "hand_id": "021"
+  },
+  "Shen1990": {
+   "pdf": "/Users/mickeymuscalli/Documents/EORE Data Project/Paper Files/Accuracy Test 2026-11/P1/Shen1990/Shen1990.pdf",
+   "source": "/Users/mickeymuscalli/Documents/EORE Data Project/Paper Files/Paper Lists/Initial Easy Papers/Shen1990/Shen1990.pdf",
+   "si": "",
+   "hand_id": "041"
+  },
+  "Steinman1966": {
+   "pdf": "/Users/mickeymuscalli/Documents/EORE Data Project/Paper Files/Accuracy Test 2026-11/P1/Steinman1966/Steinman1966.pdf",
+   "source": "/Users/mickeymuscalli/Documents/EORE Data Project/Paper Files/Paper Lists/Initial Easy Papers/Steinman1966/Steinman1966.pdf",
+   "si": "",
+   "hand_id": "032"
+  },
+  "Takaoka1991": {
+   "pdf": "/Users/mickeymuscalli/Documents/EORE Data Project/Paper Files/Accuracy Test 2026-11/P1/Takaoka1991/Takaoka1991.pdf",
+   "source": "/Users/mickeymuscalli/Documents/EORE Data Project/Paper Files/Paper Lists/Initial Easy Papers/Takaoka1991/Takaoka1991.pdf",
+   "si": "",
+   "hand_id": "039"
+  },
+  "Truman2024": {
+   "pdf": "/Users/mickeymuscalli/Documents/EORE Data Project/Paper Files/Accuracy Test 2026-11/P1/Truman2024/Truman2024.pdf",
+   "source": "/Users/mickeymuscalli/Documents/EORE Data Project/Paper Files/Paper Lists/Initial Easy Papers/Truman2024/truman2024.pdf",
+   "si": "",
+   "hand_id": null
+  },
+  "Watanabe1963": {
+   "pdf": "/Users/mickeymuscalli/Documents/EORE Data Project/Paper Files/Accuracy Test 2026-11/P1/Watanabe1963/Watanabe1963.pdf",
+   "source": "/Users/mickeymuscalli/Documents/EORE Data Project/Paper Files/Paper Lists/Initial Easy Papers/Watanabe1963/watanabe1963_unlocked en-US.pdf",
+   "si": "",
+   "hand_id": null
+  },
+  "Yamagata1997": {
+   "pdf": "/Users/mickeymuscalli/Documents/EORE Data Project/Paper Files/Accuracy Test 2026-11/P1/Yamagata1997/Yamagata1997.pdf",
+   "source": "/Users/mickeymuscalli/Documents/EORE Data Project/Paper Files/Paper Lists/Initial Easy Papers/Yamagata1997/Yamagata1997.pdf",
+   "si": "",
+   "hand_id": "047"
+  },
+  "Yamanaka1987": {
+   "pdf": "/Users/mickeymuscalli/Documents/EORE Data Project/Paper Files/Accuracy Test 2026-11/P1/Yamanaka1987/Yamanaka1987.pdf",
+   "source": "/Users/mickeymuscalli/Documents/EORE Data Project/Paper Files/Paper Lists/Initial Easy Papers/Yamanaka1987/Yamanaka1987.pdf",
+   "si": "",
+   "hand_id": "023"
+  },
+  "Ying2019": {
+   "pdf": "/Users/mickeymuscalli/Documents/EORE Data Project/Paper Files/Accuracy Test 2026-11/P1/Ying2019/Ying2019.pdf",
+   "source": "/Users/mickeymuscalli/Documents/EORE Data Project/Paper Files/Paper Lists/Initial Easy Papers/Ying2019/Ying2019.pdf",
+   "si": "",
+   "hand_id": "049"
+  },
+  "Yoshiaki2000": {
+   "pdf": "/Users/mickeymuscalli/Documents/EORE Data Project/Paper Files/Accuracy Test 2026-11/P1/Yoshiaki2000/Yoshiaki2000.pdf",
+   "source": "/Users/mickeymuscalli/Documents/EORE Data Project/Paper Files/Paper Lists/Initial Easy Papers/Yoshiaki2000/Yoshiaki2000.pdf",
+   "si": "",
+   "hand_id": "019"
+  },
+  "Zamaraev1996": {
+   "pdf": "/Users/mickeymuscalli/Documents/EORE Data Project/Paper Files/Accuracy Test 2026-11/P1/Zamaraev1996/Zamaraev1996.pdf",
+   "source": "/Users/mickeymuscalli/Documents/EORE Data Project/Paper Files/Paper Lists/Initial Easy Papers/Zamaraev1996/Zamaraev1996.pdf",
+   "si": "",
+   "hand_id": "036"
+  },
+  "faisal2005": {
+   "pdf": "/Users/mickeymuscalli/Documents/EORE Data Project/Paper Files/Accuracy Test 2026-11/P1/faisal2005/faisal2005.pdf",
+   "source": "/Users/mickeymuscalli/Documents/EORE Data Project/Paper Files/Paper Lists/Initial Easy Papers/faisal2005/faisal2005.pdf",
+   "si": "",
+   "hand_id": "020"
+  },
+  "fuchida2014": {
+   "pdf": "/Users/mickeymuscalli/Documents/EORE Data Project/Paper Files/Accuracy Test 2026-11/P1/fuchida2014/fuchida2014.pdf",
+   "source": "/Users/mickeymuscalli/Documents/EORE Data Project/Paper Files/Paper Lists/Initial Easy Papers/fuchida2014/fuchida2014.pdf",
+   "si": "",
+   "hand_id": "012"
+  },
+  "iqubal2017": {
+   "pdf": "/Users/mickeymuscalli/Documents/EORE Data Project/Paper Files/Accuracy Test 2026-11/P1/iqubal2017/iqubal2017.pdf",
+   "source": "/Users/mickeymuscalli/Documents/EORE Data Project/Paper Files/Paper Lists/Initial Easy Papers/iqubal2017/iqubal2017.pdf",
+   "si": "",
+   "hand_id": "015"
+  },
+  "kumar2012": {
+   "pdf": "/Users/mickeymuscalli/Documents/EORE Data Project/Paper Files/Accuracy Test 2026-11/P1/kumar2012/kumar2012.pdf",
+   "source": "/Users/mickeymuscalli/Documents/EORE Data Project/Paper Files/Paper Lists/Initial Easy Papers/kumar2012/kumar2012.pdf",
+   "si": "",
+   "hand_id": "017"
+  },
+  "lemke2009": {
+   "pdf": "/Users/mickeymuscalli/Documents/EORE Data Project/Paper Files/Accuracy Test 2026-11/P1/lemke2009/lemke2009.pdf",
+   "source": "/Users/mickeymuscalli/Documents/EORE Data Project/Paper Files/Paper Lists/Initial Easy Papers/lemke2009/lemke2009.pdf",
+   "si": "",
+   "hand_id": "013"
+  },
+  "mitsuzawa2004": {
+   "pdf": "/Users/mickeymuscalli/Documents/EORE Data Project/Paper Files/Accuracy Test 2026-11/P1/mitsuzawa2004/mitsuzawa2004.pdf",
+   "source": "/Users/mickeymuscalli/Documents/EORE Data Project/Paper Files/Paper Lists/Initial Easy Papers/mitsuzawa2004/mitsuzawa2004.pdf",
+   "si": "",
+   "hand_id": "018"
+  },
+  "shanker2012": {
+   "pdf": "/Users/mickeymuscalli/Documents/EORE Data Project/Paper Files/Accuracy Test 2026-11/P1/shanker2012/shanker2012.pdf",
+   "source": "/Users/mickeymuscalli/Documents/EORE Data Project/Paper Files/Paper Lists/Initial Easy Papers/shanker2012/shanker2012.pdf",
+   "si": "",
+   "hand_id": "016"
+  }
+ },
+ "P2": {
+  "Burcar2013": {
+   "pdf": "/Users/mickeymuscalli/Documents/EORE Data Project/Paper Files/Accuracy Test 2026-11/P2/Burcar2013/Burcar2013.pdf",
+   "source": "/Users/mickeymuscalli/Documents/EORE Data Project/Paper Files/Test Paper List/Oligonucleotides_MALDI_papers/Burcar et al. - 2013 - Potential Pitfalls in MALDI-TOF MS Analysis of Abi.pdf",
+   "si": "",
+   "hand_id": null
+  },
+  "Caimi2024": {
+   "pdf": "/Users/mickeymuscalli/Documents/EORE Data Project/Paper Files/Accuracy Test 2026-11/P2/Caimi2024/Caimi2024.pdf",
+   "source": "/Users/mickeymuscalli/Documents/EORE Data Project/Paper Files/Test Paper List/Sam Papers/Caimi et al. - High-Yield Prebiotic Polymerization of 2′,3′-Cyclic Nucleotides under Wet–Dry Cycling.pdf",
+   "si": "",
+   "hand_id": null
+  },
+  "CalacaSerrao2024": {
+   "pdf": "/Users/mickeymuscalli/Documents/EORE Data Project/Paper Files/Accuracy Test 2026-11/P2/CalacaSerrao2024/CalacaSerrao2024.pdf",
+   "source": "/Users/mickeymuscalli/Documents/EORE Data Project/Paper Files/Test Paper List/Sam Papers/Calaça Serrão et al_2024_High-Fidelity RNA Copying via 2′,3′-Cyclic Phosphate Ligation.pdf",
+   "si": "",
+   "hand_id": null
+  },
+  "Cleaves2008": {
+   "pdf": "/Users/mickeymuscalli/Documents/EORE Data Project/Paper Files/Accuracy Test 2026-11/P2/Cleaves2008/Cleaves2008.pdf",
+   "source": "/Users/mickeymuscalli/Documents/EORE Data Project/Paper Files/Paper Lists/cleaves2008.pdf",
+   "si": "",
+   "hand_id": null
+  },
+  "Coari2017": {
+   "pdf": "/Users/mickeymuscalli/Documents/EORE Data Project/Paper Files/Accuracy Test 2026-11/P2/Coari2017/Coari2017.pdf",
+   "source": "/Users/mickeymuscalli/Documents/EORE Data Project/Paper Files/Test Paper List/Oligonucleotides_MALDI_papers/Coari et al. - 2017 - Nucleotide Selectivity in Abiotic RNA Polymerizati.pdf",
+   "si": "",
+   "hand_id": null
+  },
+  "Costanzo2012": {
+   "pdf": "/Users/mickeymuscalli/Documents/EORE Data Project/Paper Files/Accuracy Test 2026-11/P2/Costanzo2012/Costanzo2012.pdf",
+   "source": "/Users/mickeymuscalli/Documents/EORE Data Project/Paper Files/Test Paper List/Oligonucleotides_MALDI_papers/Costanzo et al. - 2012 - Generation of RNA Molecules by a Base-Catalysed Cl.pdf",
+   "si": "",
+   "hand_id": null
+  },
+  "FerrisErtem1993": {
+   "pdf": "/Users/mickeymuscalli/Documents/EORE Data Project/Paper Files/Accuracy Test 2026-11/P2/FerrisErtem1993/FerrisErtem1993.pdf",
+   "source": "/Users/mickeymuscalli/Documents/EORE Data Project/Paper Files/Test Paper List/Sam Papers/Ferris and Ertem - 1993 - Montmorillonite catalysis of RNA oligomer formatio.pdf",
+   "si": "",
+   "hand_id": null
+  },
+  "FrenkelPinter2020": {
+   "pdf": "/Users/mickeymuscalli/Documents/EORE Data Project/Paper Files/Accuracy Test 2026-11/P2/FrenkelPinter2020/FrenkelPinter2020.pdf",
+   "source": "/Users/mickeymuscalli/Documents/EORE Data Project/Paper Files/Paper Lists/frenkel-pinter2020.pdf",
+   "si": "",
+   "hand_id": null
+  },
+  "Hirakawa2025": {
+   "pdf": "/Users/mickeymuscalli/Documents/EORE Data Project/Paper Files/Accuracy Test 2026-11/P2/Hirakawa2025/Hirakawa2025.pdf",
+   "source": "/Users/mickeymuscalli/Documents/EORE Data Project/Paper Files/Test Paper List/Sam Papers/Hirakawa et al. - 2025 - Interstep compatibility of a model for the prebiotic synthesis of RNA consistent with Hadean natural.pdf",
+   "si": "",
+   "hand_id": null
+  },
+  "Matreux2024": {
+   "pdf": "/Users/mickeymuscalli/Documents/EORE Data Project/Paper Files/Accuracy Test 2026-11/P2/Matreux2024/Matreux2024.pdf",
+   "source": "/Users/mickeymuscalli/Documents/EORE Data Project/Paper Files/Test Paper List/Sam Papers/Matreux et al. - 2024 - Heat flows enrich prebiotic building blocks and enhance their reactivity.pdf",
+   "si": "",
+   "hand_id": null
+  },
+  "Mizuuchi2019": {
+   "pdf": "/Users/mickeymuscalli/Documents/EORE Data Project/Paper Files/Accuracy Test 2026-11/P2/Mizuuchi2019/Mizuuchi2019.pdf",
+   "source": "/Users/mickeymuscalli/Documents/EORE Data Project/Paper Files/Test Paper List/mizuuchi2019.pdf",
+   "si": "",
+   "hand_id": null
+  },
+  "Otake2011": {
+   "pdf": "/Users/mickeymuscalli/Documents/EORE Data Project/Paper Files/Accuracy Test 2026-11/P2/Otake2011/Otake2011.pdf",
+   "source": "/Users/mickeymuscalli/Documents/EORE Data Project/Paper Files/Paper Lists/otake2011.pdf",
+   "si": "",
+   "hand_id": null
+  },
+  "Pulletikurti2022": {
+   "pdf": "/Users/mickeymuscalli/Documents/EORE Data Project/Paper Files/Accuracy Test 2026-11/P2/Pulletikurti2022/Pulletikurti2022.pdf",
+   "source": "/Users/mickeymuscalli/Documents/EORE Data Project/Paper Files/Test Paper List/pulletikurti2022.pdf",
+   "si": "/Users/mickeymuscalli/Documents/EORE Data Project/Paper Files/Test Paper List/pulletikurti2022_SI.pdf",
+   "hand_id": null
+  },
+  "Riggi2023": {
+   "pdf": "/Users/mickeymuscalli/Documents/EORE Data Project/Paper Files/Accuracy Test 2026-11/P2/Riggi2023/Riggi2023.pdf",
+   "source": "/Users/mickeymuscalli/Documents/EORE Data Project/Paper Files/Test Paper List/Riggi2023.pdf",
+   "si": "",
+   "hand_id": null
+  },
+  "Song2024": {
+   "pdf": "/Users/mickeymuscalli/Documents/EORE Data Project/Paper Files/Accuracy Test 2026-11/P2/Song2024/Song2024.pdf",
+   "source": "/Users/mickeymuscalli/Documents/EORE Data Project/Paper Files/Test Paper List/Sam Papers/Song et al. - 2024 - Wet–dry cycles cause nucleic acid monomers to polymerize into long chains.pdf",
+   "si": "",
+   "hand_id": null
+  },
+  "Tapiero1971": {
+   "pdf": "/Users/mickeymuscalli/Documents/EORE Data Project/Paper Files/Accuracy Test 2026-11/P2/Tapiero1971/Tapiero1971.pdf",
+   "source": "/Users/mickeymuscalli/Documents/EORE Data Project/Paper Files/Test Paper List/tapiero1971.pdf",
+   "si": "",
+   "hand_id": null
+  }
+ },
+ "P3": {
+  "Burchell2020": {
+   "pdf": "/Users/mickeymuscalli/Documents/EORE Data Project/Paper Files/Accuracy Test 2026-11/P3/Burchell2020/Burchell2020.pdf",
+   "source": "/Users/mickeymuscalli/Documents/EORE Data Project/Paper Files/Test Paper List/Organics in target/files/1130/Burchell and Harriss - 2020 - Organic Molecules Is It Possible to Distinguish A.pdf",
+   "si": "",
+   "hand_id": null
+  },
+  "DeLuca2022": {
+   "pdf": "/Users/mickeymuscalli/Documents/EORE Data Project/Paper Files/Accuracy Test 2026-11/P3/DeLuca2022/DeLuca2022.pdf",
+   "source": "/Users/mickeymuscalli/Documents/EORE Data Project/Paper Files/Test Paper List/Organics in target/files/937/JGR Planets - 2022 - DeLuca - Differential Ablation of Organic Coatings From Micrometeoroids Simulated in the Laboratory.pdf",
+   "si": "",
+   "hand_id": null
+  },
+  "Kazemi2021": {
+   "pdf": "/Users/mickeymuscalli/Documents/EORE Data Project/Paper Files/Accuracy Test 2026-11/P3/Kazemi2021/Kazemi2021.pdf",
+   "source": "/Users/mickeymuscalli/Documents/EORE Data Project/Paper Files/Test Paper List/Organics in target/files/1126/kazemi2021.pdf",
+   "si": "",
+   "hand_id": null
+  },
+  "McKay1997": {
+   "pdf": "/Users/mickeymuscalli/Documents/EORE Data Project/Paper Files/Accuracy Test 2026-11/P3/McKay1997/McKay1997.pdf",
+   "source": "/Users/mickeymuscalli/Documents/EORE Data Project/Paper Files/Test Paper List/Organics in target/files/1129/McKay and Borucki - 1997 - Organic Synthesis in Experimental Impact Shocks.pdf",
+   "si": "",
+   "hand_id": null
+  },
+  "Muchowska2019": {
+   "pdf": "/Users/mickeymuscalli/Documents/EORE Data Project/Paper Files/Accuracy Test 2026-11/P3/Muchowska2019/Muchowska2019.pdf",
+   "source": "/Users/mickeymuscalli/Documents/EORE Data Project/Paper Files/Test Paper List/Organics in target/files/1037/s41586-019-1151-1.pdf",
+   "si": "",
+   "hand_id": null
+  },
+  "Mukhin1989": {
+   "pdf": "/Users/mickeymuscalli/Documents/EORE Data Project/Paper Files/Accuracy Test 2026-11/P3/Mukhin1989/Mukhin1989.pdf",
+   "source": "/Users/mickeymuscalli/Documents/EORE Data Project/Paper Files/Test Paper List/Organics in target/files/1113/mukhin1989.pdf",
+   "si": "",
+   "hand_id": null
+  },
+  "Parnell2007": {
+   "pdf": "/Users/mickeymuscalli/Documents/EORE Data Project/Paper Files/Accuracy Test 2026-11/P3/Parnell2007/Parnell2007.pdf",
+   "source": "/Users/mickeymuscalli/Documents/EORE Data Project/Paper Files/Test Paper List/Organics in target/files/1131/Parnell et al. - 2007 - Organic geochemistry of impactites from the Haught.pdf",
+   "si": "",
+   "hand_id": null
+  },
+  "Takeuchi2020": {
+   "pdf": "/Users/mickeymuscalli/Documents/EORE Data Project/Paper Files/Accuracy Test 2026-11/P3/Takeuchi2020/Takeuchi2020.pdf",
+   "source": "/Users/mickeymuscalli/Documents/EORE Data Project/Paper Files/Test Paper List/Organics in target/files/1001/Takeuchi et al. - 2020 - Impact-induced amino acid formation on Hadean Eart.pdf",
+   "si": "",
+   "hand_id": null
+  },
+  "Tingle1991": {
+   "pdf": "/Users/mickeymuscalli/Documents/EORE Data Project/Paper Files/Accuracy Test 2026-11/P3/Tingle1991/Tingle1991.pdf",
+   "source": "/Users/mickeymuscalli/Documents/EORE Data Project/Paper Files/Test Paper List/Organics in target/files/1103/tingle1991.pdf",
+   "si": "",
+   "hand_id": null
+  },
+  "daCosta2022": {
+   "pdf": "/Users/mickeymuscalli/Documents/EORE Data Project/Paper Files/Accuracy Test 2026-11/P3/daCosta2022/daCosta2022.pdf",
+   "source": "/Users/mickeymuscalli/Documents/EORE Data Project/Paper Files/Test Paper List/Organics in target/files/1093/da Costa and da Silveira - 2022 - Infrared analysis of Valine degradation by keV ele.pdf",
+   "si": "",
+   "hand_id": null
+  }
+ },
+ "E1": {
+  "Anderson2015": {
+   "bibcode": "2015A&A...575A..61A",
+   "reference": "Anderson et al. 2015",
+   "arxiv": "1402.1482",
+   "method": "Transit",
+   "planets": [
+    "WASP-20 b"
+   ],
+   "cell": "<a refstr=ANDERSON_ET_AL__2015 href=https://ui.adsabs.harvard.edu/abs/2015A&A...575A..61A/abstract target=ref>Anderson et al. 2015</a>",
+   "archive_sets": 2
+  },
+  "Trifonov2019": {
+   "bibcode": "2019A&A...622L...7T",
+   "reference": "Trifonov et al. 2019",
+   "arxiv": "1812.04501",
+   "method": "Transit",
+   "planets": [
+    "GJ 143 b",
+    "HD 23472 b",
+    "HD 23472 c"
+   ],
+   "cell": "<a refstr=TRIFONOV_ET_AL__2019 href=https://ui.adsabs.harvard.edu/abs/2019A&A...622L...7T/abstract target=ref>Trifonov et al. 2019</a>",
+   "archive_sets": 3
+  },
+  "Fukui2021": {
+   "bibcode": "2021AJ....162..167F",
+   "reference": "Fukui et al. 2021",
+   "arxiv": "2107.05430",
+   "method": "Transit",
+   "planets": [
+    "TOI-1749 b",
+    "TOI-1749 c",
+    "TOI-1749 d"
+   ],
+   "cell": "<a refstr=FUKUI_ET_AL__2021 href=https://ui.adsabs.harvard.edu/abs/2021AJ....162..167F/abstract target=ref>Fukui et al. 2021</a>",
+   "archive_sets": 3
+  },
+  "Barkaoui2024": {
+   "bibcode": "2024NatAs...8..909B",
+   "reference": "Barkaoui et al. 2024",
+   "arxiv": "2307.08350",
+   "method": "Transit",
+   "planets": [
+    "WASP-193 b"
+   ],
+   "cell": "<a refstr=BARKAOUI_ET_AL_2024 href=https://ui.adsabs.harvard.edu/abs/2024NatAs...8..909B/abstract target=ref>Barkaoui et al. 2024</a>",
+   "archive_sets": 1
+  },
+  "Chaturvedi2022": {
+   "bibcode": "2022A&A...666A.155C",
+   "reference": "Chaturvedi et al. 2022",
+   "arxiv": "2208.10351",
+   "method": "Transit",
+   "planets": [
+    "TOI-1468 b",
+    "TOI-1468 c"
+   ],
+   "cell": "<a refstr=CHATURVEDI_ET_AL__2022 href=https://ui.adsabs.harvard.edu/abs/2022A&A...666A.155C/abstract target=ref>Chaturvedi et al. 2022</a>",
+   "archive_sets": 2
+  },
+  "Mantovan2026": {
+   "bibcode": "2026A&A...711A.107M",
+   "reference": "Mantovan et al. 2026",
+   "arxiv": "2605.04149",
+   "method": "Transit",
+   "planets": [
+    "TOI-159 b"
+   ],
+   "cell": "<a refstr=MANTOVAN_ET_AL_2026 href=https://ui.adsabs.harvard.edu/abs/2026A&A...711A.107M/abstract target=ref>Mantovan et al. 2026</a>",
+   "archive_sets": 1
+  },
+  "AstudilloDefru2020": {
+   "bibcode": "2020A&A...636A..58A",
+   "reference": "Astudillo-Defru et al. 2020",
+   "arxiv": "2001.09175",
+   "method": "Transit",
+   "planets": [
+    "L 168-9 b"
+   ],
+   "cell": "<a refstr=ASTUDILLO_DEFRU_ET_AL__2020 href=https://ui.adsabs.harvard.edu/abs/2020A&A...636A..58A/abstract target=ref>Astudillo-Defru et al. 2020</a>",
+   "archive_sets": 1
+  },
+  "Sha2021": {
+   "bibcode": "2021AJ....161...82S",
+   "reference": "Sha et al. 2021",
+   "arxiv": "2010.14436",
+   "method": "Transit",
+   "planets": [
+    "K2-329 b",
+    "TOI-954 b"
+   ],
+   "cell": "<a refstr=SHA_ET_AL__2021 href=https://ui.adsabs.harvard.edu/abs/2021AJ....161...82S/abstract target=ref>Sha et al. 2021</a>",
+   "archive_sets": 2
+  },
+  "Dittmann2017": {
+   "bibcode": "2017Natur.544..333D",
+   "reference": "Dittmann et al. 2017",
+   "arxiv": "1704.05556",
+   "method": "Transit",
+   "planets": [
+    "LHS 1140 b"
+   ],
+   "cell": "<a refstr=DITTMANN_ET_AL__2017 href=https://ui.adsabs.harvard.edu/abs/2017Natur.544..333D/abstract target=ref>Dittmann et al. 2017</a>",
+   "archive_sets": 1
+  },
+  "David2019": {
+   "bibcode": "2019ApJ...885L..12D",
+   "reference": "David et al. 2019",
+   "arxiv": "1910.04563",
+   "method": "Transit",
+   "planets": [
+    "V1298 Tau c",
+    "V1298 Tau d",
+    "V1298 Tau e"
+   ],
+   "cell": "<a refstr=DAVID_ET_AL__2019 href=https://ui.adsabs.harvard.edu/abs/2019ApJ...885L..12D/abstract target=ref>David et al. 2019</a>",
+   "archive_sets": 4
+  },
+  "Kipping2014": {
+   "bibcode": "2014ApJ...795...25K",
+   "reference": "Kipping et al. 2014",
+   "arxiv": "1407.4807",
+   "method": "Transit",
+   "planets": [
+    "Kepler-421 b"
+   ],
+   "cell": "<a refstr=KIPPING_ET_AL__2014 href=https://ui.adsabs.harvard.edu/abs/2014ApJ...795...25K/abstract target=ref>Kipping et al. 2014</a>",
+   "archive_sets": 1
+  },
+  "Jeffers2020": {
+   "bibcode": "2020Sci...368.1477J",
+   "reference": "Jeffers et al. 2020",
+   "arxiv": "2006.16372",
+   "method": "Radial Velocity",
+   "planets": [
+    "GJ 887 b",
+    "GJ 887 c"
+   ],
+   "cell": "<a refstr=JEFFERS_ET_AL__2020 href=https://ui.adsabs.harvard.edu/abs/2020Sci...368.1477J/abstract target=ref>Jeffers et al. 2020</a>",
+   "archive_sets": 2
+  },
+  "Rey2018": {
+   "bibcode": "2018A&A...619A.115R",
+   "reference": "Rey et al. 2018",
+   "arxiv": "1807.01229",
+   "method": "Radial Velocity",
+   "planets": [
+    "CoRoT-20 c"
+   ],
+   "cell": "<a refstr=REY_ET_AL__2018 href=https://ui.adsabs.harvard.edu/abs/2018A&A...619A.115R/abstract target=ref>Rey et al. 2018</a>",
+   "archive_sets": 2
+  },
+  "AstudilloDefru2015": {
+   "bibcode": "2015A&A...575A.119A",
+   "reference": "Astudillo-Defru et al. 2015",
+   "arxiv": "1411.7048",
+   "method": "Radial Velocity",
+   "planets": [
+    "GJ 3293 b",
+    "GJ 3293 c",
+    "GJ 3341 b"
+   ],
+   "cell": "<a refstr=ASTUDILLO_DEFRU_ET_AL__2015 href=https://ui.adsabs.harvard.edu/abs/2015A&A...575A.119A/abstract target=ref>Astudillo-Defru et al. 2015</a>",
+   "archive_sets": 3
+  },
+  "Tuomi2013": {
+   "bibcode": "2013A&A...549A..48T",
+   "reference": "Tuomi et al. 2013",
+   "arxiv": "1211.1617",
+   "method": "Radial Velocity",
+   "planets": [
+    "HD 40307 f",
+    "HD 40307 g"
+   ],
+   "cell": "<a refstr=TUOMI_ET_AL__2013 href=https://ui.adsabs.harvard.edu/abs/2013A%26A...549A..48T/abstract target=ref> Tuomi et al. 2013 </a>",
+   "archive_sets": 5
+  },
+  "Lamontagne2026": {
+   "bibcode": "2026A&A...706A.278L",
+   "reference": "Lamontagne et al. 2026",
+   "arxiv": "2601.09330",
+   "method": "Radial Velocity",
+   "planets": [
+    "GJ 3090 c"
+   ],
+   "cell": "<a refstr=LAMONTAGNE_ET_AL_2026 href=https://ui.adsabs.harvard.edu/abs/2026A&A...706A.278L/abstract target=ref>Lamontagne et al. 2026</a>",
+   "archive_sets": 2
+  },
+  "Carmona2025": {
+   "bibcode": "2025A&A...700A.222C",
+   "reference": "Carmona et al. 2025",
+   "arxiv": "2504.03572",
+   "method": "Radial Velocity",
+   "planets": [
+    "Gl 410 b"
+   ],
+   "cell": "<a refstr=CARMONA_ET_AL_2025 href=https://ui.adsabs.harvard.edu/abs/2025A&A...700A.222C/abstract target=ref>Carmona et al. 2025</a>",
+   "archive_sets": 1
+  },
+  "Hatzes2015": {
+   "bibcode": "2015A&A...580A..31H",
+   "reference": "Hatzes et al. 2015",
+   "arxiv": "1505.03454",
+   "method": "Radial Velocity",
+   "planets": [
+    "alf Tau b"
+   ],
+   "cell": "<a refstr=HATZES_ET_AL__2015 href=https://ui.adsabs.harvard.edu/abs/2015A&A...580A..31H/abstract target=ref>Hatzes et al. 2015</a>",
+   "archive_sets": 1
+  },
+  "AngladaEscude2013": {
+   "bibcode": "2013A&A...556A.126A",
+   "reference": "Anglada-Escude et al. 2013",
+   "arxiv": "1306.6074",
+   "method": "Radial Velocity",
+   "planets": [
+    "GJ 667 C c",
+    "GJ 667 C e",
+    "GJ 667 C f",
+    "GJ 667 C g"
+   ],
+   "cell": "<a refstr=ANGLADA_ESCUDE_ET_AL__2013 href=https://ui.adsabs.harvard.edu/abs/2013A%26A...556A.126A/abstract target=ref> Anglada-Escude et al. 2013 </a>",
+   "archive_sets": 5
+  },
+  "Morales2025": {
+   "bibcode": "2025A&A...700A.242M",
+   "reference": "Morales et al. 2025",
+   "arxiv": "2507.15516",
+   "method": "Radial Velocity",
+   "planets": [
+    "GJ 508.2 b",
+    "GJ 9773 b"
+   ],
+   "cell": "<a refstr=MORALES_ET_AL_2025 href=https://ui.adsabs.harvard.edu/abs/2025A&A...700A.242M/abstract target=ref>Morales et al. 2025</a>",
+   "archive_sets": 7
+  },
+  "Kane2019": {
+   "bibcode": "2019AJ....157..252K",
+   "reference": "Kane et al. 2019",
+   "arxiv": "1904.12931",
+   "method": "Radial Velocity",
+   "planets": [
+    "HD 221420 b"
+   ],
+   "cell": "<a refstr=KANE_ET_AL__2019 href=https://ui.adsabs.harvard.edu/abs/2019AJ....157..252K/abstract target=ref>Kane et al. 2019</a>",
+   "archive_sets": 2
+  },
+  "Gauza2015": {
+   "bibcode": "2015ApJ...804...96G",
+   "reference": "Gauza et al. 2015",
+   "arxiv": "1505.00806",
+   "method": "Imaging",
+   "planets": [
+    "VHS J125601.92-125723.9 b"
+   ],
+   "cell": "<a refstr=GAUZA_ET_AL__2015 href=https://ui.adsabs.harvard.edu/abs/2015ApJ...804...96G/abstract target=ref>Gauza et al. 2015</a>",
+   "archive_sets": 1
+  },
+  "Sutlieff2026": {
+   "bibcode": "2026ApJ..1006L..10S",
+   "reference": "Sutlieff et al. 2026",
+   "arxiv": "2606.23801",
+   "method": "Imaging",
+   "planets": [
+    "bet Pic d"
+   ],
+   "cell": "<a refstr=SUTLIEFF_ET_AL_2026 href=https://ui.adsabs.harvard.edu/abs/2026ApJ..1006L..10S/abstract target=ref>Sutlieff et al. 2026</a>",
+   "archive_sets": 3
+  },
+  "Currie2026": {
+   "bibcode": "2026AJ....171....5C",
+   "reference": "Currie et al. 2026",
+   "arxiv": "2512.02159",
+   "method": "Imaging",
+   "planets": [
+    "HIP 54515 b"
+   ],
+   "cell": "<a refstr=CURRIE_ET_AL__2026 href=https://ui.adsabs.harvard.edu/abs/2026AJ....171....5C/abstract target=ref>Currie et al. 2026</a>",
+   "archive_sets": 1
+  },
+  "Vila2025": {
+   "bibcode": "2025A&A...704L...3V",
+   "reference": "Vila et al. 2025",
+   "arxiv": "2509.04944",
+   "method": "Imaging",
+   "planets": [
+    "V2376 Ori b"
+   ],
+   "cell": "<a refstr=VILA_ET_AL__2025 href=https://ui.adsabs.harvard.edu/abs/2025A&A...704L...3V/abstract target=ref>Vila et al. 2025</a>",
+   "archive_sets": 1
+  },
+  "Ryu2020": {
+   "bibcode": "2020AJ....159...58R",
+   "reference": "Ryu et al. 2020",
+   "arxiv": "1905.04870",
+   "method": "Microlensing",
+   "planets": [
+    "KMT-2018-BLG-1292L b"
+   ],
+   "cell": "<a refstr=RYU_ET_AL__2020 href=https://ui.adsabs.harvard.edu/abs/2020AJ....159...58R/abstract target=ref>Ryu et al. 2020</a>",
+   "archive_sets": 3
+  },
+  "Bennett2020": {
+   "bibcode": "2020AJ....160...72B",
+   "reference": "Bennett et al. 2020",
+   "arxiv": "2005.07199",
+   "method": "Microlensing",
+   "planets": [
+    "OGLE-2006-BLG-284L A b"
+   ],
+   "cell": "<a refstr=BENNETT_ET_AL__2020 href=https://ui.adsabs.harvard.edu/abs/2020AJ....160...72B/abstract target=ref>Bennett et al. 2020</a>",
+   "archive_sets": 1
+  },
+  "Skowron2015": {
+   "bibcode": "2015ApJ...804...33S",
+   "reference": "Skowron et al. 2015",
+   "arxiv": "1410.8252",
+   "method": "Microlensing",
+   "planets": [
+    "OGLE-2011-BLG-0265L b"
+   ],
+   "cell": "<a refstr=SKOWRON_ET_AL__2015 href=https://ui.adsabs.harvard.edu/abs/2015ApJ...804...33S/abstract target=ref>Skowron et al. 2015</a>",
+   "archive_sets": 2
+  },
+  "CalchiNovati2018": {
+   "bibcode": "2018AJ....155..261C",
+   "reference": "Calchi Novati et al. 2018",
+   "arxiv": "1803.04437",
+   "method": "Microlensing",
+   "planets": [
+    "OGLE-2017-BLG-1140L b"
+   ],
+   "cell": "<a refstr=CALCHI_NOVATI_ET_AL__2018 href=https://ui.adsabs.harvard.edu/abs/2018AJ....155..261C/abstract target=ref>Calchi Novati et al. 2018</a>",
+   "archive_sets": 2
+  },
+  "Teng2023": {
+   "pdf": "/Users/mickeymuscalli/Documents/EORE Data Project/Paper Files/Accuracy Test 2026-11/E1/Teng2023/Teng2023.pdf",
+   "source": "/Users/mickeymuscalli/Documents/EORE Data Project/Paper Files/Paper Lists/Teng2023/teng2023.pdf",
+   "method": "catalogue",
+   "bibcode": "2023PASJ...75.1030T",
+   "archive_sets": 36
+  },
+  "Nielsen2019": {
+   "pdf": "/Users/mickeymuscalli/Documents/EORE Data Project/Paper Files/Accuracy Test 2026-11/E1/Nielsen2019/Nielsen2019.pdf",
+   "source": "/Users/mickeymuscalli/Documents/EORE Data Project/Paper Files/Paper Lists/Nielsen2019/nielsen2019.pdf",
+   "method": "Transit",
+   "bibcode": "2019A&A...623A.100N",
+   "archive_sets": 1
+  },
+  "Canas2022": {
+   "bibcode": "2022AJ....163....3C",
+   "reference": "Cañas et al. 2022",
+   "arxiv": "2112.03958",
+   "method": "Transit",
+   "planets": [
+    "KOI-4777.01"
+   ],
+   "cell": "<a refstr=CA_NTILDE_AS_ET_AL__2022 href=https://ui.adsabs.harvard.edu/abs/2022AJ....163....3C/abstract target=ref>Ca&ntilde;as et al. 2022</a>",
+   "archive_sets": 1
+  }
+ }
+}
