@@ -311,7 +311,9 @@ def as_archive_columns(run: pd.DataFrame, run_dir: Path) -> pd.DataFrame:
     return out
 
 
-def archive_scores(run: pd.DataFrame, archive_rows: list) -> dict:
+def archive_scores(run: pd.DataFrame, archive_rows: list, within: set = frozenset()) -> dict:
+    """... `within`: the archive quantities the arm's pack has a column for -- counted again as 'xin_' (a quantity
+    the pack doesn't ask for can't be found; the hand scoring leaves such columns out of recall too)."""
     refs = Counter(xa._strip_html(a.get("pl_refname", "")) for a in archive_rows)
     reference = refs.most_common(1)[0][0] if refs else ""
     mine = [a for a in archive_rows if xa._same_reference(a.get("pl_refname", ""), reference)]
@@ -341,6 +343,9 @@ def archive_scores(run: pd.DataFrame, archive_rows: list) -> dict:
             rec[f"x_{g}_found"] += level == 2
             rec[f"x_{g}_found_close"] += level >= 1
             rec[f"x_{g}_differs"] += level == 0
+            if q in within:
+                rec[f"xin_{g}_expected"] += 1
+                rec[f"xin_{g}_found"] += level == 2
     out = dict(rec)
     out.update(x_archive_planets=len({xa._key(a["pl_name"]) for a in mine}),
                x_planets_found=len(planets_found & {xa._key(a["pl_name"]) for a in mine}), x_reference=reference)
@@ -505,6 +510,8 @@ def score(config: dict) -> pd.DataFrame:
             runs = runs_of(folders, batch)
             loaded = {k: rows_of(f) for k, f in runs.items()}
             arm_columns = set().union(*(set(r.columns) for r in loaded.values())) if loaded else set()
+            # the archive quantities this arm's pack has columns for (its runs' columns, in the archive's names)
+            arm_quantities = {_quantity(c) for k, f in runs.items() for c in as_archive_columns(loaded[k], f).columns}
             for key, folder in sorted(runs.items()):
                 meta = BATCHES.get(batch, {}).get(key, {})
                 cost, seconds = cost_of(folder)
@@ -524,7 +531,7 @@ def score(config: dict) -> pd.DataFrame:
                         rec.update(h)
                     archive = TESTS / batch / "archive" / f"{key}.json"
                     if archive.is_file():
-                        rec.update(archive_scores(run, json.loads(archive.read_text())))
+                        rec.update(archive_scores(run, json.loads(archive.read_text()), arm_quantities))
                     if key in ms_runs.get(batch, {}):
                         if (batch, key) not in ms_rows:
                             ms_rows[(batch, key)] = rows_of(ms_runs[batch][key])
@@ -591,6 +598,9 @@ def summarize(df: pd.DataFrame) -> dict:
             x = sub[sub.get("x_archive_planets", 0) > 0]
             s["archive"] = {"papers": len(x), "planets": int(x.x_archive_planets.sum()),
                             "planets_found": int(x.x_planets_found.sum())}
+            den_in = [f"xin_{q}_expected" for q in xg]
+            s["archive"]["pack_quantities"] = {"recall": _paper_mean(x, [f"xin_{q}_found" for q in xg], den_in),
+                                               "expected": int(sum(x[c].sum() for c in den_in if c in x))}
             for g in xg + ["overall"]:
                 gs = xg if g == "overall" else [g]
                 den = [f"x_{q}_expected" for q in gs]
@@ -621,14 +631,14 @@ def markdown(summary: dict) -> str:
         for batch, arms in sorted(summary.get(mode, {}).items()):
             lines += [f"## {batch} ({mode})", "",
                       "| Arm | Papers (with rows) | Cost | Hand recall, papers with rows (close) | Hand recall, all hand papers "
-                      "| Archive recall (close) | MS recall | MS precision | Cells right | Figure rows waiting |", "|" + "---|" * 10]
+                      "| Archive recall (pack's own quantities) | MS recall | MS precision | Cells right | Figure rows waiting |", "|" + "---|" * 10]
             for arm, s in sorted(arms.items()):
                 h, x, m = s.get("hand", {}), s.get("archive", {}), s.get("model_standard", {})
                 ho, xo = h.get("overall", {}), x.get("overall", {})
                 lines.append(
                     f"| {arm} {s['label']} | {s['papers']} ({s['papers_with_rows']}) | ${s['cost_usd']} | "
-                    f"{ho.get('recall', '–')} ({ho.get('recall_close', '–')}) | {h.get('all_papers', {}).get('recall', '–')} | "
-                    f"{xo.get('recall', '–')} ({xo.get('recall_close', '–')}) | {m.get('recall', '–')} | "
+                    f"{ho.get('recall') or '–'} ({ho.get('recall_close') or '–'}) | {h.get('all_papers', {}).get('recall') or '–'} | "
+                    f"{xo.get('recall') or '–'} ({x.get('pack_quantities', {}).get('recall') or '–'}) | {m.get('recall', '–')} | "
                     f"{m.get('precision', '–')} | {m.get('cells_right', '–')} | {s['figure_rows_waiting']} |")
             lines.append("")
     return "\n".join(lines)

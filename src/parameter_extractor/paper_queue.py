@@ -246,6 +246,8 @@ class PaperQueue:
             self._set(paper, "finished", f"{len(paper.result.rows)} rows")
         except PipelineError as e:
             self._set(paper, "failed", error=str(e))
+        except Exception as e:                           # noqa: BLE001 -- one paper never stops the others' finishing
+            self._set(paper, "failed", error=f"{type(e).__name__}: {e}")
         return paper.result
 
     def write_combined(self) -> dict:

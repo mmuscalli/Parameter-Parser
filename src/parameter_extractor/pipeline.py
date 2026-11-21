@@ -1047,10 +1047,13 @@ def _estimate(values: dict, label: str, sample: str, column: str, suffixes=("err
     get = lambda suffix: None if suffix is None else getattr(values.get((label, sample, column + suffix)), "value", None)
     suffixes = list(suffixes) + [None] * (3 - len(suffixes))
     value, limit = get(""), get(suffixes[2])
+
+    def g(x):        # a value read as text ('~22', a range) is shown as it is (2026-11-21: ':g' on a str stopped a queue)
+        return f"{x:g}" if isinstance(x, (int, float)) and not isinstance(x, bool) else str(x)
     if limit in (1, -1):
-        return f"{'<' if limit == 1 else '>'} {value:g}"
+        return f"{'<' if limit == 1 else '>'} {g(value)}"
     plus, minus = get(suffixes[0]), get(suffixes[1])
-    return f"{value:g}" + (f" +{plus:g}/{minus:g}" if plus is not None and minus is not None else "")
+    return g(value) + (f" +{g(plus)}/{g(minus)}" if plus is not None and minus is not None else "")
 
 
 def _shown(v) -> str:

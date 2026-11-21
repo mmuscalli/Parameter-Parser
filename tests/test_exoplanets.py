@@ -223,6 +223,10 @@ def test_estimates_by_other_methods():
         assert (cols["st_rotpalt2"], cols["st_rotpalt2method"]) == (49, "GP fit") and "st_rotpalt3" not in cols
         assert _estimate(out, "TOI-3862", "", "st_rotpalt1") == "> 13"
         assert _estimate(out, "TOI-3862", "", "st_rotp") == "22 +3/-3"
+        # a value read as text is shown as it is (2026-11-21: ':g' on a str stopped a whole Economy queue)
+        text = {("TOI-3862", "", "st_age"): SimpleNamespace(value="~2.5"), ("TOI-3862", "", "st_ageerr1"): SimpleNamespace(value=0.5),
+                ("TOI-3862", "", "st_ageerr2"): SimpleNamespace(value=-0.5)}
+        assert _estimate(text, "TOI-3862", "", "st_age") == "~2.5 +0.5/-0.5"
         # the archive lists the v sin i limit: matched through the other estimate
         rows = [{"pl_name": "TOI-3862 b", "pl_refname": "Carleo et al. 2026", "st_refname": "Carleo et al. 2026",
                  "st_rotp": "13.00000", "st_rotplim": "-1"}]

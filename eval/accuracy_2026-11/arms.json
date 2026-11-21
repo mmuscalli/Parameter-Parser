@@ -8,9 +8,15 @@
     "P1": [
      "/Users/mickeymuscalli/Documents/Parameter Extractor/accuracy_20261120/P1_A/queue_20261120-225036"
     ],
-    "P2": [],
-    "P3": [],
-    "E1": []
+    "P2": [
+     "/Users/mickeymuscalli/Documents/Parameter Extractor/accuracy_20261120/P2_A/queue_20261120-235740"
+    ],
+    "P3": [
+     "/Users/mickeymuscalli/Documents/Parameter Extractor/accuracy_20261120/P3_A/queue_20261120-235739"
+    ],
+    "E1": [
+     "/Users/mickeymuscalli/Documents/Parameter Extractor/accuracy_20261120/E1_A/queue_20261121-012037"
+    ]
    }
   },
   "B": {
@@ -19,9 +25,15 @@
     "P1": [
      "/Users/mickeymuscalli/Documents/Parameter Extractor/accuracy_20261120/P1_B/queue_20261120-225036"
     ],
-    "P2": [],
-    "P3": [],
-    "E1": []
+    "P2": [
+     "/Users/mickeymuscalli/Documents/Parameter Extractor/accuracy_20261120/P2_B/queue_20261120-235740"
+    ],
+    "P3": [
+     "/Users/mickeymuscalli/Documents/Parameter Extractor/accuracy_20261120/P3_B/queue_20261120-235739"
+    ],
+    "E1": [
+     "/Users/mickeymuscalli/Documents/Parameter Extractor/accuracy_20261120/E1_B/queue_20261121-020108"
+    ]
    }
   },
   "C": {
@@ -42,9 +54,15 @@
     "P1": [
      "/Users/mickeymuscalli/Documents/Parameter Extractor/accuracy_20261120/P1_C/queue_20261120-225036"
     ],
-    "P2": [],
-    "P3": [],
-    "E1": []
+    "P2": [
+     "/Users/mickeymuscalli/Documents/Parameter Extractor/accuracy_20261120/P2_C/queue_20261120-235741"
+    ],
+    "P3": [
+     "/Users/mickeymuscalli/Documents/Parameter Extractor/accuracy_20261120/P3_C/queue_20261120-235739"
+    ],
+    "E1": [
+     "/Users/mickeymuscalli/Documents/Parameter Extractor/accuracy_20261120/E1_C/queue_20261121-014125"
+    ]
    }
   },
   "D": {
@@ -65,9 +83,15 @@
     "P1": [
      "/Users/mickeymuscalli/Documents/Parameter Extractor/accuracy_20261120/P1_D/queue_20261120-225036"
     ],
-    "P2": [],
-    "P3": [],
-    "E1": []
+    "P2": [
+     "/Users/mickeymuscalli/Documents/Parameter Extractor/accuracy_20261120/P2_D/queue_20261120-235740"
+    ],
+    "P3": [
+     "/Users/mickeymuscalli/Documents/Parameter Extractor/accuracy_20261120/P3_D/queue_20261120-235739"
+    ],
+    "E1": [
+     "/Users/mickeymuscalli/Documents/Parameter Extractor/accuracy_20261120/E1_D/queue_20261121-014853"
+    ]
    }
   },
   "F": {

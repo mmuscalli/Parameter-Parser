@@ -80,6 +80,15 @@ def test_queue_without_a_person_and_cancelling():
         assert paper.status == "finished" and len(paper.result.rows) == 42
         assert len(paper.skipped) == 5                                       # figures skipped, not lost
         assert (queue.out_dir / "combined_extracted.csv").is_file()
+        # an unexpected error while one paper is finished fails that paper only (2026-11-21: a ValueError in a flag's
+        # text stopped a whole queue before its papers.csv was written)
+        from parameter_extractor import pipeline
+        def broken(*a, **k):
+            raise ValueError("Unknown format code 'g' for object of type 'str'")
+        with patch.object(pipeline, "finish", broken):
+            failing = run_queue([EDER], RunConfig.from_settings(api_key="x", output_dir=Path(tmp) / "again"))
+        assert failing.papers[0].status == "failed" and "ValueError" in failing.papers[0].error
+        assert (failing.out_dir / "papers.csv").is_file()
         cancel = threading.Event()
         cancel.set()
         stopped = PaperQueue([EDER, EDER.with_name("x.pdf")], cfg, cancel_event=cancel)
