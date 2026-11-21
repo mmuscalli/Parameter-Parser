@@ -203,6 +203,9 @@ Search `docs/history/` for the details and the measurements behind each.
 | compact text for prebiotic; caching the plan as 2nd breakpoint | 1–3% / < 2% | history 2026-10-27 |
 | TypeSafe's Jev for extraction | text-only, no free-form strings | history 2026-10-22 |
 
+Accuracy evaluation of 0.6.0 (2026-11-20/21; Standard vs Economy x3, built-in vs drafted packs, plots, local model):
+`eval/accuracy_2026-11/REPORT.md` (re-score with its `score.py`).
+
 Open suggestions from the 2026-11-11 review (resume / rebuild, corrections in the window, opening old runs, cost
 estimates, local-model speed-ups, ...) and their status: `docs/improvement_suggestions_for_agent.md`.
 

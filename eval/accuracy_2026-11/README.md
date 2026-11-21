@@ -5,6 +5,7 @@ the hand dataset (P1), the Exoplanet Archive (E1) and a validated model standard
 
 | File | What it is |
 |---|---|
+| `REPORT.md` | the final write-up: what was run, results per batch and arm, findings, app findings, limits |
 | `make_subsets.py` | copies the prebiotic batches P1 (60), P2 (16), P3 (10) into `Paper Files/Accuracy Test 2026-11/` |
 | `make_exoplanet_subset.py` | E1: 30 discovery papers sampled by detection method (seed 20261120) + Teng 2023 + Nielsen 2019; saves each paper's archive parameter sets |
 | `batches.json` | batch -> paper key -> its PDF / arXiv id, hand-dataset id, archive reference |
