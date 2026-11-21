@@ -218,6 +218,72 @@ def test_stage_discipline():
 
 
 
+ASTRO_PROPOSAL = PackProposal(
+    description="Exoplanet discoveries. One row is one planet.", set_word="host star system", sample_word="planet",
+    notes="",
+    categories=[ProposedCategory(id="planet", label="Planet", description="the planet", value_type="number"),
+                ProposedCategory(id="star", label="Host star", description="the star", value_type="number")],
+    stages=[ProposedStage(name="planet_parameters", label="Planet parameters", description="each planet",
+                          per="sample", keywords=[], rules=[], other_hint="", parameters=[
+                              ProposedParameter(column=c, unit=u, kind="number", description=c, category="planet",
+                                                choices=[], uncertainties=True, papers=3)
+                              for c, u in [("orbital_period", "d"), ("semi_major_axis", "au"),
+                                           ("time_of_conjunction", "BJD-2457000"), ("transit_duration", "h"),
+                                           ("planet_mass", "M_earth"), ("planet_radius", "R_earth"),
+                                           ("equilibrium_temperature", "K"), ("planet_density", "g/cm3")]]),
+            ProposedStage(name="host_star", label="Host star", description="the star", per="set", keywords=[],
+                          rules=[], other_hint="", parameters=[
+                              ProposedParameter(column=c, unit=u, kind="number", description=c, category="star",
+                                                choices=[], uncertainties=True, papers=3)
+                              for c, u in [("stellar_effective_temperature", "K"), ("stellar_mass", "M_sun"),
+                                           ("stellar_age", "Myr"), ("stellar_luminosity", "log(L_sun)"),
+                                           ("stellar_metallicity", "dex")]])],
+    row_rules=["One row is one planet."])
+
+
+def test_units_follow_the_research_area():
+    """Mickey, 2026-11-20 (accuracy evaluation, Phase 1): a drafted exoplanet pack had stellar temperatures in °C and
+    orbital periods in hours although the design asked for K and days -- the lab datasets' conventions applied to an
+    astronomy field. A pack whose units are astronomy's keeps the field's own; a lab pack is drafted as before."""
+    from parameter_extractor import conventions
+    from parameter_extractor.pack_drafting import write_pack
+    assert conventions.unit_system(["d", "au", "M_earth", "R_earth", "K", "M_sun"]) == conventions.ASTRONOMY
+    assert conventions.unit_system(["°C", "h", "mM", "bar", "%", "K", "d", "km/s", "GPa"]) == conventions.LAB
+    assert conventions.unit_system(["°C", "mM", "au"]) == conventions.LAB          # one astronomy unit doesn't decide
+    assert column_for("orbital_period", "d", system="astronomy") == ("orbital_period_d", "d")
+    assert column_for("equilibrium_temperature", "K", system="astronomy") == ("equilibrium_temperature_K", "K")
+    assert column_for("planet_mass", "M_earth", system="astronomy") == ("planet_mass_M_E", "M_E")
+    assert column_for("t0", "BJD-2457000", system="astronomy") == ("t0_BJD", "BJD")     # stored as the full date
+    assert column_for("planet_density", "g/cm3", system="astronomy") == column_for("planet_density", "g/cm3")
+    assert column_for("equilibrium_temperature", "K") == ("equilibrium_temperature_C", "°C")   # lab: unchanged
+    assert column_for("stellar_log_g", "dex", system="astronomy") == ("stellar_log_g_dex", "dex")   # log g keeps its g
+    assert column_for("primer_concentration_um", "mM") == ("primer_concentration_mM", "mM")      # a unit word goes
+    with tempfile.TemporaryDirectory() as tmp, patch.object(packs, "user_packs_dir", lambda: Path(tmp)):
+        pack, _, _ = write_pack(ASTRO_PROPOSAL, "astro_drafted", "Astro drafted", base=Path(tmp))
+        m = json.loads((pack.folder / "pack.json").read_text())
+        assert m["unit_system"] == "astronomy"
+        params = {p["column"]: p.get("unit") for f in (pack.folder / "stages").glob("*.json")
+                  for p in json.loads(f.read_text())["parameters"]}
+        assert params["orbital_period_d"] == "d" and params["transit_duration_h"] == "h"
+        assert params["stellar_effective_temperature_K"] == "K" and params["equilibrium_temperature_K"] == "K"
+        assert params["time_of_conjunction_BJD"] == "BJD" and params["planet_mass_M_E"] == "M_E"
+        assert params["stellar_age_Myr"] == "Myr" and params["stellar_luminosity_log_L_sun"] == "log(L_sun)"
+        assert not any(c.endswith(("_C", "_hr")) for c in params), params
+        columns = json.loads((pack.folder / "columns.json").read_text())
+        assert "duration_hr" not in json.dumps(columns)        # a sample's time in hours is the lab datasets' row column
+        from parameter_extractor.pack_editing import PackDraft, check
+        unit_problems = [p for p in check(PackDraft.load(pack.folder)) if "named in" in p.message]
+        assert not unit_problems, unit_problems
+        # the step converts a value printed in another astronomy unit into the column's
+        from parameter_extractor.units import convert_printed
+        assert convert_printed(2.0, "days", "d")[0] == 2.0 and abs(convert_printed(48.0, "h", "d")[0] - 2.0) < 1e-9
+        assert convert_printed(5.0, "BJD - 2457000", "BJD")[0] == 2457005.0
+        lab, _, _ = write_pack(PROPOSAL, "lab_drafted", "Lab drafted", base=Path(tmp))
+        assert "unit_system" not in json.loads((lab.folder / "pack.json").read_text())
+        assert packs.Pack(lab.folder).manifest.unit_system == "lab"
+        assert packs.Pack(pack.folder).manifest.unit_system == "astronomy"
+
+
 def test_a_drafted_pack_gets_levels_and_fill_settings_from_the_surveys():
     """Branch levels-and-facets: a drafted pack's categories get the level their values sit at and whether they're
     filled in, from what the surveys say of each variable (where it differs, its role) -- conditions that differ

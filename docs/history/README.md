@@ -177,3 +177,4 @@ current month's file (start `YYYY-MM.md` in a new month), with one line here.
 - Branch levels-and-facets: the Map exports as an image; its column counts are the Columns tab's (2026-11-19, Mickey)
 - Branch levels-and-facets: a ready prompt for the assistant; version 0.6.0 (2026-11-20, Mickey)
 - Accuracy evaluation, Phase 0; a resume that reads the plots (2026-11-20, Mickey)
+- Drafted packs keep their field's units; accuracy evaluation Phase 1 (2026-11-20, Mickey)

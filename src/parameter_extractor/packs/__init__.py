@@ -20,6 +20,8 @@ A pack is a folder with a pack.json manifest:
                     system", "sample": "planet"}, and optionally a row ("row": "object model
                     instance": one planet as one fit models it), used in messages
   compact_text      collapse long runs of layout spaces in the text sent to the model
+  unit_system       "lab" (default) or "astronomy": the units the pack's tools name new columns in
+                    (conventions.unit_system; set when a pack is drafted)
   formulas          calculations without code: [{column, expression, description, if_present}], run on every
                     row after the review, in order (formulas.py: the expression language)
   modules           shared modules the pack uses, by id ("analysis", "solution_chemistry", "kinetics", "wet_dry",
@@ -84,6 +86,9 @@ class PackManifest(BaseModel):
     # send the paper text with long runs of layout spaces collapsed (-20% tokens; tables go
     # as images anyway)
     compact_text: bool = False
+    # the field's units for columns the pack's tools name (drafting, suggested additions, tidying; conventions.py):
+    # "lab" (°C, hours, mM, bar; initial_ / sampled_ names) or "astronomy" (the field's own: K, days, M_J, au, BJD)
+    unit_system: str = "lab"
     # focused search plans each paper's rows like a full extraction by default (focused_search.py)
     focused_row_plan: bool = False
     # categories of suggested new variables beyond the shared ones (variable_categories.py)

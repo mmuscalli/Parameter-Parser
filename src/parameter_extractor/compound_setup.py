@@ -549,7 +549,8 @@ def find_compounds(draft, pubchem=None, tidy: bool = True) -> CompoundPlan:
             seen_rep.add((r.stage_file, r.column))
             unique.append(r)
     plan.replacements = unique
-    if tidy:                          # the other columns: the app's naming conventions
+    # the other columns: the app's naming conventions -- the lab datasets'; an astronomy pack keeps its own names
+    if tidy and (draft.manifest.get("unit_system") or "lab") != "astronomy":
         from parameter_extractor.conventions import canonical
         replaced = {r.column for r in plan.replacements}
         taken = set(draft.all_columns())

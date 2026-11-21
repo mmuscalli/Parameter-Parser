@@ -162,9 +162,11 @@ def _unit_token(unit: str) -> str:
     return re.sub(r"[^A-Za-z0-9]+", "_", t).strip("_")
 
 
-def column_for(base: str, unit: str, kind: str = "number") -> tuple:
+def column_for(base: str, unit: str, kind: str = "number", system: str = "lab") -> tuple:
     """(column, stored unit): the app's unit suffix for the unit when it has one ('°C' -> 'temperature_C', K values
-    stored as °C, '%' -> '_pct'), else the unit itself as a suffix ('energy_eV'); text: no unit."""
+    stored as °C, '%' -> '_pct'), else the unit itself as a suffix ('energy_eV'); text: no unit. `system`
+    'astronomy' (conventions.unit_system): an astronomy unit stays the field's own ('orbital_period_d',
+    'effective_temperature_K', 'planet_mass_M_E'); other units as for any pack."""
     from parameter_extractor.ingestion.observations import unit_for_column
     from parameter_extractor.units import canonical_unit
     from parameter_extractor.variable_categories import unit_suffix
@@ -175,6 +177,11 @@ def column_for(base: str, unit: str, kind: str = "number") -> tuple:
         return base, ""
     if unit.lower() == "ph":
         return (base if re.search(r"(^|_)pH($|_)", base) else base + "_pH"), ""
+    if system == "astronomy":
+        from parameter_extractor.conventions import astronomy_column
+        found = astronomy_column(base, unit)
+        if found:
+            return found
     canon = canonical_unit(unit)
     suffix = unit_suffix(canon) if canon else ""
     if not suffix:
@@ -365,9 +372,12 @@ def synthesize(papers: List[SurveyedPaper], config: RunConfig, work_dir: Path, a
 
 # ---- writing the pack ------------------------------------------------------------------------------------------------
 
-def tidy_parameter(column: str, unit: str, kind: str, description: str = ""):
-    """(column, unit, kind, integer, note) after the naming conventions (conventions.py); column '' = drop it."""
-    from parameter_extractor.conventions import canonical
+def tidy_parameter(column: str, unit: str, kind: str, description: str = "", system: str = "lab"):
+    """(column, unit, kind, integer, note) after the naming conventions (conventions.py); column '' = drop it. The
+    conventions are the lab datasets' (initial_temperature_C, duration_hr, ...): an astronomy pack keeps its names."""
+    from parameter_extractor.conventions import ASTRONOMY, canonical
+    if system == ASTRONOMY:
+        return column, unit, kind, False, ""
     conv = canonical(column, unit, kind, description)
     if conv is None:
         return column, unit, kind, False, ""
@@ -491,6 +501,13 @@ def write_pack(proposal: PackProposal, pack_id: str, label: str, description: st
     m = draft.manifest
     m["formulas"] = []
     left: List[str] = []
+    # the field's units: astronomy keeps its own (conventions.unit_system), from the design's and the surveys' units
+    from parameter_extractor.conventions import ASTRONOMY, unit_system
+    system = unit_system([pp.unit for st in proposal.stages for pp in st.parameters if pp.kind != "text"]
+                         + [v.unit for sp in surveys if getattr(sp, "survey", None) for v in sp.survey.variables
+                            if v.kind != "text"])
+    if system == ASTRONOMY:
+        m["unit_system"] = system
     if modules:
         m["modules"] = list(dict.fromkeys(modules))
     mods = module_store.resolve(list(modules))
@@ -514,16 +531,17 @@ def write_pack(proposal: PackProposal, pack_id: str, label: str, description: st
     m["variable_categories"] = categories
     category_columns: Dict[str, Dict[str, List[str]]] = {"methodology": {"columns": ["set_type"]}}
     first = categories[0]["id"] if categories else "methodology"
-    category_columns.setdefault(first, {"columns": []})["columns"].append("duration_hr")
-    columns, seen, dropped, by_column, tidied = ["set_type", "duration_hr"], set(), [], {}, []
+    row_time = [] if system == ASTRONOMY else ["duration_hr"]   # a sample's time in hours: lab experiments only
+    category_columns.setdefault(first, {"columns": []})["columns"].extend(row_time)
+    columns, seen, dropped, by_column, tidied = ["set_type", *row_time], set(), [], {}, []
     proposed, placed = [], []
     for st in proposal.stages:                  # what the linked modules record is theirs (before merging stages)
         st = st.model_copy(deep=True)
         kept = []
         for p in st.parameters:
-            column, unit = column_for(p.column, p.unit, p.kind)
+            column, unit = column_for(p.column, p.unit, p.kind, system)
             if tidy:
-                tidied_column = tidy_parameter(column, unit, p.kind, p.description)[0]
+                tidied_column = tidy_parameter(column, unit, p.kind, p.description, system)[0]
                 column = tidied_column or column
             owner = covered_by_module(column, p.kind, modules, module_cols) if mods else ""
             if owner:
@@ -553,16 +571,17 @@ def write_pack(proposal: PackProposal, pack_id: str, label: str, description: st
                                                      "values of the parameters above.")
         params = []
         for p in st.parameters:
-            column, unit = column_for(p.column, p.unit, p.kind)
+            column, unit = column_for(p.column, p.unit, p.kind, system)
             kind, integer = p.kind, p.kind == "integer"
             if tidy:
-                column, unit, kind, tidied_integer, note = tidy_parameter(column, unit, p.kind, p.description)
+                column, unit, kind, tidied_integer, note = tidy_parameter(column, unit, p.kind, p.description,
+                                                                          system)
                 integer = integer or tidied_integer
                 if note:
                     tidied.append(note)
                 if not column:
                     continue
-            if column in seen or column in ("set_type", "duration_hr"):
+            if column in seen or column in ("set_type", *row_time):
                 dropped.append(f"{column} (stage {name})")
                 continue
             seen.add(column)
@@ -938,10 +957,11 @@ def suggest_additions(folder: Path, items: Sequence, config: RunConfig,
         out.append(Suggestion("category", c.label, f"id {_slug(c.id)}: {c.description}", payload=c))
     seen = set()
     param_suggestions = []
+    system = draft.manifest.get("unit_system") or "lab"          # the pack's field (conventions.unit_system)
     for p in answer.parameters:
-        column, unit = column_for(p.column, p.unit, p.kind)
+        column, unit = column_for(p.column, p.unit, p.kind, system)
         if tidy:
-            new, unit, kind, integer, note = tidy_parameter(column, unit, p.kind, p.description)
+            new, unit, kind, integer, note = tidy_parameter(column, unit, p.kind, p.description, system)
             if not new:
                 left_out.append(f"{column} ({note.split(': ', 1)[-1]})")
                 continue
@@ -1058,7 +1078,7 @@ def apply_additions(folder: Path, suggestions: Sequence[Suggestion], pubchem=Non
         if file is None:
             file = draft.new_stage("additions", "Additions")
             files["additions"] = file
-        column, unit = column_for(p.column, p.unit, p.kind)
+        column, unit = column_for(p.column, p.unit, p.kind, m.get("unit_system") or "lab")
         entry = {"column": column, "description": p.description}
         if unit:
             entry["unit"] = unit
