@@ -181,3 +181,4 @@ current month's file (start `YYYY-MM.md` in a new month), with one line here.
 - Accuracy evaluation, Phase 2: the model standard for P1 (2026-11-20, Mickey)
 - Accuracy evaluation, Phase 3 for P1: five arms (2026-11-20, Mickey)
 - Accuracy evaluation, Phase 3 for P2, P3, E1; the arXiv cache's concurrent saves (2026-11-21, Mickey)
+- Accuracy evaluation, Phase 4: the local model (2026-11-21, Mickey)

@@ -1041,6 +1041,9 @@ def optional_values(spec: StageSpec, result, structure: StructurePlan,
         sample = getattr(v, "sample_label", "") or ""
         mode = (getattr(v, "mode", "") or "").strip()
         method = (getattr(v, "method", "") or "").strip()
+        if (method or mode) and v.parameter not in columns:
+            continue        # another estimate / mode without its own value (refused, only its uncertainties): left out
+                            # -- 2026-11-21: a local model's estimate of pl_orbincl without one failed the paper
         if method:                                      # another method's estimate: its own columns
             label_text = f"{method} -- {mode}" if mode else method
             for label in ([v.set_label] if v.set_label else targets):

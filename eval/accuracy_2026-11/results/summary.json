@@ -364,6 +364,97 @@
       "expected": 4736
      }
     }
+   },
+   "L": {
+    "label": "qwen3.8:27b (local), built-in pack",
+    "papers": 4,
+    "papers_with_rows": 4,
+    "cost_usd": 0.0,
+    "rows": 8,
+    "figure_rows_waiting": 0,
+    "hand": {
+     "papers": 0,
+     "hand_values_not_printed": 0,
+     "metadata": {
+      "recall": null,
+      "recall_close": null,
+      "printed": 0
+     },
+     "methodology": {
+      "recall": null,
+      "recall_close": null,
+      "printed": 0
+     },
+     "chemistry_in": {
+      "recall": null,
+      "recall_close": null,
+      "printed": 0
+     },
+     "chemistry_out": {
+      "recall": null,
+      "recall_close": null,
+      "printed": 0
+     },
+     "overall": {
+      "recall": null,
+      "recall_close": null,
+      "printed": 0
+     },
+     "all_papers": {
+      "papers": 0,
+      "recall": null,
+      "recall_close": null
+     },
+     "new_values": 0,
+     "new_confirmed": 0,
+     "new_unsupported": 0,
+     "new_unverified": 0
+    },
+    "archive": {
+     "papers": 4,
+     "planets": 7,
+     "planets_found": 6,
+     "pack_quantities": {
+      "recall": 0.561,
+      "expected": 234
+     },
+     "planet": {
+      "recall": 0.53,
+      "recall_close": 0.53,
+      "differs": 3,
+      "expected": 59
+     },
+     "star": {
+      "recall": 0.583,
+      "recall_close": 0.583,
+      "differs": 2,
+      "expected": 15
+     },
+     "uncertainty": {
+      "recall": 0.546,
+      "recall_close": 0.546,
+      "differs": 0,
+      "expected": 122
+     },
+     "discovery": {
+      "recall": 0.464,
+      "recall_close": 0.536,
+      "differs": 6,
+      "expected": 42
+     },
+     "system": {
+      "recall": 0.0,
+      "recall_close": 0.0,
+      "differs": 0,
+      "expected": 1
+     },
+     "overall": {
+      "recall": 0.543,
+      "recall_close": 0.555,
+      "differs": 11,
+      "expected": 239
+     }
+    }
    }
   },
   "P1": {
@@ -896,6 +987,109 @@
      "cells_wrong": 0.043,
      "cells_missing": 0.051,
      "rows_paired": 0.987
+    }
+   },
+   "L": {
+    "label": "qwen3.8:27b (local), built-in pack",
+    "papers": 12,
+    "papers_with_rows": 12,
+    "cost_usd": 0.0,
+    "rows": 347,
+    "figure_rows_waiting": 0,
+    "hand": {
+     "papers": 12,
+     "hand_values_not_printed": 996,
+     "metadata": {
+      "recall": 0.896,
+      "recall_close": 0.896,
+      "printed": 48
+     },
+     "methodology": {
+      "recall": 0.85,
+      "recall_close": 0.85,
+      "printed": 169
+     },
+     "chemistry_in": {
+      "recall": 0.926,
+      "recall_close": 0.926,
+      "printed": 21
+     },
+     "chemistry_out": {
+      "recall": 0.355,
+      "recall_close": 0.355,
+      "printed": 34
+     },
+     "overall": {
+      "recall": 0.805,
+      "recall_close": 0.805,
+      "printed": 272
+     },
+     "all_papers": {
+      "papers": 12,
+      "recall": 0.805,
+      "recall_close": 0.805
+     },
+     "new_values": 92,
+     "new_confirmed": 89,
+     "new_unsupported": 3,
+     "new_unverified": 0
+    },
+    "archive": {
+     "papers": 0,
+     "planets": 0,
+     "planets_found": 0,
+     "pack_quantities": {
+      "recall": null,
+      "expected": 0
+     },
+     "planet": {
+      "recall": null,
+      "recall_close": null,
+      "differs": 0,
+      "expected": 0
+     },
+     "star": {
+      "recall": null,
+      "recall_close": null,
+      "differs": 0,
+      "expected": 0
+     },
+     "uncertainty": {
+      "recall": null,
+      "recall_close": null,
+      "differs": 0,
+      "expected": 0
+     },
+     "discovery": {
+      "recall": null,
+      "recall_close": null,
+      "differs": 0,
+      "expected": 0
+     },
+     "system": {
+      "recall": null,
+      "recall_close": null,
+      "differs": 0,
+      "expected": 0
+     },
+     "overall": {
+      "recall": null,
+      "recall_close": null,
+      "differs": 0,
+      "expected": 0
+     }
+    },
+    "model_standard": {
+     "papers": 12,
+     "recall": 0.7,
+     "recall_close": 0.704,
+     "precision": 0.778,
+     "precision_close": 0.791,
+     "cells_right": 0.783,
+     "cells_elsewhere": 0.001,
+     "cells_wrong": 0.125,
+     "cells_missing": 0.09,
+     "rows_paired": 0.947
     }
    }
   },
@@ -1997,6 +2191,97 @@
       "expected": 4736
      }
     }
+   },
+   "L": {
+    "label": "qwen3.8:27b (local), built-in pack",
+    "papers": 4,
+    "papers_with_rows": 4,
+    "cost_usd": 0.0,
+    "rows": 8,
+    "figure_rows_waiting": 0,
+    "hand": {
+     "papers": 0,
+     "hand_values_not_printed": 0,
+     "metadata": {
+      "recall": null,
+      "recall_close": null,
+      "printed": 0
+     },
+     "methodology": {
+      "recall": null,
+      "recall_close": null,
+      "printed": 0
+     },
+     "chemistry_in": {
+      "recall": null,
+      "recall_close": null,
+      "printed": 0
+     },
+     "chemistry_out": {
+      "recall": null,
+      "recall_close": null,
+      "printed": 0
+     },
+     "overall": {
+      "recall": null,
+      "recall_close": null,
+      "printed": 0
+     },
+     "all_papers": {
+      "papers": 0,
+      "recall": null,
+      "recall_close": null
+     },
+     "new_values": 0,
+     "new_confirmed": 0,
+     "new_unsupported": 0,
+     "new_unverified": 0
+    },
+    "archive": {
+     "papers": 4,
+     "planets": 7,
+     "planets_found": 6,
+     "pack_quantities": {
+      "recall": 0.561,
+      "expected": 234
+     },
+     "planet": {
+      "recall": 0.53,
+      "recall_close": 0.53,
+      "differs": 3,
+      "expected": 59
+     },
+     "star": {
+      "recall": 0.583,
+      "recall_close": 0.583,
+      "differs": 2,
+      "expected": 15
+     },
+     "uncertainty": {
+      "recall": 0.546,
+      "recall_close": 0.546,
+      "differs": 0,
+      "expected": 122
+     },
+     "discovery": {
+      "recall": 0.464,
+      "recall_close": 0.536,
+      "differs": 6,
+      "expected": 42
+     },
+     "system": {
+      "recall": 0.0,
+      "recall_close": 0.0,
+      "differs": 0,
+      "expected": 1
+     },
+     "overall": {
+      "recall": 0.543,
+      "recall_close": 0.555,
+      "differs": 11,
+      "expected": 239
+     }
+    }
    }
   },
   "P1": {
@@ -2529,6 +2814,109 @@
      "cells_wrong": 0.044,
      "cells_missing": 0.044,
      "rows_paired": 0.987
+    }
+   },
+   "L": {
+    "label": "qwen3.8:27b (local), built-in pack",
+    "papers": 12,
+    "papers_with_rows": 12,
+    "cost_usd": 0.0,
+    "rows": 347,
+    "figure_rows_waiting": 0,
+    "hand": {
+     "papers": 12,
+     "hand_values_not_printed": 996,
+     "metadata": {
+      "recall": 0.896,
+      "recall_close": 0.896,
+      "printed": 48
+     },
+     "methodology": {
+      "recall": 0.85,
+      "recall_close": 0.85,
+      "printed": 169
+     },
+     "chemistry_in": {
+      "recall": 0.815,
+      "recall_close": 0.815,
+      "printed": 21
+     },
+     "chemistry_out": {
+      "recall": 0.355,
+      "recall_close": 0.355,
+      "printed": 34
+     },
+     "overall": {
+      "recall": 0.799,
+      "recall_close": 0.799,
+      "printed": 272
+     },
+     "all_papers": {
+      "papers": 12,
+      "recall": 0.799,
+      "recall_close": 0.799
+     },
+     "new_values": 31,
+     "new_confirmed": 28,
+     "new_unsupported": 3,
+     "new_unverified": 0
+    },
+    "archive": {
+     "papers": 0,
+     "planets": 0,
+     "planets_found": 0,
+     "pack_quantities": {
+      "recall": null,
+      "expected": 0
+     },
+     "planet": {
+      "recall": null,
+      "recall_close": null,
+      "differs": 0,
+      "expected": 0
+     },
+     "star": {
+      "recall": null,
+      "recall_close": null,
+      "differs": 0,
+      "expected": 0
+     },
+     "uncertainty": {
+      "recall": null,
+      "recall_close": null,
+      "differs": 0,
+      "expected": 0
+     },
+     "discovery": {
+      "recall": null,
+      "recall_close": null,
+      "differs": 0,
+      "expected": 0
+     },
+     "system": {
+      "recall": null,
+      "recall_close": null,
+      "differs": 0,
+      "expected": 0
+     },
+     "overall": {
+      "recall": null,
+      "recall_close": null,
+      "differs": 0,
+      "expected": 0
+     }
+    },
+    "model_standard": {
+     "papers": 12,
+     "recall": 0.772,
+     "recall_close": 0.776,
+     "precision": 0.829,
+     "precision_close": 0.843,
+     "cells_right": 0.781,
+     "cells_elsewhere": 0.001,
+     "cells_wrong": 0.127,
+     "cells_missing": 0.091,
+     "rows_paired": 0.943
     }
    }
   },

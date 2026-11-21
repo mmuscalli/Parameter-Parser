@@ -221,6 +221,13 @@ def test_estimates_by_other_methods():
         assert not conflicts and (cols["st_rotp"], cols["st_rotperr1"]) == (22, 3)
         assert (cols["st_rotpalt1"], cols["st_rotpalt1lim"], cols["st_rotpalt1method"]) == (13, -1, "v sin i limit")
         assert (cols["st_rotpalt2"], cols["st_rotpalt2method"]) == (49, "GP fit") and "st_rotpalt3" not in cols
+        # an estimate by another method given as a range (a local model's '[7, 172] deg' interval: a range column, no
+        # value of its own) is left out, not a failed paper (2026-11-21: KeyError 'pl_orbincl')
+        bad = Item.model_validate(dict(set_label="TOI-3862", sample_label="", parameter="st_rotp", value=7, high=172,
+                                       unit="d", err_plus=0, err_minus=0, limit="", method="interval", basis="stated",
+                                       quote="[7,172]", source="Sect. 5", confidence="high"))
+        again = optional_values(spec, Result(parameters=[mk(22, 3, -3, "", ""), bad]), SimpleNamespace(experiment_sets=[]), [], [])
+        assert {k[2]: v.value for k, v in again.items()}.get("st_rotp") == 22 and not any("alt" in k[2] for k in again)
         assert _estimate(out, "TOI-3862", "", "st_rotpalt1") == "> 13"
         assert _estimate(out, "TOI-3862", "", "st_rotp") == "22 +3/-3"
         # a value read as text is shown as it is (2026-11-21: ':g' on a str stopped a whole Economy queue)

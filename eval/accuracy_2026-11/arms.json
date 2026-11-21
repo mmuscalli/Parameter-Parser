@@ -105,8 +105,12 @@
   "L": {
    "label": "qwen3.8:27b (local), built-in pack",
    "batches": {
-    "P1": [],
-    "E1": []
+    "P1": [
+     "/Users/mickeymuscalli/Documents/Parameter Extractor/accuracy_20261120/P1_L/queue_20261121-031026"
+    ],
+    "E1": [
+     "/Users/mickeymuscalli/Documents/Parameter Extractor/accuracy_20261120/E1_L/queue_20261121-052308"
+    ]
    }
   }
  },
