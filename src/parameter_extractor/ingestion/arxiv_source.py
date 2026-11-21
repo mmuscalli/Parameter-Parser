@@ -18,6 +18,7 @@ Standard library HTTP (urllib), like pubchem.py.
 from __future__ import annotations
 import difflib
 import json
+import os
 import re
 import threading
 import time
@@ -553,6 +554,34 @@ DOI_BATCH, ID_BATCH = 20, 50
 CACHE_RECHECK_DAYS = 30           # "not on arXiv" is asked again after this (preprints appear late)
 
 
+class _folder_lock:
+    """An exclusive lock on a file, across threads and processes, while a cache's lookups are read, merged and
+    written (fcntl; where it doesn't exist the save goes ahead unlocked -- a lost entry is only asked again)."""
+    _threads = threading.Lock()
+
+    def __init__(self, path: Path):
+        self.path, self.handle = path, None
+
+    def __enter__(self):
+        self._threads.acquire()            # flock on one open file isn't exclusive between threads of one process
+        try:
+            import fcntl
+            self.handle = open(self.path, "a")
+            fcntl.flock(self.handle, fcntl.LOCK_EX)
+        except (ImportError, OSError):
+            self.handle = None
+        return self
+
+    def __exit__(self, *exc):
+        try:
+            if self.handle is not None:
+                import fcntl
+                fcntl.flock(self.handle, fcntl.LOCK_UN)
+                self.handle.close()
+        finally:
+            self._threads.release()
+
+
 class LookupCache:
     """Identifier -> arXiv record (or why there's none), and arXiv full texts, on disk. Thread-safe;
     `save()` writes the lookups (texts are written as they come)."""
@@ -593,11 +622,26 @@ class LookupCache:
                 self._dirty = True
 
     def save(self) -> None:
+        """Written atomically through a temporary file of this process and thread, merged with what is on disk:
+        several caches write the same folder at once -- a queue's papers, two queues, the window and the command
+        line (2026-11-21: four exoplanet queues failed papers on 'lookups.json.tmp' -> 'lookups.json', the
+        temporary file another writer had just renamed). A cache that can't be written never fails a paper."""
         if self.folder and self._dirty:
-            with self._lock:
-                tmp = self.folder / "lookups.json.tmp"
-                tmp.write_text(json.dumps(self._lookups))
-                tmp.replace(self.folder / "lookups.json")
+            with self._lock, _folder_lock(self.folder / "lookups.lock"):
+                path = self.folder / "lookups.json"
+                try:
+                    on_disk = json.loads(path.read_text()) if path.is_file() else {}
+                except (OSError, ValueError):
+                    on_disk = {}
+                merged = {**on_disk, **self._lookups}
+                tmp = self.folder / f"lookups.{os.getpid()}.{threading.get_ident()}.json.tmp"
+                try:
+                    tmp.write_text(json.dumps(merged))
+                    tmp.replace(path)
+                except OSError:
+                    tmp.unlink(missing_ok=True)
+                    return                                      # still dirty: the next save tries again
+                self._lookups = merged
                 self._dirty = False
 
     def _text_path(self, record: "ArxivRecord") -> Optional[Path]:
@@ -619,11 +663,16 @@ class LookupCache:
         path = self._text_path(record)
         if path is None:
             return
+        target, data = (path, None) if text else (path.with_suffix(".none"), b"")
         if text:
             import gzip
-            path.write_bytes(gzip.compress(text.encode("utf-8")))
-        else:
-            path.with_suffix(".none").write_text("")
+            data = gzip.compress(text.encode("utf-8"))
+        tmp = target.with_name(f"{target.name}.{os.getpid()}.{threading.get_ident()}.tmp")
+        try:                                       # atomic: a paper reading the cache never sees half a file
+            tmp.write_bytes(data)
+            tmp.replace(target)
+        except OSError:
+            tmp.unlink(missing_ok=True)
 
 
 def _chunks(seq: list, n: int):

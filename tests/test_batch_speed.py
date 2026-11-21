@@ -168,6 +168,36 @@ def test_lookups_batched_and_cached():
         assert first == second and "EXOFASTv2" in first and len(calls) == 1
 
 
+def test_many_caches_save_the_same_folder_at_once():
+    """2026-11-21 (accuracy evaluation): four exoplanet queues at once -- caches of several papers and processes
+    saving one folder -- failed papers on 'lookups.json.tmp' -> 'lookups.json', a temporary file another writer had
+    just renamed. Saves are now atomic per writer, merged with what is on disk, and never fail a paper."""
+    import threading
+    with tempfile.TemporaryDirectory() as tmp:
+        caches = [ax.LookupCache(Path(tmp)) for _ in range(12)]
+        problems = []
+
+        def work(i, cache):
+            try:
+                for j in range(20):
+                    cache.put(f"10.1/x{i}-{j}", errors.PaperSourceError(f"DOI 10.1/x{i}-{j} isn't on arXiv."))
+                    cache.save()
+                record = ax.ArxivRecord(f"2101.{i:05d}", "v1", f"Paper {i}")
+                cache.put_text(record, f"text of paper {i}")
+                assert cache.text(record) == f"text of paper {i}"
+            except Exception as e:                    # noqa: BLE001
+                problems.append(e)
+        threads = [threading.Thread(target=work, args=(i, c)) for i, c in enumerate(caches)]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
+        assert problems == [], problems
+        merged = ax.LookupCache(Path(tmp))
+        assert all(merged.record(f"10.1/x{i}-19") is not None for i in range(12))   # every writer's last entry kept
+        assert not list(Path(tmp).glob("*.tmp")) and not list((Path(tmp) / "texts").glob("*.tmp"))
+
+
 def test_patient_retries_and_slowing_down():
     attempts = []
     class Busy(urllib.error.HTTPError):
