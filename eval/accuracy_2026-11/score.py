@@ -369,20 +369,27 @@ def family(column: str) -> tuple:
     return _quantity(current_column_name(column)), MATCH_OTHER
 
 
+# Jupiter-unit planet columns share a family with their Earth-unit twins: compared in Earth units (the archive's and the
+# app's factors, units.py), so 0.371 R_J and 4.16 R_E are one value.
+JUPITER_TO_EARTH = {"pl_radj": 11.2089, "pl_massj": 317.82838, "pl_msinij": 317.82838, "pl_bmassj": 317.82838}
+
+
 def _values(df: pd.DataFrame) -> dict:
-    """{family: (tolerance, {numbers}, {texts})}"""
+    """{family: (tolerance, {numbers}, {texts})}. Catalogue columns the app fills from the archive (xa.fillable:
+    positions, magnitudes, flags) aren't values read from the paper and are left out."""
     out = {}
     for c in df.columns:
         if (ID_COLUMNS.match(c) or CALCULATED.match(c) or THERMO.search(c) or CHARGED.search(c)
-                or RUN_EXCLUDE.search(c) and not c.startswith(("pl_", "st_", "sy_"))):
+                or RUN_EXCLUDE.search(c) and not c.startswith(("pl_", "st_", "sy_")) or xa.fillable(c)):
             continue
         key, tol = family(c)
+        factor = JUPITER_TO_EARTH.get(re.sub(r"(err[12]|lim)$", "", c), 1)
         nums, texts = out.setdefault(key, (tol, set(), set()))[1:]
         for v in df[c].dropna():
             x = num(v)
             if x is not None:
                 if x != 0:
-                    nums.add(round(x, 9))
+                    nums.add(round(x * factor, 9))
             elif str(v).strip():
                 texts.add(str(v).strip())
     return out
@@ -444,14 +451,19 @@ def _pair_rows(run: pd.DataFrame, ms: pd.DataFrame) -> dict:
     return pairs
 
 
-def ms_scores(run: pd.DataFrame, ms: pd.DataFrame) -> dict:
+def ms_scores(run: pd.DataFrame, ms: pd.DataFrame, within: set = frozenset()) -> dict:
+    """... `within`: the families the arm's pack has columns for -- recall counted again over those ('m_*_in'), as the
+    archive scoring does: a quantity the pack doesn't ask for can't be found."""
     rec = Counter()
     av, mv = _values(run), _values(ms)
     for key, (tol, mnums, mtexts) in mv.items():
         _t, anums, atexts = av.get(key, (tol, set(), set()))
+        found = sum(any(close(m, a, tol) for a in anums) for m in mnums) + sum(_text_hit(t, atexts) for t in mtexts)
         rec["m_ms_values"] += len(mnums) + len(mtexts)
-        rec["m_found"] += sum(any(close(m, a, tol) for a in anums) for m in mnums) + sum(
-            _text_hit(t, atexts) for t in mtexts)
+        rec["m_found"] += found
+        if key in within:
+            rec["m_ms_values_in"] += len(mnums) + len(mtexts)
+            rec["m_found_in"] += found
         rec["m_found_close"] += sum(any(close(m, a, CLOSE) for a in anums) for m in mnums) + sum(
             _text_hit(t, atexts) for t in mtexts)
     for key, (tol, anums, atexts) in av.items():
@@ -512,6 +524,7 @@ def score(config: dict) -> pd.DataFrame:
             arm_columns = set().union(*(set(r.columns) for r in loaded.values())) if loaded else set()
             # the archive quantities this arm's pack has columns for (its runs' columns, in the archive's names)
             arm_quantities = {_quantity(c) for k, f in runs.items() for c in as_archive_columns(loaded[k], f).columns}
+            arm_families = {family(c)[0] for k, f in runs.items() for c in as_archive_columns(loaded[k], f).columns}
             for key, folder in sorted(runs.items()):
                 meta = BATCHES.get(batch, {}).get(key, {})
                 cost, seconds = cost_of(folder)
@@ -539,7 +552,7 @@ def score(config: dict) -> pd.DataFrame:
                         if mode == "reviewed":                     # the standard's held-back values too
                             ms = with_review(ms, ms_runs[batch][key])
                         rec["has_ms"] = True
-                        rec.update(ms_scores(run, ms))
+                        rec.update(ms_scores(run, ms, arm_families))
                         if new:
                             rec.update(new_checked(new, ms))
                     else:
@@ -614,6 +627,7 @@ def summarize(df: pd.DataFrame) -> dict:
                 "papers": len(m),
                 "recall": _paper_mean(m, ["m_found"], ["m_ms_values"]),
                 "recall_close": _paper_mean(m, ["m_found_close"], ["m_ms_values"]),
+                "recall_pack_quantities": _paper_mean(m, ["m_found_in"], ["m_ms_values_in"]),
                 "precision": _paper_mean(m, ["m_supported"], ["m_arm_values"]),
                 "precision_close": _paper_mean(m, ["m_supported_close"], ["m_arm_values"]),
                 "cells_right": _ratio(m, ["m_cells_right"], ["m_cells"]),
@@ -631,14 +645,14 @@ def markdown(summary: dict) -> str:
         for batch, arms in sorted(summary.get(mode, {}).items()):
             lines += [f"## {batch} ({mode})", "",
                       "| Arm | Papers (with rows) | Cost | Hand recall, papers with rows (close) | Hand recall, all hand papers "
-                      "| Archive recall (pack's own quantities) | MS recall | MS precision | Cells right | Figure rows waiting |", "|" + "---|" * 10]
+                      "| Archive recall (pack's own quantities) | MS recall (pack's own quantities) | MS precision | Cells right | Figure rows waiting |", "|" + "---|" * 10]
             for arm, s in sorted(arms.items()):
                 h, x, m = s.get("hand", {}), s.get("archive", {}), s.get("model_standard", {})
                 ho, xo = h.get("overall", {}), x.get("overall", {})
                 lines.append(
                     f"| {arm} {s['label']} | {s['papers']} ({s['papers_with_rows']}) | ${s['cost_usd']} | "
                     f"{ho.get('recall') or '–'} ({ho.get('recall_close') or '–'}) | {h.get('all_papers', {}).get('recall') or '–'} | "
-                    f"{xo.get('recall') or '–'} ({x.get('pack_quantities', {}).get('recall') or '–'}) | {m.get('recall', '–')} | "
+                    f"{xo.get('recall') or '–'} ({x.get('pack_quantities', {}).get('recall') or '–'}) | {m.get('recall', '–')} ({m.get('recall_pack_quantities') or '–'}) | "
                     f"{m.get('precision', '–')} | {m.get('cells_right', '–')} | {s['figure_rows_waiting']} |")
             lines.append("")
     return "\n".join(lines)

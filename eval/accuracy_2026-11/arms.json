@@ -129,8 +129,47 @@
    "/Users/mickeymuscalli/Documents/Parameter Extractor/accuracy_20261120/ms_P1/runs/kumar2012_20261120-223802",
    "/Users/mickeymuscalli/Documents/Parameter Extractor/accuracy_20261120/ms_P1/runs/mitsuzawa2004_20261120-223928"
   ],
-  "P2": [],
-  "P3": [],
-  "E1": []
+  "P2": [
+   "/Users/mickeymuscalli/Documents/Parameter Extractor/accuracy_20261120/ms_P2/runs/Burcar2013_20261121-153010",
+   "/Users/mickeymuscalli/Documents/Parameter Extractor/accuracy_20261120/ms_P2/runs/Caimi2024_20261121-153843",
+   "/Users/mickeymuscalli/Documents/Parameter Extractor/accuracy_20261120/ms_P2/runs/CalacaSerrao2024_20261121-153158",
+   "/Users/mickeymuscalli/Documents/Parameter Extractor/accuracy_20261120/ms_P2/runs/Cleaves2008_20261121-153323",
+   "/Users/mickeymuscalli/Documents/Parameter Extractor/accuracy_20261120/ms_P2/runs/Coari2017_20261121-152816",
+   "/Users/mickeymuscalli/Documents/Parameter Extractor/accuracy_20261120/ms_P2/runs/Costanzo2012_20261121-153108",
+   "/Users/mickeymuscalli/Documents/Parameter Extractor/accuracy_20261120/ms_P2/runs/FerrisErtem1993_20261121-152726",
+   "/Users/mickeymuscalli/Documents/Parameter Extractor/accuracy_20261120/ms_P2/runs/FrenkelPinter2020_20261121-154252",
+   "/Users/mickeymuscalli/Documents/Parameter Extractor/accuracy_20261120/ms_P2/runs/Hirakawa2025_20261121-153434",
+   "/Users/mickeymuscalli/Documents/Parameter Extractor/accuracy_20261120/ms_P2/runs/Matreux2024_20261121-153946",
+   "/Users/mickeymuscalli/Documents/Parameter Extractor/accuracy_20261120/ms_P2/runs/Mizuuchi2019_20261121-152516",
+   "/Users/mickeymuscalli/Documents/Parameter Extractor/accuracy_20261120/ms_P2/runs/Otake2011_20261121-153534",
+   "/Users/mickeymuscalli/Documents/Parameter Extractor/accuracy_20261120/ms_P2/runs/Pulletikurti2022_20261121-154136",
+   "/Users/mickeymuscalli/Documents/Parameter Extractor/accuracy_20261120/ms_P2/runs/Riggi2023_20261121-153635",
+   "/Users/mickeymuscalli/Documents/Parameter Extractor/accuracy_20261120/ms_P2/runs/Song2024_20261121-152612",
+   "/Users/mickeymuscalli/Documents/Parameter Extractor/accuracy_20261120/ms_P2/runs/Tapiero1971_20261121-152432"
+  ],
+  "P3": [
+   "/Users/mickeymuscalli/Documents/Parameter Extractor/accuracy_20261120/ms_P3/runs/Burchell2020_20261121-154416",
+   "/Users/mickeymuscalli/Documents/Parameter Extractor/accuracy_20261120/ms_P3/runs/DeLuca2022_20261121-154452",
+   "/Users/mickeymuscalli/Documents/Parameter Extractor/accuracy_20261120/ms_P3/runs/Kazemi2021_20261121-154523",
+   "/Users/mickeymuscalli/Documents/Parameter Extractor/accuracy_20261120/ms_P3/runs/McKay1997_20261121-155011",
+   "/Users/mickeymuscalli/Documents/Parameter Extractor/accuracy_20261120/ms_P3/runs/Muchowska2019_20261121-154635",
+   "/Users/mickeymuscalli/Documents/Parameter Extractor/accuracy_20261120/ms_P3/runs/Mukhin1989_20261121-154750",
+   "/Users/mickeymuscalli/Documents/Parameter Extractor/accuracy_20261120/ms_P3/runs/Parnell2007_20261121-154926",
+   "/Users/mickeymuscalli/Documents/Parameter Extractor/accuracy_20261120/ms_P3/runs/Takeuchi2020_20261121-155008",
+   "/Users/mickeymuscalli/Documents/Parameter Extractor/accuracy_20261120/ms_P3/runs/Tingle1991_20261121-155041",
+   "/Users/mickeymuscalli/Documents/Parameter Extractor/accuracy_20261120/ms_P3/runs/daCosta2022_20261121-155111"
+  ],
+  "E1": [
+   "/Users/mickeymuscalli/Documents/Parameter Extractor/accuracy_20261120/ms_E1/runs/arXiv_1306.6074_20261121-160740",
+   "/Users/mickeymuscalli/Documents/Parameter Extractor/accuracy_20261120/ms_E1/runs/arXiv_1407.4807_20261121-155845",
+   "/Users/mickeymuscalli/Documents/Parameter Extractor/accuracy_20261120/ms_E1/runs/arXiv_1410.8252_20261121-155536",
+   "/Users/mickeymuscalli/Documents/Parameter Extractor/accuracy_20261120/ms_E1/runs/arXiv_1807.01229_20261121-155356",
+   "/Users/mickeymuscalli/Documents/Parameter Extractor/accuracy_20261120/ms_E1/runs/arXiv_1812.04501_20261121-160737",
+   "/Users/mickeymuscalli/Documents/Parameter Extractor/accuracy_20261120/ms_E1/runs/arXiv_2001.09175_20261121-155948",
+   "/Users/mickeymuscalli/Documents/Parameter Extractor/accuracy_20261120/ms_E1/runs/arXiv_2005.07199_20261121-155451",
+   "/Users/mickeymuscalli/Documents/Parameter Extractor/accuracy_20261120/ms_E1/runs/arXiv_2307.08350_20261121-155750",
+   "/Users/mickeymuscalli/Documents/Parameter Extractor/accuracy_20261120/ms_E1/runs/arXiv_2504.03572_20261121-160742",
+   "/Users/mickeymuscalli/Documents/Parameter Extractor/accuracy_20261120/ms_E1/runs/arXiv_2509.04944_20261121-155623"
+  ]
  }
 }
