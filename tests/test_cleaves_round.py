@@ -542,6 +542,33 @@ def test_values_listed_for_a_set_go_to_the_rows_their_labels_name():
     assert "001001001" not in flags[0].message
 
 
+def test_a_label_concentration_no_row_has_is_flagged():
+    """Eder1994 (Standard, 2026-11-20): the sets are the table's sub-headers ('Na+ 3.33 mol dm-3, 81 C') but the
+    chemistry answer gave only the paper-wide glycine -- every set lost its salt, unnoticed. Pointed out per table,
+    never filled; a value under any compound's name counts, and so does one held for review in the chemistry answer."""
+    from types import SimpleNamespace as N
+    from parameter_extractor.calculators.label_values import label_concentrations, label_gaps
+    from parameter_extractor.schemas.row_schema import ExtractedRow
+    from parameter_extractor.schemas.structure_plan import StructurePlan
+    assert label_concentrations("Na+ 3.33 mol dm-3, 81 C") == [("3.33 mol dm-3", 3330.0)]
+    assert label_concentrations("0.5 M NaCl, pH 7") == [("0.5 M", 500.0)]
+    assert label_concentrations("Added H2PO4- 0.42-0.49 M") == [] and label_concentrations("pH 8, 25 C, 24 h") == []
+    plan = StructurePlan.model_validate({"paper_id": "p", "n_rows": 4, "experiment_sets": [
+        {"set_label": label, "set_type": "Time Series", "varies": "time", "src": "Table 1",
+         "samples": [{"sample_label": "24 h"}, {"sample_label": "48 h"}]}
+        for label in ("Na+ 3.33 mol dm-3, 81 C", "K+ 5.00 mol dm-3, 90 C", "Ca2+ 1.67 mol dm-3, 85 C")]})
+    base = dict(set_type="Time Series", paper_title="t", authors=[], year_published=1994, journal_published="j",
+                experiment_type="Batch", solution_type="Wet")
+    rows = [ExtractedRow(full_id=f"00100{s}00{k}", set_id=f"00100{s}", sample_id=f"00{k}", entry_number=k, **base,
+                         extra={"initial_Gly_aq_mM": 1000.0, **({"initial_NaCl_aq_mM": 3330.0} if s == 1 else {})})
+            for s in (1, 2, 3) for k in (1, 2)]
+    flags = label_gaps(rows, plan)
+    assert len(flags) == 1 and flags[0].message.startswith("2 set(s) of Table 1")
+    assert "set 001002 (K+ 5.00 mol dm-3, 90 C): 5.00 mol dm-3" in flags[0].message and "001001" not in flags[0].message
+    held = N(solutes=[N(role="initial", concentration_mM=5000.0, set_label="K+ 5.00 mol dm-3, 90 C")])
+    assert "001002" not in label_gaps(rows, plan, held)[0].message
+
+
 def test_row_labels_checked_and_filled_for_every_kind_of_quantity():
     """Mickey (2026-11-12): one rule for every quantity a row label states, not a temperature-only check. Read with the
     unit table: temperature, time, pressure (any unit), pH, a concentration only with its compound named; two

@@ -119,6 +119,26 @@ def test_tables_are_cropped():
         assert all(w > 1000 for w, h in sizes) and all(h < 450 for w, h in sizes), sizes   # full width, table only
 
 
+def test_tables_cropped_under_their_own_caption():
+    """A sentence citing a table ('Table 1, a big difference ...') isn't its caption (Islam2003: its taller block won
+    over the real Table 1), and a block hanging under another table's caption isn't this table's (iqubal2017 p. 11:
+    a second text layer prints each caption twice, and 'Table 3' took Table 2). 2026-11-21."""
+    from parameter_extractor.ingestion.pdf_parser import parse_pdf
+    from parameter_extractor.ingestion.table_finder import find_tables
+    papers = ROOT.parent / "Paper Files" / "Paper Lists" / "Initial Easy Papers"
+    expect = {"Islam2003/islam2003.pdf": ("Table 1", 3, 63, 126), "iqubal2017/iqubal2017.pdf": ("Table 3", 11, 596, 763)}
+    for rel, (table, page, top, bottom) in expect.items():
+        pdf = papers / rel
+        if not pdf.is_file():
+            print(f"SKIP: needs {rel}"); return
+        parsed = parse_pdf(str(pdf))
+        with tempfile.TemporaryDirectory() as tmp:
+            found = {t["table_id"]: t for t in find_tables(str(pdf), sorted(parsed.table_pages), Path(tmp),
+                                                          captions=parsed.table_pages)}
+        box = found[table]["box"]
+        assert found[table]["page"] == page and abs(box[1] - top) < 3 and abs(box[3] - bottom) < 3, (rel, box)
+
+
 def test_supplement_figures_are_offered():
     from test_supplements_averages import _pdf
     from parameter_extractor.ingestion.figure_finder import find_figures

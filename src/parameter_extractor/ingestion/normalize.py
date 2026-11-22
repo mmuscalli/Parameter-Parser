@@ -171,6 +171,19 @@ def normalize_chemistry(chemistry: ChemistryExtraction, pubchem=None, registry=N
             _rename(s, short, "repeated units shortened", notes)
     _identify(chemistry, pubchem, registry, notes, rule_matched)
     _rename_ratio_species(chemistry, original)
+    from parameter_extractor.units import scaled_unit
+    for s in chemistry.solutes:            # 'x10-6 g' -> µg: a power of ten printed in front of the unit
+        scaled = scaled_unit(s.concentration_unit_raw)
+        if scaled is None:
+            continue
+        factor, unit = scaled
+        printed = s.concentration_unit_raw
+        if factor != 1.0:
+            for field in ("concentration_value", "concentration_high", "err_plus", "err_minus"):
+                if getattr(s, field, None):
+                    setattr(s, field, float(f"{getattr(s, field) * factor:.10g}"))
+        s.concentration_unit_raw = unit
+        _append_note(s, f"unit printed as '{printed}', read as {unit}" + (f" (values x {factor:g})" if factor != 1.0 else ""))
     for s in chemistry.solutes:
         if s.concentration_high and s.concentration_value is not None and s.concentration_high > s.concentration_value:
             _range_text(s)                 # 'low:high', never used in calculations

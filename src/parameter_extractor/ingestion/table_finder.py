@@ -179,6 +179,10 @@ def _find_on_page(page, page_no: int) -> List[dict]:
             m = TABLE_RE.match(ln["compact"])
             if not m or len(ln["compact"]) - m.end() < 1:
                 continue
+            after = ln["compact"][m.end()]
+            if after in ",;" or after.islower():
+                continue                       # a sentence citing it ('Table 1, a big ...', 'Table 2 gives ...':
+                                               # Islam2003, whose taller block won over the real Table 1)
             line_h = max(ln["bottom"] - ln["top"], 6.0)
             # the caption: following lines of the same column, closely spaced
             caption = [ln]
@@ -221,6 +225,10 @@ def _find_on_page(page, page_no: int) -> List[dict]:
                                               mid if wide and not one_column else None)))
                 if not region or bottom - region[0]["top"] < MIN_TABLE_HEIGHT + (bottom - top):
                     continue                   # no table next to it: a sentence citing a table
+                over = [l for l in above if l["bottom"] <= region[0]["top"] + 0.5]
+                if over and TABLE_RE.match(over[-1]["compact"]):
+                    continue                   # that block hangs under another table's caption: it's that table
+                                               # (iqubal2017 p. 11, a second text layer: 'Table 3' took Table 2)
             x0s = [l["x0"] for l in region + caption]
             x1s = [l["x1"] for l in region + caption]
             box = (max(min(x0s) - MARGIN, 0.0), max(min(top, region[0]["top"]) - MARGIN, 0.0),

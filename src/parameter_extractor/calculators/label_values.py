@@ -219,3 +219,61 @@ def label_mismatches(rows, structure, label_columns: Optional[dict] = None, pair
                              items[:8])
                  + (" ..." if len(items) > 8 else "") + ". Check them against the paper.")
             for sid, items in wrong.items()]
+
+
+# ---- a label's concentration that no row has (2026-11-21) ------------------------------------------------------------
+# Eder1994's sets are its table's sub-headers ('Na+ 3.33 mol dm-3, 81 C'). One Standard run's chemistry answer gave only
+# the paper-wide glycine and CuCl2: every set lost its salt, and fill_from_labels couldn't help -- 'Na+' names no
+# compound the app knows, and a concentration goes only into its compound's existing column. A missing salt is a
+# result-changing gap, so it's pointed out (never filled: the label is a model's copy of the heading, and the
+# compound may be one the user hasn't accepted yet).
+
+def label_concentrations(label: str) -> List[Tuple[str, float]]:
+    """[(text as written, mM)] for each concentration a label states, its compound before or after it or none
+    ('Na+ 3.33 mol dm-3', '0.5 M NaCl', '[Gly]0 = 3e-4 M'). A range ('0.42-0.49 M') isn't one value: skipped."""
+    from parameter_extractor.units import convert, dimension_of, parse_quantity
+    out = []
+    for seg in _segments(label):
+        seg = re.sub(r"^.*?=\s*", "", seg)                           # '[Gly]0 = 3e-4 M' -> '3e-4 M'
+        for m in re.finditer(r"(?<![\w.\-−–+])\d+(?:\.\d+)?(?:[eE][-+]?\d+)?(?![\d.]*\s*[-−–]\s*\d)", seg):
+            words = seg[m.end():].split()
+            for k in (3, 2, 1):                                         # 'mol dm-3' before 'mol'
+                text = " ".join([m.group(0)] + words[:k])
+                q = parse_quantity(text, "concentration")
+                if q and dimension_of(q[1]) == "concentration":
+                    out.append((text, convert(q[0], q[1], "mM")))
+                    break
+    return out
+
+
+def label_gaps(rows, structure, chemistry=None) -> List[Flag]:
+    """A set whose label states a concentration that none of its rows has as a starting amount, and the chemistry
+    answer doesn't give for the set either (values held for review count) -- one flag per set."""
+    plan = structure.experiment_sets if structure is not None else []
+    by_set: Dict[int, list] = {}
+    for r in rows:
+        n = r.set_id[-3:]
+        if n.isdigit() and 0 < int(n) <= len(plan):
+            by_set.setdefault(int(n), []).append(r)
+    solutes = list(getattr(chemistry, "solutes", None) or [])
+    gaps: Dict[str, list] = {}                                 # by table: one flag per table, its sets listed
+    for n, members in sorted(by_set.items()):
+        pset = plan[n - 1]
+        wanted = label_concentrations(pset.set_label)
+        if not wanted:
+            continue
+        have = [v for rec in (row_to_template_dict(r) for r in members) for c, v in rec.items()
+                if re.match(r"^(?:initial|stock)_.+_mM$", c) and _number(v) is not None]
+        have = [float(v) for v in have] + [
+            s.concentration_mM for s in solutes if s.role in ("initial", "stock") and s.concentration_mM is not None
+            and (s.set_label or "") in ("", pset.set_label)]
+        missing = [text for text, mM in wanted if mM and not any(abs(h - mM) <= TOLERANCE * abs(mM) for h in have)]
+        if missing:
+            gaps.setdefault(pset.source_table_or_section or "its source", []).append(
+                (members[0].set_id, pset.set_label, missing))
+    return [Flag("plan_mismatch",
+                 f"{len(items)} set(s) of {where} whose label gives a concentration none of their rows has as a starting "
+                 f"amount -- the compound was probably left out: "
+                 + "; ".join(f"set {sid} ({label}): {', '.join(miss)}" for sid, label, miss in items[:8])
+                 + (" ..." if len(items) > 8 else "") + f". Check {where} and enter it.", source=where)
+            for where, items in gaps.items()]

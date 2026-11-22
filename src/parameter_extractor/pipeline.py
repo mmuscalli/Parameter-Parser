@@ -1574,9 +1574,10 @@ def finish(
         row_flags.setdefault(fid, []).extend(flags)
     paper_flags += _range_flags(rows)
     paper_flags += starting_composition_flags(rows)          # products but no starting compounds (2026-11-12)
-    from parameter_extractor.calculators.label_values import label_mismatches
+    from parameter_extractor.calculators.label_values import label_gaps, label_mismatches
     paper_flags += label_mismatches(rows, ex.structure, pack.manifest.label_columns,   # against the rows' own labels
                                     pack.manifest.column_pairs)
+    paper_flags += label_gaps(rows, ex.structure, ex.chemistry)    # a label's concentration no row has
     image_tables = image_table_numbers(ex.parsed.table_pages) if config.rasterize_table_pages else set()
     table_pages = table_page_numbers(ex.parsed.table_pages)
     paper_flags += _source_flags(ex.source)

@@ -111,6 +111,28 @@ def test_normalisation_pass():
     assert normalize_chemistry(chem) == []                                  # idempotent
 
 
+def test_power_of_ten_printed_before_a_unit():
+    """'Gases (x10-6 g)' (Mukhin1989, 2026-11-21): the amounts are µg, not values of an unknown '10_6_g' unit. A bare
+    '10-6 g' stays unread -- a lost superscript."""
+    from parameter_extractor.ingestion.flatten_to_template import printed_measure
+    from parameter_extractor.units import scaled_unit
+    assert scaled_unit("\u00d710-6 g") == (1.0, "\u00b5g") and scaled_unit("(\u00d710\u207b\u2076 g)") == (1.0, "\u00b5g")
+    assert scaled_unit("x10^-3 M") == (1.0, "mM") and scaled_unit("\u00d710^4 s") == (10000.0, "s")
+    for unread in ("10-6 g", "g", "\u00d710-6 furlongs", ""):
+        assert scaled_unit(unread) is None, unread
+    chem = ChemistryExtraction(paper_id="p", solutes=[
+        _entry("CO", 36.3, "\u00d710-6 g", None, role="sampled"),
+        _entry("Gly", 2.5, "\u00d710-3 M", None),
+        _entry("H2S", 1.6, "\u00d710^2 \u00b5g", None, role="sampled")])
+    normalize_chemistry(chem)
+    co, gly, h2s = chem.solutes
+    assert (co.concentration_value, co.concentration_unit_raw) == (36.3, "\u00b5g") and printed_measure(co) == "ug"
+    assert gly.concentration_mM == 2.5 and "read as mM" in gly.conversion_note
+    assert (h2s.concentration_value, h2s.concentration_unit_raw) == (160.0, "\u00b5g")
+    assert to_column_unit(250.0, "\u00d710-3 mL", "\u00b5L").value == 250.0       # a condition value too
+    assert to_column_unit(5.0, "10-3 mL", "\u00b5L") is None
+
+
 def test_review_preview_shows_stored_value():
     try:
         from PySide6.QtWidgets import QApplication

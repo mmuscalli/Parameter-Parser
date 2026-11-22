@@ -189,6 +189,30 @@ _APPROX = re.compile(r"^(?:~|∼|≈|ca\.?\s|about\s|approximately\s|approx\.?\s
 _SUPERSCRIPTS = str.maketrans("⁰¹²³⁴⁵⁶⁷⁸⁹⁻⁺", "0123456789-+")
 
 
+# a unit printed with a power of ten in front: 'x10-6 g', '(×10⁻⁶ g)', '10^-3 M' (Mukhin1989's 'Gases (×10−6 g)',
+# 2026-11-21: kept as an unknown unit, so the amounts went to '..._10_6_g' columns). The '×' / '^' / superscript
+# makes the exponent unambiguous; a bare '10-6 g' stays unread (a lost superscript, as for values).
+_UNIT_SCALE = re.compile(r"^\(?\s*(?:[x×*]\s*10\s*(?:\^|\*\*)?|10\s*(?:\^|\*\*))\s*\(?\s*([-−–+]?\s*\d+)\s*\)?\s*(.+?)\s*\)?$")
+
+
+def scaled_unit(text: Optional[str]) -> Optional[Tuple[float, str]]:
+    """A unit printed as a power of ten times a unit we know -> (factor, unit): a value times `factor` is in `unit`.
+    Where the scaled unit has its own name that one is used, factor 1 ('×10-6 g' -> (1.0, 'µg')); otherwise the
+    base unit ('×10^4 s' -> (10000.0, 's')). None for anything else."""
+    t = re.sub(r"10\s*([⁻⁺]?[⁰¹²³⁴⁵⁶⁷⁸⁹]+)", lambda m: "10^" + m.group(1).translate(_SUPERSCRIPTS), (text or "").strip())
+    m = _UNIT_SCALE.match(t)
+    if not m:
+        return None
+    unit = canonical_unit(m.group(2))
+    if unit is None or unit not in _UNITS:
+        return None
+    exponent = int(re.sub(r"\s", "", m.group(1)).replace("−", "-").replace("–", "-"))
+    dimension, factor = _UNITS[unit]
+    target = factor * 10.0 ** exponent
+    named = next((u for u, (d, f) in _UNITS.items() if d == dimension and abs(f - target) <= 1e-9 * abs(target)), None)
+    return (1.0, named) if named else (10.0 ** exponent, unit)
+
+
 def _explicit_powers(t: str) -> str:
     """Powers of ten written out unambiguously, as '<n> × 10^<e>' (2026-11-12: Cleaves2008's '10^-1 M' was refused,
     so Fig. 2's starting glycine never reached its rows): '10^-1 M', '10**-3 M', '10^(-2) M', '10⁻³ M', '1e-3 M',
@@ -299,6 +323,9 @@ def to_column_unit(raw, unit: Optional[str], column_unit: str, difference: bool 
         return None
     dimension = dimension_of(target)
     if isinstance(raw, (int, float)):
+        if unit and unit_for_dimension(unit, dimension) is None and (scaled := scaled_unit(unit)):
+            out = convert(float(raw) * scaled[0], scaled[1], target, difference)       # 'x10-6 g'
+            return None if out is None else Conversion(_tidy(out), f"converted from {raw:g} {unit}")
         source = unit_for_dimension(unit, dimension) if unit else None
         if source is None:
             return Conversion(float(raw), "") if not unit else None
