@@ -17,7 +17,8 @@
         "paper_DOI",
         "paper_arxiv_id",
         "data_location",
-        "original_data_reference"
+        "original_data_reference",
+        "result_type"
       ]
     },
     {

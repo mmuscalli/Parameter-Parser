@@ -59,6 +59,13 @@ class PlannedSet(BaseModel):
                     "another publication (cited table, redrawn figure, quoted results), the original "
                     "reference as the paper gives it, e.g. 'Rodriguez-Garcia et al. 2015, Nat. Commun. 6:8385 "
                     "(ref. 12)'.")
+    # Mickey, 2026-11-21: rows that aren't the paper's own experiments say so ('result_type'); paper-wide experiment
+    # conditions and the fill-ins don't reach them when the paper also has experiments
+    result_kind: Literal["experiment", "field_sample", "model"] = Field(
+        default="experiment", alias="rk",
+        description="Leave out for the paper's own experiments. 'field_sample' for natural samples analysed as found "
+                    "(rocks, meteorites, environmental samples); 'model' for values the paper calculated or simulated "
+                    "(a table of calculated equilibrium concentrations, a model's predictions).")
     samples: List[PlannedSample]
 
 

@@ -17,7 +17,8 @@ from typing import Dict, List, Optional
 
 COMPOUND = re.compile(r"^(initial|sampled|stock|calculated)_.+_(aq|s|gas|g|l)_|^added_.+_volume_")
 METADATA = {"paper_title", "author_list", "year_published", "journal_published", "paper_DOI"}
-ROW_PLAN = {"set_type", "duration_hr", "duration_hr_high", "run", "data_location", "original_data_reference"}
+ROW_PLAN = {"set_type", "duration_hr", "duration_hr_high", "run", "data_location", "original_data_reference",
+            "result_type"}
 IDENTIFIERS = {"full_id", "set_id", "sample_id", "entry_number"}
 FIT_MODELS = re.compile(r"^(pl|st|sy)_fit")
 # calculation -> the columns it writes (by name or pattern); calculators/ and pipeline.finish

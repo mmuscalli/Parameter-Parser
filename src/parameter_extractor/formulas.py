@@ -256,7 +256,9 @@ def _eval(node, values):
             return _number(values.get(node.args[0].value))
         if name in _AGGREGATES:
             pattern = re.compile(node.args[0].value)
+            # a limit ('<0.2', its '<column>_lim' set) is a bound, not a value to add up or average (2026-11-21)
             nums = [n for c, v in values.items() if c != SERIES and pattern.search(c)
+                    and _number(values.get(c + "_lim")) in (MISSING, 0.0)
                     and (n := _number(v)) is not MISSING]
             if name == "count_of":
                 return float(len(nums))

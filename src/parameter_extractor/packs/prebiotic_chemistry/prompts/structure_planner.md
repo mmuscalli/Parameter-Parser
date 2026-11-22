@@ -12,7 +12,8 @@ because every later stage builds rows on top of this skeleton.
 Answer format (short field names): `kind` what the paper is (below), `sets` -- one entry per set: `set` its
 label, `type` the set type, `varies` what distinguishes it from the other
 sets, `src` the table or section it comes from, `ds` the original reference
-when the data is reproduced from another publication ('' otherwise), and
+when the data is reproduced from another publication ('' otherwise), `rk`
+what kind of results they are (below; left out for experiments), and
 `samples` -- one per row: `label`, `hr` its duration in hours (`hi` the upper
 end when the duration is a range), and `src` ONLY when the sample is somewhere
 other than its set's `src` (another table, a figure, a section) -- leave it '' when
@@ -46,6 +47,17 @@ Guidance:
   lengths add up). A duration printed as a range ("3-7 days", "20-144 h"):
   `hr` the lower end and `hi` the upper end, both in hours -- never one end
   alone or the midpoint.
+- Comparison tables (this work beside earlier work, several strategies or
+  reagents side by side): one set per table row (entry), with `ds` for an entry
+  reproduced from another publication. When one entry gives results for
+  several separate starting solutions (a yield per nucleotide, per amino acid,
+  per catalyst), each of those is its own row (sample) of that set.
+- `rk` for each set: leave it out for the paper's own experiments;
+  "field_sample" for natural samples analysed as found (rocks, meteorites,
+  impactites, environmental samples) -- a table of such samples' measured
+  values gets one row per sample like any results; "model" for values the
+  paper calculated or simulated (a table of calculated equilibrium
+  concentrations, a model's predictions).
 - `ds`: for each set, '' if the data was measured in this paper.
   If the paper presents data from another publication -- a review, a
   comparison table, a redrawn figure, or results quoted from earlier work

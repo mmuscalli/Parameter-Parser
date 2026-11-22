@@ -399,14 +399,25 @@ def _solute_value(entry):
     return value
 
 
+# rows that aren't the paper's own experiments (the row plan's `rk`; Mickey, 2026-11-21)
+RESULT_TYPE = "result_type"
+RESULT_TYPES = {"field_sample": "field sample", "model": "model"}
+
 ERROR_SUFFIXES = ("_err_plus", "_err_minus")   # the prebiotic pack's uncertainty columns (as its conditions step's)
+LIMIT_SUFFIX = "_lim"                           # its limit flag: 1 an upper limit ('<'), -1 a lower one ('>')
 
 
 def error_cells(entry, column: str) -> dict:
     """{column_err_plus: x, column_err_minus: -y} for a value with an uncertainty, in the column's unit (the same
     conversion as the value: mM from the printed unit, % as printed); {} without one."""
     plus, minus = getattr(entry, "err_plus", 0.0) or 0.0, getattr(entry, "err_minus", 0.0) or 0.0
-    if not (plus or minus) or entry.concentration_value in (None, 0) or is_range(entry):
+    limit = {"upper": 1, "lower": -1}.get(getattr(entry, "limit", "") or "")
+    if entry.concentration_value is None or is_range(entry):
+        return {}
+    if limit:                       # '<0.2': the bound is the value, '<column>_lim' says it's a limit (2026-11-21)
+        return {column + LIMIT_SUFFIX: limit, **(error_cells(entry.model_copy(update={"limit": ""}), column)
+                                                 if hasattr(entry, "model_copy") else {})}
+    if not (plus or minus) or entry.concentration_value == 0:
         return {}
     if is_percent(entry) or getattr(entry, "measure", "yield") == "ratio":
         factor = 1.0
@@ -498,8 +509,13 @@ def build_rows(
                     for spec, result in optional_results(optional, wet_dry)]
 
     entry_number = 0
+    has_experiments = any(getattr(p, "result_kind", "experiment") == "experiment" for p in structure.experiment_sets)
     for set_idx, pset in enumerate(structure.experiment_sets, start=1):
         set_id = f"{paper_prefix}{set_idx:03d}"
+        # field samples / model values next to experiments (result_type, 2026-11-21): the paper-wide conditions and
+        # starting compounds describe the experiments -- only the set's own values reach these rows
+        apart = has_experiments and getattr(pset, "result_kind", "experiment") != "experiment"
+        paper_wide = (lambda field: None) if apart else _method_value
         # initial species for the whole set; ones with a sample_label (a starting
         # concentration that differs per sample, e.g. truman2024's Table 2) are applied
         # per sample below -- keying them by name here would let the last one win
@@ -514,7 +530,7 @@ def build_rows(
             if s.set_label == pset.set_label and s.role == "initial" and _kept(s.confidence)
             and s.sample_label
         ]
-        merged_species = {**constant_species, **set_species}
+        merged_species = {**({} if apart else constant_species), **set_species}
         species_mM, species_prov = {}, {}
         range_cells = {}                       # starting concentrations printed as ranges: 'low:high' text
         for s in merged_species.values():
@@ -587,8 +603,8 @@ def build_rows(
                 prov[col] = _from_extracted(getattr(methodology, fname))
             if "initial_pH" in override:            # no dedicated field: template column via extra
                 extra["initial_pH"] = override["initial_pH"]
-            elif _method_value(methodology.initial_pH) is not None:
-                extra["initial_pH"] = _method_value(methodology.initial_pH)
+            elif paper_wide(methodology.initial_pH) is not None:
+                extra["initial_pH"] = paper_wide(methodology.initial_pH)
                 prov["initial_pH"] = _from_extracted(methodology.initial_pH)
             for fname, o in methodology.override_details(pset.set_label).items():
                 prov[fname] = CellSource(
@@ -622,6 +638,10 @@ def build_rows(
             if run:                     # one of several experiments in its set, each sampled more than once (step 4)
                 extra[RUN_COLUMN] = run
                 prov[RUN_COLUMN] = CellSource(origin="structure", source=pset.source_table_or_section)
+            kind = getattr(pset, "result_kind", "experiment")
+            if kind != "experiment":
+                extra[RESULT_TYPE] = RESULT_TYPES[kind]
+                prov[RESULT_TYPE] = CellSource(origin="structure", source=pset.source_table_or_section)
             if pset.data_source:
                 prov["original_data_reference"] = CellSource(
                     origin="structure (data reproduced from another publication)",
@@ -634,19 +654,19 @@ def build_rows(
                 paper_doi=metadata.paper_doi, paper_title=metadata.paper_title,
                 authors=metadata.authors, year_published=metadata.year_published,
                 journal_published=metadata.journal_published,
-                experiment_type=_method_value(methodology.experiment_type) or "",
-                solution_type=_method_value(methodology.solution_type) or "",
+                experiment_type=paper_wide(methodology.experiment_type) or "",
+                solution_type=paper_wide(methodology.solution_type) or "",
                 duration_hr=duration,
-                vessel_material=_method_value(methodology.vessel_material),
-                solvent_name=_method_value(methodology.solvent_name),
-                analysis_method=_method_value(methodology.analysis_method),
-                headspace_gas=_method_value(methodology.headspace_gas),
+                vessel_material=paper_wide(methodology.vessel_material),
+                solvent_name=paper_wide(methodology.solvent_name),
+                analysis_method=_method_value(methodology.analysis_method),     # how every sample was measured
+                headspace_gas=paper_wide(methodology.headspace_gas),
                 initial_temperature_C=override.get(
-                    "initial_temperature_C", _method_value(methodology.initial_temperature_C)),
+                    "initial_temperature_C", paper_wide(methodology.initial_temperature_C)),
                 initial_pressure_bar=override.get("initial_pressure_bar",
-                                                  _method_value(methodology.initial_pressure_bar)),
+                                                  paper_wide(methodology.initial_pressure_bar)),
                 sampled_temperature_C=override.get(
-                    "sampled_temperature_C", _method_value(methodology.sampled_temperature_C)),
+                    "sampled_temperature_C", paper_wide(methodology.sampled_temperature_C)),
                 species_mM={**row_species, **sampled_mM},
                 extra=extra,
                 # lowest confidence among this row's MEASURED values, including any

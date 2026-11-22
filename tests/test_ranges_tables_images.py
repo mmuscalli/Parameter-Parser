@@ -83,6 +83,37 @@ def test_stage_values_with_hi_and_negative_values():
     assert {k: v.value for k, v in single.items()} == {"initial_temperature_C": -5}
 
 
+def test_limits_kept_with_a_limit_column():
+    """'<0.2' (Mukhin1989's Table 1, 2026-11-21): the bound is the value and '<column>_lim' says which limit, 1 upper /
+    -1 lower, as the exoplanet pack's lim columns; dropped before. A limit isn't added up in a formula's total."""
+    packs.activate("prebiotic_chemistry")
+    import ast
+    from parameter_extractor import formulas
+    from parameter_extractor.ingestion.flatten_to_template import error_cells
+    from parameter_extractor.registry import VariableRegistry
+    from parameter_extractor.schemas.chemistry import TableResults
+    from parameter_extractor.stages.optional import load_specs, stage_values
+    table = TableResults.model_validate({"src": "Table 1", "c": "high", "cols": [
+        {"nm": "Gly-Gly", "r": "sampled", "ph": "aq", "u": "%", "lbl": "% (Gly)2"}],
+        "rows": [{"set": "S1", "sample": "S1.1", "row": "a", "v": ["<0.2"]}, {"set": "S1", "sample": "S1.2", "row": "b",
+                 "v": ["\u2265 5a"]}, {"set": "S1", "sample": "S1.3", "row": "c", "v": ["~0.02"]}]})
+    lo, hi, approx = table.entries()
+    assert (lo.concentration_value, lo.limit, hi.concentration_value, hi.limit) == (0.2, "upper", 5.0, "lower")
+    assert approx.concentration_value is None and "not read" in approx.conversion_note
+    col = "sampled_Gly-Gly_aq_%yield"
+    assert error_cells(lo, col) == {col + "_lim": 1} and error_cells(hi, col) == {col + "_lim": -1}
+    assert VariableRegistry().is_known_column(col + "_lim")
+    rows = [{col: 0.2, col + "_lim": 1, "sampled_Gly-Gly-Gly_aq_%yield": 1.5}]
+    expr = ast.parse('sum_of("^sampled_.*_aq_%yield$")', mode="eval").body
+    assert formulas._eval(expr, rows[0]) == 1.5                       # the '<0.2' is left out of the sum
+    spec = load_specs()["experimental_conditions"]
+    Item, _ = spec.models()
+    out, flags = stage_values(spec, Item.model_validate(dict(col="initial_temperature_C", v=25, lim="upper", u="°C",
+                                                             q="q", src="s", c="high")))
+    assert {k: v.value for k, v in out.items()} == {"initial_temperature_C": 25, "initial_temperature_C_lim": 1}
+    assert not flags
+
+
 def test_number_parameter_answered_in_its_text():
     """Huber1998 (2026-11-17): pH came back as v 0 with txt '7.5-9.9 (varies by run, see sample)' and was written as
     pH 0.0 on 12 rows. The text is read: a range, a number or a quantity; anything else is left out and said."""

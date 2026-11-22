@@ -72,7 +72,9 @@ class _Filler:
     def __init__(self, rows: List[ExtractedRow]):
         self.rows = rows
         self.records = {r.full_id: row_to_template_dict(r) for r in rows}
-        self.eligible = [r for r in rows if measured(self.records[r.full_id]) and not r.original_data_reference]
+        # not reproduced data, field samples or model values (result_type): their conditions aren't the experiments'
+        self.eligible = [r for r in rows if measured(self.records[r.full_id]) and not r.original_data_reference
+                         and not r.extra.get("result_type")]
         self.filled: Dict[tuple, list] = {}             # (rule, rows filled) -> [(column, value)]
 
     def value(self, r: ExtractedRow, column: str):

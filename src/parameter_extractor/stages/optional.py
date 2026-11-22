@@ -311,8 +311,13 @@ class StageSpec(BaseModel):
     def target_sets(self, structure: StructurePlan) -> List[str]:
         """The sets a value with set_label '' applies to: those that match the trigger's set
         conditions, or every set when the stage was triggered by keywords or always runs."""
-        matching = [s.set_label for s in structure.experiment_sets if self._set_matches(s)]
-        return matching or [s.set_label for s in structure.experiment_sets]
+        sets = structure.experiment_sets
+        # a paper-wide value describes the paper's experiments: field samples and model values beside them get only
+        # their own values (result_type, 2026-11-21); a paper of only those gets the paper-wide ones too
+        if any(getattr(s, "result_kind", "experiment") == "experiment" for s in sets):
+            sets = [s for s in sets if getattr(s, "result_kind", "experiment") == "experiment"]
+        matching = [s.set_label for s in sets if self._set_matches(s)]
+        return matching or [s.set_label for s in sets]
 
     # ---- output budget ---------------------------------------------------------------
 
@@ -914,6 +919,11 @@ def stage_values(spec: StageSpec, item) -> Tuple[Dict[str, StageValue], List[str
             out[cols[2]] = StageValue({"upper": 1, "lower": -1}.get(getattr(item, "limit", ""), 0), **base)
             return out, []
     limit = getattr(item, "limit", "") or ""
+    if limit and (spec.suffixes_for(param) or [""])[0].startswith("_"):
+        # the lab packs' naming ('<column>_err_plus'): the limit goes to '<column>_lim', 1 upper / -1 lower, as the
+        # Exoplanet Archive's lim columns (Mickey, 2026-11-21); a measured value gets none
+        out[param.column + "_lim"] = StageValue({"upper": 1, "lower": -1}[limit], **base)
+        return out, []
     if limit:
         # no limit column for this parameter: the bound is kept as the value, said in its provenance and flagged
         # (mckay1997's '>10,000 K' had become a plain 9726.85 °C, organics test set 2026-11-09)

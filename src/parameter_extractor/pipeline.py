@@ -734,11 +734,19 @@ def _summary_plan(structure):
     return structure.model_copy(update={"experiment_sets": [pset], "total_planned_rows": 1})
 
 
+# what every row has whatever the paper says: which paper and where, not what was done
+_BOOKKEEPING = {"full_id", "set_id", "sample_id", "set_type", "entry_number", "paper_title", "paper_DOI", "author_list",
+                "year_published", "journal_published", "paper_arxiv_id", "data_location", "source_notes",
+                "extraction_confidence", "is_last_sample", "is_max_peptide_yield"}
+
+
 def _has_content(row) -> bool:
-    """A row with a condition, a starting compound or a result -- not only the paper's metadata."""
+    """A row with anything the paper states about its work -- a condition, a material, a method, a starting compound
+    or a result -- not only the paper's metadata. (Mickey, 2026-11-21: a paper without a results table gets its
+    'Paper summary' row whatever it states; before, only compounds or a duration made one, and Burchell2020's
+    materials and methods made none.)"""
     from parameter_extractor.ingestion.flatten_to_template import row_to_template_dict
-    return any(v not in (None, "") and (c.startswith(("initial_", "sampled_", "stock_", "total_sampled_"))
-                                        or c == "duration_hr") for c, v in row_to_template_dict(row).items())
+    return any(v not in (None, "") and c not in _BOOKKEEPING for c, v in row_to_template_dict(row).items())
 
 
 def _chemistry_on(pack, config: RunConfig) -> bool:
@@ -1123,7 +1131,7 @@ def starting_composition_flags(rows) -> List[Flag]:
     for r in rows:
         values = {**{c: v for c, v in r.species_mM.items()}, **r.extra}
         products = [c for c, v in values.items() if v not in (None, "") and _PRODUCT_COLUMN.match(c)
-                    and not c.endswith(("_err_plus", "_err_minus"))]
+                    and not c.endswith(("_err_plus", "_err_minus", "_lim"))]
         if products and not any(v not in (None, "") and _STARTING_COLUMN.match(c) for c, v in values.items()):
             where = str(r.extra.get(DATA_LOCATION, "") or "this paper").replace(". ", " ")
             groups.setdefault(where, []).append((r.full_id, products))

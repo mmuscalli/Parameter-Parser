@@ -542,6 +542,18 @@ def test_values_listed_for_a_set_go_to_the_rows_their_labels_name():
     assert "001001001" not in flags[0].message
 
 
+def test_a_summary_row_with_only_materials_and_methods_is_kept():
+    """Mickey, 2026-11-21: a paper without a results table gets its 'Paper summary' row whatever it states (Burchell2020:
+    a target material and the analyses, no compounds -- no row before); metadata alone is still no row."""
+    from parameter_extractor.pipeline import _has_content
+    from parameter_extractor.schemas.row_schema import ExtractedRow
+    base = dict(full_id="001001001", set_id="001001", sample_id="001", entry_number=1, set_type="Independent",
+                paper_title="t", authors=["A"], year_published=2020, journal_published="j", experiment_type="",
+                solution_type="")
+    assert not _has_content(ExtractedRow(**base, extra={"data_location": "Text"}))
+    assert _has_content(ExtractedRow(**base, extra={"solid_material_name": "aluminium target (Al-1080)"}))
+
+
 def test_a_label_concentration_no_row_has_is_flagged():
     """Eder1994 (Standard, 2026-11-20): the sets are the table's sub-headers ('Na+ 3.33 mol dm-3, 81 C') but the
     chemistry answer gave only the paper-wide glycine -- every set lost its salt, unnoticed. Pointed out per table,

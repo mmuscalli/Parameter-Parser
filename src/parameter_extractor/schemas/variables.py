@@ -41,6 +41,7 @@ class NewVariable(BaseModel):
     format_note: str = ""                       # value doesn't follow its category's format
     err_plus: float = 0.0                       # uncertainty in the value's unit (written as <column>_err_plus /
     err_minus: float = 0.0                      # _err_minus when the variable is accepted); 0 = none
+    limit: int = 0                              # 1 an upper limit ('<'), -1 a lower one: <column>_lim (2026-11-21)
 
 
 # ---- targeted search for the user's "parameters to look for" ---------------

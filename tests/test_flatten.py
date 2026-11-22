@@ -49,6 +49,25 @@ def test_per_sample_initial_concentrations_and_ph_override():
     assert rows[0].provenance["initial_pH"].origin == "methodology (per set)"
 
 
+def test_field_samples_and_model_values_beside_experiments():
+    """Mickey, 2026-11-21: rows that aren't the paper's own experiments say so (`result_type`: the row plan's `rk`);
+    beside experiments they get only their own values -- the paper-wide conditions and starting compounds describe
+    the experiments. A paper of only field samples gets the paper-wide values (they describe its samples)."""
+    meta, structure = L(PaperMetadata, "metadata"), L(StructurePlan, "structure_planner")
+    meth, chem = L(Methodology, "methodology"), L(ChemistryExtraction, "chemistry")
+    structure.experiment_sets[1].result_kind = "field_sample"
+    rows = build_rows(meta, structure, meth, chem, "001")
+    exp = [row_to_template_dict(r) for r in rows if r.set_id == "001001"]
+    field = [row_to_template_dict(r) for r in rows if r.set_id == "001002"]
+    assert all("result_type" not in d and d["initial_Gly_aq_mM"] == 1000.0 and d.get("experiment_type") for d in exp)
+    assert all(d["result_type"] == "field sample" and "initial_Gly_aq_mM" not in d and not d.get("experiment_type")
+               for d in field)
+    for pset in structure.experiment_sets:
+        pset.result_kind = "field_sample"
+    only = [row_to_template_dict(r) for r in build_rows(meta, structure, meth, chem, "001")]
+    assert all(d["result_type"] == "field sample" and d["initial_Gly_aq_mM"] == 1000.0 for d in only)
+
+
 def test_a_run_named_in_the_row_plan_reaches_its_rows():
     """Branch levels-and-facets (Mickey, 2026-11-18, option 2): the row plan's `run` -- several experiments in one
     set, each sampled more than once -- is the dataset's `run` column, in the Row block after sample_id; empty for

@@ -162,6 +162,10 @@ For each species:
   printed (the app reads the ±); in `groups`, `ep` the upper and `em` the lower
   uncertainty (negative) in the value's unit: "29.18 ± 2.40 mM" -> v 29.18,
   ep 2.40, em -2.40. Leave both out when none is given.
+- Limits: a value printed as "<0.2" or "> 5" -- in a table, copy the cell as
+  printed (the app reads it); in `groups`, `v` the bound and `lim` "upper"
+  ("<", "≤") or "lower" (">", "≥"). A "not detected" without a number stays
+  `det` "not detected".
 - A percentage of a STARTING material left over ("Recovered nicotinamide (%)",
   "unreacted 4"): role sampled, `meas` "recovered" (on the table column or the species) -- it
   isn't a yield.

@@ -17,7 +17,8 @@ with no results of any kind gets no sets, and its extraction steps are skipped),
 `sets` -- one entry per set: `set` its label, `type` the set type, `varies`
 what distinguishes it from the other sets, `src` the table or section it comes
 from, `ds` the original reference when the data is reproduced from another
-publication ('' otherwise), and `samples` -- one per row: `label`, `hr` its
+publication ('' otherwise), `rk` what kind of results they are (below; left out
+for experiments), and `samples` -- one per row: `label`, `hr` its
 duration in hours whenever the paper states one -- a time point, a time given
 per table row, or one time stated once for the whole table or experiment (a
 caption's "heated at 90 °C for 3 hours") -- empty only when the paper gives
@@ -52,6 +53,17 @@ Guidance:
   row and block names where it has them.
 - Compound numbers ("compound 7") and citation numbers are never values or
   labels by themselves; use the names the paper gives.
+- Comparison tables (this work beside earlier work, several strategies or
+  reagents side by side): one set per table row (entry), with `ds` for an entry
+  reproduced from another publication. When one entry gives results for
+  several separate starting solutions (a yield per nucleotide, per amino acid,
+  per catalyst), each of those is its own row (sample) of that set.
+- `rk` for each set: leave it out for the paper's own experiments;
+  "field_sample" for natural samples analysed as found (rocks, meteorites,
+  impactites, environmental samples) -- a table of such samples' measured
+  values gets one row per sample like any results; "model" for values the
+  paper calculated or simulated (a table of calculated equilibrium
+  concentrations, a model's predictions).
 - `ds`: '' when this paper produced the data; the reference as printed when a
   set is reproduced from another publication.
 - If page images are attached, they are renders of the pages with tables.

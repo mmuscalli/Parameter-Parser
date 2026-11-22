@@ -269,8 +269,9 @@ class VariableRegistry:
                 return True
         # no automatic acceptance by naming rule: a new compound of ANY type -- peptide, oligonucleotide, ... -- is
         # reviewed (Mickey, 2026-11-04); only the pack's own columns and the user's accepted ones are known
-        # the uncertainty of a known value ('<column>_err_plus' / '_err_minus', the prebiotic pack's naming)
-        m = re.fullmatch(r"(.+)_err_(?:plus|minus)", column)
+        # the uncertainty or limit flag of a known value ('<column>_err_plus' / '_err_minus' / '_lim', the prebiotic
+        # pack's naming; '_lim' 1 = an upper limit, -1 = a lower one, as the Exoplanet Archive's 'lim' columns)
+        m = re.fullmatch(r"(.+)_(?:err_(?:plus|minus)|lim)", column)
         if m and self.is_known_column(m.group(1)):
             return True
         # the logarithms of a known quantity ('<name>_log10_<unit>': a 'Log % yield' axis, 2026-11-12)

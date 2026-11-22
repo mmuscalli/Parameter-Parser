@@ -126,6 +126,12 @@ class SoluteEntry(BaseModel):
                                         "value's unit ('29.18 ± 2.40' -> 2.40; error bars, s.d.).")
     err_minus: float = Field(default=0.0, alias="em",
                              description="Only with an uncertainty: the lower one, negative ('± 2.40' -> -2.40).")
+    # an upper or lower limit ('<0.2', '>5'; Mickey, 2026-11-21): the bound is the value, `limit` says which -> a
+    # '<column>_lim' column, 1 upper / -1 lower (the exoplanet pack's convention)
+    limit: Literal["", "upper", "lower"] = Field(
+        default="", alias="lim",
+        description="Only for a value printed as a limit: 'upper' for '<0.2' (v = 0.2), 'lower' for '>5'; leave out "
+                    "otherwise.")
     concentration_basis: ConcentrationBasis = Field(
         default="mixture", alias="b",
         description="Leave out for the concentration in the reaction mixture itself; 'stock' for a solution "
@@ -261,6 +267,18 @@ def _cell_number(text: str):
     return value * 10 ** int(m.group(2)) if m.group(2) else value
 
 
+_LIMIT = re.compile(r"^\s*(<=|>=|≤|≥|<|>|&lt;|&gt;)\s*(.+?)\s*$")
+
+
+def _cell_limit(text: str):
+    """A table cell printed as a limit -> (bound, 'upper' | 'lower'): '<0.2', '≤ 5', '>1.0a'; None otherwise."""
+    m = _LIMIT.match(text.replace("\u2264", "≤").replace("\u2265", "≥"))
+    if not m:
+        return None
+    bound = _cell_number(m.group(2))
+    return None if bound is None else (bound, "upper" if m.group(1) in ("<", "<=", "≤", "&lt;") else "lower")
+
+
 class TableColumn(BaseModel):
     """One species column of a results table (TableResults)."""
     model_config = ConfigDict(populate_by_name=True, json_schema_extra=_required(["nm", "r", "ph", "u", "lbl"]))
@@ -353,16 +371,18 @@ class TableResults(BaseModel):
                     continue                             # empty, or a dash with a footnote mark ('-b')
                 low = text.lower()
                 detection = "not detected" if low in self._ND else "detected" if low in self._DETECTED else ""
-                number, note, high = None, None, 0.0
+                number, note, high, limit = None, None, 0.0, ""
                 if not detection:
                     number = _cell_number(text)
-                    if number is None and (rng := _cell_range(text)):
+                    if number is None and (bound := _cell_limit(text)):
+                        number, limit = bound            # '<0.2': the bound, with its limit column
+                    elif number is None and (rng := _cell_range(text)):
                         number, high = rng               # '5-10': a range, kept as 'low:high'
-                    elif number is None:                 # '<0.1', '10-4': kept, flagged, never guessed
+                    elif number is None:                 # '10-4', '~0.02': kept, flagged, never guessed
                         note = f"table cell '{text}' isn't a single number -- not read"
                 out.append(SoluteEntry(
                     name=col.name, role=col.role, phase=col.phase, set_label=row.set_label or None,
-                    sample_label=row.sample_label or None, concentration_value=number, conversion_note=note,
+                    sample_label=row.sample_label or None, concentration_value=number, conversion_note=note, limit=limit,
                     concentration_high=high,
                     concentration_unit_raw=col.unit or None, detection=detection if col.role == "sampled" else "",
                     err_plus=_cell_error(text) if number is not None and not high else 0.0,

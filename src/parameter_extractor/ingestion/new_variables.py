@@ -378,7 +378,8 @@ def _errors(s) -> dict:
     """A species value's uncertainty in the unit of the value offered for review (mM, or % as printed)."""
     from parameter_extractor.ingestion.flatten_to_template import error_cells
     cells = error_cells(s, "x")
-    return {"err_plus": cells.get("x_err_plus", 0.0), "err_minus": cells.get("x_err_minus", 0.0)}
+    return {"err_plus": cells.get("x_err_plus", 0.0), "err_minus": cells.get("x_err_minus", 0.0),
+            "limit": cells.get("x_lim", 0)}
 
 
 def write_values(rows: List[ExtractedRow], column: str, values: List[NewVariable],
@@ -405,6 +406,8 @@ def write_values(rows: List[ExtractedRow], column: str, values: List[NewVariable
             from parameter_extractor.units import _tidy
             errors = {column + suffix: _tidy(e * factor) for suffix, e in (("_err_plus", v.err_plus),
                                                                           ("_err_minus", v.err_minus)) if e}
+        if getattr(v, "limit", 0) and isinstance(value, (int, float)):
+            errors[column + "_lim"] = v.limit               # '<0.2': the bound is the value (2026-11-21)
         for rid in v.row_ids:
             if rid in by_id:
                 set_row_value(by_id[rid], column, value, source)

@@ -7,6 +7,7 @@
     {"column": "year_published", "description": "Publication year"},
     {"column": "journal_published", "description": "Journal"},
     {"column": "data_location", "description": "Where in the paper the row's data point was found: 'Figure. 1', 'Figure. 3b', 'Table. 2', 'Table. S1' (supplementary), or 'Text: <section>'"},
-    {"column": "paper_arxiv_id", "description": "arXiv ID and version of the text that was read, when the paper was read from arXiv (a preprint)"}
+    {"column": "paper_arxiv_id", "description": "arXiv ID and version of the text that was read, when the paper was read from arXiv (a preprint)"},
+    {"column": "result_type", "description": "What a row's results are when they aren't the paper's own experiments: 'field sample' (a natural sample analysed as found: rock, meteorite, water) or 'model' (calculated or simulated). Empty for experiments"}
   ]
 }
