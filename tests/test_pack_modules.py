@@ -114,9 +114,27 @@ def test_prebiotic_uses_the_modules():
     specs = set(load_specs(pack))
     assert "experimental_conditions" in specs                            # the pack's own step
     from parameter_extractor import module_settings as ms
+    from parameter_extractor.stages.optional import _specs_in
+    own = {p.column for s in _specs_in(pack.folder / "stages").values() for p in s.parameters}
     for mod in pack.modules:                     # every linked module's steps, unless the pack switches one off
         st = ms.settings_for(pack.own_manifest.module_settings, mod.id).steps
-        assert {f.stem for f in mod.stage_files() if not (f.stem in st and st[f.stem].off)} <= specs, mod.id
+        recorded = {f.stem for f in mod.stage_files()      # the pack's own steps record all of it: theirs stand
+                    if all(q["column"] in own for q in json.loads(f.read_text())["parameters"])}
+        assert {f.stem for f in mod.stage_files() if not (f.stem in st and st[f.stem].off) and f.stem not in recorded} \
+            <= specs, mod.id
+
+
+def test_a_module_step_the_pack_already_records_is_left_out():
+    import shutil
+    from parameter_extractor.stages.optional import load_specs
+    with tempfile.TemporaryDirectory() as tmp:
+        folder = Path(tmp) / "prebiotic_copy"
+        shutil.copytree(packs.BUILTIN_DIR / "prebiotic_chemistry", folder)
+        manifest = json.loads((folder / "pack.json").read_text())
+        manifest["id"], manifest["modules"] = "prebiotic_copy", ["lab_experiment"] + manifest["modules"]
+        (folder / "pack.json").write_text(json.dumps(manifest))
+        specs = load_specs(packs.Pack(folder))
+        assert "lab_conditions" not in specs and "experimental_conditions" in specs     # the pack's own step stands
 
 
 def test_migrate_copies():

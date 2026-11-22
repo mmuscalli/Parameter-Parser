@@ -669,11 +669,16 @@ def _pack_specs(folder: str, module_ids: tuple, settings_json: str = "{}") -> tu
     raw_settings = json.loads(settings_json)
     module_specs = []
     added_all, rules = [], []
+    own_columns = {p.column for s in own.values() for p in s.parameters}
     for m in mods:
         settings = ms.settings_for(raw_settings, m.id)
         names = ms.renames(m, settings)
         for s in _specs_in(m.stages_dir).values():
             s = ms.apply_to_spec(s, settings, names)
+            if s is not None and any(p.column in own_columns for p in s.parameters):
+                # the pack's own steps record these (lab_experiment's conditions in a pack that has them): theirs stand
+                kept = [p for p in s.parameters if p.column not in own_columns]
+                s = s.model_copy(update={"parameters": kept}) if kept else None
             if s is not None:
                 module_specs.append((m, s))
         added_all += [p for p in (ms.pack_parameter(e, settings, names) for e in m.manifest.pack_parameters) if p]
