@@ -305,6 +305,18 @@ def test_a_drafted_lab_pack_gets_the_lab_experiment_module():
         assert {"experiment_type", "vessel_sealed", "sampled_temperature_C", "negative_control", "replicates"} <= cols
         own = {c["column"] for f in (pack.folder / "stages").glob("*.json") for c in json.loads(f.read_text())["parameters"]}
         assert not own & cols                                   # the module's columns aren't asked twice
+        from parameter_extractor.stages.optional import _pack_specs, _specs_in, load_specs
+        assert load_specs(p)["lab_conditions"].trigger.always  # no always-running step of the pack's own: its own step
+        for f in (pack.folder / "stages").glob("*.json"):     # with one, the conditions join it
+            spec = json.loads(f.read_text())
+            spec["trigger"] = {"always": True}
+            f.write_text(json.dumps(spec))
+        _pack_specs.cache_clear(), _specs_in.cache_clear()
+        specs = load_specs(packs.Pack(pack.folder))
+        first = next(s for s in specs.values() if s.trigger.always)
+        assert "lab_conditions" not in specs and {"experiment_type", "solid_material_name"} <= {
+            x.column for x in first.parameters}
+        assert any(r.startswith("sampled_temperature_C:") for r in first.rules)
         bare, _, _ = write_pack(PROPOSAL, "lab_bare", "Lab bare", base=Path(tmp), lab_module=False)
         assert "lab_experiment" not in packs.Pack(bare.folder).module_ids()
 

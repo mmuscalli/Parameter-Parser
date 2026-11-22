@@ -76,6 +76,10 @@ class ModuleManifest(BaseModel):
     label_columns: Dict[str, str] = Field(default_factory=dict)
     category_fill: Dict[str, str] = Field(default_factory=dict)
     fill_columns: Dict[str, str] = Field(default_factory=dict)
+    # its steps join the pack's first always-running step (parameters and rules) instead of being requests of their own;
+    # a step of their own only when the pack has no such step (2026-11-22: lab_experiment's conditions as a separate
+    # request cost a request a paper and split the solid material from a drafted 'catalyst')
+    joins_first_step: bool = False
 
 
 class Module:

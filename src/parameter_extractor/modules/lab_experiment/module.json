@@ -4,6 +4,7 @@
   "description": "The conditions every laboratory experiment has -- setup, vessel, solvent, temperatures, pressure, pH, solids, controls, replicates, suppliers -- with the app's rules for them: ambient conditions read as 25 °C and 1 bar, a sealed vessel's start at 1 bar, sampled and starting temperature and pressure filled from each other, suppliers and buffers shared across the paper.",
   "covers": "The general experimental conditions: experiment and solution type, vessel and sealing, solvent and volume, headspace gas, starting and sampled temperature, pressure and pH, pH buffer, solid materials, positive and negative controls, replicates, stirring, reagent suppliers and the analysis method.",
   "version": 1,
+  "joins_first_step": true,
   "postprocess": [
     "ambient_conditions",
     "atmospheric_start"

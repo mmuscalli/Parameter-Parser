@@ -683,12 +683,16 @@ def _pack_specs(folder: str, module_ids: tuple, settings_json: str = "{}") -> tu
                 module_specs.append((m, s))
         added_all += [p for p in (ms.pack_parameter(e, settings, names) for e in m.manifest.pack_parameters) if p]
         rules += [r for r in m.manifest.stage_rules if r not in settings.stage_rules_off]
+    joined: List[StageSpec] = []
     if mods:
+        first_always = next((name for name, s in own.items() if s.trigger.always), None)
+        if first_always:                    # a joining module's steps become part of the pack's first step
+            joined = [s for m, s in module_specs if m.manifest.joins_first_step]
+            module_specs = [(m, s) for m, s in module_specs if not m.manifest.joins_first_step]
         present = {p.column for s in own.values() for p in s.parameters} | \
                   {p.column for _, s in module_specs for p in s.parameters}
         added = [p for p in added_all if p["column"] not in present]
         hints = {step: h for m in mods for step, h in m.manifest.stage_hints.items()}
-        first_always = next((name for name, s in own.items() if s.trigger.always), None)
     for name, spec in own.items():
         if mods:
             update = {}
@@ -697,10 +701,14 @@ def _pack_specs(folder: str, module_ids: tuple, settings_json: str = "{}") -> tu
                 update["rules"] = list(spec.rules) + extra_rules
             if spec.open_ended and any(step not in spec.hint_by_stage for step in hints):
                 update["hint_by_stage"] = {**{s: h for s, h in hints.items()}, **spec.hint_by_stage}
-            if name == first_always and added:
-                seen = set()
-                update["parameters"] = list(spec.parameters) + [
+            if name == first_always and (added or joined):
+                seen = {p.column for p in spec.parameters}
+                join_params = [p for js in joined for p in js.parameters if not (p.column in seen or seen.add(p.column))]
+                update["parameters"] = list(spec.parameters) + join_params + [
                     StageParameter.model_validate(p) for p in added if not (p["column"] in seen or seen.add(p["column"]))]
+                join_rules = [r for js in joined for r in js.rules if r not in spec.rules and r not in extra_rules]
+                if join_rules:
+                    update["rules"] = list(update.get("rules", spec.rules)) + join_rules
             spec = spec.model_copy(update=update) if update else spec
         out[name] = spec
     for _, spec in module_specs:

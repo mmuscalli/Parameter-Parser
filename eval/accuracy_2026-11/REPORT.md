@@ -97,10 +97,35 @@ recall is A 0.779, B 0.786, L 0.799. F's cost is its runs' summaries (the reused
 | One paper's finishing error stopped a whole queue; a text estimate broke `_estimate` | fixed in Phase 3 |
 | An estimate by another method given as a range raised KeyError | fixed in Phase 4 |
 | Resume could not turn plot reading on (arm F) | added in Phase 0 (`--resume --auto-figures`) |
-| A unit printed '×10⁻⁶ g' stays unknown instead of µg (Mukhin1989) | open |
-| Some table pages not cropped as images (iqubal2017; Islam2003's Table 1 crop shows Table 2) | open |
-| A set label's salt and pH not carried to the rows when the chemistry answer omits them (Eder1994, arm A) | open |
+| A unit printed '×10⁻⁶ g' stays unknown instead of µg (Mukhin1989) | fixed 2026-11-22 (`units.scaled_unit`) |
+| Some table pages not cropped as images (iqubal2017; Islam2003's Table 1 crop shows Table 2) | fixed 2026-11-22 (`table_finder`) |
+| A set label's salt and pH not carried to the rows when the chemistry answer omits them (Eder1994, arm A) | flagged since 2026-11-22 (`label_values.label_gaps`), not filled |
+| Row structure left open (comparison tables, field samples, papers without tables) | decided and implemented 2026-11-22 (one row per entry; `result_type`; a summary row) |
 | Local models over-split table rows | open (local_model_notes) |
+
+## Follow-up: drafting closer to the built-in packs (2026-11-22)
+
+The drafted packs were written again from their saved designs with two changes: every lab pack links the new
+`lab_experiment` module (the general experiment conditions and their settings), and an astronomy design that mostly
+records the archive's quantities is drafted on the exoplanet pack. Same papers (the model-standard ones), old drafted
+pack (C) against new; `arms_redraft.json`, `results_redraft/`:
+
+| Batch | Measure | C | New |
+|---|---|---|---|
+| E1 (10) | MS recall | 0.374 | 0.817 |
+| E1 | MS precision (numbers only) | 0.919 (0.971) | 0.824 (0.959) |
+| E1 | uncertainties, star values found | 0.57, 0.71 | 0.89, 0.88 |
+| P1 (12), reviewed | MS recall (pack's own quantities) | 0.777 (0.933) | 0.891 (0.955) |
+| P1, reviewed | MS precision; hand recall | 0.830; 0.817 | 0.817; 0.801 |
+| P1, written | MS recall; hand recall | 0.782; 0.804 | 0.903; 0.790 |
+| cost | E1; P1 | $0.92; $1.41 | $1.27; $1.81 |
+
+E1's lower precision is composition, not error: its numbers are as well supported as before (0.959 vs 0.971, twice
+as many), but it now writes the fit models' free-text descriptions (priors, assumptions, software), which the text
+matcher rarely counts as the same, and 105 values in columns the standard has no counterpart for (microlensing,
+imaged companions). P1's conditions gain experiment type, solution type and vessel, and volume 3 -> 6 of 8; solid
+materials recorded as the drafted `catalyst` lose `solid_material_name` (14 -> 7 of 14) since the conditions are a
+request of their own.
 
 ## Limits
 
