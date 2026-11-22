@@ -37,8 +37,14 @@ improved here reaches every pack that links it. A pack changes how a module work
 | `fixed` | columns the app's calculations read by name: a pack can't change their unit |
 | `prompt_rules` | `{"chemistry": [...]}`: rules added to a built-in step's prompt (its `{{MODULE_RULES}}` slot) |
 | `compound_series` | compound setup fills in every length of an oligomer series between the shortest and longest found |
+| `column_pairs` | value pairs one fills from the other (sampled <- initial temperature); added when the pack has no pair for those columns |
+| `label_columns`, `category_fill`, `fill_columns` | a set label's values, and how far a value is shared (paper / set / none); the pack's own settings win |
 | `covers` | what the module records, in a sentence: drafting a pack leaves that to the module |
 | `evidence` | `{"words": [...]}`: drafting links the module when a paper's survey uses them (the app's first modules have code rules instead) |
+
+A module's step leaves out the columns the pack's own steps record, and a step with nothing left is dropped. So
+`lab_experiment` (the general conditions of a laboratory experiment: temperatures, pressures, pH, vessel, solvent,
+suppliers, controls, replicates; linked to every drafted lab pack) adds nothing to a pack that has its own conditions step.
 
 A step's trigger can need several mentions (`"min_hits": 3` in its `trigger`): a passing mention of a word isn't enough.
 Modules can be drafted from sample papers: *Data Packs > All data packs and modules > Modules > Suggest modules from

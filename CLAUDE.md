@@ -38,7 +38,8 @@ Version: `parameter_extractor.__version__` (0.6.0, tag `v0.6.0`, on branch level
 - `schemas/`: pydantic answer formats (compact, short aliases), `prompts/`: shared prompts.
 - `packs/` (`prebiotic_chemistry`, `exoplanets`, hidden `_template`; users' own in `<app data>/packs/`) and
   `modules/` (shared parts linked by reference: analysis, solution_chemistry, kinetics, wet_dry, peptides_oligomers,
-  mineral_surfaces, impact_shock, heat_flow_chamber, flow_reactor, fluid_inclusions; `modules/README.md`).
+  mineral_surfaces, impact_shock, heat_flow_chamber, flow_reactor, fluid_inclusions, lab_experiment (general lab
+  conditions, linked to every drafted lab pack); `modules/README.md`).
   Loader `packs/__init__.py` (merged manifest = pack + linked modules + `module_settings.py`).
 - `ingestion/`: PDF parsing (`pdf_parser.py`: pdfplumber text, pypdfium2 renders; no poppler), table / figure /
   equation finders, supplements, arXiv and CrossRef sources, rows (`flatten_to_template.py`, `figure_rows.py`),
@@ -56,7 +57,8 @@ Version: `parameter_extractor.__version__` (0.6.0, tag `v0.6.0`, on branch level
   `flag_targets.py` (which cells a flag is about; flags of different kinds about the same cells merged) and
   `gui/flagged_values.py` (Things to check > Review flagged values…; boxes a value on its saved table image via
   `ingestion/table_locate.py`, from the PDF's text layer).
-  Pack authoring: `pack_editing.py` (+ `check`), `pack_drafting.py`, `compound_setup.py`, `conventions.py`,
+  Pack authoring: `pack_editing.py` (+ `check`), `pack_drafting.py` (an astronomy design that covers the exoplanet
+  pack is written on it: `built_in_base`, `conventions.archive_column`), `compound_setup.py`, `conventions.py`,
   `pack_modules.py`, `module_drafting.py`, `pack_overview.py`.
 - `gui/`: `main_window.py` (five numbered steps: data pack, papers, what to extract, options, run; results tabs),
   `multi_runs.py`, `digitizer.py` + `figure_dialog.py`, `variable_review.py`, `registry_dialog.py`,
@@ -154,12 +156,15 @@ Search `docs/history/` for the details and the measurements behind each.
   `<role>_<name>_<phase>_<measure>` (role initial / sampled / stock, or calculated for a value the paper calculated
   or modelled; `initial_Gly_aq_mM`, `sampled_Gly-Gly_aq_%yield`, `sampled_(Gly)4_aq_mM`,
   `sampled_4mer_A_aq_mM`); old names convert (`flatten_to_template.current_column_name`). Analysis columns
-  `analysis_<technique>_<setting>[_range][_<unit>]`. Ranges `low:high` in `_range_` columns; averages `_avg`.
+  `analysis_<technique>_<setting>[_range][_<unit>]`. Ranges `low:high` in `_range_` columns; averages `_avg`;
+  limits ('<0.2') a `<column>_lim` column beside the value (1 upper / -1 lower, as the exoplanet pack's `lim`).
   Dataset columns are ordered by variable category (`column_order.py`), all of a pack's columns written.
 - **Rows**: set = an experiment condition / host star, sample = a time point / planet (pack words in `units`).
   Rows come from tables and digitized figures (2026-11-12; `RunConfig.rows_from_text` / Options / `--rows-from-text`
   also makes rows from text or captions with complete conditions -- the row-plan prompts' {{#TEXT_ROWS}} sections);
-  a review's reproduced data are rows marked with their source (`original_data_reference`, `cited_data` flags). Exoplanets:
+  a review's reproduced data are rows marked with their source (`original_data_reference`, `cited_data` flags); a comparison
+  table is one row per entry; field samples and model values only when the paper labels them so (plan `rk`, column
+  `result_type`; paper-wide experiment conditions stay off them); a paper with no rows gets a summary row. Exoplanets:
   one row per (planet, fit solution); every posterior mode and estimate by another method is kept.
   Every chemistry dataset has `set_independent_variable` / `set_independent_value` (what a set varies, from the
   rows; calculators/set_variables.py); a condition given for a starting solution reaches every row with that
