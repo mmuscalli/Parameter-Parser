@@ -67,6 +67,26 @@
      "/Users/mickeymuscalli/Documents/Parameter Extractor/accuracy_20261122/P1_C2_rebuilt/queue_20261122-003110"
     ]
    }
+  },
+  "C3": {
+   "label": "C2 + compound vocabulary restored + solid-material description widened",
+   "drafted_from": [
+    "Chen2007",
+    "Chung1971",
+    "Huber1998",
+    "Imai1998",
+    "Kawamura2009",
+    "Rode1990",
+    "Shen1990",
+    "Yamagata1997",
+    "lemke2009",
+    "shanker2012"
+   ],
+   "batches": {
+    "P1": [
+     "/Users/mickeymuscalli/Documents/Parameter Extractor/accuracy_20261122/P1_C3/queue_20261122-013110"
+    ]
+   }
   }
  },
  "model_standard": {

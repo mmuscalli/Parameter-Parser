@@ -115,7 +115,7 @@
     {
       "column": "solid_material_name",
       "kind": "text",
-      "description": "a solid / mineral present in the reaction, e.g. 'montmorillonite', 'TiO2'."
+      "description": "the solid present in the reaction, by its name -- a mineral, clay, solid catalyst or other material, e.g. 'montmorillonite', 'TiO2', 'CoFe2O4'; per set when the sets use different solids (also when another step records it as a catalyst); its kind goes in solid_material_type."
     },
     {
       "column": "solid_material_type",

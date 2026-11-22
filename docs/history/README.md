@@ -184,3 +184,4 @@ current month's file (start `YYYY-MM.md` in a new month), with one line here.
 - Accuracy evaluation, Phase 4: the local model (2026-11-21, Mickey)
 - Accuracy evaluation, Phase 5: model standards for P2, P3 and E1; scorer leaves out archive-filled columns (2026-11-21, Mickey)
 - Accuracy evaluation, Phase 6: the report (2026-11-21, Mickey)
+- Open gaps from the accuracy evaluation; drafting closer to the built-in packs (2026-11-22, Mickey)

@@ -15,6 +15,7 @@ the hand dataset (P1), the Exoplanet Archive (E1) and a validated model standard
 | `inspect_misses.py` | one paper's printed hand values a run misses, next to the run's values (validation) |
 | `arms_mscheck.json`, `results_mscheck/` | Phase 2: the 12 P1 model-standard runs scored as an arm against the hand data (0.858) |
 | `arms.json` | which queue folders are which arm, and `model_standard`: the standard's run folders per batch (P1 12, P2 16, P3 10, E1 10 papers; Phases 2 and 5); `python score.py arms.json` |
+| `arms_redraft.json`, `results_redraft/` | 2026-11-22: the drafted packs written again (lab_experiment module, E1 on the exoplanet pack) on the 22 P1 + E1 model-standard papers: C (old), C2, C2r (C2 rebuilt with the compound vocabulary), C3 (vocabulary + solid-material description) |
 | `arms_test.json`, `results_test/` | Phase 0 check: the study's curated queue rebuilt on 2026-11-20 against the hand data, and against its 11-17 queue as a stand-in model standard (same answers: 1.0) |
 | `arms_v3check.json`, `results_test_v3check/` | Phase 0 check: the hand scores reproduce `evaluate_v3.py` exactly (46 papers, every count) |
 

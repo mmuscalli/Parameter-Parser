@@ -546,6 +546,118 @@
      "cells_missing": 0.01,
      "rows_paired": 0.987
     }
+   },
+   "C3": {
+    "label": "C2 + compound vocabulary restored + solid-material description widened",
+    "papers": 12,
+    "papers_with_rows": 12,
+    "cost_usd": 1.81,
+    "rows": 244,
+    "figure_rows_waiting": 0,
+    "hand": {
+     "papers": 12,
+     "hand_values_not_printed": 996,
+     "metadata": {
+      "recall": 0.896,
+      "recall_close": 0.896,
+      "printed": 48
+     },
+     "methodology": {
+      "recall": 0.772,
+      "recall_close": 0.772,
+      "printed": 169
+     },
+     "chemistry_in": {
+      "recall": 0.926,
+      "recall_close": 0.926,
+      "printed": 21
+     },
+     "chemistry_out": {
+      "recall": 0.608,
+      "recall_close": 0.608,
+      "printed": 34
+     },
+     "overall": {
+      "recall": 0.795,
+      "recall_close": 0.795,
+      "printed": 272
+     },
+     "all_papers": {
+      "papers": 12,
+      "recall": 0.795,
+      "recall_close": 0.795
+     },
+     "new_values": 246,
+     "new_confirmed": 242,
+     "new_unsupported": 4,
+     "new_unverified": 0,
+     "drafted_from": {
+      "papers": 2,
+      "recall": 0.728
+     },
+     "held_out": {
+      "papers": 10,
+      "recall": 0.809
+     }
+    },
+    "archive": {
+     "papers": 0,
+     "planets": 0,
+     "planets_found": 0,
+     "pack_quantities": {
+      "recall": null,
+      "expected": 0
+     },
+     "planet": {
+      "recall": null,
+      "recall_close": null,
+      "differs": 0,
+      "expected": 0
+     },
+     "star": {
+      "recall": null,
+      "recall_close": null,
+      "differs": 0,
+      "expected": 0
+     },
+     "uncertainty": {
+      "recall": null,
+      "recall_close": null,
+      "differs": 0,
+      "expected": 0
+     },
+     "discovery": {
+      "recall": null,
+      "recall_close": null,
+      "differs": 0,
+      "expected": 0
+     },
+     "system": {
+      "recall": null,
+      "recall_close": null,
+      "differs": 0,
+      "expected": 0
+     },
+     "overall": {
+      "recall": null,
+      "recall_close": null,
+      "differs": 0,
+      "expected": 0
+     }
+    },
+    "model_standard": {
+     "papers": 12,
+     "recall": 0.867,
+     "recall_close": 0.873,
+     "recall_pack_quantities": 0.946,
+     "precision": 0.781,
+     "precision_close": 0.781,
+     "cells_right": 0.935,
+     "cells_elsewhere": 0.003,
+     "cells_wrong": 0.049,
+     "cells_missing": 0.013,
+     "rows_paired": 0.991
+    }
    }
   }
  },
@@ -1095,6 +1207,118 @@
      "cells_wrong": 0.043,
      "cells_missing": 0.009,
      "rows_paired": 0.991
+    }
+   },
+   "C3": {
+    "label": "C2 + compound vocabulary restored + solid-material description widened",
+    "papers": 12,
+    "papers_with_rows": 12,
+    "cost_usd": 1.81,
+    "rows": 244,
+    "figure_rows_waiting": 0,
+    "hand": {
+     "papers": 12,
+     "hand_values_not_printed": 996,
+     "metadata": {
+      "recall": 0.896,
+      "recall_close": 0.896,
+      "printed": 48
+     },
+     "methodology": {
+      "recall": 0.772,
+      "recall_close": 0.772,
+      "printed": 169
+     },
+     "chemistry_in": {
+      "recall": 0.87,
+      "recall_close": 0.87,
+      "printed": 21
+     },
+     "chemistry_out": {
+      "recall": 0.577,
+      "recall_close": 0.592,
+      "printed": 34
+     },
+     "overall": {
+      "recall": 0.783,
+      "recall_close": 0.786,
+      "printed": 272
+     },
+     "all_papers": {
+      "papers": 12,
+      "recall": 0.783,
+      "recall_close": 0.786
+     },
+     "new_values": 121,
+     "new_confirmed": 117,
+     "new_unsupported": 4,
+     "new_unverified": 0,
+     "drafted_from": {
+      "papers": 2,
+      "recall": 0.728
+     },
+     "held_out": {
+      "papers": 10,
+      "recall": 0.794
+     }
+    },
+    "archive": {
+     "papers": 0,
+     "planets": 0,
+     "planets_found": 0,
+     "pack_quantities": {
+      "recall": null,
+      "expected": 0
+     },
+     "planet": {
+      "recall": null,
+      "recall_close": null,
+      "differs": 0,
+      "expected": 0
+     },
+     "star": {
+      "recall": null,
+      "recall_close": null,
+      "differs": 0,
+      "expected": 0
+     },
+     "uncertainty": {
+      "recall": null,
+      "recall_close": null,
+      "differs": 0,
+      "expected": 0
+     },
+     "discovery": {
+      "recall": null,
+      "recall_close": null,
+      "differs": 0,
+      "expected": 0
+     },
+     "system": {
+      "recall": null,
+      "recall_close": null,
+      "differs": 0,
+      "expected": 0
+     },
+     "overall": {
+      "recall": null,
+      "recall_close": null,
+      "differs": 0,
+      "expected": 0
+     }
+    },
+    "model_standard": {
+     "papers": 12,
+     "recall": 0.885,
+     "recall_close": 0.895,
+     "recall_pack_quantities": 0.896,
+     "precision": 0.812,
+     "precision_close": 0.814,
+     "cells_right": 0.934,
+     "cells_elsewhere": 0.003,
+     "cells_wrong": 0.049,
+     "cells_missing": 0.014,
+     "rows_paired": 0.996
     }
    }
   }

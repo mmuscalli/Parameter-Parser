@@ -14,6 +14,7 @@
 | C Standard, drafted pack | 60 (60) | $6.41 | 0.716 (0.725) | 0.716 | – (–) | 0.713 (0.872) | 0.808 | 0.921 | 0 |
 | C2 Standard, drafted pack rewritten 2026-11-22 (lab_experiment module; E1 on the exoplanet pack) | 12 (12) | $1.77 | 0.675 (0.675) | 0.675 | – (–) | 0.543 (0.851) | 0.724 | 0.949 | 0 |
 | C2r C2 rebuilt with the compound vocabulary restored ($0) | 12 (12) | $1.77 | 0.779 (0.782) | 0.779 | – (–) | 0.815 (0.823) | 0.786 | 0.948 | 0 |
+| C3 C2 + compound vocabulary restored + solid-material description widened | 12 (12) | $1.81 | 0.783 (0.786) | 0.783 | – (–) | 0.885 (0.896) | 0.812 | 0.934 | 0 |
 
 ## E1 (reviewed)
 
@@ -29,3 +30,4 @@
 | C Standard, drafted pack | 60 (60) | $6.41 | 0.734 (0.742) | 0.734 | – (–) | 0.726 (0.915) | 0.775 | 0.922 | 0 |
 | C2 Standard, drafted pack rewritten 2026-11-22 (lab_experiment module; E1 on the exoplanet pack) | 12 (12) | $1.77 | 0.795 (0.795) | 0.795 | – (–) | 0.836 (0.875) | 0.774 | 0.945 | 0 |
 | C2r C2 rebuilt with the compound vocabulary restored ($0) | 12 (12) | $1.77 | 0.805 (0.805) | 0.805 | – (–) | 0.847 (0.924) | 0.774 | 0.948 | 0 |
+| C3 C2 + compound vocabulary restored + solid-material description widened | 12 (12) | $1.81 | 0.795 (0.795) | 0.795 | – (–) | 0.867 (0.946) | 0.781 | 0.935 | 0 |
