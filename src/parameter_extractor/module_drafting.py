@@ -123,11 +123,12 @@ def existing_brief() -> str:
 
 def _existing_columns() -> Dict[str, str]:
     """{column: module label} for the columns modules OWN -- not the core conditions they add to a pack only when it
-    lacks them (pack_parameters): those belong to no module."""
+    lacks them (pack_parameters), nor the core conditions a module like lab_experiment records for every lab pack:
+    those belong to no module."""
     from parameter_extractor.pack_drafting import _module_own_columns
     out = {}
     for m in module_store.available().values():
-        core = {p["column"] for p in m.manifest.pack_parameters}
+        core = {p["column"] for p in m.manifest.pack_parameters} | core_columns()
         out.update({c: m.label for c in _module_own_columns(m) if c not in core})
     return out
 

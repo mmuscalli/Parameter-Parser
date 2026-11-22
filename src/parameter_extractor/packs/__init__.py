@@ -139,6 +139,12 @@ def merged_manifest(own: PackManifest, mods) -> PackManifest:
         names = ms.renames(mod, settings)
         m.builtin_stages += [x for x in mm.builtin_stages if x not in m.builtin_stages]
         m.postprocess += [x for x in mm.postprocess if x not in m.postprocess and x not in settings.calculations_off]
+        # its row settings, where the pack has none of its own (the pack's always win)
+        m.column_pairs += [p for p in getattr(mm, "column_pairs", []) if p not in m.column_pairs
+                           and not any(set(p) & set(q) for q in m.column_pairs)]
+        for key in ("label_columns", "category_fill", "fill_columns"):
+            for k, v in (getattr(mm, key, None) or {}).items():
+                getattr(m, key).setdefault(k, v)
         placed = {c for e in m.category_columns.values() for c in e.get("columns", [])}
         for cat in mm.variable_categories:
             ids = {c.get("id") for c in m.variable_categories}

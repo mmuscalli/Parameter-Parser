@@ -485,29 +485,76 @@ def structure_from_surveys(params: Sequence[tuple], papers) -> tuple:
     return levels, fills, never
 
 
+LAB_MODULE = "lab_experiment"
+BASE_SHARE = 0.4         # the share of a design's numeric parameters a built-in pack must record to be drafted on
+
+
+def built_in_base(proposal: PackProposal, system: str) -> tuple:
+    """(the built-in pack to draft on, {proposed column: the pack's column for it}) -- (None, {}) when none fits. An
+    astronomy design whose parameters are mostly the Exoplanet Archive's quantities (conventions.archive_column; at
+    least 6, and BASE_SHARE of its numeric ones) is drafted on the exoplanet pack: its steps, fit models, archive check
+    and fill, and Earth / Jupiter masses come with it (the accuracy test's drafted exoplanet pack had none of them)."""
+    from parameter_extractor.conventions import ASTRONOMY, archive_column
+    if system != ASTRONOMY or "exoplanets" not in packs.available():
+        return None, {}
+    base = packs.available()["exoplanets"]
+    own = set(_stage_columns(base))
+    covered, numeric = {}, 0
+    for st in proposal.stages:
+        for p in st.parameters:
+            column = column_for(p.column, p.unit, p.kind, system)[0]
+            numeric += p.kind != "text"
+            archive = archive_column(column)
+            if archive and archive in own:
+                covered[column] = archive
+    if len(covered) >= 6 and len(covered) >= BASE_SHARE * max(numeric, 1):
+        return base, covered
+    return None, {}
+
+
+def _stage_columns(pack) -> List[str]:
+    """Every column a pack's steps record (its parameters' columns)."""
+    cols = []
+    for path in sorted((pack.folder / "stages").glob("*.json")):
+        try:
+            cols += [p["column"] for p in json.loads(path.read_text()).get("parameters", [])]
+        except (ValueError, OSError):
+            pass
+    return cols
+
+
 def write_pack(proposal: PackProposal, pack_id: str, label: str, description: str = "",
                base: Optional[Path] = None, tidy: bool = True, modules: Sequence[str] = (),
-               surveys: Sequence = ()) -> tuple:
+               surveys: Sequence = (), lab_module: bool = True, on_built_in: bool = True) -> tuple:
     """A new pack from the proposal (packs.create_pack from the template, examples replaced), linking `modules`;
     proposed parameters / steps / categories a linked module already covers are left out. (pack, dropped duplicate
     columns, {column: proposed parameter}); by_column["__tidied__"] / ["__left_to_modules__"] carry the notes."""
     from parameter_extractor import modules as module_store
     from parameter_extractor.pack_editing import PackDraft, items_to_rules
-    pack = packs.create_pack(pack_id, label, description or proposal.description, base=base,
-                             units={"set": proposal.set_word, "sample": proposal.sample_word})
-    draft = PackDraft.load(pack.folder)
-    for file in list(draft.stages):                       # the template's example stage
-        draft.remove_stage(file)
-    m = draft.manifest
-    m["formulas"] = []
-    left: List[str] = []
     # the field's units: astronomy keeps its own (conventions.unit_system), from the design's and the surveys' units
     from parameter_extractor.conventions import ASTRONOMY, unit_system
     system = unit_system([pp.unit for st in proposal.stages for pp in st.parameters if pp.kind != "text"]
                          + [v.unit for sp in surveys if getattr(sp, "survey", None) for v in sp.survey.variables
                             if v.kind != "text"])
+    # a design that is mostly what a built-in pack records is drafted ON that pack: its steps, prompts and
+    # calculations kept, the design's other parameters added (2026-11-21: exoplanets)
+    on, covered = built_in_base(proposal, system) if on_built_in else (None, {})
+    pack = packs.create_pack(pack_id, label, description or proposal.description, base=base, source=on,
+                             units={"set": proposal.set_word, "sample": proposal.sample_word})
+    draft = PackDraft.load(pack.folder)
+    if on is None:
+        for file in list(draft.stages):                   # the template's example stage
+            draft.remove_stage(file)
+    m = draft.manifest
+    if on is None:
+        m["formulas"] = []
+    left: List[str] = []
     if system == ASTRONOMY:
         m["unit_system"] = system
+    elif lab_module:  # every lab pack gets the general experiment conditions and their rules (accuracy test, 2026-11-21:
+        # drafted packs had none of them, so the sealed-vessel start, the sampled / starting pairs and the paper-wide
+        # fills never switched on either)
+        modules = [LAB_MODULE, *[x for x in modules if x != LAB_MODULE]]
     if modules:
         m["modules"] = list(dict.fromkeys(modules))
     mods = module_store.resolve(list(modules))
@@ -528,12 +575,16 @@ def write_pack(proposal: PackProposal, pack_id: str, label: str, description: st
         renamed.setdefault(c.id, cid)
         categories.append({"id": cid, "table_order": 30 + 10 * i, "label": c.label, "value_type": c.value_type,
                            "model_assigns": True, "description": c.description})
-    m["variable_categories"] = categories
-    category_columns: Dict[str, Dict[str, List[str]]] = {"methodology": {"columns": ["set_type"]}}
+    kept_categories = [c for c in (m.get("variable_categories") or []) if on is not None]
+    m["variable_categories"] = kept_categories + [c for c in categories
+                                                  if c["id"] not in {k.get("id") for k in kept_categories}]
+    category_columns: Dict[str, Dict[str, List[str]]] = (json.loads(json.dumps(m.get("category_columns") or {}))
+                                                          if on is not None else {"methodology": {"columns": ["set_type"]}})
     first = categories[0]["id"] if categories else "methodology"
     row_time = [] if system == ASTRONOMY else ["duration_hr"]   # a sample's time in hours: lab experiments only
     category_columns.setdefault(first, {"columns": []})["columns"].extend(row_time)
-    columns, seen, dropped, by_column, tidied = ["set_type", *row_time], set(), [], {}, []
+    columns = list(draft.columns) if on is not None else ["set_type", *row_time]
+    seen, dropped, by_column, tidied = set(columns), [], {}, []
     proposed, placed = [], []
     for st in proposal.stages:                  # what the linked modules record is theirs (before merging stages)
         st = st.model_copy(deep=True)
@@ -544,6 +595,8 @@ def write_pack(proposal: PackProposal, pack_id: str, label: str, description: st
                 tidied_column = tidy_parameter(column, unit, p.kind, p.description, system)[0]
                 column = tidied_column or column
             owner = covered_by_module(column, p.kind, modules, module_cols) if mods else ""
+            if not owner and on is not None and covered.get(column):
+                owner = f"built-in {on.label} pack's {covered[column]}"
             if owner:
                 left.append(f"`{column}` (step {st.name}) -- recorded by the {owner} module")
             else:
@@ -1183,7 +1236,7 @@ def draft_pack(items: Sequence, pack_id: str, label: str, description: str, conf
            + (f" (shared modules: {', '.join(evidence)})" if evidence else ""))
     proposal, merge_cost = synthesize(good, config, work_dir, area, description, cancel_event, modules=list(evidence))
     report(len(items) + 1, total, "Writing the data pack")
-    pack, dropped, by_column = write_pack(proposal, pack_id, label, description, base=base, tidy=tidy,
+    pack, dropped, by_column = write_pack(proposal, pack_id, label, description, base=base, tidy=tidy, lab_module=modules_on,
                                           modules=list(evidence), surveys=good)
     tidied = by_column.pop("__tidied__", [])
     left = by_column.pop("__left_to_modules__", [])

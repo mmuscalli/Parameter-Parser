@@ -1,0 +1,65 @@
+{
+  "id": "lab_experiment",
+  "label": "Laboratory experiment",
+  "description": "The conditions every laboratory experiment has -- setup, vessel, solvent, temperatures, pressure, pH, solids, controls, replicates, suppliers -- with the app's rules for them: ambient conditions read as 25 °C and 1 bar, a sealed vessel's start at 1 bar, sampled and starting temperature and pressure filled from each other, suppliers and buffers shared across the paper.",
+  "covers": "The general experimental conditions: experiment and solution type, vessel and sealing, solvent and volume, headspace gas, starting and sampled temperature, pressure and pH, pH buffer, solid materials, positive and negative controls, replicates, stirring, reagent suppliers and the analysis method.",
+  "version": 1,
+  "postprocess": [
+    "ambient_conditions",
+    "atmospheric_start"
+  ],
+  "column_pairs": [
+    [
+      "sampled_temperature_C",
+      "initial_temperature_C"
+    ],
+    [
+      "sampled_pressure_bar",
+      "initial_pressure_bar"
+    ]
+  ],
+  "label_columns": {
+    "temperature": "initial_temperature_C",
+    "time": "duration_hr",
+    "pressure": "initial_pressure_bar",
+    "pH": "initial_pH"
+  },
+  "category_fill": {
+    "methodology": "paper"
+  },
+  "fill_columns": {
+    "reagent_suppliers": "paper",
+    "pH_buffer": "paper",
+    "set_type": "none",
+    "duration_hr": "none"
+  },
+  "category_columns": {
+    "methodology": {
+      "columns": [
+        "experiment_type",
+        "solution_type",
+        "vessel_sealed",
+        "vessel_material",
+        "solvent_name",
+        "solvent_volume_mL",
+        "analysis_method",
+        "headspace_gas_name",
+        "initial_pressure_bar",
+        "sampled_pressure_bar",
+        "initial_temperature_C",
+        "sampled_temperature_C",
+        "initial_pH",
+        "sampled_pH",
+        "solid_material_name",
+        "solid_material_type",
+        "solid_material_mass_g",
+        "positive_control",
+        "negative_control",
+        "pH_buffer",
+        "reagent_suppliers",
+        "replicates",
+        "stirring_agitation"
+      ]
+    }
+  }
+}

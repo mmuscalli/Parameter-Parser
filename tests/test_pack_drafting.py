@@ -259,7 +259,7 @@ def test_units_follow_the_research_area():
     assert column_for("stellar_log_g", "dex", system="astronomy") == ("stellar_log_g_dex", "dex")   # log g keeps its g
     assert column_for("primer_concentration_um", "mM") == ("primer_concentration_mM", "mM")      # a unit word goes
     with tempfile.TemporaryDirectory() as tmp, patch.object(packs, "user_packs_dir", lambda: Path(tmp)):
-        pack, _, _ = write_pack(ASTRO_PROPOSAL, "astro_drafted", "Astro drafted", base=Path(tmp))
+        pack, _, _ = write_pack(ASTRO_PROPOSAL, "astro_drafted", "Astro drafted", base=Path(tmp), on_built_in=False)
         m = json.loads((pack.folder / "pack.json").read_text())
         assert m["unit_system"] == "astronomy"
         params = {p["column"]: p.get("unit") for f in (pack.folder / "stages").glob("*.json")
@@ -284,6 +284,59 @@ def test_units_follow_the_research_area():
         assert packs.Pack(pack.folder).manifest.unit_system == "astronomy"
 
 
+def test_a_drafted_lab_pack_gets_the_lab_experiment_module():
+    """Accuracy evaluation (2026-11-21): drafted lab packs lacked the general experiment conditions (experiment and
+    solution type, vessel, sampled temperature, suppliers, controls, ...) and so the rules built on them. The
+    lab-experiment module brings the step, its calculations, its sampled / starting pairs and its paper-wide fills;
+    the pack's own settings win; a pack drafted without modules doesn't get it."""
+    from parameter_extractor.pack_drafting import write_pack
+    with tempfile.TemporaryDirectory() as tmp, patch.object(packs, "user_packs_dir", lambda: Path(tmp)):
+        pack, _, _ = write_pack(PROPOSAL, "lab_mod", "Lab mod", base=Path(tmp))
+        p = packs.Pack(pack.folder)
+        m = p.manifest
+        assert p.module_ids()[0] == "lab_experiment"
+        assert {"ambient_conditions", "atmospheric_start"} <= set(m.postprocess)
+        assert ["sampled_temperature_C", "initial_temperature_C"] in m.column_pairs
+        assert m.fill_columns["reagent_suppliers"] == "paper" and m.category_fill["methodology"] == "paper"
+        steps = [f.name for mod in p.modules for f in mod.stage_files()]
+        assert "lab_conditions.json" in steps
+        cols = {c for mod in p.modules for f in mod.stage_files() for c in
+                [x["column"] for x in json.loads(f.read_text())["parameters"]]}
+        assert {"experiment_type", "vessel_sealed", "sampled_temperature_C", "negative_control", "replicates"} <= cols
+        own = {c["column"] for f in (pack.folder / "stages").glob("*.json") for c in json.loads(f.read_text())["parameters"]}
+        assert not own & cols                                   # the module's columns aren't asked twice
+        bare, _, _ = write_pack(PROPOSAL, "lab_bare", "Lab bare", base=Path(tmp), lab_module=False)
+        assert "lab_experiment" not in packs.Pack(bare.folder).module_ids()
+
+
+def test_an_exoplanet_design_is_drafted_on_the_exoplanet_pack():
+    """Accuracy evaluation (2026-11-21): the drafted exoplanet pack named its own columns and had none of the exoplanet
+    pack's logic (fit models, Earth / Jupiter masses, the archive check and fill). A design mostly of the archive's
+    quantities is now drafted on that pack: its steps kept, the design's parameters it records left to it, the rest
+    added as the design's own step."""
+    from parameter_extractor.conventions import archive_column
+    from parameter_extractor.pack_drafting import write_pack
+    assert archive_column("orbital_period_d") == "pl_orbper" and archive_column("planet_mass_M_E") == "pl_massj"
+    assert archive_column("scaled_semi_major_axis") == "pl_ratdor" and archive_column("radius_ratio") == "pl_ratror"
+    for none in ("planet_mass_ratio", "companion_effective_temperature_K", "lens_distance_kpc", "fit_chi_squared"):
+        assert archive_column(none) == "", none
+    proposal = ASTRO_PROPOSAL.model_copy(deep=True)
+    proposal.stages[0].parameters.append(ProposedParameter(
+        column="einstein_crossing_time", unit="d", kind="number", description="t_E", category="planet", choices=[],
+        uncertainties=True, papers=2))
+    with tempfile.TemporaryDirectory() as tmp, patch.object(packs, "user_packs_dir", lambda: Path(tmp)):
+        pack, _, by_column = write_pack(proposal, "exo_drafted", "Exo drafted", base=Path(tmp))
+        m = json.loads((pack.folder / "pack.json").read_text())
+        assert m["unit_system"] == "astronomy" and "fit_models" in m["builtin_stages"]
+        assert {"exoplanet_masses", "archive_validation", "archive_values"} <= set(m["postprocess"])
+        stages = {f.name: json.loads(f.read_text()) for f in (pack.folder / "stages").glob("*.json")}
+        assert {"planet_parameters.json", "stellar_parameters.json", "system_and_discovery.json"} <= set(stages)
+        params = {p["column"] for st in stages.values() for p in st["parameters"]}
+        assert {"pl_orbper", "st_teff"} <= params and "einstein_crossing_time_d" in params
+        assert not {"orbital_period_d", "stellar_effective_temperature_K", "planet_mass_M_E"} & params
+        assert any("pl_orbper" in note for note in by_column["__left_to_modules__"])
+
+
 def test_a_drafted_pack_gets_levels_and_fill_settings_from_the_surveys():
     """Branch levels-and-facets: a drafted pack's categories get the level their values sit at and whether they're
     filled in, from what the surveys say of each variable (where it differs, its role) -- conditions that differ
@@ -296,7 +349,8 @@ def test_a_drafted_pack_gets_levels_and_fill_settings_from_the_surveys():
         [("temp_C", "conditions", "reaction_temperature"), ("yield_pct", "results", "product_yield")], surveys)
     assert levels == {"conditions": "set"} and fills == {"conditions": "set"} and never == []
     with tempfile.TemporaryDirectory() as tmp, patch.object(packs, "user_packs_dir", lambda: Path(tmp)):
-        pack, _, _ = write_pack(PROPOSAL, "levels_drafted", "Levels drafted", base=Path(tmp), surveys=surveys)
+        pack, _, _ = write_pack(PROPOSAL, "levels_drafted", "Levels drafted", base=Path(tmp), surveys=surveys,
+                                lab_module=False)
         m = json.loads((pack.folder / "pack.json").read_text())
         cats = {c["id"]: c for c in m["variable_categories"]}
         assert cats["conditions"]["level"] == "set" and cats["conditions"]["fill"] == "set"
@@ -306,7 +360,7 @@ def test_a_drafted_pack_gets_levels_and_fill_settings_from_the_surveys():
         shared, group = selectors(packs.Pack(pack.folder))
         assert "conditions" in group["categories"] and "methodology" in shared["categories"]
         # without surveys (an older caller): the template's settings only
-        plain, _, _ = write_pack(PROPOSAL, "levels_plain", "Levels plain", base=Path(tmp))
+        plain, _, _ = write_pack(PROPOSAL, "levels_plain", "Levels plain", base=Path(tmp), lab_module=False)
         m2 = json.loads((plain.folder / "pack.json").read_text())
         assert not any(c.get("fill") or c.get("level") for c in m2["variable_categories"])
 
@@ -354,7 +408,7 @@ def test_modules_are_chosen_before_the_design():
         left = by_column["__left_to_modules__"]
         d = PackDraft.load(pack.folder)
         own = {s["name"]: [p["column"] for p in s["parameters"]] for s in d.stages.values()}
-        assert d.manifest["modules"] == ["kinetics", "solution_chemistry"]
+        assert d.manifest["modules"] == ["lab_experiment", "kinetics", "solution_chemistry"]   # lab packs: always
         assert any("product_yield" in l and "Solution chemistry" in l for l in left), left
         assert "kinetics" not in own                                        # the module's step keeps its name
         assert not any("product_yield" in c for cols in own.values() for c in cols)

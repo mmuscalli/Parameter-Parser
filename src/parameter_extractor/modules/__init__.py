@@ -70,6 +70,12 @@ class ModuleManifest(BaseModel):
     # how drafting recognises papers that need the module: {"words": [...]} found in a paper's survey (modules drafted
     # from papers: module_drafting.py; the app's own modules have their evidence in pack_modules.EVIDENCE)
     evidence: Dict[str, List[str]] = Field(default_factory=dict)
+    # row settings a pack gets from the module unless it sets its own (2026-11-21: the lab-experiment module's
+    # sampled / initial pairs and paper-wide fills, which drafted packs never got): as in pack.json
+    column_pairs: List[List[str]] = Field(default_factory=list)
+    label_columns: Dict[str, str] = Field(default_factory=dict)
+    category_fill: Dict[str, str] = Field(default_factory=dict)
+    fill_columns: Dict[str, str] = Field(default_factory=dict)
 
 
 class Module:

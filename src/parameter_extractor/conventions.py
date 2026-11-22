@@ -183,3 +183,46 @@ def astronomy_column(base: str, unit: str):
     if base.lower().endswith(suffix.lower()):
         base = base[: -len(suffix)]
     return base + suffix, stored
+
+
+# ---- the Exoplanet Archive's names for an astronomy design's parameters (2026-11-21) --------------------------------
+# A pack drafted for exoplanet papers named its own columns ('orbital_period_d', 'stellar_mass_M_sun'), so it had none
+# of the built-in exoplanet pack's logic: fit models, Earth / Jupiter masses, the archive check and fill. Drafting now
+# recognises the quantities that pack records (pack_drafting._built_in_base) by the words in a column's name: every
+# word set of an entry must be there (first entry that matches wins; planet before stellar where both could).
+_ARCHIVE_WORDS = [
+    ("pl_ratdor", [{"scaled", "semi"}, {"a", "rstar"}]),         # before the semi-major axis itself
+    ("pl_orbper", [{"orbital", "period"}]), ("pl_orbsmax", [{"semi", "major"}, {"semimajor"}]),
+    ("pl_orbeccen", [{"eccentricity"}]), ("pl_orbincl", [{"inclination"}]), ("pl_imppar", [{"impact", "parameter"}]),
+    ("pl_orblper", [{"periastron"}, {"periapsis"}, {"omega"}]), ("pl_rvamp", [{"semi", "amplitude"}, {"rv", "amplitude"}]),
+    ("pl_tranmid", [{"conjunction"}, {"transit", "mid"}, {"transit", "midpoint"}, {"transit", "epoch"}]),
+    ("pl_trandur", [{"transit", "duration"}]), ("pl_trandep", [{"transit", "depth"}]),
+    ("pl_ratror", [{"radius", "ratio"}]),
+    ("pl_massj", [{"planet", "mass"}, {"planetary", "mass"}, {"minimum", "mass"}]),
+    ("pl_radj", [{"planet", "radius"}, {"planetary", "radius"}]), ("pl_dens", [{"planet", "density"}]),
+    ("pl_eqt", [{"equilibrium", "temperature"}]), ("pl_insol", [{"insolation"}, {"irradiation"}]),
+    ("st_teff", [{"stellar", "effective", "temperature"}, {"host", "effective", "temperature"}, {"st", "teff"}]),
+    ("st_logg", [{"stellar", "log", "g"}, {"surface", "gravity"}]), ("st_met", [{"metallicity"}]),
+    ("st_mass", [{"stellar", "mass"}, {"host", "mass"}]), ("st_rad", [{"stellar", "radius"}, {"host", "radius"}]),
+    ("st_lum", [{"stellar", "luminosity"}, {"host", "luminosity"}]), ("st_dens", [{"stellar", "density"}]),
+    ("st_age", [{"stellar", "age"}, {"host", "age"}]), ("st_rotp", [{"rotation", "period"}]),
+    ("st_vsin", [{"vsini"}, {"v", "sin", "i"}, {"projected", "rotational"}]), ("st_spectype", [{"spectral", "type"}]),
+    ("st_radv", [{"systemic", "velocity"}, {"radial", "velocity", "systemic"}]),
+    ("sy_dist", [{"stellar", "distance"}, {"system", "distance"}, {"distance", "pc"}]), ("sy_plx", [{"parallax"}]),
+    ("discoverymethod", [{"detection", "method"}, {"discovery", "method"}]),
+    ("disc_facility", [{"discovery", "facility"}]), ("disc_year", [{"discovery", "year"}]),
+]
+
+
+def archive_column(column: str) -> str:
+    """The Exoplanet Archive column a drafted astronomy parameter stands for ('orbital_period_d' -> 'pl_orbper'), or
+    '' when it names none (a companion's own temperature, a microlensing lens distance)."""
+    words = set(re.split(r"[_\W]+", (column or "").lower())) - {""}
+    if words & {"companion", "lens", "source", "einstein", "halpha", "accretion"}:
+        return ""                   # another object's quantity or a method's own one, not the planet's or its host's
+    for archive, alternatives in _ARCHIVE_WORDS:
+        if any(alt <= words for alt in alternatives):
+            if "ratio" in words and archive not in ("pl_ratror", "pl_ratdor"):
+                return ""           # a mass ratio isn't a mass ('planet_mass_ratio', 'mass_ratio_to_host')
+            return archive
+    return ""

@@ -114,11 +114,12 @@ def test_new_app_modules():
         spec = json.loads(mod.stage_files()[0].read_text())
         assert spec["trigger"]["min_hits"] == 3 and len(spec["parameters"]) >= 3
     assert any(p.name == "oligomer_linkage.json" for p in found["peptides_oligomers"].stage_files())
-    # no two modules fill the same column
+    # no two modules fill the same column (pack_parameters are added only when nothing else records them)
     from parameter_extractor.pack_drafting import _module_own_columns
     seen = {}
     for mid, mod in found.items():
-        for c in _module_own_columns(mod):
+        conditional = {p["column"] for p in mod.manifest.pack_parameters}
+        for c in [c for c in _module_own_columns(mod) if c not in conditional]:
             assert c not in seen or seen[c] == mid, (c, seen.get(c), mid)
             seen[c] = mid
     # the evidence for new modules comes from their words
