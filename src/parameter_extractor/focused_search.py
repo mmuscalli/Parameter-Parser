@@ -64,6 +64,63 @@ class FocusParameter:
     # columns for its upper / lower uncertainty, in the pack's naming (pl_orbpererr1 / pl_orbpererr2,
     # initial_temperature_C_err_plus ...); empty when the parameter has none
     error_columns: tuple = ()
+    compound: str = ""            # a compound column's compound (its default name); '' for a step's parameter
+    names: tuple = ()             # its other names (PubChem title and synonyms, the app's words): the search words
+
+
+COMPOUND_GROUP = "Chemical compounds"
+_COMPOUND_COLUMN = re.compile(r"^(?P<role>initial|sampled|stock|calculated)_(?P<name>.+)_(?P<phase>aq|gas|s)_"
+                              r"(?P<measure>mM|%yield|%recovered|ratio|rate_mM_hr)$")
+_ROLE_TEXT = {"initial": "starting {m} of {n} in the reaction mixture", "sampled": "measured {m} of {n} (a product, "
+              "or a reactant left over)", "stock": "{m} of {n} in a stock solution, before mixing",
+              "calculated": "{m} of {n} that the paper calculated or modelled"}
+_MEASURE_TEXT = {"mM": "concentration", "%yield": "yield (%)", "%recovered": "amount recovered (%)",
+                 "ratio": "ratio", "rate_mM_hr": "rate of change"}
+_PHASE_TEXT = {"aq": "dissolved", "gas": "gas", "s": "solid"}
+MAX_COMPOUND_NAMES = 8
+
+
+def compound_names_for(name: str, info: Optional[dict] = None) -> List[str]:
+    """Other names of a compound for a search: PubChem's title and best synonyms (pubchem.useful_synonyms, from the
+    pack's and its modules' species_cids.json or the registry), and the app's own words for it (an amino acid's name,
+    a peptide's residues); the column name itself left out."""
+    from parameter_extractor.names import AMINO_ACIDS, peptide_codes
+    from parameter_extractor.pubchem import useful_synonyms
+    info = info or {}
+    names = [info.get("title", "")] + list(info.get("synonyms", []))
+    if name in AMINO_ACIDS:
+        names.insert(0, AMINO_ACIDS[name])
+    elif (codes := peptide_codes(name)) and len(codes) > 1:
+        names.insert(0, "-".join(AMINO_ACIDS.get(c, c) for c in codes))
+    return [n for n in useful_synonyms([n for n in names if n], MAX_COMPOUND_NAMES + 4)
+            if n.lower() != name.lower()][:MAX_COMPOUND_NAMES]
+
+
+def compound_parameters(pack) -> List[FocusParameter]:
+    """The pack's compound columns (its own and its modules': initial_Gly_aq_mM, sampled_Gly-Gly_aq_%yield ...) as
+    searchable parameters (2026-11-24, Mickey): each described by what it holds and the compound's other names, so a
+    paper writing 'glycine' or 'aminoacetic acid' is found and screened in too."""
+    from parameter_extractor.compound_names import bundled
+    from parameter_extractor.ingestion.flatten_to_template import column_safe_name
+    from parameter_extractor.ingestion.observations import unit_for_column
+    if not pack.uses("chemistry"):
+        return []
+    species = list(pack.vocab.get("species_names", []))
+    by_slug = {column_safe_name(n): n for n in species}
+    identities = bundled(pack)
+    out = []
+    for column in pack.template_columns:
+        m = _COMPOUND_COLUMN.match(column)
+        if not m or m.group("name") not in by_slug:
+            continue
+        name = by_slug[m.group("name")]
+        others = compound_names_for(name, identities.get(name))
+        what = _ROLE_TEXT[m.group("role")].format(m=_MEASURE_TEXT[m.group("measure")],
+                                                  n=f"{name} ({_PHASE_TEXT[m.group('phase')]})")
+        description = what + (f"; the paper may call it: {'; '.join(others)}" if others else "")
+        out.append(FocusParameter(column, COMPOUND_GROUP, description, unit_for_column(column) or "", "number",
+                                  (column + "_err_plus", column + "_err_minus"), compound=name, names=tuple(others)))
+    return out
 
 
 def available_parameters(pack=None, optional_stages: Optional[Dict[str, str]] = None) -> List[FocusParameter]:
@@ -83,6 +140,9 @@ def available_parameters(pack=None, optional_stages: Optional[Dict[str, str]] = 
         from parameter_extractor.calculators.exoplanet_fits import PLANET_COLUMNS, STELLAR_COLUMNS
         out += [FocusParameter(c, "Fitting models", d, "", "text") for c, d in PLANET_COLUMNS + STELLAR_COLUMNS
                 if c != "pl_fitlabel"]
+    if "chemistry" not in off:
+        known = {p.column for p in out}
+        out += [p for p in compound_parameters(pack) if p.column not in known]
     return out
 
 
@@ -94,6 +154,9 @@ def keywords_for(params: Sequence[FocusParameter], search_words: Sequence[str] =
         return list(dict.fromkeys(words))
     found = []
     for p in params:
+        if p.compound:              # a compound: its names, whole (a name under 3 characters would match any line)
+            found += [n.lower() for n in [p.compound, *p.names] if len(n) >= 3]
+            continue
         found += [w.lower() for w in re.findall(r"[A-Za-z][A-Za-z\-]{3,}", p.description) if w.lower() not in _STOP]
     return list(dict.fromkeys(found))
 

@@ -218,6 +218,25 @@ def test_a_search_over_several_papers():
         packs.activate("prebiotic_chemistry")
 
 
+def test_compounds_are_searchable_with_their_other_names():
+    """A compound column is a parameter (2026-11-24, Mickey): described with the compound's PubChem title and
+    synonyms and the app's words for it, which are also the words a paper is screened for."""
+    pack = packs.available()["prebiotic_chemistry"]
+    params = {p.column: p for p in fs.available_parameters(pack)}
+    gly = params["initial_Gly_aq_mM"]
+    assert gly.group == fs.COMPOUND_GROUP and gly.compound == "Gly" and gly.unit == "mM"
+    assert "glycine" in gly.description and "aminoacetic acid" in gly.description.lower()
+    words = fs.keywords_for([gly])
+    assert "gly" in words and "glycine" in words and "starting" not in words           # names, not description words
+    yld = params["sampled_Gly-Gly_aq_%yield"]
+    assert yld.unit == "%" and "Glycylglycine" in yld.description and yld.error_columns[0].endswith("_err_plus")
+    body, hits = fs.passages("Intro.\nWe heated aminoacetic acid at 80 C.\nNothing.", fs.keywords_for([gly]))
+    assert hits == 1 and "aminoacetic acid" in body
+    co = [p for p in params.values() if p.compound == "CO"]
+    assert all("co" not in fs.keywords_for([p]) for p in co)                          # too short to screen with
+    assert not [p for p in fs.available_parameters(packs.available()["exoplanets"]) if p.compound]
+
+
 def test_every_parameter_answered_for():
     """--check-every-parameter (2026-11-24, Mickey: controlled tests): the answer has a required entry per parameter;
     parameter_checks.csv says what the model said about each, and where that disagrees with its values; a paper

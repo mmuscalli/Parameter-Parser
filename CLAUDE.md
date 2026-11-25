@@ -17,7 +17,7 @@ screening tool, never a gate in the pipeline.
 
 Front ends: a PySide6 window (`parameter-extractor-gui`), a command line (`parameter-extract`), and PyInstaller
 builds for macOS (unsigned; signing, notarization and the Windows build are deferred by Mickey; don't start them).
-Version: `parameter_extractor.__version__` (0.6.3, tag `v0.6.3`, on branch levels-and-facets), the one place it is set.
+Version: `parameter_extractor.__version__` (0.6.4, tag `v0.6.4`, on branch levels-and-facets), the one place it is set.
 
 ## Map of the code (`src/parameter_extractor/`, ~36K lines)
 
@@ -53,7 +53,8 @@ Version: `parameter_extractor.__version__` (0.6.3, tag `v0.6.3`, on branch level
   (passes), `scopes.py`, `compound_names.py`, `pubchem.py`, `pricing.py`.
 - Multi-paper: `paper_queue.py` (full extraction queue), `focused_search.py` (a few values across many papers;
   `check_every` / `--check-every-parameter` / the window's "Answer for every value": a required answer per parameter,
-  parameter_checks.csv -- for controlled tests).
+  parameter_checks.csv -- for controlled tests; compound columns are parameters too, described and screened by the
+  compound's PubChem title / synonyms, chosen under each compound in the Parameters panel).
   Earlier runs: `run_folder.py` (a run folder read back into a RunResult: File > Open a results folder…),
   `resume.py` (resume / rebuild from a run's or queue's saved answers into a NEW folder; CLI --resume / --rebuild).
   `corrections.py` (the reviewer's corrections -> corrections.json + the dataset files; checked marks ->
@@ -234,6 +235,6 @@ estimates, local-model speed-ups, ...) and their status: `docs/improvement_sugge
   when present, so "Always Allow" survives a rebuild.
 - Branches: `main` (on GitHub since 2026-11-11) and `flexible-variables`, both at the same commit; keep them
   together until Mickey retires `flexible-variables`. Tags: `v0.2-figure-digitizer`,
-  `backup/flexible-variables-before-public`, `v0.3.0`, `v0.4.0`, `v0.5.0`, `v0.6.0`, `v0.6.1`, `v0.6.2`, `v0.6.3`. Tag a state whenever both apps are built for use.
+  `backup/flexible-variables-before-public`, `v0.3.0`, `v0.4.0`, `v0.5.0`, `v0.6.0`, `v0.6.1`, `v0.6.2`, `v0.6.3`, `v0.6.4`. Tag a state whenever both apps are built for use.
 - Backups: full project archive `../Backups/EORE_Data_Project_FULL_BACKUP_20261012_030042.tar` (before this
   pipeline); dated `runs/` archives from `scripts/backup_runs.py` in `../Backups/`.

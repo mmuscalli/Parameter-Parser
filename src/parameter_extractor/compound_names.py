@@ -46,12 +46,16 @@ class Compound:
 
 
 def bundled(pack=None) -> Dict[str, dict]:
-    """The pack's vocabulary species with a PubChem CID: {name: {cid, title, synonyms}}."""
+    """The pack's vocabulary species with a PubChem CID: {name: {cid, title, synonyms}} -- its own, then those its
+    linked modules bring (their species_cids.json, 2026-11-22), the pack's own first."""
     from parameter_extractor import packs
-    path = (pack or packs.current()).species_cids_path
-    if not path or not Path(path).is_file():
-        return {}
-    return json.loads(Path(path).read_text()).get("species", {})
+    pack = pack or packs.current()
+    out: Dict[str, dict] = {}
+    for path in [pack.species_cids_path] + [m.folder / "species_cids.json" for m in getattr(pack, "modules", [])]:
+        if path and Path(path).is_file():
+            for name, info in json.loads(Path(path).read_text()).get("species", {}).items():
+                out.setdefault(name, info)
+    return out
 
 
 def slug(name: str) -> str:

@@ -188,3 +188,4 @@ current month's file (start `YYYY-MM.md` in a new month), with one line here.
 - The shared library closer to the prebiotic pack; misses sorted by cause (2026-11-24, Mickey)
 - A row's label picks its value among a set's; how much one run varies (2026-11-24, Mickey)
 - Answering for every parameter in a focused search; building columns (2026-11-24, Mickey)
+- Compounds in a focused search; what answering for every parameter would cost a full run (2026-11-24, Mickey)

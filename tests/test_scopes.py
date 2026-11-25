@@ -120,6 +120,33 @@ def test_panel_scope_groups():
     QSettings().clear()
 
 
+def test_panel_compound_columns():
+    """A compound's columns under it (2026-11-24): unticking one of them is a focused search for the rest; a compound
+    with some columns ticked still counts in a narrowed full run; all compounds ticked adds none to a search."""
+    from PySide6.QtCore import QSettings, Qt
+    from PySide6.QtWidgets import QApplication
+    QApplication.instance() or QApplication([])
+    QApplication.setOrganizationName("ParameterExtractorTests")
+    QSettings().clear()
+    from parameter_extractor.gui.parameter_panel import ParameterPanel, STAGE_ROLE
+    panel = ParameterPanel()
+    panel.load(_pack().id)
+    chem = panel.groups["chemistry"]
+    gly = next(chem.child(j) for j in range(chem.childCount()) if chem.child(j).data(0, STAGE_ROLE) == "Gly")
+    cols = [gly.child(k).data(0, STAGE_ROLE) for k in range(gly.childCount())]
+    assert "initial_Gly_aq_mM" in cols and not panel.focused and panel.compound_columns() == []
+    for k in range(gly.childCount()):                         # only the starting concentration of glycine
+        if gly.child(k).data(0, STAGE_ROLE) != "initial_Gly_aq_mM":
+            gly.child(k).setCheckState(0, Qt.CheckState.Unchecked)
+    assert panel.focused and panel.compound_columns() == ["initial_Gly_aq_mM"]
+    assert "Gly" in panel.scopes().get("chemistry", [])        # partly ticked: still one of the run's compounds
+    panel.set_stage("chemistry", False)                       # the compounds narrowed to one, all its columns
+    gly.setCheckState(0, Qt.CheckState.Checked)
+    assert set(panel.compound_columns()) == set(cols) and not panel.focused
+    panel.tick_all()
+    QSettings().clear()
+
+
 if __name__ == "__main__":
     for name, fn in list(globals().items()):
         if name.startswith("test_"):

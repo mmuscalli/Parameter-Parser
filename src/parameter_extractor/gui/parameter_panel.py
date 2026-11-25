@@ -88,6 +88,11 @@ class ParameterPanel(QWidget):
                 registry = None
         built = {g.step: g for g in (scopes.groups(pack, registry) if pack else [])}
         self._sources = _step_sources(pack) if pack else {}
+        from parameter_extractor.focused_search import COMPOUND_GROUP
+        self._compound_columns: Dict[str, list] = {}      # compound -> its searchable columns (FocusParameter)
+        for p in params:
+            if p.group == COMPOUND_GROUP:
+                self._compound_columns.setdefault(p.compound, []).append(p)
         if "chemistry" in built:                 # the core step first
             self._add_scope_group(built.pop("chemistry"), pack_id)
         for t in (toggleable_stages(pack) if pack else []):
@@ -117,7 +122,8 @@ class ParameterPanel(QWidget):
             self.groups[t.name] = group
         self.always_label.setText("Everything ticked: the full dataset. Untick a whole step to skip it. Untick single "
                                   "values to search only for those (quicker and cheaper). Unticking compounds or "
-                                  "instrument families limits those steps to the ones left ticked.")
+                                  "instrument families limits those steps to the ones left ticked; unticking one of "
+                                  "a compound's columns searches for its ticked columns.")
         self.tree.resizeColumnToContents(0)
         self.tree.setColumnWidth(0, min(self.tree.columnWidth(0), 300))
         self._filling = False
@@ -143,12 +149,21 @@ class ParameterPanel(QWidget):
         self.tree.addTopLevelItem(group)
         for it in group_def.items:
             item = QTreeWidgetItem([it.label, it.detail])
-            item.setFlags(item.flags() | Qt.ItemFlag.ItemIsUserCheckable)
+            columns = getattr(self, "_compound_columns", {}).get(it.key, []) if group_def.step == "chemistry" else []
+            item.setFlags(item.flags() | Qt.ItemFlag.ItemIsUserCheckable
+                          | (Qt.ItemFlag.ItemIsAutoTristate if columns else Qt.ItemFlag.NoItemFlags))
             item.setCheckState(0, Qt.CheckState.Checked if on else Qt.CheckState.Unchecked)
             item.setData(0, STAGE_ROLE, it.key)
             item.setToolTip(0, it.tip)
             item.setToolTip(1, it.tip)
             group.addChild(item)
+            for p in columns:                    # its columns: a focused search can look for each (2026-11-24)
+                child = QTreeWidgetItem([p.column, p.description])
+                child.setFlags(child.flags() | Qt.ItemFlag.ItemIsUserCheckable)
+                child.setCheckState(0, Qt.CheckState.Checked if on else Qt.CheckState.Unchecked)
+                child.setData(0, STAGE_ROLE, p.column)
+                child.setToolTip(1, p.description)
+                item.addChild(child)
         self.groups[group_def.step] = group
         self.scope_groups[group_def.step] = group
 
@@ -156,9 +171,9 @@ class ParameterPanel(QWidget):
         """RunConfig.scopes: the ticked items of each vocabulary-built step that's only partly ticked."""
         out = {}
         for step, g in self.scope_groups.items():
-            if g.checkState(0) == Qt.CheckState.PartiallyChecked:
+            if g.checkState(0) == Qt.CheckState.PartiallyChecked:      # a compound with some columns ticked counts
                 out[step] = [g.child(j).data(0, STAGE_ROLE) for j in range(g.childCount())
-                             if g.child(j).checkState(0) == Qt.CheckState.Checked]
+                             if g.child(j).checkState(0) != Qt.CheckState.Unchecked]
         return out
 
     def scope_summary(self) -> str:
@@ -204,7 +219,26 @@ class ParameterPanel(QWidget):
     def focused(self) -> bool:
         """Single parameters unticked inside a stage: a focused search, not a full extraction."""
         return any(g.checkState(0) == Qt.CheckState.PartiallyChecked for name, g in self.groups.items()
-                   if name not in self.scope_groups)
+                   if name not in self.scope_groups) or any(
+            c.checkState(0) == Qt.CheckState.PartiallyChecked for c in self._compound_items())
+
+    def _compound_items(self) -> list:
+        g = self.scope_groups.get("chemistry")
+        return [g.child(j) for j in range(g.childCount())] if g is not None else []
+
+    def compound_columns(self) -> List[str]:
+        """The compound columns a focused search looks for: the ticked columns of a compound with only some ticked,
+        and every column of a compound ticked while others are unticked (the compounds narrowed to a few). All
+        compounds ticked: none -- untick the compounds, then tick the ones (or the columns) wanted."""
+        items = self._compound_items()
+        narrowed = any(c.checkState(0) == Qt.CheckState.Unchecked for c in items)
+        out = []
+        for c in items:
+            state = c.checkState(0)
+            if state == Qt.CheckState.PartiallyChecked or (state == Qt.CheckState.Checked and narrowed):
+                out += [c.child(k).data(0, STAGE_ROLE) for k in range(c.childCount())
+                        if c.child(k).checkState(0) == Qt.CheckState.Checked]
+        return out
 
     def checked_columns(self) -> List[str]:
         out = []
@@ -214,7 +248,7 @@ class ParameterPanel(QWidget):
             for j in range(g.childCount()):
                 if g.child(j).checkState(0) == Qt.CheckState.Checked:
                     out.append(g.child(j).data(0, STAGE_ROLE))
-        return out
+        return out + self.compound_columns()
 
     def stages_off(self) -> List[str]:
         return [g.text(0).split(" (")[0] for g in self.groups.values() if g.checkState(0) == Qt.CheckState.Unchecked]
