@@ -18,6 +18,7 @@ from dataclasses import dataclass
 from typing import List, Optional
 
 APP = "the app"
+CORE_ROWS, CORE_DETAILS = "the Rows module (core)", "the Paper details module (core)"   # part of every data pack
 # built-in steps by what they do
 BUILTIN_LABELS = {"chemistry": "Compounds and their amounts", "analysis": "Analysis methods and instrument settings",
                   "fit_models": "How the fits were made"}
@@ -63,10 +64,11 @@ def paper_flow(pack) -> List[FlowStep]:
     from parameter_extractor.stages.optional import _specs_in, load_specs
     mods = list(getattr(pack, "modules", []))
     own_prompt = (pack.folder / "prompts" / "structure_planner.md").is_file()
+    rows, details = CORE_ROWS, CORE_DETAILS          # the core modules every pack has (modules.core())
     out = [FlowStep("request", "structure_planner", "Plan the rows",
-                    PACK if own_prompt else APP + " (with this data pack's row rules)", "every paper",
+                    PACK if own_prompt else rows + " (with this data pack's row rules)", "every paper",
                     "reads the whole paper and decides which results become rows and how they group", always=True),
-           FlowStep("request", "metadata", "Read the paper's details", APP,
+           FlowStep("request", "metadata", "Read the paper's details", details,
                     "every paper (first page only; not needed when the text comes from arXiv)",
                     "title, authors, year, journal, DOI", always=True)]
 
@@ -145,8 +147,8 @@ def parts_html(heading: str = "How a data pack is put together") -> str:
                    for t, d in PARTS)
     return (STYLE + f"<h2>{escape(heading)}</h2>"
             f"<table cellpadding='7' cellspacing='0' width='100%'>{rows}</table>"
-            "<p>Besides its steps, every paper gets two of the app's own requests: planning the rows and reading the "
-            "paper's details. Reading the values twice or three times (Options) repeats the steps that extract "
+            "<p>Besides its steps, every paper gets the requests of the two core modules every data pack has: "
+            "planning the rows (Rows) and reading the paper's details (Paper details). Reading the values twice or three times (Options) repeats the steps that extract "
             "values.</p>")
 
 

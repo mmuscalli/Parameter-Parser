@@ -52,14 +52,18 @@ def test_the_chemistry_step_as_a_pack_runs_it():
 
 def test_other_built_in_steps_and_packs_without_them():
     exo = packs.available()["exoplanets"]
-    assert step_info.built_in_steps(exo) == ["fit_models"]
+    assert step_info.built_in_steps(exo) == ["structure_planner", "metadata", "fit_models"]   # core modules' first
     info = step_info.describe("fit_models", exo)
     assert info.records and info.source == "this data pack" and info.rules == []
     pre = pf.linked("prebiotic_chemistry", "analysis")
     analysis = step_info.describe("analysis", pre)
     assert "techniques" in analysis.vocabulary and analysis.source == "the Analysis methods module"
+    plan = step_info.describe("structure_planner", pre)                 # the Rows core module's step (2026-11-25)
+    assert plan.source.startswith("the Rows module") and plan.records and "set_type" in str(plan.columns)
+    details = step_info.describe("metadata", exo)
+    assert details.source.startswith("the Paper details module") and "first page" in details.reads
     try:
-        step_info.describe("structure_planner", pre)
+        step_info.describe("no_such_step", pre)
         raise AssertionError("only the described built-in steps")
     except ValueError:
         pass

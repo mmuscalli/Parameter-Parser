@@ -1308,6 +1308,19 @@ class PackEditor(QDialog):
         self.module_table.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
         style_rows(self.module_table)
         own = set(self.draft.manifest.get("modules", []))
+        for mid, mod in module_store.core().items():        # part of every data pack: shown ticked, locked, first
+            r = self.module_table.rowCount()
+            self.module_table.insertRow(r)
+            item = QTableWidgetItem(mod.label)
+            item.setData(Qt.ItemDataRole.UserRole, mid)
+            item.setData(self.CORE_MODULE, True)
+            item.setFlags(Qt.ItemFlag.ItemIsEnabled | Qt.ItemFlag.ItemIsSelectable)
+            item.setCheckState(Qt.CheckState.Checked)
+            item.setToolTip(mod.manifest.description)
+            self.module_table.setItem(r, 0, item)
+            status = QTableWidgetItem("core: every data pack")
+            status.setFlags(status.flags() & ~Qt.ItemFlag.ItemIsEditable)
+            self.module_table.setItem(r, 1, status)
         for mid, mod in module_store.available().items():
             r = self.module_table.rowCount()
             self.module_table.insertRow(r)
@@ -1348,8 +1361,12 @@ class PackEditor(QDialog):
             self.module_table.setCurrentCell(0, 0)
         return w
 
+    CORE_MODULE = Qt.ItemDataRole.UserRole + 5        # a core module's row: part of every pack, not the pack's to link
+
     def _module_status(self, mid: str) -> str:
         from parameter_extractor import modules as module_store
+        if mid in module_store.core():
+            return "core: every data pack"
         found, chosen = module_store.available(), set(self._chosen_modules())
         if mid in chosen:
             return "linked" + (" • changed" if self.module_settings_tab.changed(mid) else "")
@@ -1375,7 +1392,8 @@ class PackEditor(QDialog):
         out = []
         for r in range(t.rowCount()):
             item = t.item(r, 0)
-            if item.checkState() == Qt.CheckState.Checked and item.flags() & Qt.ItemFlag.ItemIsEnabled:
+            if item.checkState() == Qt.CheckState.Checked and item.flags() & Qt.ItemFlag.ItemIsEnabled \
+                    and not item.data(self.CORE_MODULE):
                 out.append(item.data(Qt.ItemDataRole.UserRole))
         return out
 
@@ -1455,6 +1473,22 @@ class PackEditor(QDialog):
         pv = QVBoxLayout(page)
         pv.setContentsMargins(14, 10, 14, 14)
         pv.setSpacing(12)
+        core = module_store.core().get(item.data(Qt.ItemDataRole.UserRole)) if item and mod is None else None
+        if core is not None:                            # a core module: what it holds, nothing to set
+            from parameter_extractor import step_info
+            steps = [step_info.DOCS[s]["label"] for s in core.manifest.builtin_stages if s in step_info.DOCS]
+            cols = [(e["column"], e.get("description", "")) for e in
+                    list(core.manifest.standard_columns) + list(core.manifest.app_columns)]
+            pv.addWidget(QLabel(f"<h3>{escape(core.label)}</h3><p>{escape(core.manifest.description)}</p>"
+                                f"<p><b>Its request (built-in step):</b> {escape(', '.join(steps))} -- see the Steps "
+                                f"tab.</p><p><b>Its columns</b> (in every dataset; their names are fixed):</p>"
+                                + "<table>" + "".join(f"<tr><td><code>{escape(c)}</code></td><td>{escape(d)}</td></tr>"
+                                                      for c, d in cols) + "</table>"
+                                f"<p class='muted'>A core module is part of every data pack: it can't be unlinked "
+                                f"or changed. A pack's own row rules go in its Rules tab.</p>", wordWrap=True))
+            pv.addStretch(1)
+            self.module_scroll.setWidget(page)
+            return
         if mod is None:
             self.module_scroll.setWidget(page)
             return

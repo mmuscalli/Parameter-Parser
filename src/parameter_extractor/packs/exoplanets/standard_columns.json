@@ -1,4 +1,4 @@
 {
-  "_comment": "Columns beyond the archive's layout. The paper's metadata columns come from packs/common_columns.json (every pack).",
+  "_comment": "Columns beyond the archive's layout. The paper's metadata columns come from the core modules Rows and Paper details (every pack).",
   "columns": []
 }

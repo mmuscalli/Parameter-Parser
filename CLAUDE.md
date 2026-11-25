@@ -41,7 +41,9 @@ Version: `parameter_extractor.__version__` (0.6.8, tag `v0.6.8`, on branch level
   mineral_surfaces, impact_shock, heat_flow_chamber, flow_reactor, fluid_inclusions, lab_experiment (general lab
   conditions, linked to every drafted lab pack; its conditions join the pack's first step, `joins_first_step`),
   sample_time (each row's time point `duration_hr` as a module `row_values` entry + `is_last_sample`; new packs and
-  lab packs link it; modules can carry `row_values` and `formulas`);
+  lab packs link it; modules can carry `row_values` and `formulas`); and two CORE modules every pack has, not linked
+  in pack.json: rows (the row plan, identifiers, row columns) and paper_details (the paper's details request and its
+  columns) -- `modules.core()`, the columns every pack gets are their standard_columns (`packs.common_columns()`);
   peptides_oligomers and solution_chemistry also carry compound vocabularies (`compounds.json`, from the prebiotic
   pack's; `scripts/build_module_compounds.py`); `modules/README.md`).
   Loader `packs/__init__.py` (merged manifest = pack + linked modules + `module_settings.py`).

@@ -88,13 +88,13 @@ def sources(draft) -> Dict[str, List[str]]:
         if "fit_models" in steps and FIT_MODELS.match(column):
             add(column, _builtin_label("fit_models") + " (built-in)")
         if column in METADATA:
-            add(column, "the paper's details (the app)")
+            add(column, "the paper's details (Paper details module, core)")
         if column in row_values:
             add(column, f"the row plan ({row_values[column]} module)")
         elif column in ROW_PLAN:
-            add(column, "the row plan (the app)")
+            add(column, "the row plan (Rows module, core)")
         if column in IDENTIFIERS:
-            add(column, "the app (row identifier)")
+            add(column, "row identifier (Rows module, core)")
         if column in ALWAYS_CALCULATED:
             add(column, ALWAYS_CALCULATED[column])
         for calc, pattern in CALCULATED.items():

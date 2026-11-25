@@ -105,7 +105,8 @@ def test_filled_by_names_the_real_source():
     prebiotic = PackDraft.load(packs.available()["prebiotic_chemistry"].folder)
     found = cs.sources(prebiotic)
     assert any("built-in" in x for x in found["initial_NaCl_aq_mM"])
-    assert found["paper_title"] == ["the paper's details (the app)"] and "the row plan (the app)" in found["set_type"]
+    assert found["paper_title"] == ["the paper's details (Paper details module, core)"] and \
+        "the row plan (Rows module, core)" in found["set_type"]
     for f in prebiotic.manifest.get("formulas", []):
         assert any(x.startswith("formula:") for x in found[f["column"]])
     nothing = [c for c in prebiotic.columns if not found.get(c)]

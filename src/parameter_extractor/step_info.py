@@ -17,12 +17,37 @@ import json
 from dataclasses import dataclass, field
 from typing import List, Optional, Tuple
 
-STEPS = ("chemistry", "analysis", "fit_models")
+STEPS = ("structure_planner", "metadata", "chemistry", "analysis", "fit_models")
 PAPER_PLACEHOLDER = "[the paper's text and its tables are inserted here]"
 PLAN_PLACEHOLDER = "[the row plan of the paper (its sets and samples) is inserted here]"
 
 # the hand-written part: what the step is for and the columns it fills (the rest is read from the code)
 DOCS = {
+    "structure_planner": {
+        "label": "Plan the rows (row plan)",
+        "does": "Reads the whole paper, with images of its tables, and decides which results become the dataset's "
+                "rows and how they group into sets: each set (an experiment condition) with its type and what it "
+                "varies, each sample (a row) with its label and time point. Every other step fills the rows it plans.",
+        "columns": [("set_type", "the set's type (Time Series, Independent, ...)"),
+                    ("duration_hr", "each sample's time point in hours -- the Sample time module's column, when linked"),
+                    ("run", "one experiment of several in a set, each sampled more than once"),
+                    ("data_location", "where in the paper the row's data are"),
+                    ("result_type", "field sample / model value, for rows that aren't experiment results"),
+                    ("original_data_reference", "the publication a review's reproduced data come from")],
+        "phase": "",
+        "known": "A data pack adds its own row rules (Rules tab) and its modules add theirs; the pack's own row "
+                 "planning instructions replace the app's when it has them (prompts/structure_planner.md).",
+    },
+    "metadata": {
+        "label": "Read the paper's details",
+        "does": "Reads the paper's first page for its title, authors, year, journal and DOI. Not asked when the text "
+                "comes from arXiv: the arXiv record gives them. A DOI the page doesn't print is looked up on "
+                "CrossRef by title (free).",
+        "columns": [("paper_title, author_list, year_published, journal_published, paper_DOI", "the paper's details"),
+                    ("paper_arxiv_id", "the arXiv version read, when the text came from arXiv")],
+        "phase": "",
+        "known": "",
+    },
     "chemistry": {
         "label": "Compounds and their amounts (chemistry)",
         "does": "Reads every compound the paper's experiments use or produce, with its amount, for each row of the "
@@ -153,6 +178,12 @@ def _schema_rows(model) -> List[Tuple[int, str, str]]:
 
 
 def _answer_model(step: str):
+    if step == "structure_planner":
+        from parameter_extractor.schemas.structure_plan import StructurePlan
+        return StructurePlan
+    if step == "metadata":
+        from parameter_extractor.schemas.paper_metadata import PaperMetadata
+        return PaperMetadata
     if step == "chemistry":
         from parameter_extractor.schemas.chemistry import ChemistryExtraction
         return ChemistryExtraction
@@ -166,6 +197,15 @@ def _answer_model(step: str):
 def _instructions(step: str, pack) -> Tuple[str, str]:
     """(system line, the step's prompt) for `pack`, as a run builds them."""
     from parameter_extractor.stages import analysis as analysis_stage, chemistry_extractor, fit_models as fit_stage
+    if step == "structure_planner":
+        from parameter_extractor.stages import structure_planner as planner_stage
+        return ("You are planning a database row skeleton from a paper. Precision in grouping matters more than speed "
+                "-- every later extraction step depends on getting this right.",
+                planner_stage.prompt_text(PAPER_PLACEHOLDER))
+    if step == "metadata":
+        from parameter_extractor.stages.prompt_loader import load_prompt
+        return ("Extract bibliographic metadata only. Do not fabricate a DOI.",
+                load_prompt("metadata", PAPER_TEXT=PAPER_PLACEHOLDER))
     if step == "chemistry":
         return ("Extract every species and concentration from text and tables only (not figures). Never drop a "
                 "species that doesn't match the controlled vocabulary -- flag it instead.",
@@ -193,7 +233,10 @@ def describe(step: str, pack) -> StepInfo:
         system, instructions = _instructions(step, pack)
         mods = list(pack.modules)
         source = "this data pack"
-        if step not in pack.own_manifest.builtin_stages:
+        core = next((m for m in pack.core_modules if step in m.manifest.builtin_stages), None)
+        if core is not None:
+            source = f"the {core.manifest.label} module (core: every data pack)"
+        elif step not in pack.own_manifest.builtin_stages:
             mod = next((m for m in mods if step in m.manifest.builtin_stages), None)
             source = f"the {mod.manifest.label} module" if mod else source
         rules = []
@@ -223,10 +266,10 @@ def describe(step: str, pack) -> StepInfo:
         if step == "chemistry" and not pack.species_names:
             problems.append("The compound list is empty: every compound will go to the review.")
         return StepInfo(name=step, label=doc["label"], does=doc["does"], source=source,
-                        when=("Every paper whose row plan has rows, at the same time as the other steps; "
-                              "once per pass when values are read two or three times." if step == "chemistry"
-                              else "Every paper whose row plan has rows, at the same time as the other steps."),
-                        reads="The whole paper (its text) with images of its tables, and the row plan.",
+                        when=WHEN.get(step, "Every paper whose row plan has rows, at the same time as the other "
+                                                 "steps."),
+                        reads=READS.get(step, "The whole paper (its text) with images of its tables, and the row "
+                                              "plan."),
                         records=_schema_rows(_answer_model(step)), columns=doc["columns"],
                         notes=[n for n in (doc["phase"], doc["known"]) if n], rules=rules, calculations=calcs,
                         vocabulary=vocabulary, instructions=instructions, system=system, problems=problems)
@@ -234,9 +277,19 @@ def describe(step: str, pack) -> StepInfo:
         packs._current = previous
 
 
+WHEN = {"structure_planner": "Every paper, first: the other steps wait for its rows.",
+        "metadata": "Every paper read from a PDF, at the same time as the row plan.",
+        "chemistry": "Every paper whose row plan has rows, at the same time as the other steps; once per pass when "
+                     "values are read two or three times."}
+READS = {"structure_planner": "The whole paper (its text) with images of its tables.",
+         "metadata": "The paper's first page."}
+
+
 def built_in_steps(pack) -> List[str]:
-    """The described built-in steps the pack runs (its own or its modules')."""
-    return [s for s in pack.manifest.builtin_stages if s in DOCS]
+    """The described built-in steps the pack runs: its core modules' (the row plan, the paper's details), then its
+    own or its other modules'."""
+    core = [s for m in getattr(pack, "core_modules", []) for s in m.manifest.builtin_stages]
+    return [s for s in core + list(pack.manifest.builtin_stages) if s in DOCS]
 
 
 STYLE = """<style>

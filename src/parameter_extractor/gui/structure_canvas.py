@@ -519,7 +519,7 @@ def build_scene(pack, palette: Optional[QPalette] = None, opened: Optional[Set[s
     y += 20
     x = COL_LANES
     for src in ["app", "pack"] + [k for k in colors if k not in ("app", "pack")]:
-        name = "the app" if src == "app" else "this data pack" if src == "pack" else f"module: {src}"
+        name = "core modules (every data pack)" if src == "app" else "this data pack" if src == "pack" else f"module: {src}"
         w = 17 + QFontMetricsF(_font(10.5)).horizontalAdvance(name) + 20
         if x + w > COL_LANES + LANES_W and x > COL_LANES:
             x, y = COL_LANES, y + 20

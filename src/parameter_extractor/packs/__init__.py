@@ -9,7 +9,7 @@ A pack is a folder with a pack.json manifest:
                     "species_names" (the species vocabulary, if any)
   standard_columns  JSON {"columns": [{"column", "description"}]}: columns the pack
                     adds beyond its template (optional). Every pack also gets the shared
-                    columns of packs/common_columns.json (paper title, DOI, authors, year,
+                    columns of the core modules Rows and Paper details (paper title, DOI, authors, year,
                     journal, arXiv version) unless its template has them
   species_cids      PubChem CIDs of the template's species (optional; pubchem.py)
   builtin_stages    code stages the pack uses: "methodology", "chemistry" (the rest
@@ -189,6 +189,12 @@ class Pack:
     def module_ids(self) -> List[str]:
         return [m.id for m in self.modules]
 
+    @property
+    def core_modules(self) -> list:
+        """The app's core modules (Rows, Paper details): part of every pack, not in its module list."""
+        from parameter_extractor import modules
+        return list(modules.core().values())
+
     def file(self, name: str) -> Optional[Path]:
         """A data file the pack or one of its modules provides (analysis_vocab.json): the pack's own wins."""
         own = self.folder / name
@@ -258,7 +264,7 @@ class Pack:
 
     @cached_property
     def standard_column_entries(self) -> List[dict]:
-        """The columns every pack gets (packs/common_columns.json: which paper a row comes from),
+        """The columns every pack gets (the core modules' standard columns: which paper a row comes from),
         then the pack's own standard columns -- leaving out any its template already has."""
         own = []
         if self.manifest.standard_columns:
@@ -350,12 +356,13 @@ def row_word(pack: Optional["Pack"] = None) -> str:
     return (pack or current()).manifest.units.get("row", "row")
 
 
-COMMON_COLUMNS = BUILTIN_DIR / "common_columns.json"
-
-
 def common_columns() -> List[dict]:
-    """[{column, description}] every pack gets (bibliographic metadata, the arXiv version read)."""
-    return json.loads(COMMON_COLUMNS.read_text())["columns"]
+    """[{column, description}] every pack gets: the core modules' standard columns (Paper details: bibliographic
+    metadata, the arXiv version read; Rows: where a row's data are, the kind of result), in their `order`
+    (2026-11-25: before, packs/common_columns.json)."""
+    from parameter_extractor import modules
+    entries = [e for m in modules.core().values() for e in m.manifest.standard_columns]
+    return [{k: v for k, v in e.items() if k != "order"} for e in sorted(entries, key=lambda e: e.get("order", 999))]
 
 
 def user_packs_dir() -> Path:

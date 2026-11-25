@@ -188,6 +188,41 @@ def test_the_sample_time_module():
     assert modules.available()["sample_time"].manifest.fixed            # the name and unit the app reads stay
 
 
+def test_the_core_modules():
+    """Rows and Paper details (2026-11-25, Mickey: no app-only parts): part of every pack, never in its module list,
+    never among the modules to link; they hold the row plan and the paper's details and the columns every pack gets
+    (the same columns, in the same order, as packs/common_columns.json had)."""
+    from PySide6.QtCore import Qt
+    from PySide6.QtWidgets import QApplication
+    QApplication.instance() or QApplication([])
+    from parameter_extractor import modules, pack_overview
+    core = modules.core()
+    assert list(core) == ["rows", "paper_details"] and not set(core) & set(modules.available())
+    assert [c["column"] for c in packs.common_columns()] == ["paper_title", "paper_DOI", "author_list",
+                                                            "year_published", "journal_published", "data_location",
+                                                            "paper_arxiv_id", "result_type"]
+    pre = packs.available()["prebiotic_chemistry"]
+    assert [m.id for m in pre.core_modules] == ["rows", "paper_details"] and "rows" not in pre.module_ids()
+    flow = {s.name: s.source for s in pack_overview.paper_flow(packs.available()["exoplanets"])}
+    assert flow["metadata"] == pack_overview.CORE_DETAILS
+    from parameter_extractor.gui.pack_windows import PackEditor
+    with tempfile.TemporaryDirectory() as tmp, patch.object(packs, "user_packs_dir", lambda: Path(tmp) / "packs"):
+        pack = _new_pack(Path(tmp))
+        e = PackEditor(pack.folder)
+        t = e.module_table
+        first = [t.item(r, 0) for r in range(2)]
+        assert [i.data(Qt.ItemDataRole.UserRole) for i in first] == ["rows", "paper_details"]
+        assert all(i.checkState() == Qt.CheckState.Checked and not i.flags() & Qt.ItemFlag.ItemIsUserCheckable
+                   for i in first)
+        e._show_module(0)
+        from PySide6.QtWidgets import QLabel
+        page_text = " ".join(lbl.text() for lbl in e.module_scroll.widget().findChildren(QLabel))
+        assert "full_id" in page_text and "can't be unlinked" in page_text
+        assert e.save()
+        own = json.loads((pack.folder / "pack.json").read_text())
+        assert "rows" not in own["modules"] and "paper_details" not in own["modules"]
+
+
 def test_migrate_copies():
     """A pack made when modules were copied: identical copies become links, the pack's own changes stay."""
     from parameter_extractor.pack_editing import PackDraft

@@ -1,0 +1,64 @@
+{
+  "id": "rows",
+  "label": "Rows",
+  "core": true,
+  "version": 1,
+  "description": "How a paper's results become the dataset's rows: the row plan (one request per paper) reads the whole paper and decides which results become rows and how they group into sets, and the app gives every row its identifiers. Part of every data pack; it can't be unlinked or changed (a pack's own row rules go in its Rules tab).",
+  "covers": "The row plan and the row columns every data pack has: identifiers, set type, where a row's data are, the kind of result, reproduced data's source.",
+  "builtin_stages": [
+    "structure_planner"
+  ],
+  "standard_columns": [
+    {
+      "column": "data_location",
+      "description": "Where in the paper the row's data point was found: 'Figure. 1', 'Figure. 3b', 'Table. 2', 'Table. S1' (supplementary), or 'Text: <section>'",
+      "order": 5
+    },
+    {
+      "column": "result_type",
+      "description": "What a row's results are when they aren't the paper's own experiments: 'field sample' (a natural sample analysed as found: rock, meteorite, water) or 'model' (calculated or simulated). Empty for experiments",
+      "order": 7
+    }
+  ],
+  "app_columns": [
+    {
+      "column": "full_id",
+      "description": "the row's id: paper prefix + set number + sample number"
+    },
+    {
+      "column": "set_id",
+      "description": "the row's set (paper prefix + set number)"
+    },
+    {
+      "column": "sample_id",
+      "description": "the row's number within its set"
+    },
+    {
+      "column": "entry_number",
+      "description": "the row's number within the paper"
+    },
+    {
+      "column": "set_type",
+      "description": "the set's type, from the row plan (Time Series, Independent, ...)"
+    },
+    {
+      "column": "run",
+      "description": "one experiment of several in its set, each sampled more than once (row plan)"
+    },
+    {
+      "column": "original_data_reference",
+      "description": "the publication a review's reproduced data come from"
+    }
+  ],
+  "fixed": {
+    "full_id": "the app writes and reads it by this name",
+    "set_id": "the app writes and reads it by this name",
+    "sample_id": "the app writes and reads it by this name",
+    "entry_number": "the app writes and reads it by this name",
+    "set_type": "the app writes and reads it by this name",
+    "run": "the app writes and reads it by this name",
+    "original_data_reference": "the app writes and reads it by this name",
+    "data_location": "the app writes and reads it by this name",
+    "result_type": "the app writes and reads it by this name"
+  }
+}

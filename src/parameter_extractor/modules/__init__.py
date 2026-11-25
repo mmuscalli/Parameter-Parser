@@ -86,6 +86,13 @@ class ModuleManifest(BaseModel):
     row_values: List[dict] = Field(default_factory=list)
     # calculations written as formulas (formulas.py), as in pack.json; the pack's own formula for a column wins
     formulas: List[dict] = Field(default_factory=list)
+    # a CORE module (2026-11-25, Mickey: no app-only parts -- every step and column has a module home): part of every
+    # data pack, always, and locked -- not linked in pack.json, not unlinked, no settings. Only the app's own (rows,
+    # paper_details); they hold the app's built-in requests (builtin_stages: the row plan, the paper's details),
+    # the columns every pack gets (standard_columns, in `order`) and the columns the app itself writes for every
+    # row (app_columns: the row identifiers ...), described here; the run uses them as it always has
+    core: bool = False
+    app_columns: List[dict] = Field(default_factory=list)
 
 
 class Module:
@@ -126,8 +133,19 @@ _extra_dirs: List[Path] = []          # more places to look (tests)
 
 
 def available() -> Dict[str, Module]:
-    """Every module found, by id: the app's own first, then the user's (which can't replace one of the app's)."""
-    return dict(_available(tuple(str(d) for d in [BUILTIN_DIR, user_modules_dir(), *_extra_dirs])))
+    """Every module a pack can link, by id: the app's own first, then the user's (which can't replace one of the
+    app's). The core modules (every pack has them, always) are not among them: core()."""
+    return {mid: m for mid, m in _available(tuple(str(d) for d in [BUILTIN_DIR, user_modules_dir(), *_extra_dirs]))
+            if not (m.manifest.core and m.folder.parent == BUILTIN_DIR)}
+
+
+CORE_ORDER = ("rows", "paper_details")
+
+
+def core() -> Dict[str, Module]:
+    """The app's core modules (Rows, Paper details), in CORE_ORDER: part of every data pack."""
+    found = dict(_available((str(BUILTIN_DIR),)))
+    return {mid: found[mid] for mid in CORE_ORDER if mid in found and found[mid].manifest.core}
 
 
 @lru_cache(maxsize=8)
