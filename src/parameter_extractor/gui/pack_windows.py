@@ -699,7 +699,13 @@ class PackEditor(QDialog):
         row = QHBoxLayout()
         self.column_tree = _ColumnTree()
         self.column_tree.setHeaderLabels(["Column", "Unit", "Filled by", "Must answer"])
-        self._required = set(self.draft.manifest.get("check_columns", []) or [])
+        from parameter_extractor.parameter_checks import marked, set_marked
+        try:
+            self._required = set(marked(packs.Pack(self.draft.folder)))
+        except Exception:                            # noqa: BLE001 -- a pack that doesn't load yet: the file's own
+            self._required = set(self.draft.manifest.get("check_columns", []) or [])
+        if self.draft.manifest.get("check_columns") and not self.read_only:   # 0.6.6 kept them in pack.json
+            set_marked(self.draft.manifest.get("id", ""), self._required)
         self.column_tree.header().setSectionResizeMode(0, QHeaderView.ResizeMode.Interactive)
         self.column_tree.header().setStretchLastSection(True)
         self.column_tree.setColumnWidth(0, 360)
@@ -719,12 +725,10 @@ class PackEditor(QDialog):
         self.require_btn = QPushButton("Must answer", clicked=lambda: self._set_required(True))
         self.require_btn.setToolTip("Mark the selected columns: every run with this data pack has to say whether the "
                                     "paper reports them (reported / not reported / unclear) -- parameter_checks.csv. "
-                                    "For a step's values and compound columns. Select several to mark them at once.")
+                                    "For a step's values and compound columns. Select several to mark them at once. "
+                                    "Kept in your app data (also for the app's own data packs), saved at once.")
         self.unrequire_btn = QPushButton("Not required", clicked=lambda: self._set_required(False))
         for b in (self.require_btn, self.unrequire_btn):
-            b.setEnabled(not self.read_only)
-            if self.read_only:
-                b.setToolTip("Copy this data pack first: the app's own can't be changed.")
             side.addWidget(b)
         side.addSpacing(16)
         side.addWidget(QPushButton("Add a kind of value…", clicked=self._add_category))
@@ -1032,10 +1036,10 @@ class PackEditor(QDialog):
             item.setForeground(col, QBrush(MARKS["mark_text"]) if on else (muted if unfilled and col < 3 else QBrush()))
 
     def _set_required(self, on: bool) -> None:
-        """The selected columns (several at once) marked 'Must answer', or not; columns no step or compound fills
-        are left as they are and named."""
-        if self.read_only:
-            return
+        """The selected columns (several at once) marked 'Must answer', or not -- saved at once in the user's app
+        data (parameter_checks.set_marked), so the app's own packs can be marked too; columns no step or compound
+        fills are left as they are and named."""
+        from parameter_extractor.parameter_checks import set_marked
         skipped = []
         for item in self.column_tree.selectedItems():
             if item.parent() is None or item.data(0, self.SUBHEADER):
@@ -1046,6 +1050,7 @@ class PackEditor(QDialog):
                 continue
             (self._required.add if on else self._required.discard)(column)
             self._show_required(item)
+        set_marked(self.draft.manifest.get("id", ""), self._required)
         if skipped:
             QMessageBox.information(self, "Must answer", "Not marked -- no step asks for these, and they aren't "
                                     "compound columns, so a run has nothing to answer for them:\n\n"
@@ -2642,10 +2647,7 @@ class PackEditor(QDialog):
         m["units"] = units
         self.structure_page.store(m)
         m["focused_row_plan"] = self.focused_box.isChecked()
-        if getattr(self, "_required", None):                     # the Columns tab's 'Must answer' columns
-            m["check_columns"] = sorted(self._required)
-        else:
-            m.pop("check_columns", None)
+        m.pop("check_columns", None)          # the 'Must answer' columns are kept in the user's app data now
         m["compact_text"] = self.compact_box.isChecked()
         provided = self._module_steps()
         m["builtin_stages"] = [n for n in self.builtin_boxes if n in self._own_steps and n not in provided] + \
@@ -2747,10 +2749,12 @@ class PackEditor(QDialog):
         for child in widget.findChildren(QWidget):
             if isinstance(child, (QLineEdit, QPlainTextEdit)):
                 child.setReadOnly(True)
-            elif child in (self.rules_page.show_btn, self.rules_page.modules_btn) or (isinstance(child, QPushButton)
+            elif child in (self.rules_page.show_btn, self.rules_page.modules_btn, self.require_btn,
+                           self.unrequire_btn) or (isinstance(child, QPushButton)
                                                and child.text() in ("Fit to window", "Export image…",
                                                                     "Variable categories (all data packs)…")):
-                continue                       # looking at things: a prompt, the map, other tabs
+                continue                       # looking at things: a prompt, the map, other tabs; 'Must answer'
+                                               # (kept in the user's app data, not the pack)
             elif isinstance(child, (QCheckBox, QComboBox, QPushButton)):
                 child.setEnabled(False)
         for lst in widget.findChildren(QListWidget):

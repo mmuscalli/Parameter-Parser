@@ -791,7 +791,8 @@ def _step_instructions(pack, config: RunConfig, tools: dict, vocab: dict) -> dic
 def _step_checks(config: RunConfig) -> frozenset:
     """The columns this run's steps answer for, found or not: the data pack's 'Must answer' columns (check_columns,
     its Columns tab) and the run's own (RunConfig.check_columns); with check_every_parameter, every parameter."""
-    return frozenset(packs.current().manifest.check_columns) | frozenset(config.check_columns or ())
+    from parameter_extractor.parameter_checks import marked
+    return frozenset(marked(packs.current())) | frozenset(config.check_columns or ())
 
 
 def _paper_tools(pack, config: RunConfig, terms, has_figures: bool = False, paper_text: Optional[str] = None) -> dict:

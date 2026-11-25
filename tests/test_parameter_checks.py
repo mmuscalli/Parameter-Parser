@@ -135,8 +135,9 @@ def test_run_config_and_cli():
 
 
 def test_must_answer_columns_in_the_columns_tab():
-    """The Columns tab (2026-11-25, Mickey): select columns, 'Must answer' marks them all (highlighted, saved as the
-    pack's check_columns); a column no step or compound fills isn't marked; a run with the pack answers for them."""
+    """The Columns tab (2026-11-25, Mickey): select columns, 'Must answer' marks them all (highlighted, saved at once in
+    the user's app data, by pack); a column no step or compound fills isn't marked; a run with the pack answers for
+    them; the app's own (read-only) packs can be marked too."""
     from unittest.mock import patch
     from PySide6.QtWidgets import QApplication, QMessageBox
     QApplication.instance() or QApplication([])
@@ -163,8 +164,8 @@ def test_must_answer_columns_in_the_columns_tab():
         assert editor._required == set(step_cols[:2]) and shown and "nothing_fills_this" in shown[0]
         marked = [i for i in items if i.text(0) in step_cols[:2]]
         assert all(i.text(3) == "must answer" and i.background(0).color() == MARKS["must_answer"] for i in marked)
-        assert editor.save()
-        assert PackDraft.load(pack.folder).manifest["check_columns"] == sorted(step_cols[:2])
+        assert json.loads(pc.markings_path().read_text())[pack.id] == sorted(step_cols[:2])     # saved at once
+        assert editor.save() and "check_columns" not in PackDraft.load(pack.folder).manifest
         packs.activate(pack.id)
         from parameter_extractor import pipeline
         from parameter_extractor.config.run_config import RunConfig
@@ -181,7 +182,28 @@ def test_must_answer_columns_in_the_columns_tab():
                     assert item.text(3) == "must answer"                    # marked after the refill too
                     item.setSelected(True)
         editor._set_required(False)
-        assert editor.save() and "check_columns" not in PackDraft.load(pack.folder).manifest
+        assert pack.id not in json.loads(pc.markings_path().read_text())
+        # the app's own pack, read-only: marked without copying it
+        builtin = PackEditor(packs.available()["prebiotic_chemistry"].folder)
+        assert builtin.read_only and builtin.require_btn.isEnabled()
+        tree = builtin.column_tree
+        for i in range(tree.topLevelItemCount()):
+            for item in builtin._column_children(tree.topLevelItem(i)):
+                item.setSelected(item.text(0) in ("initial_temperature_C", "initial_Gly_aq_mM"))
+        builtin._set_required(True)
+        packs.activate("prebiotic_chemistry")
+        cfg = RunConfig.from_settings(api_key="x")
+        assert pipeline._step_checks(cfg) >= {"initial_temperature_C", "initial_Gly_aq_mM"}
+        from parameter_extractor.stages import chemistry_extractor as ce
+        assert ce.compound_checks(cfg) == ("initial_Gly_aq_mM",)
+        pc.set_marked("prebiotic_chemistry", [])
+        # a 0.6.6 pack that listed them in its own file: still counted, and moved into the app data by the editor
+        draft = PackDraft.load(pack.folder)
+        draft.manifest["check_columns"] = [step_cols[0]]
+        draft.save()
+        assert pc.marked(packs.Pack(pack.folder)) == [step_cols[0]]
+        PackEditor(pack.folder)
+        assert json.loads(pc.markings_path().read_text())[pack.id] == [step_cols[0]]
     packs.activate("prebiotic_chemistry")
 
 

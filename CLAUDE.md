@@ -17,7 +17,7 @@ screening tool, never a gate in the pipeline.
 
 Front ends: a PySide6 window (`parameter-extractor-gui`), a command line (`parameter-extract`), and PyInstaller
 builds for macOS (unsigned; signing, notarization and the Windows build are deferred by Mickey; don't start them).
-Version: `parameter_extractor.__version__` (0.6.6, tag `v0.6.6`, on branch levels-and-facets), the one place it is set.
+Version: `parameter_extractor.__version__` (0.6.7, tag `v0.6.7`, on branch levels-and-facets), the one place it is set.
 
 ## Map of the code (`src/parameter_extractor/`, ~36K lines)
 
@@ -95,9 +95,10 @@ Version: `parameter_extractor.__version__` (0.6.6, tag `v0.6.6`, on branch level
 - `column_sources.py`: what fills each column (the Columns tab's "Filled by"); `validation/exoplanet_archive.py`
   also fills empty catalogue columns from the archive (calculation `archive_values`).
 - `parameter_checks.py`: answering for every parameter: a required `checked` entry per column in a step's answer
-  (StageSpec.check_columns, set by for_run, never written to files). Which columns: the data pack's `check_columns`
-  (its Columns tab's "Must answer", highlighted; step parameters and compound columns -- the chemistry step answers
-  per compound column), RunConfig.check_columns (CLI --check-column), and with RunConfig.check_every_parameter (the
+  (StageSpec.check_columns, set by for_run, never written to files). Which columns: the user's "Must answer" columns
+  per data pack (the Columns tab, highlighted, usable on the app's own packs too; kept in `<app data>/must_answer.json`,
+  `parameter_checks.marked` / `set_marked`; a pack's own `check_columns` from 0.6.6 still count; step parameters and
+  compound columns -- the chemistry step answers per compound column), RunConfig.check_columns (CLI --check-column), and with RunConfig.check_every_parameter (the
   reading options' "Answer for every value of the steps", CLI --check-every-parameter) every step parameter. After a
   run: parameter_checks.csv + a `parameter_check` flag where the answers and the values disagree. None asked: every
   request as before.
@@ -242,6 +243,6 @@ estimates, local-model speed-ups, ...) and their status: `docs/improvement_sugge
   when present, so "Always Allow" survives a rebuild.
 - Branches: `main` (on GitHub since 2026-11-11) and `flexible-variables`, both at the same commit; keep them
   together until Mickey retires `flexible-variables`. Tags: `v0.2-figure-digitizer`,
-  `backup/flexible-variables-before-public`, `v0.3.0`, `v0.4.0`, `v0.5.0`, `v0.6.0`, `v0.6.1`, `v0.6.2`, `v0.6.3`, `v0.6.4`, `v0.6.5`, `v0.6.6`. Tag a state whenever both apps are built for use.
+  `backup/flexible-variables-before-public`, `v0.3.0`, `v0.4.0`, `v0.5.0`, `v0.6.0`, `v0.6.1`, `v0.6.2`, `v0.6.3`, `v0.6.4`, `v0.6.5`, `v0.6.6`, `v0.6.7`. Tag a state whenever both apps are built for use.
 - Backups: full project archive `../Backups/EORE_Data_Project_FULL_BACKUP_20261012_030042.tar` (before this
   pipeline); dated `runs/` archives from `scripts/backup_runs.py` in `../Backups/`.

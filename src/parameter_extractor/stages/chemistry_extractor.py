@@ -58,7 +58,8 @@ def compound_checks(config) -> tuple:
     run's own (RunConfig.check_columns) that are compound columns."""
     from parameter_extractor import packs
     from parameter_extractor.focused_search import _COMPOUND_COLUMN
-    wanted = list(packs.current().manifest.check_columns) + list(getattr(config, "check_columns", []) or [])
+    from parameter_extractor.parameter_checks import marked
+    wanted = marked(packs.current()) + list(getattr(config, "check_columns", []) or [])
     return tuple(c for c in dict.fromkeys(wanted) if _COMPOUND_COLUMN.match(c))
 
 

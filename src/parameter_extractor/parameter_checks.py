@@ -25,7 +25,49 @@ from pydantic import ConfigDict, Field, create_model
 
 STATUSES = ("reported", "not reported", "unclear")
 CHECKS_FILE = "parameter_checks.csv"
+MARKINGS_FILE = "must_answer.json"      # <app data>: {data pack id: [columns]} (2026-11-25, Mickey)
 _lock = threading.Lock()
+
+
+# ---- the 'Must answer' columns ---------------------------------------------------------------------------------------
+# Kept in the user's app data, by data pack, not in the pack (Mickey, 2026-11-25: the app's own packs can be marked for
+# tests without copying them). A pack's own check_columns (0.6.6 kept them in pack.json) still count; the editor moves
+# them here.
+
+def markings_path() -> Path:
+    from parameter_extractor.registry import default_registry_path
+    return default_registry_path().parent / MARKINGS_FILE
+
+
+def _load_markings() -> Dict[str, List[str]]:
+    import json
+    path = markings_path()
+    try:
+        data = json.loads(path.read_text()) if path.is_file() else {}
+    except (OSError, ValueError):
+        return {}
+    return {k: [c for c in v if isinstance(c, str)] for k, v in data.items() if isinstance(v, list)}
+
+
+def marked(pack) -> List[str]:
+    """The pack's 'Must answer' columns: the user's (app data), and any the pack's own file lists."""
+    own = list(getattr(pack.manifest, "check_columns", []) or []) if pack is not None else []
+    users = _load_markings().get(pack.id, []) if pack is not None else []
+    return list(dict.fromkeys(users + own))
+
+
+def set_marked(pack_id: str, columns) -> None:
+    """The user's 'Must answer' columns for a pack (an empty list removes the pack's entry)."""
+    import json
+    with _lock:
+        data = _load_markings()
+        if columns:
+            data[pack_id] = sorted(set(columns))
+        else:
+            data.pop(pack_id, None)
+        path = markings_path()
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(data, indent=2, ensure_ascii=False) + "\n")
 
 
 def check_keys(columns: Sequence[str]) -> Dict[str, str]:
