@@ -73,6 +73,13 @@ _ALIASES = {
     "mm": "mM", "mmol/l": "mM", "mmoll-1": "mM", "mmoldm-3": "mM", "millimolar": "mM",
     "µm": "µM", "umol/l": "µM", "µmol/l": "µM", "µmoldm-3": "µM", "um": "µM",
     "nm": "nM", "nmol/l": "nM",
+    # an amount per millilitre is the same molar concentration a thousand times over: 1 µmol/mL = 1 mM (2026-11-22,
+    # Alargov2002's 'µmol mL-1' amino acids were left unconverted in every pack)
+    "mmol/ml": "M", "mmolml-1": "M", "mmol/cm3": "M", "mmolcm-3": "M",
+    "µmol/ml": "mM", "µmolml-1": "mM", "umol/ml": "mM", "umolml-1": "mM", "µmol/cm3": "mM", "µmolcm-3": "mM",
+    "mol/m3": "mM", "molm-3": "mM",
+    "nmol/ml": "µM", "nmolml-1": "µM", "nmol/cm3": "µM", "nmolcm-3": "µM",
+    "pmol/ml": "nM", "pmolml-1": "nM",
     "l": "L", "dm3": "L", "litre": "L", "liter": "L",
     "ml": "mL", "cm3": "mL", "cc": "mL", "millilitre": "mL", "milliliter": "mL",
     "µl": "µL", "ul": "µL", "mm3": "µL", "microlitre": "µL", "microliter": "µL",

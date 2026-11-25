@@ -137,6 +137,24 @@ def test_a_module_step_the_pack_already_records_is_left_out():
         assert "lab_conditions" not in specs and "experimental_conditions" in specs     # the pack's own step stands
 
 
+def test_a_module_brings_its_compounds():
+    """A module's compounds.json (species + their columns) reaches a pack that links it, after the pack's own; the
+    prebiotic pack, the modules' source, has them all already."""
+    from parameter_extractor import modules
+    with tempfile.TemporaryDirectory() as tmp:
+        pack = _new_pack(Path(tmp))
+        manifest = json.loads((pack.folder / "pack.json").read_text())
+        manifest["modules"] = ["peptides_oligomers"]
+        (pack.folder / "pack.json").write_text(json.dumps(manifest))
+        linked = packs.Pack(pack.folder)
+        brought = json.loads((modules.available()["peptides_oligomers"].folder / "compounds.json").read_text())
+        assert "Gly-Gly" in linked.species_names and set(brought["species_names"]) <= set(linked.species_names)
+        assert "sampled_Gly-Gly_aq_mM" in linked.template_columns
+    pre = packs.available()["prebiotic_chemistry"]
+    own = json.loads((pre.folder / pre.manifest.template).read_text())
+    assert pre.species_names == own["species_names"] and pre.template_columns == own["all_columns"]
+
+
 def test_migrate_copies():
     """A pack made when modules were copied: identical copies become links, the pack's own changes stay."""
     from parameter_extractor.pack_editing import PackDraft

@@ -205,7 +205,26 @@ class Pack:
 
     @cached_property
     def _template(self) -> dict:
-        return json.loads((self.folder / self.manifest.template).read_text())
+        """The pack's columns and compound vocabulary, then the compounds its linked modules bring (a module's
+        compounds.json: species and their columns) that it lacks -- after its own, so a pack with them all (the
+        prebiotic pack, the modules' source) is unchanged (2026-11-22)."""
+        own = json.loads((self.folder / self.manifest.template).read_text())
+        extra_species, extra_columns = [], []
+        for mod in self.modules:
+            path = mod.folder / "compounds.json"
+            if path.is_file():
+                data = json.loads(path.read_text())
+                extra_species += data.get("species_names", [])
+                extra_columns += data.get("all_columns", [])
+        if not extra_species:
+            return own
+        have_species, have_columns = set(own.get("species_names", [])), set(own.get("all_columns", []))
+        species = [x for x in dict.fromkeys(extra_species) if x not in have_species]
+        columns = [c for c in dict.fromkeys(extra_columns) if c not in have_columns]
+        if not species and not columns:
+            return own
+        return dict(own, species_names=list(own.get("species_names", [])) + species,
+                    all_columns=list(own.get("all_columns", [])) + columns)
 
     @property
     def template_columns(self) -> List[str]:

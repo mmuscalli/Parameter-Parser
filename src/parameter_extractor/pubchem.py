@@ -68,13 +68,18 @@ def template_species_cids() -> Dict[int, str]:
     """CID -> template species name, for the template species whose identity
     was confirmed (the active pack's species_cids.json, built by scripts/build_species_cids.py)."""
     from parameter_extractor.packs import current
-    path = current().species_cids_path
-    if path is None or not path.is_file():
-        return {}
+    pack = current()
+    paths = [pack.species_cids_path] + [m.folder / "species_cids.json" for m in pack.modules]   # the pack's own first
     from parameter_extractor.names import match_species
-    data = json.loads(path.read_text())
-    # in the app's naming (the template's DKP_Gly is cyclo_Gly-Gly)
-    return {int(v["cid"]): (match_species(name) or (name,))[0] for name, v in data["species"].items()}
+    out: Dict[int, str] = {}
+    for path in paths:
+        if path is None or not path.is_file():
+            continue
+        data = json.loads(path.read_text())
+        # in the app's naming (the template's DKP_Gly is cyclo_Gly-Gly)
+        for name, v in data["species"].items():
+            out.setdefault(int(v["cid"]), (match_species(name) or (name,))[0])
+    return out
 
 
 # synonyms worth offering as a column name: not registry numbers or database codes (Mickey, 2026-11-03)

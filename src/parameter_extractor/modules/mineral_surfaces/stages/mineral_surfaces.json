@@ -62,6 +62,16 @@
       "column": "clay_structural_fe3_content_pct",
       "description": "Content of structural Fe3+ in the clay lattice.",
       "unit": "%"
+    },
+    {
+      "column": "solid_material_preheat_C",
+      "unit": "°C",
+      "description": "temperature the solid was pre-heated to before use."
+    },
+    {
+      "column": "solid_material_preheat_hr",
+      "unit": "h",
+      "description": "duration of that pre-heating."
     }
   ],
   "rules": [

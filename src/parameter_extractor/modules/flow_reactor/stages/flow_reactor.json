@@ -45,6 +45,16 @@
       "column": "reactor_description",
       "description": "Type and material of the flow reactor and how the sample is introduced.",
       "kind": "text"
+    },
+    {
+      "column": "loading_volume_mL",
+      "unit": "mL",
+      "description": "volume loaded into a flowthrough system."
+    },
+    {
+      "column": "flow_cycle_duration_sec",
+      "unit": "s",
+      "description": "duration of one flow cycle, for flowthrough experiments."
     }
   ],
   "rules": []

@@ -111,6 +111,12 @@ def test_normalisation_pass():
     assert normalize_chemistry(chem) == []                                  # idempotent
 
 
+def test_an_amount_per_millilitre_is_a_molar_concentration():
+    from parameter_extractor.units import canonical_unit, convert
+    assert canonical_unit("µmol mL-1") == "mM" and canonical_unit("umol/mL") == "mM"     # Alargov2002's amino acids
+    assert convert(2, canonical_unit("nmol/mL"), "mM") == 0.002 and canonical_unit("mmol/mL") == "M"
+
+
 def test_power_of_ten_printed_before_a_unit():
     """'Gases (x10-6 g)' (Mukhin1989, 2026-11-21): the amounts are µg, not values of an unknown '10_6_g' unit. A bare
     '10-6 g' stays unread -- a lost superscript."""
