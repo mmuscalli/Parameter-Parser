@@ -40,9 +40,16 @@ improved here reaches every pack that links it. A pack changes how a module work
 | `compound_series` | compound setup fills in every length of an oligomer series between the shortest and longest found |
 | `column_pairs` | value pairs one fills from the other (sampled <- initial temperature); added when the pack has no pair for those columns |
 | `label_columns`, `category_fill`, `fill_columns` | a set label's values, and how far a value is shared (paper / set / none); the pack's own settings win |
+| `row_values` | values the row plan records for every row, as columns: `[{column, plan_field, plan_key, unit, description}]` (`sample_time`'s `duration_hr`); a pack's module settings can describe one its own way (it reaches the row planning as a rule) or switch it off |
+| `formulas` | calculations written as formulas, as in pack.json (`peptides_oligomers`' peptide totals, `sample_time`'s `is_last_sample`); the pack's own formula for a column wins |
 | `joins_first_step` | its steps join the pack's first always-running step (parameters and rules) instead of being requests of their own; a step of their own only when the pack has none (`lab_experiment`) |
 | `covers` | what the module records, in a sentence: drafting a pack leaves that to the module |
 | `evidence` | `{"words": [...]}`: drafting links the module when a paper's survey uses them (the app's first modules have code rules instead) |
+
+`sample_time` brings each row's time point (`duration_hr`, in hours, as the row plan records it), the label and fill
+settings for it and the `is_last_sample` formula; new packs link it (the template), drafted lab packs too (also through
+`lab_experiment`'s `needs`); its name and unit stay (`fixed`), its description can be the pack's own. A module's column
+placement (`category_columns`) applies only to columns the pack doesn't place itself.
 
 A module's step leaves out the columns the pack's own steps record, and a step with nothing left is dropped. So
 `lab_experiment` (the general conditions of a laboratory experiment: temperatures, pressures, pH, vessel, solvent,

@@ -486,6 +486,7 @@ def structure_from_surveys(params: Sequence[tuple], papers) -> tuple:
 
 
 LAB_MODULE = "lab_experiment"
+TIME_MODULE = "sample_time"
 BASE_SHARE = 0.4         # the share of a design's numeric parameters a built-in pack must record to be drafted on
 
 
@@ -555,8 +556,12 @@ def write_pack(proposal: PackProposal, pack_id: str, label: str, description: st
         # drafted packs had none of them, so the sealed-vessel start, the sampled / starting pairs and the paper-wide
         # fills never switched on either)
         modules = [LAB_MODULE, *[x for x in modules if x != LAB_MODULE]]
+    if system != ASTRONOMY:     # a lab sample's time (duration_hr, in hours) comes from the Sample time module (0.6.8)
+        modules = [TIME_MODULE, *[x for x in modules if x != TIME_MODULE]]
     if modules:
         m["modules"] = list(dict.fromkeys(modules))
+    elif system == ASTRONOMY:   # an astronomy row (a planet) has no time: not the template's Sample time module
+        m["modules"] = [x for x in m.get("modules", []) if x != TIME_MODULE]
     mods = module_store.resolve(list(modules))
     module_cols = draft.module_columns() if mods else []
     module_steps = {p.stem: x.label for x in mods for p in x.stage_files()}
@@ -581,9 +586,11 @@ def write_pack(proposal: PackProposal, pack_id: str, label: str, description: st
     category_columns: Dict[str, Dict[str, List[str]]] = (json.loads(json.dumps(m.get("category_columns") or {}))
                                                           if on is not None else {"methodology": {"columns": ["set_type"]}})
     first = categories[0]["id"] if categories else "methodology"
-    row_time = [] if system == ASTRONOMY else ["duration_hr"]   # a sample's time in hours: lab experiments only
-    category_columns.setdefault(first, {"columns": []})["columns"].extend(row_time)
-    columns = list(draft.columns) if on is not None else ["set_type", *row_time]
+    # a sample's time in hours (lab experiments only) is the Sample time module's column: not one of the pack's own,
+    # and a proposed parameter of that name is left to the module
+    row_time = [] if system == ASTRONOMY else ["duration_hr"]
+    category_columns.setdefault(first, {"columns": []})["columns"].extend(row_time)    # placed with the conditions
+    columns = list(draft.columns) if on is not None else ["set_type"]
     seen, dropped, by_column, tidied = set(columns), [], {}, []
     proposed, placed = [], []
     for st in proposal.stages:                  # what the linked modules record is theirs (before merging stages)

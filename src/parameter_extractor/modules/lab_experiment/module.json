@@ -21,7 +21,6 @@
   ],
   "label_columns": {
     "temperature": "initial_temperature_C",
-    "time": "duration_hr",
     "pressure": "initial_pressure_bar",
     "pH": "initial_pH"
   },
@@ -31,8 +30,7 @@
   "fill_columns": {
     "reagent_suppliers": "paper",
     "pH_buffer": "paper",
-    "set_type": "none",
-    "duration_hr": "none"
+    "set_type": "none"
   },
   "category_columns": {
     "methodology": {
@@ -62,5 +60,8 @@
         "stirring_agitation"
       ]
     }
-  }
+  },
+  "needs": [
+    "sample_time"
+  ]
 }

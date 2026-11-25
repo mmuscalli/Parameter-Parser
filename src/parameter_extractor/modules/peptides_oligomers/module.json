@@ -52,5 +52,17 @@
       "unit": "nt",
       "description": "the longest nucleic-acid oligomer detected for this row (in nucleotides / monomer units), as the paper states it; a lower bound ('14 and higher') is its number with n 'lower bound'. Peptides use their own species columns, not this."
     }
+  ],
+  "formulas": [
+    {
+      "column": "total_sampled_peptides_mM",
+      "expression": "sum_of(\"^sampled_(cyclo_)?(\\([A-Z][a-z]{2}\\)\\d+|[A-Z][a-z]{2}(-[A-Z][a-z]{2})+)_(aq|s|gas)_mM$\")",
+      "description": "the sum of the row's sampled peptide concentrations (sequences and (X)n homopolymers, cyclic ones too -- the peptides the yield total counts)"
+    },
+    {
+      "column": "is_max_peptide_yield",
+      "expression": "total_sampled_peptides_yield == series_max(total_sampled_peptides_yield)",
+      "description": "1 for the row with the highest total peptide yield of its experiment series, else 0"
+    }
   ]
 }

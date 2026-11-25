@@ -139,6 +139,7 @@ def renames(module, settings: ModuleSettings) -> Dict[str, str]:
     params = {p.column: p.unit for s in _specs_in(module.stages_dir).values() for p in s.parameters} \
         if module.stages_dir.is_dir() else {}
     params.update({p["column"]: p.get("unit", "") for p in module.manifest.pack_parameters})
+    params.update({v["column"]: v.get("unit", "") for v in getattr(module.manifest, "row_values", [])})
     out = {}
     for col, ps in settings.parameters.items():
         if ps.unit and col in params and col not in fixed:

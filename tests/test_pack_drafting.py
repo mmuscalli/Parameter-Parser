@@ -133,8 +133,9 @@ def test_draft_writes_a_working_pack():
         assert any(t.startswith("reaction_temperature_C -> initial_temperature_C") for t in r.tidied)
         assert any(t.startswith("pH -> initial_pH") for t in r.tidied)
         columns = json.loads((folder / "columns.json").read_text())["all_columns"]
-        assert columns == ["set_type", "duration_hr", "initial_temperature_C", "initial_pH", "reactor", "product_yield_pct",
+        assert columns == ["set_type", "initial_temperature_C", "initial_pH", "reactor", "product_yield_pct",
                            "rate_per_hr"]
+        assert "duration_hr" in packs.Pack(folder).template_columns            # the Sample time module's (0.6.8)
         assert (folder / "prompts" / "structure_planner.rules.md").read_text() == \
             "- One row is one time point.\n- Controls are not rows.\n"
         report = (folder / "drafted_from.md").read_text()
@@ -294,7 +295,9 @@ def test_a_drafted_lab_pack_gets_the_lab_experiment_module():
         pack, _, _ = write_pack(PROPOSAL, "lab_mod", "Lab mod", base=Path(tmp))
         p = packs.Pack(pack.folder)
         m = p.manifest
-        assert p.module_ids()[0] == "lab_experiment"
+        assert p.module_ids()[:2] == ["sample_time", "lab_experiment"]          # the module it needs comes first
+        assert "duration_hr" in p.template_columns and m.label_columns["time"] == "duration_hr"      # sample_time's
+        assert any(f["column"] == "is_last_sample" for f in m.formulas)
         assert {"ambient_conditions", "atmospheric_start"} <= set(m.postprocess)
         assert ["sampled_temperature_C", "initial_temperature_C"] in m.column_pairs
         assert m.fill_columns["reagent_suppliers"] == "paper" and m.category_fill["methodology"] == "paper"
@@ -367,7 +370,8 @@ def test_a_drafted_pack_gets_levels_and_fill_settings_from_the_surveys():
         cats = {c["id"]: c for c in m["variable_categories"]}
         assert cats["conditions"]["level"] == "set" and cats["conditions"]["fill"] == "set"
         assert "level" not in cats["results"] and "fill" not in cats["results"]
-        assert m["category_fill"] == {"methodology": "paper"} and m["fill_columns"]["duration_hr"] == "none"
+        assert m["category_fill"] == {"methodology": "paper"}
+        assert packs.Pack(pack.folder).manifest.fill_columns["duration_hr"] == "none"     # the Sample time module's
         assert "shared_columns" not in m and "group_columns" not in m
         shared, group = selectors(packs.Pack(pack.folder))
         assert "conditions" in group["categories"] and "methodology" in shared["categories"]
@@ -420,7 +424,7 @@ def test_modules_are_chosen_before_the_design():
         left = by_column["__left_to_modules__"]
         d = PackDraft.load(pack.folder)
         own = {s["name"]: [p["column"] for p in s["parameters"]] for s in d.stages.values()}
-        assert d.manifest["modules"] == ["lab_experiment", "kinetics", "solution_chemistry"]   # lab packs: always
+        assert d.manifest["modules"] == ["sample_time", "lab_experiment", "kinetics", "solution_chemistry"]   # lab: always
         assert any("product_yield" in l and "Solution chemistry" in l for l in left), left
         assert "kinetics" not in own                                        # the module's step keeps its name
         assert not any("product_yield" in c for cols in own.values() for c in cols)

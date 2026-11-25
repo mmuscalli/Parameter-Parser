@@ -104,6 +104,8 @@ class ModuleSettingsEditor:
         params = [(spec.label, p.column, p.unit, p.kind, p.description) for spec in specs for p in spec.parameters]
         params += [("added to your first step", p["column"], p.get("unit", ""), p.get("kind", "number"),
                     p.get("description", "")) for p in mod.manifest.pack_parameters]
+        params += [("recorded by the row plan", v["column"], v.get("unit", ""), "number", v.get("description", ""))
+                   for v in getattr(mod.manifest, "row_values", [])]
         if params:
             collectors.append(self._values_box(pv, mod, params, settings, on_change))
         if mod.manifest.postprocess:

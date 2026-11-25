@@ -155,6 +155,36 @@ def record(ctx, step: str, result, columns: Sequence[str]) -> None:
         store.setdefault(step, found)
 
 
+# ---- the built-in steps' columns (2026-11-25, Mickey: every column that comes from a step can be marked) -------------
+
+PAPER_DETAILS = {"paper_title": "paper_title", "author_list": "authors", "year_published": "year_published",
+                 "journal_published": "journal_published", "paper_DOI": "paper_doi"}     # column -> PaperMetadata field
+
+
+def asked_columns(config, step_columns, everything: bool = True) -> tuple:
+    """The step's columns this run answers for: the data pack's 'Must answer' columns and the run's own
+    (RunConfig.check_columns) among them; with check_every_parameter (`everything`), all of them."""
+    from parameter_extractor import packs
+    if everything and getattr(config, "check_every_parameter", False):
+        return tuple(step_columns)
+    wanted = set(marked(packs.current())) | set(getattr(config, "check_columns", []) or [])
+    return tuple(c for c in step_columns if c in wanted)
+
+
+def planner_columns(pack) -> List[str]:
+    """The columns the row plan fills that a run can answer for: each sample's time (sample_time's column) and each
+    set's type."""
+    time = pack.row_value_column("duration_hr")
+    return ([time] if time else []) + ["set_type"]
+
+
+def planner_rule(columns: Sequence[str], pack) -> str:
+    time = pack.row_value_column("duration_hr")
+    what = {time: "each sample's time point `hr`", "set_type": "each set's `set_type`"}
+    return ("Columns this run answers for in `checked`: " + "; ".join(f"`{c}` ({what.get(c, c)})" for c in columns)
+            + ". " + rule(columns, "column", "the plan"))
+
+
 def problem(status: str, n: int) -> str:
     if status == "reported" and n == 0:
         return "marked reported, but no value given"
@@ -175,6 +205,17 @@ def finish(ctx, ex, run_dir: Path) -> list:
         c = counts.setdefault(name, {})
         for item in (getattr(result, "parameters", None) or []):
             c[item.parameter] = c.get(item.parameter, 0) + 1
+    plan = getattr(ex, "structure", None)
+    if plan is not None:                                   # the row plan: each sample's time, each set's type
+        from parameter_extractor import packs
+        time = packs.current().row_value_column("duration_hr")
+        c = counts.setdefault("structure_planner", {})
+        if time:
+            c[time] = sum(1 for s in plan.experiment_sets for x in s.samples if x.duration_hr is not None)
+        c["set_type"] = sum(1 for s in plan.experiment_sets if s.set_type)
+    meta = getattr(ex, "metadata", None)
+    if meta is not None:
+        counts["metadata"] = {col: int(bool(getattr(meta, field, None))) for col, field in PAPER_DETAILS.items()}
     if getattr(ex, "chemistry", None) is not None:         # the chemistry step answers per compound column
         from parameter_extractor.ingestion.flatten_to_template import _species_column_of
         c = counts.setdefault("chemistry", {})

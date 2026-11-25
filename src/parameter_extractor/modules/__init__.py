@@ -80,6 +80,12 @@ class ModuleManifest(BaseModel):
     # a step of their own only when the pack has no such step (2026-11-22: lab_experiment's conditions as a separate
     # request cost a request a paper and split the solid material from a drafted 'catalyst')
     joins_first_step: bool = False
+    # values the row plan records for every row, as columns a pack linking the module gets (2026-11-25, Mickey: the
+    # app's own columns in the module format -- sample_time's duration_hr): [{column, plan_field, plan_key, unit,
+    # description}]; a pack's module settings can describe one its own way (a row-planning rule) or switch it off
+    row_values: List[dict] = Field(default_factory=list)
+    # calculations written as formulas (formulas.py), as in pack.json; the pack's own formula for a column wins
+    formulas: List[dict] = Field(default_factory=list)
 
 
 class Module:

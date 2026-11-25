@@ -1,3 +1,4 @@
+from functools import lru_cache
 from parameter_extractor.api_client import call_structured
 from parameter_extractor.run_context import RunContext
 from parameter_extractor.schemas.paper_metadata import PaperMetadata
@@ -5,15 +6,35 @@ from parameter_extractor.ingestion.crossref_lookup import lookup_doi
 from .prompt_loader import load_prompt
 
 
+def checks(config) -> tuple:
+    """The paper details this run answers for, found or not (parameter_checks.asked_columns)."""
+    from parameter_extractor.parameter_checks import PAPER_DETAILS, asked_columns
+    return asked_columns(config, list(PAPER_DETAILS))
+
+
+@lru_cache(maxsize=None)
+def answer_format(check: tuple = ()):
+    if not check:
+        return PaperMetadata
+    from parameter_extractor.parameter_checks import with_checks
+    return with_checks(PaperMetadata, list(check))
+
+
 def run_metadata_extraction(ctx: RunContext, title_page_text: str) -> PaperMetadata:
-    prompt = load_prompt("metadata", PAPER_TEXT=title_page_text)
+    from parameter_extractor.parameter_checks import rule
+    check = checks(ctx.config)
+    prompt = load_prompt("metadata", PAPER_TEXT=title_page_text,
+                         **({"CHECK_RULE": rule(check, "detail", "their fields")} if check else {}))
     metadata = call_structured(
         ctx,
         stage="metadata",
         system_prompt="Extract bibliographic metadata only. Do not fabricate a DOI.",
         user_content=prompt,
-        response_model=PaperMetadata,
+        response_model=answer_format(check),
     )
+    if check:
+        from parameter_extractor.parameter_checks import record
+        record(ctx, "metadata", metadata, list(check))
 
     if metadata.paper_doi:
         metadata.doi_source = "paper_text"

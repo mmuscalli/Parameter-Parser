@@ -115,7 +115,7 @@ def test_series_functions_and_the_prebiotic_formulas():
             row(1, "001002", "Independent", 24, 3.0), row(2, "001002", "Independent", 24, 1.0),
             row(1, "001003", "Time Series", 2, 1.0, run="Run 1"), row(2, "001003", "Time Series", 4, 0.5, run="Run 1"),
             row(3, "001003", "Time Series", 2, 0.2, run="Run 2")]
-    formulas = json.loads((packs.current().folder / "pack.json").read_text())["formulas"]
+    formulas = packs.current().manifest.formulas          # its modules' (peptides_oligomers, sample_time) since 0.6.8
     apply_formulas(rows, formulas)
     got = [(r.full_id, row_to_template_dict(r).get("is_last_sample"), row_to_template_dict(r).get("is_max_peptide_yield"))
            for r in rows]

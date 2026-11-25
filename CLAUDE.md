@@ -39,7 +39,9 @@ Version: `parameter_extractor.__version__` (0.6.7, tag `v0.6.7`, on branch level
 - `packs/` (`prebiotic_chemistry`, `exoplanets`, hidden `_template`; users' own in `<app data>/packs/`) and
   `modules/` (shared parts linked by reference: analysis, solution_chemistry, kinetics, wet_dry, peptides_oligomers,
   mineral_surfaces, impact_shock, heat_flow_chamber, flow_reactor, fluid_inclusions, lab_experiment (general lab
-  conditions, linked to every drafted lab pack; its conditions join the pack's first step, `joins_first_step`);
+  conditions, linked to every drafted lab pack; its conditions join the pack's first step, `joins_first_step`),
+  sample_time (each row's time point `duration_hr` as a module `row_values` entry + `is_last_sample`; new packs and
+  lab packs link it; modules can carry `row_values` and `formulas`);
   peptides_oligomers and solution_chemistry also carry compound vocabularies (`compounds.json`, from the prebiotic
   pack's; `scripts/build_module_compounds.py`); `modules/README.md`).
   Loader `packs/__init__.py` (merged manifest = pack + linked modules + `module_settings.py`).
@@ -95,7 +97,8 @@ Version: `parameter_extractor.__version__` (0.6.7, tag `v0.6.7`, on branch level
 - `column_sources.py`: what fills each column (the Columns tab's "Filled by"); `validation/exoplanet_archive.py`
   also fills empty catalogue columns from the archive (calculation `archive_values`).
 - `parameter_checks.py`: answering for every parameter: a required `checked` entry per column in a step's answer
-  (StageSpec.check_columns, set by for_run, never written to files). Which columns: the user's "Must answer" columns
+  (StageSpec.check_columns, set by for_run, never written to files; the row plan's time / set type and the paper
+  details too, through their answer formats). Which columns: the user's "Must answer" columns
   per data pack (the Columns tab, highlighted, usable on the app's own packs too; kept in `<app data>/must_answer.json`,
   `parameter_checks.marked` / `set_marked`; a pack's own `check_columns` from 0.6.6 still count; step parameters and
   compound columns -- the chemistry step answers per compound column), RunConfig.check_columns (CLI --check-column), and with RunConfig.check_every_parameter (the

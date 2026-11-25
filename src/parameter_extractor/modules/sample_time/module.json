@@ -1,0 +1,40 @@
+{
+  "id": "sample_time",
+  "label": "Sample time",
+  "description": "Each row's time point -- how long the experiment had run when the sample was taken -- as the row plan records it, in hours: the duration_hr column, read from a row's label when the plan leaves it out, and the last time point of each experiment series marked (is_last_sample). A data pack can describe what the time means in its research area (reaction time, residence time, time since cycling began) in its module settings: the description reaches the row planning as a rule.",
+  "covers": "The time point of each sample (row): how long the experiment had run, in hours.",
+  "version": 1,
+  "row_values": [
+    {
+      "column": "duration_hr",
+      "plan_field": "duration_hr",
+      "plan_key": "hr",
+      "unit": "h",
+      "description": "how long the experiment had run when the sample was taken (the row plan's time point), in hours"
+    }
+  ],
+  "fixed": {
+    "duration_hr": "the app reads each row's time in hours by this name (row labels, series ends, figure time axes, set variables)"
+  },
+  "label_columns": {
+    "time": "duration_hr"
+  },
+  "fill_columns": {
+    "duration_hr": "none"
+  },
+  "formulas": [
+    {
+      "column": "is_last_sample",
+      "expression": "duration_hr == series_max(duration_hr)",
+      "description": "1 for the last time point of its experiment series (its set, or its run), else 0; every row of an Independent set is its own experiment"
+    }
+  ],
+  "category_columns": {
+    "methodology": {
+      "columns": [
+        "duration_hr",
+        "is_last_sample"
+      ]
+    }
+  }
+}

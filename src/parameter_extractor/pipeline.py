@@ -772,7 +772,7 @@ def _step_instructions(pack, config: RunConfig, tools: dict, vocab: dict) -> dic
     out = {}
     for stage in tools:
         if stage == "structure_planner":
-            out[stage] = planner_stage.prompt_text(PAPER_ABOVE, config.rows_from_text)
+            out[stage] = planner_stage.prompt_text(PAPER_ABOVE, config.rows_from_text, planner_stage.checks(config))
         elif stage == "chemistry":
             out[stage] = chemistry_extractor.prompt_text(PAPER_ABOVE, PLAN_MARK, vocab["species_names"],
                                                          config.scopes.get("chemistry"), grids=config.table_grids,
@@ -801,7 +801,8 @@ def _paper_tools(pack, config: RunConfig, terms, has_figures: bool = False, pape
     structure is planned: optional stages are included unless switched off, triggered or not."""
     from parameter_extractor.schemas.variables import TermSearch
     from parameter_extractor.stages import chemistry_extractor
-    tools = {"structure_planner": StructurePlan}
+    from parameter_extractor.stages import structure_planner as planner_stage
+    tools = {"structure_planner": planner_stage.answer_format(planner_stage.checks(config))}
     if pack.uses("methodology"):
         tools["methodology"] = Methodology
     if _chemistry_on(pack, config):

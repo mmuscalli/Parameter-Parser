@@ -81,7 +81,8 @@ def test_draft_saves_and_is_used():
         d.save()
         from parameter_extractor.stages.optional import load_specs
         reloaded = packs.available()["saved_area"]
-        assert reloaded.label == "Soils" and reloaded.template_columns == ["soil_carbon_pct", "depth_cm"]
+        assert reloaded.label == "Soils" and reloaded.template_columns == ["soil_carbon_pct", "depth_cm", "duration_hr"]
+        # (duration_hr: the Sample time module a new pack links, after the pack's own columns)
         assert list(load_specs(reloaded)) == ["soil_properties"]                     # the cache was cleared
         assert not (pack.folder / "stages" / "example_measurements.json").exists()
         assert (pack.folder / "prompts" / "structure_planner.rules.md").read_text().startswith("- One row")

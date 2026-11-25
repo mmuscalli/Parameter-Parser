@@ -192,3 +192,4 @@ current month's file (start `YYYY-MM.md` in a new month), with one line here.
 - Answering for every parameter in a full run, as an option (2026-11-24, Mickey)
 - 'Must answer' columns in the data pack's Columns tab (2026-11-25, Mickey)
 - 'Must answer' markings in the user's app data (2026-11-25, Mickey)
+- App-filled columns in the module format: Sample time, module formulas, Must answer for the row plan and paper details (2026-11-25, Mickey)

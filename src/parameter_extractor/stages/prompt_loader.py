@@ -40,6 +40,10 @@ def load_prompt(name: str, sections: dict = None, **placeholders: str) -> str:
     pack = current()
     text = pack.prompt_path(name).read_text()        # the domain pack's own, else the app's
     rules = pack.prompt_rules(name)
+    # a run's own rule after the pack's (parameter_checks: the columns this run must answer for); none: as before
+    check_rule = placeholders.pop("CHECK_RULE", "")
+    if check_rule:
+        rules = (rules.rstrip() + "\n" if rules.strip() else "") + f"- {check_rule}\n"
     placeholders = {"PACK_RULES": f"\nRules for this research area ({pack.label}):\n{rules.strip()}\n" if rules else "",
                     "RESEARCH_AREA": pack.label.lower(),
                     # rules the pack's modules add to this prompt (the Peptides and oligomers module's naming rules in

@@ -141,6 +141,9 @@ def merged_manifest(own: PackManifest, mods) -> PackManifest:
         settings = ms.settings_for(own.module_settings, mod.id)
         names = ms.renames(mod, settings)
         m.builtin_stages += [x for x in mm.builtin_stages if x not in m.builtin_stages]
+        # its formulas, after the pack's own (a column the pack already calculates keeps the pack's formula)
+        have = {f.get("column") for f in m.formulas}
+        m.formulas += [dict(f, module=mod.id) for f in getattr(mm, "formulas", []) if f.get("column") not in have]
         m.postprocess += [x for x in mm.postprocess if x not in m.postprocess and x not in settings.calculations_off]
         # its row settings, where the pack has none of its own (the pack's always win)
         m.column_pairs += [p for p in getattr(mm, "column_pairs", []) if p not in m.column_pairs
@@ -162,6 +165,7 @@ def merged_manifest(own: PackManifest, mods) -> PackManifest:
                 continue
             m.variable_categories.append(dict(cat, module=mod.id))
         ids = {c.get("id") for c in m.variable_categories} | SHARED_CATEGORY_IDS
+        placed = {c for e in m.category_columns.values() for c in e.get("columns", [])}
         for cid, entry in ms.apply_to_category_columns(mm.category_columns, names).items():
             if cid not in ids:
                 continue
@@ -169,7 +173,8 @@ def merged_manifest(own: PackManifest, mods) -> PackManifest:
             for key in ("columns", "patterns"):
                 if entry.get(key):
                     have = target.setdefault(key, [])
-                    have += [x for x in entry[key] if x not in have]
+                    # a column the pack (or an earlier module) already places stays where it is: the pack's own wins
+                    have += [x for x in entry[key] if x not in have and (key != "columns" or x not in placed)]
     return m
 
 
@@ -206,12 +211,21 @@ class Pack:
         """A built-in stage or a post-processing step this pack declares."""
         return feature in self.manifest.builtin_stages or feature in self.manifest.postprocess
 
+    def _own_template(self) -> dict:
+        return json.loads((self.folder / self.manifest.template).read_text())
+
     @cached_property
     def _template(self) -> dict:
         """The pack's columns and compound vocabulary, then the compounds its linked modules bring (a module's
         compounds.json: species and their columns) that it lacks -- after its own, so a pack with them all (the
-        prebiotic pack, the modules' source) is unchanged (2026-11-22)."""
-        own = json.loads((self.folder / self.manifest.template).read_text())
+        prebiotic pack, the modules' source) is unchanged (2026-11-22). Its modules' row values (sample_time's
+        duration_hr) are columns too, after its own; one switched off in the module settings is left out."""
+        own = self._own_template()
+        values = self.row_values()
+        off = {v["column"] for v in values if v["off"]}
+        add = [v["column"] for v in values if not v["off"] and v["column"] not in own.get("all_columns", [])]
+        if off or add:
+            own = dict(own, all_columns=[c for c in own.get("all_columns", []) if c not in off] + add)
         extra_species, extra_columns = [], []
         for mod in self.modules:
             path = mod.folder / "compounds.json"
@@ -274,9 +288,40 @@ class Pack:
             from parameter_extractor import module_settings as ms
             extra = [r for mod in self.modules for r in mod.manifest.row_rules if r not in text
                      and r not in ms.settings_for(self.own_manifest.module_settings, mod.id).row_rules_off]
+            extra += [r for r in self._row_value_rules() if r not in text]
             if extra:
                 text = (text.rstrip() + "\n" if text.strip() else "") + "".join(f"- {r}\n" for r in extra)
         return text
+
+    # ---- values the row plan records (modules' row_values: sample_time's duration_hr) --------------------------
+
+    def row_values(self) -> List[dict]:
+        """[{column, plan_field, plan_key, unit, description, module, own_description, off}] of the linked modules'
+        row values, with this pack's module settings (a description of its own, or switched off)."""
+        from parameter_extractor import module_settings as ms
+        out = []
+        for mod in self.modules:
+            settings = ms.settings_for(self.own_manifest.module_settings, mod.id)
+            for v in getattr(mod.manifest, "row_values", []):
+                ps = settings.parameters.get(v["column"], ms.ParameterSetting())
+                out.append(dict(v, module=mod.id, own_description=ps.description, off=ps.off))
+        return out
+
+    def row_value_column(self, plan_field: str) -> Optional[str]:
+        """The column a row-plan value is written to in this pack ('duration_hr'), or None: switched off, or no linked
+        module brings it -- then the pack's own template column of that name, as before (packs made before 0.6.8)."""
+        for v in self.row_values():
+            if v.get("plan_field") == plan_field:
+                return None if v["off"] else v["column"]
+        return plan_field if plan_field in self._own_template().get("all_columns", []) else None
+
+    def _row_value_rules(self) -> List[str]:
+        """A pack's own description of a row value (module settings): one row-planning rule, so the model reads the
+        value as this research area means it. None when the module's wording stands (requests as before)."""
+        units = self.manifest.units
+        return [f"`{v.get('plan_key') or v['column']}` ({v['column']}, in {v.get('unit') or 'its unit'}) of each "
+                f"{units.get('sample', 'sample')} in this data pack: {v['own_description']}"
+                for v in self.row_values() if v["own_description"] and not v["off"]]
 
     def module_prompt_rules(self, name: str) -> str:
         """The rules the pack's modules add to a built-in step's prompt ('- rule' lines for its {{MODULE_RULES}} slot),

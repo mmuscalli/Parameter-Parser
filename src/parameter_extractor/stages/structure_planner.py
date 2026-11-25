@@ -1,26 +1,47 @@
 import re
 from pathlib import Path
-from typing import List, Optional
+from functools import lru_cache
+from typing import List, Optional, Sequence
 from parameter_extractor.api_client import call_structured
 from parameter_extractor.run_context import RunContext
 from parameter_extractor.schemas.structure_plan import StructurePlan
 from .prompt_loader import load_prompt
 
 
-def prompt_text(paper_text: str, text_rows: bool = False) -> str:
+def prompt_text(paper_text: str, text_rows: bool = False, check: Sequence[str] = ()) -> str:
     """The step's prompt (also the static instructions cached for every paper of a run: api_client). `text_rows`:
-    rows from results stated in the body text too, else only from tables (RunConfig.rows_from_text)."""
+    rows from results stated in the body text too, else only from tables (RunConfig.rows_from_text). `check`: the
+    plan's columns this run answers for (parameter_checks)."""
     from parameter_extractor.packs import current
+    from parameter_extractor.parameter_checks import planner_rule
     units = current().manifest.units      # what the pack calls a set / a row (the shared prompt's slots)
     return load_prompt("structure_planner", sections={"TEXT_ROWS": text_rows}, PAPER_TEXT=paper_text,
-                       SET_WORD=units.get("set", "set"), SAMPLE_WORD=units.get("sample", "sample"))
+                       SET_WORD=units.get("set", "set"), SAMPLE_WORD=units.get("sample", "sample"),
+                       **({"CHECK_RULE": planner_rule(check, current())} if check else {}))
+
+
+def checks(config) -> tuple:
+    """The plan's columns this run answers for, found or not (parameter_checks.asked_columns)."""
+    from parameter_extractor.packs import current
+    from parameter_extractor.parameter_checks import asked_columns, planner_columns
+    return asked_columns(config, planner_columns(current()))
+
+
+@lru_cache(maxsize=None)
+def answer_format(check: tuple = ()):
+    """StructurePlan, with a `checked` entry per column asked for."""
+    if not check:
+        return StructurePlan
+    from parameter_extractor.parameter_checks import with_checks
+    return with_checks(StructurePlan, list(check))
 
 
 def run_structure_planner(
     ctx: RunContext, paper_text: str, table_images: Optional[List[Path]] = None,
 ) -> StructurePlan:
     from parameter_extractor.packs import current
-    prompt = prompt_text(paper_text, ctx.config.rows_from_text)
+    check = checks(ctx.config)
+    prompt = prompt_text(paper_text, ctx.config.rows_from_text, check)
     plan = call_structured(
         ctx,
         stage="structure_planner",
@@ -28,11 +49,14 @@ def run_structure_planner(
                       "grouping matters more than speed -- every later extraction step "
                       "depends on getting this right.",
         user_content=prompt,
-        response_model=StructurePlan,
+        response_model=answer_format(check),
         paper_text=paper_text,
         image_paths=table_images,
     )
     fill_durations(plan)
+    if check:
+        from parameter_extractor.parameter_checks import record
+        record(ctx, "structure_planner", plan, list(check))
     return plan
 
 

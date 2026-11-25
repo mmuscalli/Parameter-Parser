@@ -60,7 +60,7 @@ def test_analysis_module():
         lines = pack_modules.add_modules(pack.folder, ["analysis"])["analysis"]
         assert lines and all(l.startswith("linked") for l in lines), lines
         own = json.loads((pack.folder / "pack.json").read_text())
-        assert own["modules"] == ["analysis"] and "analysis" not in own.get("builtin_stages", [])
+        assert own["modules"] == ["sample_time", "analysis"] and "analysis" not in own.get("builtin_stages", [])
         assert not (pack.folder / "analysis_vocab.json").exists()                  # nothing copied
         merged = packs.Pack(pack.folder)
         assert "analysis" in merged.manifest.builtin_stages
@@ -153,6 +153,39 @@ def test_a_module_brings_its_compounds():
     pre = packs.available()["prebiotic_chemistry"]
     own = json.loads((pre.folder / pre.manifest.template).read_text())
     assert pre.species_names == own["species_names"] and pre.template_columns == own["all_columns"]
+
+
+def test_the_sample_time_module():
+    """Each row's time in the module format (2026-11-25, Mickey): sample_time brings duration_hr (the row plan's time),
+    its label and fill settings and the is_last_sample formula; a pack can describe the time its own way (one
+    row-planning rule) or switch it off (no column); the prebiotic pack's settings and prompts are as before."""
+    from parameter_extractor import modules
+    pre = packs.available()["prebiotic_chemistry"]
+    assert "sample_time" in pre.module_ids() and pre.row_value_column("duration_hr") == "duration_hr"
+    assert {f["column"] for f in pre.manifest.formulas} >= {"is_last_sample", "total_sampled_peptides_mM",
+                                                           "is_max_peptide_yield"}
+    assert "in this data pack:" not in pre.prompt_rules("structure_planner")          # no description of its own
+    with tempfile.TemporaryDirectory() as tmp:
+        pack = _new_pack(Path(tmp))
+        manifest = json.loads((pack.folder / "pack.json").read_text())
+        manifest["modules"] = []                                                    # a new pack links it: unlinked
+        (pack.folder / "pack.json").write_text(json.dumps(manifest))
+        assert packs.Pack(pack.folder).row_value_column("duration_hr") is None        # no module, not in its columns
+        manifest["modules"] = ["sample_time"]
+        (pack.folder / "pack.json").write_text(json.dumps(manifest))
+        linked = packs.Pack(pack.folder)
+        assert "duration_hr" in linked.template_columns and linked.manifest.label_columns["time"] == "duration_hr"
+        assert any(f["column"] == "is_last_sample" for f in linked.manifest.formulas)
+        manifest["module_settings"] = {"sample_time": {"parameters": {"duration_hr": {
+            "description": "time since the first wet-dry cycle began"}}}}
+        (pack.folder / "pack.json").write_text(json.dumps(manifest))
+        described = packs.Pack(pack.folder)
+        assert "time since the first wet-dry cycle began" in described.prompt_rules("structure_planner")
+        manifest["module_settings"] = {"sample_time": {"parameters": {"duration_hr": {"off": True}}}}
+        (pack.folder / "pack.json").write_text(json.dumps(manifest))
+        off = packs.Pack(pack.folder)
+        assert "duration_hr" not in off.template_columns and off.row_value_column("duration_hr") is None
+    assert modules.available()["sample_time"].manifest.fixed            # the name and unit the app reads stay
 
 
 def test_migrate_copies():
@@ -271,7 +304,7 @@ def test_modules_tab():
         assert not e._vocab_editable()                                        # the module's: read-only here
         assert e.save()
         own = json.loads((pack.folder / "pack.json").read_text())
-        assert own["modules"] == ["analysis", "peptides_oligomers"]
+        assert own["modules"] == ["analysis", "peptides_oligomers", "sample_time"]      # sample_time: a new pack's
         assert own.get("builtin_stages", []) == [] and own.get("postprocess", []) == []
 
 

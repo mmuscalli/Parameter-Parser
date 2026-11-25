@@ -68,10 +68,19 @@ def sources(draft) -> Dict[str, List[str]]:
     steps = set(draft.effective_steps())
     calcs = set(draft.effective_calculations())
     formulas = {f.get("column"): f.get("expression", "") for f in draft.manifest.get("formulas", []) if f.get("column")}
+    row_values = {}                                      # the modules' row values (sample_time's duration_hr)
+    try:
+        for mod in draft.linked_modules():
+            for f in getattr(mod.manifest, "formulas", []):
+                formulas.setdefault(f.get("column"), f.get("expression", ""))       # the pack's own formula wins
+            for v in getattr(mod.manifest, "row_values", []):
+                row_values[v["column"]] = mod.label
+    except Exception:                                    # noqa: BLE001 -- a module that can't load: the pack's own
+        pass
     archive = None
     if "archive_values" in calcs:
         from parameter_extractor.validation import exoplanet_archive as archive
-    for column in set(draft.columns) | set(out):
+    for column in set(draft.columns) | set(out) | set(row_values) | set(formulas):
         if "chemistry" in steps and COMPOUND.match(column):
             add(column, _builtin_label("chemistry") + " (built-in)")
         if "analysis" in steps and column.startswith("analysis_"):
@@ -80,7 +89,9 @@ def sources(draft) -> Dict[str, List[str]]:
             add(column, _builtin_label("fit_models") + " (built-in)")
         if column in METADATA:
             add(column, "the paper's details (the app)")
-        if column in ROW_PLAN:
+        if column in row_values:
+            add(column, f"the row plan ({row_values[column]} module)")
+        elif column in ROW_PLAN:
             add(column, "the row plan (the app)")
         if column in IDENTIFIERS:
             add(column, "the app (row identifier)")

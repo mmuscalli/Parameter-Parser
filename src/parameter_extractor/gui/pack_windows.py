@@ -1008,15 +1008,17 @@ class PackEditor(QDialog):
         return item
 
     def answerable(self, column: str) -> bool:
-        """A column a run can be made to answer for: a step's parameter (the pack's or a module's) or a compound
-        column (the chemistry step)."""
+        """A column a run can be made to answer for: a step's parameter (the pack's or a module's), a compound column
+        (the chemistry step), the row plan's (each sample's time, each set's type) or a paper detail."""
         from parameter_extractor.focused_search import _COMPOUND_COLUMN
+        from parameter_extractor.parameter_checks import PAPER_DETAILS, planner_columns
         if _COMPOUND_COLUMN.match(column):
             return True
         if not hasattr(self, "_step_param_columns"):
-            cols = set(self.draft.stage_columns())
+            cols = set(self.draft.stage_columns()) | set(PAPER_DETAILS)
             try:
                 cols |= {c for _m, spec in self.draft.module_specs() for c in spec.columns}
+                cols |= set(planner_columns(packs.Pack(self.draft.folder)))
             except Exception:                        # noqa: BLE001 -- a module that can't load: its steps unknown
                 pass
             self._step_param_columns = cols

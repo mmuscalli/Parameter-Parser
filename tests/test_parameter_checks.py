@@ -122,6 +122,38 @@ def test_answers_compared_with_the_values_given():
     assert pc.finish(SimpleNamespace(), ex, Path(".")) == []                     # not asked for: nothing written
 
 
+def test_the_row_plan_and_paper_details_can_be_answered_for():
+    """Columns the app's own steps fill (2026-11-25): the row plan's time and set type, the paper details -- marked
+    'Must answer' (or with check_every_parameter), their steps answer for them; nothing marked: as before."""
+    from parameter_extractor.config.run_config import RunConfig
+    from parameter_extractor.stages import metadata_extractor as me, structure_planner as sp
+    from parameter_extractor.schemas.structure_plan import StructurePlan
+    packs.activate("prebiotic_chemistry")
+    plain = RunConfig.from_settings(api_key="x")
+    assert sp.checks(plain) == () and sp.answer_format(()) is StructurePlan and me.checks(plain) == ()
+    assert sp.prompt_text("PAPER") == sp.prompt_text("PAPER", check=())
+    asked = RunConfig.from_settings(api_key="x", check_columns=["duration_hr", "paper_DOI", "initial_pH"])
+    assert sp.checks(asked) == ("duration_hr",) and me.checks(asked) == ("paper_DOI",)
+    every = RunConfig.from_settings(api_key="x", check_every_parameter=True)
+    assert sp.checks(every) == ("duration_hr", "set_type") and len(me.checks(every)) == 5
+    schema = _schema(sp.answer_format(("duration_hr", "set_type")))
+    assert "checked" in schema["required"]
+    text = sp.prompt_text("PAPER", check=("duration_hr",))
+    assert "`duration_hr` (each sample's time point `hr`)" in text and text.index("duration_hr") < text.index("PAPER")
+    # after the run: the plan's values counted against the answers
+    Plan = sp.answer_format(("duration_hr", "set_type"))
+    plan = Plan.model_validate({"paper_id": "p", "n_rows": 1, "experiment_sets": [{
+        "set_label": "S", "set_type": "Time Series", "varies": "time", "src": "Table 1",
+        "samples": [{"sample_label": "1 h", "hr": 1}]}],
+        "checked": {"duration_hr": {"s": "reported", "n": "Table 1"}, "set_type": {"s": "reported", "n": "-"}}})
+    ctx = SimpleNamespace()
+    pc.record(ctx, "structure_planner", plan, ["duration_hr", "set_type"])
+    with tempfile.TemporaryDirectory() as tmp:
+        assert pc.finish(ctx, SimpleNamespace(optional={}, chemistry=None, structure=plan, metadata=None), Path(tmp)) == []
+        rows = list(csv.DictReader(open(Path(tmp) / pc.CHECKS_FILE)))
+    assert {(r["parameter"], r["values"]) for r in rows} == {("duration_hr", "1"), ("set_type", "1")}
+
+
 def test_run_config_and_cli():
     from parameter_extractor.config.run_config import RunConfig
     cfg = RunConfig.from_settings(api_key="x")
@@ -189,8 +221,10 @@ def test_must_answer_columns_in_the_columns_tab():
         tree = builtin.column_tree
         for i in range(tree.topLevelItemCount()):
             for item in builtin._column_children(tree.topLevelItem(i)):
-                item.setSelected(item.text(0) in ("initial_temperature_C", "initial_Gly_aq_mM"))
+                item.setSelected(item.text(0) in ("initial_temperature_C", "initial_Gly_aq_mM", "duration_hr",
+                                                  "set_type", "paper_DOI"))
         builtin._set_required(True)
+        assert {"duration_hr", "set_type", "paper_DOI"} <= builtin._required     # the app's own steps' columns too
         packs.activate("prebiotic_chemistry")
         cfg = RunConfig.from_settings(api_key="x")
         assert pipeline._step_checks(cfg) >= {"initial_temperature_C", "initial_Gly_aq_mM"}
