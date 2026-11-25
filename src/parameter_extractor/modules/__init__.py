@@ -194,5 +194,6 @@ def resolve(ids: List[str]) -> List[Module]:
 
 
 def unknown(ids: List[str]) -> List[str]:
+    """Ids no module has. A core module named in a pack's list isn't unknown: it is part of every pack anyway."""
     found = available()
-    return [m for m in ids if canonical_id(m) not in found]
+    return [m for m in ids if canonical_id(m) not in found and canonical_id(m) not in core()]

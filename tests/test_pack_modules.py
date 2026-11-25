@@ -198,6 +198,7 @@ def test_the_core_modules():
     from parameter_extractor import modules, pack_overview
     core = modules.core()
     assert list(core) == ["rows", "paper_details"] and not set(core) & set(modules.available())
+    assert modules.unknown(["rows", "paper_details"]) == [] and modules.resolve(["rows"]) == []   # listed: harmless
     assert [c["column"] for c in packs.common_columns()] == ["paper_title", "paper_DOI", "author_list",
                                                             "year_published", "journal_published", "data_location",
                                                             "paper_arxiv_id", "result_type"]

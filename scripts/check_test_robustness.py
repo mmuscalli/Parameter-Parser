@@ -63,7 +63,9 @@ def _probe_module() -> None:
 
 
 def _all_app_modules() -> list:
-    return sorted(p.parent.name for p in (PE / "modules").glob("*/module.json") if p.parent.name != "zz_probe")
+    import json as _json        # the core modules (Rows, Paper details) are part of every pack: never linked
+    return sorted(p.parent.name for p in (PE / "modules").glob("*/module.json") if p.parent.name != "zz_probe"
+                  and not _json.loads(p.read_text()).get("core"))
 
 
 VARIATIONS = {
