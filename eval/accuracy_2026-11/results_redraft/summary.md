@@ -16,6 +16,8 @@
 | C2r C2 rebuilt with the compound vocabulary restored ($0) | 12 (12) | $1.77 | 0.779 (0.782) | 0.779 | – (–) | 0.791 (0.799) | 0.786 | 0.948 | 0 |
 | C3 C2 + compound vocabulary restored + solid-material description widened | 12 (12) | $1.81 | 0.783 (0.786) | 0.783 | – (–) | 0.86 (0.87) | 0.812 | 0.934 | 0 |
 | C4 C3 + conditions in the pack's first step, module conditions and compound vocabularies, µmol/mL read as mM | 12 (12) | $1.54 | 0.809 (0.809) | 0.809 | – (–) | 0.844 (0.863) | 0.83 | 0.945 | 0 |
+| C4r C4 rebuilt with the row-label fix ($0) | 12 (12) | $1.54 | 0.815 (0.815) | 0.815 | – (–) | 0.844 (0.863) | 0.83 | 0.945 | 0 |
+| C5 C4 repeated (same pack and settings) with the row-label fix | 12 (12) | $1.01 | 0.814 (0.814) | 0.814 | – (–) | 0.883 (0.899) | 0.836 | 0.94 | 0 |
 
 ## E1 (reviewed)
 
@@ -33,3 +35,5 @@
 | C2r C2 rebuilt with the compound vocabulary restored ($0) | 12 (12) | $1.77 | 0.805 (0.805) | 0.805 | – (–) | 0.846 (0.885) | 0.774 | 0.948 | 0 |
 | C3 C2 + compound vocabulary restored + solid-material description widened | 12 (12) | $1.81 | 0.795 (0.795) | 0.795 | – (–) | 0.867 (0.904) | 0.781 | 0.935 | 0 |
 | C4 C3 + conditions in the pack's first step, module conditions and compound vocabularies, µmol/mL read as mM | 12 (12) | $1.54 | 0.823 (0.823) | 0.823 | – (–) | 0.819 (0.862) | 0.787 | 0.944 | 0 |
+| C4r C4 rebuilt with the row-label fix ($0) | 12 (12) | $1.54 | 0.829 (0.829) | 0.829 | – (–) | 0.819 (0.862) | 0.787 | 0.944 | 0 |
+| C5 C4 repeated (same pack and settings) with the row-label fix | 12 (12) | $1.01 | 0.825 (0.825) | 0.825 | – (–) | 0.85 (0.891) | 0.801 | 0.938 | 0 |

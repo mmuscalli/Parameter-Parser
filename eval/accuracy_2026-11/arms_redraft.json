@@ -107,6 +107,46 @@
      "/Users/mickeymuscalli/Documents/Parameter Extractor/accuracy_20261122/P1_C4/queue_20261124-201315"
     ]
    }
+  },
+  "C4r": {
+   "label": "C4 rebuilt with the row-label fix ($0)",
+   "drafted_from": [
+    "Chen2007",
+    "Chung1971",
+    "Huber1998",
+    "Imai1998",
+    "Kawamura2009",
+    "Rode1990",
+    "Shen1990",
+    "Yamagata1997",
+    "lemke2009",
+    "shanker2012"
+   ],
+   "batches": {
+    "P1": [
+     "/Users/mickeymuscalli/Documents/Parameter Extractor/accuracy_20261122/P1_C4_rebuilt/queue_20261124-211059"
+    ]
+   }
+  },
+  "C5": {
+   "label": "C4 repeated (same pack and settings) with the row-label fix",
+   "drafted_from": [
+    "Chen2007",
+    "Chung1971",
+    "Huber1998",
+    "Imai1998",
+    "Kawamura2009",
+    "Rode1990",
+    "Shen1990",
+    "Yamagata1997",
+    "lemke2009",
+    "shanker2012"
+   ],
+   "batches": {
+    "P1": [
+     "/Users/mickeymuscalli/Documents/Parameter Extractor/accuracy_20261122/P1_C5/queue_20261124-211054"
+    ]
+   }
   }
  },
  "model_standard": {

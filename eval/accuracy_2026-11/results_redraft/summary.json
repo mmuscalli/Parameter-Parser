@@ -770,6 +770,230 @@
      "cells_missing": 0.012,
      "rows_paired": 0.947
     }
+   },
+   "C4r": {
+    "label": "C4 rebuilt with the row-label fix ($0)",
+    "papers": 12,
+    "papers_with_rows": 12,
+    "cost_usd": 1.54,
+    "rows": 227,
+    "figure_rows_waiting": 0,
+    "hand": {
+     "papers": 12,
+     "hand_values_not_printed": 996,
+     "metadata": {
+      "recall": 0.896,
+      "recall_close": 0.896,
+      "printed": 48
+     },
+     "methodology": {
+      "recall": 0.816,
+      "recall_close": 0.816,
+      "printed": 169
+     },
+     "chemistry_in": {
+      "recall": 0.926,
+      "recall_close": 0.926,
+      "printed": 21
+     },
+     "chemistry_out": {
+      "recall": 0.608,
+      "recall_close": 0.608,
+      "printed": 34
+     },
+     "overall": {
+      "recall": 0.829,
+      "recall_close": 0.829,
+      "printed": 272
+     },
+     "all_papers": {
+      "papers": 12,
+      "recall": 0.829,
+      "recall_close": 0.829
+     },
+     "new_values": 138,
+     "new_confirmed": 134,
+     "new_unsupported": 4,
+     "new_unverified": 0,
+     "drafted_from": {
+      "papers": 2,
+      "recall": 0.728
+     },
+     "held_out": {
+      "papers": 10,
+      "recall": 0.849
+     }
+    },
+    "archive": {
+     "papers": 0,
+     "planets": 0,
+     "planets_found": 0,
+     "pack_quantities": {
+      "recall": null,
+      "expected": 0
+     },
+     "planet": {
+      "recall": null,
+      "recall_close": null,
+      "differs": 0,
+      "expected": 0
+     },
+     "star": {
+      "recall": null,
+      "recall_close": null,
+      "differs": 0,
+      "expected": 0
+     },
+     "uncertainty": {
+      "recall": null,
+      "recall_close": null,
+      "differs": 0,
+      "expected": 0
+     },
+     "discovery": {
+      "recall": null,
+      "recall_close": null,
+      "differs": 0,
+      "expected": 0
+     },
+     "system": {
+      "recall": null,
+      "recall_close": null,
+      "differs": 0,
+      "expected": 0
+     },
+     "overall": {
+      "recall": null,
+      "recall_close": null,
+      "differs": 0,
+      "expected": 0
+     }
+    },
+    "model_standard": {
+     "papers": 12,
+     "recall": 0.819,
+     "recall_close": 0.824,
+     "recall_pack_quantities": 0.862,
+     "precision": 0.787,
+     "precision_close": 0.787,
+     "cells_right": 0.944,
+     "cells_elsewhere": 0.001,
+     "cells_wrong": 0.044,
+     "cells_missing": 0.012,
+     "rows_paired": 0.947
+    }
+   },
+   "C5": {
+    "label": "C4 repeated (same pack and settings) with the row-label fix",
+    "papers": 12,
+    "papers_with_rows": 12,
+    "cost_usd": 1.01,
+    "rows": 222,
+    "figure_rows_waiting": 0,
+    "hand": {
+     "papers": 12,
+     "hand_values_not_printed": 996,
+     "metadata": {
+      "recall": 0.938,
+      "recall_close": 0.938,
+      "printed": 48
+     },
+     "methodology": {
+      "recall": 0.8,
+      "recall_close": 0.8,
+      "printed": 169
+     },
+     "chemistry_in": {
+      "recall": 0.926,
+      "recall_close": 0.926,
+      "printed": 21
+     },
+     "chemistry_out": {
+      "recall": 0.587,
+      "recall_close": 0.587,
+      "printed": 34
+     },
+     "overall": {
+      "recall": 0.825,
+      "recall_close": 0.825,
+      "printed": 272
+     },
+     "all_papers": {
+      "papers": 12,
+      "recall": 0.825,
+      "recall_close": 0.825
+     },
+     "new_values": 189,
+     "new_confirmed": 184,
+     "new_unsupported": 5,
+     "new_unverified": 0,
+     "drafted_from": {
+      "papers": 2,
+      "recall": 0.752
+     },
+     "held_out": {
+      "papers": 10,
+      "recall": 0.839
+     }
+    },
+    "archive": {
+     "papers": 0,
+     "planets": 0,
+     "planets_found": 0,
+     "pack_quantities": {
+      "recall": null,
+      "expected": 0
+     },
+     "planet": {
+      "recall": null,
+      "recall_close": null,
+      "differs": 0,
+      "expected": 0
+     },
+     "star": {
+      "recall": null,
+      "recall_close": null,
+      "differs": 0,
+      "expected": 0
+     },
+     "uncertainty": {
+      "recall": null,
+      "recall_close": null,
+      "differs": 0,
+      "expected": 0
+     },
+     "discovery": {
+      "recall": null,
+      "recall_close": null,
+      "differs": 0,
+      "expected": 0
+     },
+     "system": {
+      "recall": null,
+      "recall_close": null,
+      "differs": 0,
+      "expected": 0
+     },
+     "overall": {
+      "recall": null,
+      "recall_close": null,
+      "differs": 0,
+      "expected": 0
+     }
+    },
+    "model_standard": {
+     "papers": 12,
+     "recall": 0.85,
+     "recall_close": 0.855,
+     "recall_pack_quantities": 0.891,
+     "precision": 0.801,
+     "precision_close": 0.801,
+     "cells_right": 0.938,
+     "cells_elsewhere": 0.001,
+     "cells_wrong": 0.052,
+     "cells_missing": 0.01,
+     "rows_paired": 0.947
+    }
    }
   }
  },
@@ -1542,6 +1766,230 @@
      "cells_elsewhere": 0.001,
      "cells_wrong": 0.044,
      "cells_missing": 0.009,
+     "rows_paired": 0.947
+    }
+   },
+   "C4r": {
+    "label": "C4 rebuilt with the row-label fix ($0)",
+    "papers": 12,
+    "papers_with_rows": 12,
+    "cost_usd": 1.54,
+    "rows": 227,
+    "figure_rows_waiting": 0,
+    "hand": {
+     "papers": 12,
+     "hand_values_not_printed": 996,
+     "metadata": {
+      "recall": 0.896,
+      "recall_close": 0.896,
+      "printed": 48
+     },
+     "methodology": {
+      "recall": 0.806,
+      "recall_close": 0.806,
+      "printed": 169
+     },
+     "chemistry_in": {
+      "recall": 0.815,
+      "recall_close": 0.815,
+      "printed": 21
+     },
+     "chemistry_out": {
+      "recall": 0.608,
+      "recall_close": 0.608,
+      "printed": 34
+     },
+     "overall": {
+      "recall": 0.815,
+      "recall_close": 0.815,
+      "printed": 272
+     },
+     "all_papers": {
+      "papers": 12,
+      "recall": 0.815,
+      "recall_close": 0.815
+     },
+     "new_values": 36,
+     "new_confirmed": 33,
+     "new_unsupported": 3,
+     "new_unverified": 0,
+     "drafted_from": {
+      "papers": 2,
+      "recall": 0.728
+     },
+     "held_out": {
+      "papers": 10,
+      "recall": 0.833
+     }
+    },
+    "archive": {
+     "papers": 0,
+     "planets": 0,
+     "planets_found": 0,
+     "pack_quantities": {
+      "recall": null,
+      "expected": 0
+     },
+     "planet": {
+      "recall": null,
+      "recall_close": null,
+      "differs": 0,
+      "expected": 0
+     },
+     "star": {
+      "recall": null,
+      "recall_close": null,
+      "differs": 0,
+      "expected": 0
+     },
+     "uncertainty": {
+      "recall": null,
+      "recall_close": null,
+      "differs": 0,
+      "expected": 0
+     },
+     "discovery": {
+      "recall": null,
+      "recall_close": null,
+      "differs": 0,
+      "expected": 0
+     },
+     "system": {
+      "recall": null,
+      "recall_close": null,
+      "differs": 0,
+      "expected": 0
+     },
+     "overall": {
+      "recall": null,
+      "recall_close": null,
+      "differs": 0,
+      "expected": 0
+     }
+    },
+    "model_standard": {
+     "papers": 12,
+     "recall": 0.844,
+     "recall_close": 0.849,
+     "recall_pack_quantities": 0.863,
+     "precision": 0.83,
+     "precision_close": 0.83,
+     "cells_right": 0.945,
+     "cells_elsewhere": 0.001,
+     "cells_wrong": 0.044,
+     "cells_missing": 0.009,
+     "rows_paired": 0.947
+    }
+   },
+   "C5": {
+    "label": "C4 repeated (same pack and settings) with the row-label fix",
+    "papers": 12,
+    "papers_with_rows": 12,
+    "cost_usd": 1.01,
+    "rows": 222,
+    "figure_rows_waiting": 0,
+    "hand": {
+     "papers": 12,
+     "hand_values_not_printed": 996,
+     "metadata": {
+      "recall": 0.938,
+      "recall_close": 0.938,
+      "printed": 48
+     },
+     "methodology": {
+      "recall": 0.8,
+      "recall_close": 0.8,
+      "printed": 169
+     },
+     "chemistry_in": {
+      "recall": 0.778,
+      "recall_close": 0.778,
+      "printed": 21
+     },
+     "chemistry_out": {
+      "recall": 0.587,
+      "recall_close": 0.587,
+      "printed": 34
+     },
+     "overall": {
+      "recall": 0.814,
+      "recall_close": 0.814,
+      "printed": 272
+     },
+     "all_papers": {
+      "papers": 12,
+      "recall": 0.814,
+      "recall_close": 0.814
+     },
+     "new_values": 87,
+     "new_confirmed": 80,
+     "new_unsupported": 7,
+     "new_unverified": 0,
+     "drafted_from": {
+      "papers": 2,
+      "recall": 0.752
+     },
+     "held_out": {
+      "papers": 10,
+      "recall": 0.827
+     }
+    },
+    "archive": {
+     "papers": 0,
+     "planets": 0,
+     "planets_found": 0,
+     "pack_quantities": {
+      "recall": null,
+      "expected": 0
+     },
+     "planet": {
+      "recall": null,
+      "recall_close": null,
+      "differs": 0,
+      "expected": 0
+     },
+     "star": {
+      "recall": null,
+      "recall_close": null,
+      "differs": 0,
+      "expected": 0
+     },
+     "uncertainty": {
+      "recall": null,
+      "recall_close": null,
+      "differs": 0,
+      "expected": 0
+     },
+     "discovery": {
+      "recall": null,
+      "recall_close": null,
+      "differs": 0,
+      "expected": 0
+     },
+     "system": {
+      "recall": null,
+      "recall_close": null,
+      "differs": 0,
+      "expected": 0
+     },
+     "overall": {
+      "recall": null,
+      "recall_close": null,
+      "differs": 0,
+      "expected": 0
+     }
+    },
+    "model_standard": {
+     "papers": 12,
+     "recall": 0.883,
+     "recall_close": 0.888,
+     "recall_pack_quantities": 0.899,
+     "precision": 0.836,
+     "precision_close": 0.838,
+     "cells_right": 0.94,
+     "cells_elsewhere": 0.001,
+     "cells_wrong": 0.052,
+     "cells_missing": 0.007,
      "rows_paired": 0.947
     }
    }

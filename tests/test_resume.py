@@ -79,6 +79,22 @@ def test_rebuild_asks_nothing_and_reproduces_the_dataset():
         assert len(reuse) == 1 and reuse[0].startswith("Rebuilt from the earlier run") and "nothing was asked" in reuse[0]
 
 
+def test_a_saved_answer_no_step_asks_for_is_flagged():
+    """A step the data pack no longer runs on its own (2026-11-24: lab_experiment's conditions joined the pack's first
+    step): its saved answer isn't used, and the rebuild says so."""
+    if not _have_inputs():
+        return
+    import shutil
+    with tempfile.TemporaryDirectory() as tmp:
+        first = _finished(Path(tmp))
+        shutil.copy(first.run_dir / "metadata.output.json", first.run_dir / "lab_conditions.output.json")
+        with patch.object(api_client, "_send", _no_send):
+            again = resume.resume_run(first.run_dir, _config(Path(tmp)), rebuild=True)
+        assert again.csv_path.read_text() == COMMITTED.read_text()
+        unused = [f.message for f in again.paper_flags if f.kind == "reused_answer" and "didn't use" in f.message]
+        assert len(unused) == 1 and "lab_conditions" in unused[0]
+
+
 def test_resume_after_a_failure_asks_only_the_missing_step():
     if not _have_inputs():
         return

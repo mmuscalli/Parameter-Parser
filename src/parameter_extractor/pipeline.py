@@ -1720,6 +1720,17 @@ def _reuse_flags(ctx: RunContext) -> List[Flag]:
                                            f"these steps differ now, so their answers may not match what this data "
                                            f"pack would extract. Resume (instead of Rebuild) asks the model again for "
                                            f"them."))
+    # an earlier answer no step of this run asked for (the data pack, or a module joined into another step, runs its
+    # steps differently now -- 2026-11-24: lab_experiment's step joined the pack's first): its values aren't in this run
+    run_dir = Path(ctx.run_dir) if getattr(ctx, "run_dir", None) else None
+    if run_dir is not None and Path(old).is_dir():
+        unused = sorted(f.name[:-len(".output.json")] for f in Path(old).glob("*.output.json")
+                        if not (run_dir / f.name).is_file() and not f.name.startswith("figure"))
+        if unused:
+            flags.append(Flag("reused_answer", f"Saved answers of {Path(old).name} this run didn't use: "
+                                               f"{', '.join(unused)}. The data pack no longer runs them as steps of "
+                                               f"their own, so their values aren't in this dataset; Resume asks the "
+                                               f"model for what the steps ask now."))
     return flags
 
 

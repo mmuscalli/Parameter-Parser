@@ -154,6 +154,13 @@ column (volumes), 5 not printed in the paper (the standard's derived values), 3 
 step gave one temperature per table row without the row's sample, so every row of the set got the first (flagged,
 twice: a conflict and a label mismatch) while the rows' own labels state each temperature.
 
+A repeat (2026-11-24, arm C5: C4's pack and settings run again, $1.01) measures how much one run varies: reviewed
+MS recall 0.846 and 0.870 (written 0.865 and 0.898), against C3's 0.890; per paper up to 11 values apart (Chen2007's
+volumes and the concentrations that depend on them, Rode1990's run labels, iqubal2017's particle sizes, Bujdak1996's
+cycles in one run and yields in the other). The step change of C4 is within that spread: no quantity was lost in
+both runs except one solid-material type. kumar2012's solid materials came back in one run (14/14) and not the other
+(7/14), so that miss is also variable. Comparisons of single runs of 12 papers should allow about +-0.03.
+
 ## Limits
 
 - One model family throughout, the standard included. The standard covers 48 of 118 papers; P2, P3 and E1 have no
