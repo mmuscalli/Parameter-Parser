@@ -610,7 +610,11 @@ class MainWindow(QMainWindow):
         self.whole_box.setToolTip("Normally only the passages around the search words are read. Tick to read the whole "
                                   "paper instead.")
         self.whole_box.toggled.connect(lambda on: self.tables_box.setEnabled(not on))
-        for x in (self.words_edit, self.tables_box, self.plan_box, self.whole_box):
+        self.check_every_box = QCheckBox("Answer for every value, found or not (for tests)")
+        self.check_every_box.setToolTip("The model has to say, for each value you chose, whether the paper reports it "
+                                        "(reported / not reported / unclear, with a note) -- written to "
+                                        "parameter_checks.csv. For controlled tests of what a search finds.")
+        for x in (self.words_edit, self.tables_box, self.plan_box, self.whole_box, self.check_every_box):
             fv.addWidget(x)
         v.insertWidget(0, self.focused_widget)
         v.addStretch(1)
@@ -919,6 +923,7 @@ class MainWindow(QMainWindow):
         self.words_edit.setText(self._settings.value("focused/search_words", ""))
         self.whole_box.setChecked(self._settings.value("focused/whole_paper", False, type=bool))
         self.tables_box.setChecked(self._settings.value("focused/whole_tables", True, type=bool))
+        self.check_every_box.setChecked(self._settings.value("focused/check_every", False, type=bool))
         self._load_plan_box()
         stored_ads = key_store.load_key(key_store.ADS_ACCOUNT)
         self._ads_was_stored = bool(stored_ads)
@@ -965,6 +970,7 @@ class MainWindow(QMainWindow):
         self._settings.setValue("focused/search_words", self.words_edit.text())
         self._settings.setValue("focused/whole_paper", self.whole_box.isChecked())
         self._settings.setValue("focused/whole_tables", self.tables_box.isChecked())
+        self._settings.setValue("focused/check_every", self.check_every_box.isChecked())
         if self.pack_combo.currentData():
             self._settings.setValue(f"focused/{self.pack_combo.currentData()}/plan_rows", self.plan_box.isChecked())
         self._settings.setValue("use_pubchem", self.pubchem_box.isChecked())
@@ -1161,7 +1167,8 @@ class MainWindow(QMainWindow):
             if self.params.focused:
                 words = [w.strip() for w in self.words_edit.text().split(",") if w.strip()]
                 self.focused_run.start(items, self.params.checked_columns(), config, words, self.whole_box.isChecked(),
-                                       self.tables_box.isChecked(), self.plan_box.isChecked())
+                                       self.tables_box.isChecked(), self.plan_box.isChecked(),
+                                       self.check_every_box.isChecked())
             else:
                 self.skip_figures_btn.setHidden(not self.review_figures_box.isChecked())
                 self.skip_figures_btn.setEnabled(True)
@@ -1658,7 +1665,7 @@ class MainWindow(QMainWindow):
                   self.open_results_action, self.resume_action, self.rebuild_action,
                   self.export_requests_action, self.import_answers_action,
                   self.output_action, self.lookups_action, *self.option_toggles(), self.review_figures_box,
-                  self.review_variables_box, self.tables_box, self.plan_box, self.whole_box):
+                  self.review_variables_box, self.tables_box, self.plan_box, self.whole_box, self.check_every_box):
             w.setEnabled(enabled)
         if enabled:
             self.all_figures_box.setEnabled(self.images_box.isChecked())

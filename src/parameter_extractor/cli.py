@@ -84,6 +84,9 @@ def main() -> int:
     focused.add_argument("--rows-only", action="store_true",
                          help="In passages mode, send only the table rows near the search words instead of "
                               "whole tables (a little cheaper; misses table values whose rows lack the words)")
+    focused.add_argument("--check-every-parameter", action="store_true",
+                         help="Make the model answer for every --focus parameter, found or not (reported / not "
+                              "reported / unclear, with a note): parameter_checks.csv -- for controlled tests")
     plan = focused.add_mutually_exclusive_group()
     plan.add_argument("--plan-rows", dest="plan_rows", action="store_true", default=None,
                       help="Plan each paper's rows like a full extraction first (the pack's row planner, with "
@@ -482,7 +485,7 @@ def _focused(args, parser) -> int:
     try:
         run = run_focused_search(items, args.focus, config, search_words=args.search_word,
                                  whole_paper=args.whole_paper, whole_tables=not args.rows_only,
-                                 plan_rows=args.plan_rows,
+                                 plan_rows=args.plan_rows, check_every=args.check_every_parameter,
                                  on_progress=lambda done, total, message: print(f"[{done}/{total}] {message}"))
     except PipelineError as e:
         print(f"\nError: {e}", file=sys.stderr)

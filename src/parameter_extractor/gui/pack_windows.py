@@ -708,6 +708,11 @@ class PackEditor(QDialog):
         side = QVBoxLayout()
         for text, slot in (("Add…", self._add_column), ("Remove", self._remove_column)):
             side.addWidget(QPushButton(text, clicked=slot))
+        self.build_values_btn = QPushButton("Build columns…", clicked=lambda: self._build_columns("values"))
+        self.build_values_btn.setToolTip("Columns in the app's formats: compounds identified on PubChem, or a value "
+                                         "with its unit and the step that asks for it. Saves your edits first.")
+        self.build_values_btn.setEnabled(not self.read_only)
+        side.addWidget(self.build_values_btn)
         side.addSpacing(16)
         side.addWidget(QPushButton("Add a kind of value…", clicked=self._add_category))
         side.addStretch(1)
@@ -1481,6 +1486,12 @@ class PackEditor(QDialog):
         v.addWidget(self.compound_table, 1)
         row = QHBoxLayout()
         row.addWidget(QPushButton("Add compound…", clicked=self._add_compound))
+        self.build_compounds_btn = QPushButton("Add compounds from PubChem…",
+                                               clicked=lambda: self._build_columns("compounds"))
+        self.build_compounds_btn.setToolTip("Type names or formulas; they're identified (the app's name rules, then "
+                                            "PubChem) and get their columns. Saves your edits first.")
+        self.build_compounds_btn.setEnabled(not self.read_only)
+        row.addWidget(self.build_compounds_btn)
         row.addWidget(QPushButton("Remove", clicked=lambda: [self.compound_table.removeRow(r) for r in sorted(
             {i.row() for i in self.compound_table.selectedIndexes()}, reverse=True)]))
         self.lookup_btn = QPushButton("Look up missing CIDs on PubChem", clicked=self._lookup_cids)
@@ -2627,6 +2638,14 @@ class PackEditor(QDialog):
         dlg = CompoundSetupDialog(self.draft.folder, self)
         if dlg.exec():
             self._reopen("Compounds set up", dlg.applied, dlg.problems)
+
+    def _build_columns(self, start: str) -> None:
+        from parameter_extractor.gui.variable_builder import VariableBuilderDialog
+        if self.read_only or not self.save():
+            return
+        dlg = VariableBuilderDialog(self.draft.folder, self, start=start)
+        if dlg.exec():
+            self._reopen("Columns built", dlg.applied, dlg.problems)
 
     def _suggest_additions(self) -> None:
         from parameter_extractor.gui.pack_assist import AdditionsDialog

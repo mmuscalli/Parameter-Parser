@@ -35,6 +35,7 @@ from parameter_extractor.paper_source import PaperItem, resolve_paper, run_name
 from parameter_extractor.run_context import RunContext, total_cost
 
 STAGE = "focused_search"
+CHECKS_FILE = "parameter_checks.csv"      # check_every: one line per paper and parameter
 CONTEXT_LINES = 3                 # lines kept around a hit (a table around a hit is kept whole)
 # a hit this many lines above a table also keeps it: captions without a 'Table N' label (PASJ's \tbl
 # 'Orbital parameters.' sits 7 lines above teng2023's Table 3 rows, past footnote marks)
@@ -157,9 +158,28 @@ def passages(text: str, keywords: Sequence[str], whole_tables: bool = True) -> t
     return "\n".join(out), len(hits)
 
 
-def answer_model(columns: Sequence[str]):
+CHECK_STATUSES = ("reported", "not reported", "unclear")
+
+
+def check_keys(columns: Sequence[str]) -> Dict[str, str]:
+    """{column: its key in the answer's `checked` object} -- the column itself where it is a plain name, else
+    with other characters as '_' (and a number when two would clash)."""
+    out, used = {}, set()
+    for c in columns:
+        key = re.sub(r"[^A-Za-z0-9_-]", "_", c)[:60] or "p"
+        base, n = key, 2
+        while key in used:
+            key, n = f"{base}_{n}", n + 1
+        used.add(key)
+        out[c] = key
+    return out
+
+
+def answer_model(columns: Sequence[str], check_every: bool = False):
     """The answer schema for these columns: flat, every field required (optional fields invited
-    runaway answers, see docs/history/), short field names."""
+    runaway answers, see docs/history/), short field names. `check_every` (2026-11-24, Mickey: controlled
+    tests): `checked` has one required entry per parameter -- the model has to answer for each, found or not --
+    in place of the free `not_found` list."""
     Col = Literal[tuple(columns)]
     required = lambda names: {"json_schema_extra": {"required": names}}
     Value = create_model(
@@ -181,6 +201,22 @@ def answer_model(columns: Sequence[str]):
     Row = create_model(
         "FocusedRow", __config__=ConfigDict(populate_by_name=True, **required(["set", "obj"])),
         grp=(str, Field(alias="set", description="The set")), obj=(str, Field(description="The row within it")))
+    if check_every:
+        Check = create_model(
+            "ParameterCheck", __config__=ConfigDict(json_schema_extra={"required": ["s", "n"]}),
+            s=(Literal[CHECK_STATUSES], Field(description="reported: the paper gives a value (in `values`); not "
+                                                         "reported; unclear: something might be it")),
+            n=(str, Field(description="A few words: where it is, or what you checked")))
+        keys = check_keys(columns)
+        Checks = create_model(
+            "ParameterChecks", __config__=ConfigDict(populate_by_name=True,
+                                                     json_schema_extra={"required": list(keys.values())}),
+            **{f"k{i}": (Check, Field(alias=keys[c], description=f"`{c}`")) for i, c in enumerate(columns)})
+        return create_model(
+            "FocusedAnswer", __config__=ConfigDict(json_schema_extra={"required": ["rows", "values", "checked"]}),
+            rows=(List[Row], Field(default_factory=list, description="Every row (set + sample) of the paper's results")),
+            values=(List[Value], Field(default_factory=list)),
+            checked=(Checks, Field(description="One entry per parameter: was it reported?")))
     return create_model(
         "FocusedAnswer", __config__=ConfigDict(json_schema_extra={"required": ["rows", "values", "not_found"]}),
         # every row the paper's results make, also those with no requested value: a set's values then fill
@@ -223,6 +259,8 @@ class PaperOutcome:
     message: str = ""
     values: List[FocusedValue] = field(default_factory=list)
     rows: List[tuple] = field(default_factory=list)   # (set, sample) of every row the paper's results make
+    # check_every: {column: {"status", "note", "values", "problem"}} -- what the model said about each parameter
+    checks: Dict[str, dict] = field(default_factory=dict)
 
 
 def _number(text: str) -> Optional[float]:
@@ -288,7 +326,8 @@ def _paper_text(source, run_dir: Path, whole_paper: bool, rasterize: bool, dpi: 
 def search_paper(item: PaperItem, params: Sequence[FocusParameter], config: RunConfig, run_dir: Path,
                  search_words: Sequence[str] = (), whole_paper: bool = False,
                  cancel_event: Optional[threading.Event] = None, whole_tables: bool = True,
-                 record=None, cache=None, client=None, collector=None, plan_rows: bool = False) -> PaperOutcome:
+                 record=None, cache=None, client=None, collector=None, plan_rows: bool = False,
+                 check_every: bool = False) -> PaperOutcome:
     """`record`: the identifier's arXiv record (or the PaperSourceError) from the batched lookup;
     `cache`: arXiv texts kept between runs; `client` / `collector`: shared by all papers (one
     Anthropic client; in batch mode, requests pooled into shared batches)."""
@@ -322,6 +361,10 @@ def search_paper(item: PaperItem, params: Sequence[FocusParameter], config: RunC
         if outcome.hits == 0:
             outcome.status = "not mentioned"
             outcome.message = f"none of the search words appear in the text ({', '.join(keywords[:8])})"
+            if check_every:
+                outcome.checks = {p.column: {"status": "not searched", "note": "no search word in the text (screened "
+                                             "on this computer, no request)", "values": 0, "problem": ""}
+                                  for p in params}
             return outcome
     pack = packs.current()
     listing = "\n".join(f"- `{p.column}`: {p.description}" + (f" (unit: {p.unit})" if p.unit else "")
@@ -343,8 +386,16 @@ def search_paper(item: PaperItem, params: Sequence[FocusParameter], config: RunC
                        "'' for the whole paper); leave `rows` empty.\n" + "\n".join(
                            f"- set {s.set_label!r}: " + ", ".join(repr(x.sample_label) for x in s.samples)
                            for s in plan.experiment_sets))
+    if check_every:
+        keys = check_keys([p.column for p in params])
+        prompt += ("\n\nEVERY PARAMETER CHECKED: instead of `not_found`, `checked` has one entry per parameter above, "
+                   "keyed by its name" + ("" if all(k == c for c, k in keys.items()) else " (" + ", ".join(
+                       f"`{c}` is `{k}`" for c, k in keys.items() if k != c) + ")") + ". Look for EACH parameter "
+                   "specifically, in the text and the tables, and answer for every one: `s` 'reported' when the paper "
+                   "gives a value for it (its values go in `values`), 'not reported' when it doesn't, 'unclear' when "
+                   "something might be it but you aren't sure; `n` a few words: where it is, or what you checked.")
     content = f"{prompt}\n\nPAPER {'TEXT' if whole_paper else 'PASSAGES'}:\n{body}"
-    model = answer_model([p.column for p in params])
+    model = answer_model([p.column for p in params], check_every)
     answer = call_structured(ctx, stage=STAGE, system_prompt="Find only the requested parameters in a research "
                              "paper. Report only what the paper states.", user_content=content,
                              response_model=model, image_paths=images or None,
@@ -355,11 +406,30 @@ def search_paper(item: PaperItem, params: Sequence[FocusParameter], config: RunC
     if plan is not None and plan.experiment_sets:          # the planned rows, in the plan's order
         outcome.rows = [(s.set_label, x.sample_label) for s in plan.experiment_sets for x in s.samples]
     outcome.found = list(dict.fromkeys(v.parameter for v in outcome.values))
+    if check_every:
+        outcome.checks = _checks(answer, params, outcome.values)
     outcome.status = "found" if outcome.values else "not found"
     outcome.cost_usd = total_cost(ctx.usage) or 0.0
     outcome.input_tokens = sum(u.prompt_tokens for u in ctx.usage)
     outcome.output_tokens = sum(u.output_tokens for u in ctx.usage)
     return outcome
+
+
+def _checks(answer, params: Sequence[FocusParameter], values: Sequence["FocusedValue"]) -> Dict[str, dict]:
+    """What the model said about each parameter, against the values it gave: 'reported' with no value, or values
+    for one it marked 'not reported', is a problem (shown, nothing changed)."""
+    keys = check_keys([p.column for p in params])
+    checked = getattr(answer, "checked", None)
+    raw = checked.model_dump(by_alias=True) if checked is not None else {}
+    counts = {p.column: sum(v.parameter == p.column for v in values) for p in params}
+    out = {}
+    for p in params:
+        entry = raw.get(keys[p.column]) or {}
+        status, n = entry.get("s", ""), counts[p.column]
+        problem = ("marked reported, but no value given" if status == "reported" and n == 0 else
+                   f"{n} value(s) given, but marked not reported" if status == "not reported" and n else "")
+        out[p.column] = {"status": status or "no answer", "note": entry.get("n", ""), "values": n, "problem": problem}
+    return out
 
 
 @dataclass
@@ -503,13 +573,15 @@ def run_focused_search(items: Sequence[PaperItem], columns: Sequence[str], confi
                        search_words: Sequence[str] = (), whole_paper: bool = False,
                        on_progress: Optional[Callable[[int, int, str], None]] = None,
                        cancel_event: Optional[threading.Event] = None, max_workers: int = 0,
-                       whole_tables: bool = True, plan_rows: Optional[bool] = None) -> FocusedRun:
+                       whole_tables: bool = True, plan_rows: Optional[bool] = None,
+                       check_every: bool = False) -> FocusedRun:
     """Search every paper for `columns` only. `plan_rows`: plan each paper's rows with the pack's structure
     planner first, as a full extraction does (more tokens: the whole paper + its table images); None = the
     pack's default (pack.json focused_row_plan). on_progress(done, total, message). `whole_tables`
     (passages mode): a match in or just above a table sends the whole table (measured 2026-10-24:
     +10-45% passage tokens, ~$0.003 a paper on Economy; without it teng2023's planet table -- rows
-    without the search words -- was missed)."""
+    without the search words -- was missed). `check_every`: the model answers for every parameter, found or not
+    (parameter_checks.csv) -- for controlled tests."""
     from parameter_extractor.errors import ApiKeyMissingError
     if config.needs_api_key and not config.api_key:
         raise ApiKeyMissingError()
@@ -557,7 +629,7 @@ def run_focused_search(items: Sequence[PaperItem], columns: Sequence[str], confi
     with ThreadPoolExecutor(max_workers=workers, thread_name_prefix="focused") as pool:
         futures = {pool.submit(search_paper, item, params, config, run_dir, search_words, whole_paper,
                                cancel_event, whole_tables, records.get(str(item)), cache, client, collector,
-                               plan_rows):
+                               plan_rows, check_every):
                    (item, run_dir) for item, run_dir in jobs}
         try:
             for future in as_completed(futures):
@@ -584,7 +656,7 @@ def run_focused_search(items: Sequence[PaperItem], columns: Sequence[str], confi
     cache.save()
     order = {str(item): i for i, (item, _) in enumerate(jobs)}
     outcomes.sort(key=lambda o: order.get(o.item, len(order)))
-    return _write(out_dir, outcomes, params, config, search_words, whole_paper, whole_tables)
+    return _write(out_dir, outcomes, params, config, search_words, whole_paper, whole_tables, check_every)
 
 
 def result_columns(params: Sequence[FocusParameter], outcomes: Sequence[PaperOutcome]) -> List[tuple]:
@@ -602,7 +674,7 @@ def result_columns(params: Sequence[FocusParameter], outcomes: Sequence[PaperOut
 
 
 def _write(out_dir: Path, outcomes: List[PaperOutcome], params, config: RunConfig, search_words, whole_paper,
-           whole_tables: bool = True) -> FocusedRun:
+           whole_tables: bool = True, check_every: bool = False) -> FocusedRun:
     results_csv, papers_csv = out_dir / "focused_results.csv", out_dir / "papers.csv"
     quotes_csv = out_dir / "focused_values_with_quotes.csv"
     columns = result_columns(params, outcomes)
@@ -628,10 +700,21 @@ def _write(out_dir: Path, outcomes: List[PaperOutcome], params, config: RunConfi
             row["found"] = "; ".join(o.found)
             row["cost_usd"] = round(o.cost_usd, 5)
             w.writerow(row)
+    if check_every:                              # one line per paper and parameter: what the model said about it
+        with open(out_dir / CHECKS_FILE, "w", newline="", encoding="utf-8") as f:
+            w = csv.writer(f)
+            w.writerow(["reference", "paper", "parameter", "status", "values", "note", "problem"])
+            for o in outcomes:
+                for p in params:
+                    c = o.checks.get(p.column) or {"status": "error" if o.status == "error" else "no answer",
+                                                   "note": o.message if o.status == "error" else "", "values": 0,
+                                                   "problem": ""}
+                    w.writerow([o.reference, o.paper, p.column, c["status"], c["values"], c["note"], c["problem"]])
     cost = sum(o.cost_usd for o in outcomes)
     summary = {"finished": datetime.now().isoformat(timespec="seconds"), "config": config.to_public_dict(),
                "parameters": [asdict(p) for p in params], "search_words": list(search_words),
                "whole_paper": whole_paper, "whole_tables": whole_tables and not whole_paper, "papers": len(outcomes),
+               "check_every_parameter": check_every,
                "status_counts": {s: sum(o.status == s for o in outcomes) for s in
                                  ("found", "not found", "not mentioned", "error")},
                "estimated_cost_usd": round(cost, 5)}

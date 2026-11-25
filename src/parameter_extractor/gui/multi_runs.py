@@ -36,9 +36,10 @@ class FocusedWorker(QObject):
     cancelled = Signal()
     done = Signal()
 
-    def __init__(self, items, columns, config, search_words, whole_paper, whole_tables=True, plan_rows=None):
+    def __init__(self, items, columns, config, search_words, whole_paper, whole_tables=True, plan_rows=None,
+                 check_every=False):
         super().__init__()
-        self.args = (items, columns, config, search_words, whole_paper, whole_tables, plan_rows)
+        self.args = (items, columns, config, search_words, whole_paper, whole_tables, plan_rows, check_every)
         self._cancel = threading.Event()
 
     def cancel(self) -> None:
@@ -48,10 +49,11 @@ class FocusedWorker(QObject):
     def run(self) -> None:
         from parameter_extractor.focused_search import run_focused_search
         from parameter_extractor.gui.error_log import record
-        items, columns, config, words, whole, tables, plan = self.args
+        items, columns, config, words, whole, tables, plan, check_every = self.args
         try:
             run = run_focused_search(items, columns, config, search_words=words, whole_paper=whole, whole_tables=tables,
-                                     plan_rows=plan, on_progress=self.progress.emit, cancel_event=self._cancel)
+                                     plan_rows=plan, on_progress=self.progress.emit, cancel_event=self._cancel,
+                                     check_every=check_every)
         except RunCancelledError:
             self.cancelled.emit()
         except PipelineError as e:
@@ -79,9 +81,9 @@ class FocusedRun(QObject):
     def running(self) -> bool:
         return self._thread is not None
 
-    def start(self, items, columns, config, words, whole_paper, whole_tables, plan_rows) -> None:
+    def start(self, items, columns, config, words, whole_paper, whole_tables, plan_rows, check_every=False) -> None:
         m = self.main
-        self._worker = FocusedWorker(items, columns, config, words, whole_paper, whole_tables, plan_rows)
+        self._worker = FocusedWorker(items, columns, config, words, whole_paper, whole_tables, plan_rows, check_every)
         self._thread = QThread(self)
         self._worker.moveToThread(self._thread)
         self._thread.started.connect(self._worker.run)

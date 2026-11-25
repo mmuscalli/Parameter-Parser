@@ -218,6 +218,54 @@ def test_a_search_over_several_papers():
         packs.activate("prebiotic_chemistry")
 
 
+def test_every_parameter_answered_for():
+    """--check-every-parameter (2026-11-24, Mickey: controlled tests): the answer has a required entry per parameter;
+    parameter_checks.csv says what the model said about each, and where that disagrees with its values; a paper
+    screened out locally has every parameter 'not searched'. Off, the request is as before."""
+    if not EDER_PDF.is_file():
+        print(f"SKIP: needs {EDER_PDF}"); return
+    calls = []
+
+    def send(ctx, *, model, system_prompt, content, response_model, stop_reason="end_turn"):
+        calls.append({"content": content, "model": response_model})
+        answer = {"rows": [], "values": [
+            {"obj": "", "col": "pl_fitsoftware", "v": "EXOFASTv2", "u": "", "ep": "", "em": "", "q": "using EXOFASTv2",
+             "src": "Abstract", "c": "high"},
+            {"obj": "", "col": "pl_fitexofastver", "v": "EXOFASTv2", "u": "", "ep": "", "em": "", "q": "using EXOFASTv2",
+             "src": "Abstract", "c": "high"}],
+            "checked": {"pl_fitsoftware": {"s": "reported", "n": "Abstract"},
+                        "pl_fitexofastver": {"s": "not reported", "n": "only the name"},
+                        "pl_orbper": {"s": "reported", "n": "Table 2"}}}
+        return SimpleNamespace(id="fake", stop_reason=stop_reason, parsed_output=response_model.model_validate(answer),
+                               content=[SimpleNamespace(type="text", text=json.dumps(answer))],
+                               usage=SimpleNamespace(input_tokens=6000, output_tokens=300))
+    try:
+        with tempfile.TemporaryDirectory() as tmp, patch.object(ax, "_get", fake_get()), \
+                patch.object(api_client, "_send", send):
+            cfg = RunConfig.from_settings(api_key="x", output_dir=Path(tmp), pack="exoplanets", model_profile="economy")
+            run = fs.run_focused_search(["arXiv:1811.01882", EDER_PDF], ["pl_fitsoftware", "pl_fitexofastver",
+                                                                          "pl_orbper"], cfg, search_words=["EXOFAST"],
+                                        check_every=True)
+            sent = calls[0]["content"] if isinstance(calls[0]["content"], str) else json.dumps(calls[0]["content"])
+            assert "EVERY PARAMETER CHECKED" in sent and "checked" in calls[0]["model"].model_fields
+            import csv as _csv
+            checks = list(_csv.DictReader(open(run.out_dir / fs.CHECKS_FILE)))
+            assert len(checks) == 6                                                  # 2 papers x 3 parameters
+            got = {(r["paper"], r["parameter"]): r for r in checks}
+            nielsen = "arXiv_1811.01882"
+            assert got[(nielsen, "pl_fitsoftware")]["status"] == "reported" and not got[(nielsen, "pl_fitsoftware")]["problem"]
+            assert "marked not reported" in got[(nielsen, "pl_fitexofastver")]["problem"]
+            assert got[(nielsen, "pl_orbper")]["problem"] == "marked reported, but no value given"
+            eder = next(r for r in checks if r["paper"] != nielsen)
+            assert eder["status"] == "not searched"
+            assert json.loads((run.out_dir / "focused_summary.json").read_text())["check_every_parameter"] is True
+            fs.run_focused_search(["arXiv:1811.01882"], ["pl_fitsoftware"], cfg, search_words=["EXOFAST"])
+            sent = calls[-1]["content"] if isinstance(calls[-1]["content"], str) else json.dumps(calls[-1]["content"])
+            assert "EVERY PARAMETER CHECKED" not in sent and "not_found" in calls[-1]["model"].model_fields
+    finally:
+        packs.activate("prebiotic_chemistry")
+
+
 if __name__ == "__main__":
     for name, fn in list(globals().items()):
         if name.startswith("test_") and callable(fn):

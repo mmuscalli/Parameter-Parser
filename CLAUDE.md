@@ -17,7 +17,7 @@ screening tool, never a gate in the pipeline.
 
 Front ends: a PySide6 window (`parameter-extractor-gui`), a command line (`parameter-extract`), and PyInstaller
 builds for macOS (unsigned; signing, notarization and the Windows build are deferred by Mickey; don't start them).
-Version: `parameter_extractor.__version__` (0.6.2, tag `v0.6.2`, on branch levels-and-facets), the one place it is set.
+Version: `parameter_extractor.__version__` (0.6.3, tag `v0.6.3`, on branch levels-and-facets), the one place it is set.
 
 ## Map of the code (`src/parameter_extractor/`, ~36K lines)
 
@@ -51,7 +51,9 @@ Version: `parameter_extractor.__version__` (0.6.2, tag `v0.6.2`, on branch level
 - Shared logic at the top level: `units.py`, `names.py` (species matching), `registry.py` (columns, synonyms,
   compounds per data pack), `column_order.py`, `value_types.py`, `variable_categories.py`, `formulas.py`, `voting.py`
   (passes), `scopes.py`, `compound_names.py`, `pubchem.py`, `pricing.py`.
-- Multi-paper: `paper_queue.py` (full extraction queue), `focused_search.py` (a few values across many papers).
+- Multi-paper: `paper_queue.py` (full extraction queue), `focused_search.py` (a few values across many papers;
+  `check_every` / `--check-every-parameter` / the window's "Answer for every value": a required answer per parameter,
+  parameter_checks.csv -- for controlled tests).
   Earlier runs: `run_folder.py` (a run folder read back into a RunResult: File > Open a results folder…),
   `resume.py` (resume / rebuild from a run's or queue's saved answers into a NEW folder; CLI --resume / --rebuild).
   `corrections.py` (the reviewer's corrections -> corrections.json + the dataset files; checked marks ->
@@ -59,7 +61,9 @@ Version: `parameter_extractor.__version__` (0.6.2, tag `v0.6.2`, on branch level
   `flag_targets.py` (which cells a flag is about; flags of different kinds about the same cells merged) and
   `gui/flagged_values.py` (Things to check > Review flagged values…; boxes a value on its saved table image via
   `ingestion/table_locate.py`, from the PDF's text layer).
-  Pack authoring: `pack_editing.py` (+ `check`), `pack_drafting.py` (an astronomy design that covers the exoplanet
+  Pack authoring: `variable_builder.py` + `gui/variable_builder.py` (Build columns…: compounds identified by the
+  name rules and PubChem -> compound columns; other values -> conventional columns / step parameters),
+  `pack_editing.py` (+ `check`), `pack_drafting.py` (an astronomy design that covers the exoplanet
   pack is written on it: `built_in_base`, `conventions.archive_column`), `compound_setup.py`, `conventions.py`,
   `pack_modules.py`, `module_drafting.py`, `pack_overview.py`.
 - `gui/`: `main_window.py` (five numbered steps: data pack, papers, what to extract, options, run; results tabs),
@@ -230,6 +234,6 @@ estimates, local-model speed-ups, ...) and their status: `docs/improvement_sugge
   when present, so "Always Allow" survives a rebuild.
 - Branches: `main` (on GitHub since 2026-11-11) and `flexible-variables`, both at the same commit; keep them
   together until Mickey retires `flexible-variables`. Tags: `v0.2-figure-digitizer`,
-  `backup/flexible-variables-before-public`, `v0.3.0`, `v0.4.0`, `v0.5.0`, `v0.6.0`, `v0.6.1`, `v0.6.2`. Tag a state whenever both apps are built for use.
+  `backup/flexible-variables-before-public`, `v0.3.0`, `v0.4.0`, `v0.5.0`, `v0.6.0`, `v0.6.1`, `v0.6.2`, `v0.6.3`. Tag a state whenever both apps are built for use.
 - Backups: full project archive `../Backups/EORE_Data_Project_FULL_BACKUP_20261012_030042.tar` (before this
   pipeline); dated `runs/` archives from `scripts/backup_runs.py` in `../Backups/`.
