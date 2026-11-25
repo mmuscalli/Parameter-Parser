@@ -572,7 +572,8 @@ def extract_steps(ex: "Extraction") -> "Extraction":
         # optional stages whose trigger matches this paper (decided locally, no API call)
         specs = [] if skip else triggered_specs(ex.structure, parsed.text, config.optional_stages,
                                                 config.suggest_new_variables, set(running),
-                                                set(config.parameters_off), config.table_grids)
+                                                set(config.parameters_off), config.table_grids,
+                                                config.check_every_parameter)
         for spec in specs:
             if spec.name not in always_on:
                 ctx.total_steps += 1
@@ -774,14 +775,16 @@ def _step_instructions(pack, config: RunConfig, tools: dict, vocab: dict) -> dic
             out[stage] = planner_stage.prompt_text(PAPER_ABOVE, config.rows_from_text)
         elif stage == "chemistry":
             out[stage] = chemistry_extractor.prompt_text(PAPER_ABOVE, PLAN_MARK, vocab["species_names"],
-                                                         config.scopes.get("chemistry"), grids=config.table_grids)
+                                                         config.scopes.get("chemistry"), grids=config.table_grids,
+                                                         check=tuple(config.check_compounds or ()))
         elif stage == "analysis":
             out[stage] = analysis_stage.prompt_text(PAPER_ABOVE, PLAN_MARK, config.scopes.get("analysis"))
         elif stage == "fit_models":
             out[stage] = fit_stage.prompt_text(PAPER_ABOVE, PLAN_MARK)
         elif stage in specs:
             out[stage] = for_run(specs[stage], config.suggest_new_variables, running,
-                                 set(config.parameters_off), config.table_grids).prompt_text(PAPER_ABOVE, PLAN_MARK)
+                                 set(config.parameters_off), config.table_grids,
+                                 config.check_every_parameter).prompt_text(PAPER_ABOVE, PLAN_MARK)
     return out
 
 
@@ -790,11 +793,12 @@ def _paper_tools(pack, config: RunConfig, terms, has_figures: bool = False, pape
     list in every request (api_client), so all of them share the cached paper. Fixed before the
     structure is planned: optional stages are included unless switched off, triggered or not."""
     from parameter_extractor.schemas.variables import TermSearch
+    from parameter_extractor.stages import chemistry_extractor
     tools = {"structure_planner": StructurePlan}
     if pack.uses("methodology"):
         tools["methodology"] = Methodology
     if _chemistry_on(pack, config):
-        tools["chemistry"] = ChemistryExtraction
+        tools["chemistry"] = chemistry_extractor.answer_format(tuple(config.check_compounds or ()))
     if terms:
         tools["term_search"] = TermSearch
     if pack.uses("fit_models") and config.optional_stages.get("fit_models", "auto") != "off":
@@ -809,7 +813,8 @@ def _paper_tools(pack, config: RunConfig, terms, has_figures: bool = False, pape
         per_paper = paper_text is not None and not config.shared_instructions
         if choice == "off" or (choice == "auto" and per_paper and not spec.could_trigger(paper_text)):
             continue
-        spec = for_run(spec, config.suggest_new_variables, left_out=left_out, grids=config.table_grids)
+        spec = for_run(spec, config.suggest_new_variables, left_out=left_out, grids=config.table_grids,
+                       check_every=config.check_every_parameter)
         if spec.parameters:
             tools[name] = spec.models()[1]
     if has_figures and config.figure_suggestions_on_paper:
@@ -1582,6 +1587,8 @@ def finish(
         row_flags.setdefault(fid, []).extend(flags)
     paper_flags += _range_flags(rows)
     paper_flags += starting_composition_flags(rows)          # products but no starting compounds (2026-11-12)
+    from parameter_extractor.parameter_checks import finish as check_answers
+    paper_flags += check_answers(ctx, ex, Path(ctx.run_dir))   # answers for every parameter (when asked for)
     from parameter_extractor.calculators.label_values import label_gaps, label_mismatches
     paper_flags += label_mismatches(rows, ex.structure, pack.manifest.label_columns,   # against the rows' own labels
                                     pack.manifest.column_pairs)

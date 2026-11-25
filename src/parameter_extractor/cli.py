@@ -85,8 +85,13 @@ def main() -> int:
                          help="In passages mode, send only the table rows near the search words instead of "
                               "whole tables (a little cheaper; misses table values whose rows lack the words)")
     focused.add_argument("--check-every-parameter", action="store_true",
-                         help="Make the model answer for every --focus parameter, found or not (reported / not "
-                              "reported / unclear, with a note): parameter_checks.csv -- for controlled tests")
+                         help="Make the model answer for every parameter, found or not (reported / not reported / "
+                              "unclear, with a note): parameter_checks.csv -- for controlled tests. In a focused "
+                              "search the --focus parameters; in a full run every configurable step's parameters "
+                              "(about +5-10%% a paper)")
+    focused.add_argument("--check-compound", action="append", default=[], metavar="NAME",
+                         help="Full run: make the chemistry step answer for this compound (repeatable; the name as "
+                              "the data pack has it, e.g. Gly)")
     plan = focused.add_mutually_exclusive_group()
     plan.add_argument("--plan-rows", dest="plan_rows", action="store_true", default=None,
                       help="Plan each paper's rows like a full extraction first (the pack's row planner, with "
@@ -271,6 +276,7 @@ def main() -> int:
                  "batch_mode": args.batch, "prefer_arxiv": args.arxiv,
                  "suggest_new_variables": not args.no_suggestions, "passes": args.passes,
                  "rows_from_text": args.rows_from_text,
+                 "check_every_parameter": args.check_every_parameter, "check_compounds": list(args.check_compound),
                  "include_supplements": not args.no_si,
                  "save_images": not args.no_images, "save_all_figure_images": args.all_figure_images,
                  "auto_digitize_figures": args.auto_figures, "table_check": not args.no_table_check,

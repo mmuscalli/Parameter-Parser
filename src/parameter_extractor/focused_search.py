@@ -32,6 +32,7 @@ from parameter_extractor import packs
 from parameter_extractor.config.run_config import RunConfig
 from parameter_extractor.errors import PipelineError, RunCancelledError
 from parameter_extractor.paper_source import PaperItem, resolve_paper, run_name
+from parameter_extractor.parameter_checks import STATUSES as CHECK_STATUSES, check_keys  # noqa: F401 (shared)
 from parameter_extractor.run_context import RunContext, total_cost
 
 STAGE = "focused_search"
@@ -219,23 +220,6 @@ def passages(text: str, keywords: Sequence[str], whole_tables: bool = True) -> t
         size += len(lines[i]) + 1
         last = i
     return "\n".join(out), len(hits)
-
-
-CHECK_STATUSES = ("reported", "not reported", "unclear")
-
-
-def check_keys(columns: Sequence[str]) -> Dict[str, str]:
-    """{column: its key in the answer's `checked` object} -- the column itself where it is a plain name, else
-    with other characters as '_' (and a number when two would clash)."""
-    out, used = {}, set()
-    for c in columns:
-        key = re.sub(r"[^A-Za-z0-9_-]", "_", c)[:60] or "p"
-        base, n = key, 2
-        while key in used:
-            key, n = f"{base}_{n}", n + 1
-        used.add(key)
-        out[c] = key
-    return out
 
 
 def answer_model(columns: Sequence[str], check_every: bool = False):

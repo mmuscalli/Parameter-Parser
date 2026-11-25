@@ -552,7 +552,20 @@ class MainWindow(QMainWindow):
             "stated in the text or a caption also gets a row when the paper gives its conditions completely "
             "(composition, temperature and duration). Text results are often passing remarks that repeat a table's "
             "data, so they are left out unless you turn this on; they are listed as excluded in the run's notes.")
-        for box in (self.suggest_box, self.text_rows_box, self.shared_box, self.auto_figures_box):
+        self.check_all_box = QCheckBox("Answer for every value of the steps (for tests; about 5-10% more)")
+        self.check_all_box.setToolTip(
+            "For controlled tests: each step has to say, for every value it asks for, whether the paper reports it "
+            "(reported / not reported / unclear, with a note) -- written to parameter_checks.csv, with a flag where "
+            "the answers and the values disagree. It changes what the steps are asked, so compare runs made the "
+            "same way.")
+        self.check_compounds_edit = QLineEdit(placeholderText="…and for these compounds (optional, comma-separated, "
+                                                              "e.g. Gly, Gly-Gly)")
+        self.check_compounds_edit.setToolTip("The chemistry step answers for each compound listed (names as the data "
+                                             "pack has them). Every compound of the pack would add about 30%; list "
+                                             "the ones the test is about.")
+        self.check_all_box.toggled.connect(self.check_compounds_edit.setEnabled)
+        for box in (self.suggest_box, self.text_rows_box, self.shared_box, self.auto_figures_box, self.check_all_box,
+                    self.check_compounds_edit):
             self.reading_section.body.addWidget(box)
 
         self.saved_section = CollapsibleSection("Saved with the results")
@@ -623,7 +636,7 @@ class MainWindow(QMainWindow):
     def option_toggles(self) -> List[QCheckBox]:
         """The on/off run options, in the panel's order."""
         return [self.batch_box, self.arxiv_box, self.si_box, self.suggest_box, self.text_rows_box, self.shared_box, self.auto_figures_box,
-                self.images_box, self.all_figures_box, self.equations_box]
+                self.check_all_box, self.images_box, self.all_figures_box, self.equations_box]
 
     def _update_options_summary(self, *_args) -> None:
         """Kept for callers of the old summary line: the mode line says what the run will do now."""
@@ -909,6 +922,9 @@ class MainWindow(QMainWindow):
         self.suggest_box.setChecked(self._settings.value("suggest_new_variables", True, type=bool))
         self.shared_box.setChecked(self._settings.value("fill_shared_values", True, type=bool))
         self.text_rows_box.setChecked(self._settings.value("rows_from_text", False, type=bool))
+        self.check_all_box.setChecked(self._settings.value("check_every_parameter", False, type=bool))
+        self.check_compounds_edit.setText(self._settings.value("check_compounds", ""))
+        self.check_compounds_edit.setEnabled(self.check_all_box.isChecked())
         self.si_box.setChecked(self._settings.value("include_supplements", True, type=bool))
         self.images_box.setChecked(self._settings.value("save_images", True, type=bool))
         self.all_figures_box.setChecked(self._settings.value("save_all_figure_images", False, type=bool))
@@ -983,6 +999,8 @@ class MainWindow(QMainWindow):
         self._settings.setValue("suggest_new_variables", self.suggest_box.isChecked())
         self._settings.setValue("fill_shared_values", self.shared_box.isChecked())
         self._settings.setValue("rows_from_text", self.text_rows_box.isChecked())
+        self._settings.setValue("check_every_parameter", self.check_all_box.isChecked())
+        self._settings.setValue("check_compounds", self.check_compounds_edit.text())
         self._settings.setValue("include_supplements", self.si_box.isChecked())
         self._settings.setValue("save_images", self.images_box.isChecked())
         self._settings.setValue("save_all_figure_images", self.all_figures_box.isChecked())
@@ -1095,6 +1113,9 @@ class MainWindow(QMainWindow):
                          suggest_new_variables=self.suggest_box.isChecked(),
                          fill_shared_values=self.shared_box.isChecked(),
                          rows_from_text=self.text_rows_box.isChecked(),
+                         check_every_parameter=self.check_all_box.isChecked(),
+                         check_compounds=[c.strip() for c in self.check_compounds_edit.text().split(",") if c.strip()]
+                         if self.check_all_box.isChecked() else [],
                          include_supplements=self.si_box.isChecked(),
                          save_images=self.images_box.isChecked(),
                          save_all_figure_images=self.images_box.isChecked() and self.all_figures_box.isChecked(),
@@ -1667,6 +1688,7 @@ class MainWindow(QMainWindow):
                   self.output_action, self.lookups_action, *self.option_toggles(), self.review_figures_box,
                   self.review_variables_box, self.tables_box, self.plan_box, self.whole_box, self.check_every_box):
             w.setEnabled(enabled)
+        self.check_compounds_edit.setEnabled(enabled and self.check_all_box.isChecked())
         if enabled:
             self.all_figures_box.setEnabled(self.images_box.isChecked())
             self.tables_box.setEnabled(not self.whole_box.isChecked())
