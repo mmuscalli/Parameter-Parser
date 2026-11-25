@@ -524,13 +524,15 @@ def test_values_listed_for_a_set_go_to_the_rows_their_labels_name():
     res = Result.model_validate({"rows": [{"set": "T series", "sample": "", "values": [v(t) for t in (100, 150, 200, 250)]}]})
     got = {k[1]: x.value for k, x in optional_values(spec, res, plan).items() if k[2] == "initial_temperature_C"}
     assert got == {"100 C, 20 min": 100.0, "150 C, 20 min": 150.0, "200 C, 20 min": 200.0, "250 C, 20 min": 250.0}
-    # not one row each (two labels name 100): left as before -- the first kept, a conflict reported
+    # not one row each (two labels name 100): the conflict is reported, the set keeps the first, and each row whose
+    # label states one of the values as a temperature takes it (2026-11-24, Rode1990: two rows per temperature)
     plan2 = plan.model_copy(deep=True)
     plan2.experiment_sets[0].samples[1].sample_label = "100 C, 40 min"
     conflicts = []
-    got2 = {k[1] for k, _x in optional_values(spec, res, plan2, conflicts=conflicts).items()
+    got2 = {k[1]: x.value for k, x in optional_values(spec, res, plan2, conflicts=conflicts).items()
             if k[2] == "initial_temperature_C"}
-    assert got2 == {""} and conflicts
+    assert got2 == {"": 100.0, "100 C, 20 min": 100.0, "100 C, 40 min": 100.0, "200 C, 20 min": 200.0,
+                    "250 C, 20 min": 250.0} and conflicts
     # the check: a row's value against its own label
     base = dict(set_type="Independent", paper_title="t", authors=[], year_published=2008, journal_published="j",
                 experiment_type="Flowthrough", solution_type="Wet")

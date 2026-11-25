@@ -152,6 +152,34 @@ def test_a_rate_law_listed_among_other_goes_to_kinetic_model():
     assert reroute_other(spec, given) == 0 and len(given.other) == 2          # already given: left for the review
 
 
+def test_a_rows_label_picks_its_value_among_a_sets_conflicting_ones():
+    """Rode1990 (2026-11-24): the step gave a set one temperature per table row, none for a sample -- every row got
+    the first. A sample whose own label states one of the set's values takes that one; one whose label states none
+    keeps the first; the conflict is still reported."""
+    plan = StructurePlan.model_validate({"experiment_sets": [{
+        "set_label": "Gly/Cu variation", "set_type": "Independent", "varying_condition_summary": "",
+        "source_table_or_section": "Table II", "samples": [
+            {"sample_label": "Gly 0.8/Cu 0.4, 86 C, Ar", "duration_hr": 264},
+            {"sample_label": "Gly 0.8/Cu 0.2, 75 C, air", "duration_hr": 264},
+            {"sample_label": "Gly 1.2/Cu 0.4, Ar", "duration_hr": 264}]}], "n_rows": 3})
+    spec = StageSpec.model_validate({"name": "conds", "label": "Conditions", "trigger": {"always": True}, "intro": "",
+                                     "parameters": [{"column": "initial_temperature_C", "unit": "°C",
+                                                     "description": "temperature"}]})
+    _Item, Result = spec.models()
+    result = Result.model_validate({"parameters": [
+        {"set_label": "Gly/Cu variation", "parameter": "initial_temperature_C", "value": v, "unit": "C",
+         "quote": q, "source": "Table II", "confidence": "high"} for v, q in ((80, "1.2 0.4 80"), (86, "0.8 0.4 86"),
+                                                                                (75, "0.8 0.2 75"))]})
+    conflicts = []
+    values = optional_values(spec, result, plan, conflicts=conflicts)
+    assert values[("Gly/Cu variation", "", "initial_temperature_C")].value == 80          # the set's first
+    assert values[("Gly/Cu variation", "Gly 0.8/Cu 0.4, 86 C, Ar", "initial_temperature_C")].value == 86
+    assert values[("Gly/Cu variation", "Gly 0.8/Cu 0.2, 75 C, air", "initial_temperature_C")].value == 75
+    assert "label says 86 C" in values[("Gly/Cu variation", "Gly 0.8/Cu 0.4, 86 C, Ar", "initial_temperature_C")].note
+    assert ("Gly/Cu variation", "Gly 1.2/Cu 0.4, Ar", "initial_temperature_C") not in values
+    assert len(conflicts) == 2
+
+
 if __name__ == "__main__":
     for name, fn in list(globals().items()):
         if name.startswith("test_") and callable(fn):

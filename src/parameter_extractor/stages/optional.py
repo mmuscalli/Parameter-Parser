@@ -41,7 +41,7 @@ from __future__ import annotations
 from parameter_extractor.schemas.structure_plan import step_plan_json
 import json
 import re
-from dataclasses import dataclass
+from dataclasses import replace, dataclass
 from functools import lru_cache
 from pathlib import Path
 from typing import Dict, List, Literal, Optional, Tuple
@@ -1039,6 +1039,35 @@ def rows_from_labels(spec: "StageSpec", items: list, structure: StructurePlan) -
     return out
 
 
+def _by_row_labels(out: Dict[Tuple[str, str, str], StageValue], offered: Dict[Tuple[str, str], list],
+                   structure: StructurePlan) -> None:
+    """A set given several different values for one parameter, none for a sample (Rode1990, 2026-11-24: one
+    temperature per table row, every row of the set got the first): a sample whose own label in the row plan states
+    one of them ('Gly 0.8/Cu 0.4, 86 C, Ar') takes that one, with all its columns. Only values the step gave; the
+    conflict stays flagged."""
+    from parameter_extractor.calculators.label_values import _agrees, _in_column_unit, label_quantities
+    sets = {p.set_label: p for p in structure.experiment_sets}
+    for (label, param), options in offered.items():
+        numbers = {round(float(c[param].value), 9) for c in options
+                   if param in c and isinstance(c[param].value, (int, float)) and not isinstance(c[param].value, bool)}
+        if len(numbers) < 2 or label not in sets:
+            continue
+        for smp in sets[label].samples:
+            if (label, smp.sample_label, param) in out:
+                continue                                    # the step gave this sample its own value
+            for q in label_quantities(smp.sample_label):
+                if (q.kind == "pH") != ("pH" in param):
+                    continue
+                expected = _in_column_unit(q, param)
+                match = next((c for c in options if expected is not None and isinstance(c[param].value, (int, float))
+                              and _agrees(float(c[param].value), expected)), None)
+                if match is not None:
+                    for column, value in match.items():
+                        out[(label, smp.sample_label, column)] = replace(
+                            value, note="; ".join(x for x in (value.note, f"this row's label says {q.text}") if x))
+                    break
+
+
 def optional_values(spec: StageSpec, result, structure: StructurePlan,
                     problems: Optional[List[str]] = None,
                     conflicts: Optional[List[StageConflict]] = None) -> Dict[Tuple[str, str, str], StageValue]:
@@ -1051,6 +1080,7 @@ def optional_values(spec: StageSpec, result, structure: StructurePlan,
     out: Dict[Tuple[str, str, str], StageValue] = {}
     owner: Dict[Tuple[str, str, str], Tuple[object, List[str]]] = {}   # (label, sample, parameter) -> (item, its columns)
     items = rows_from_labels(spec, list(result.parameters) if result is not None else [], structure)
+    offered: Dict[Tuple[str, str], list] = {}                          # (set, parameter) -> [columns], whole-set items
     modes: Dict[Tuple[str, str, str], list] = {}                       # same key -> [(mode text, columns)]
     alternatives: Dict[Tuple[str, str, str], list] = {}                # same key -> [(method, columns)]
     for v in items:
@@ -1078,6 +1108,8 @@ def optional_values(spec: StageSpec, result, structure: StructurePlan,
             continue
         for label in ([v.set_label] if v.set_label else targets):
             key = (label, sample, v.parameter)
+            if v.set_label and not sample:
+                offered.setdefault((label, v.parameter), []).append(columns)
             if key in owner:
                 first, first_cols = owner[key]
                 if not v.set_label and first.set_label:
@@ -1106,6 +1138,7 @@ def optional_values(spec: StageSpec, result, structure: StructurePlan,
             owner[key] = (v, list(columns))
             for column, value in columns.items():
                 out[(label, sample, column)] = value
+    _by_row_labels(out, offered, structure)
     for (label, sample, param), found in modes.items():
         param_spec = next(p for p in spec.parameters if p.column == param)
         suffixes = spec.suffixes_for(param_spec)[:2] if param_spec.uncertainties else []
