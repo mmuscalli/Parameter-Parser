@@ -48,6 +48,14 @@
     {
       "column": "original_data_reference",
       "description": "the publication a review's reproduced data come from"
+    },
+    {
+      "column": "set_independent_variable",
+      "description": "the starting-condition columns whose values differ between the rows of its set (calculation set_variables)"
+    },
+    {
+      "column": "set_independent_value",
+      "description": "the row's values of them, in the same order"
     }
   ],
   "fixed": {
@@ -59,6 +67,14 @@
     "run": "the app writes and reads it by this name",
     "original_data_reference": "the app writes and reads it by this name",
     "data_location": "the app writes and reads it by this name",
-    "result_type": "the app writes and reads it by this name"
+    "result_type": "the app writes and reads it by this name",
+    "set_independent_variable": "the app writes it by this name",
+    "set_independent_value": "the app writes it by this name"
+  },
+  "postprocess": [
+    "set_variables"
+  ],
+  "calculations": {
+    "set_variables": "what each set varies: set_independent_variable / set_independent_value from the rows themselves, and a flag for a starting compound missing on a few rows of a set"
   }
 }

@@ -194,3 +194,4 @@ current month's file (start `YYYY-MM.md` in a new month), with one line here.
 - 'Must answer' markings in the user's app data (2026-11-25, Mickey)
 - App-filled columns in the module format: Sample time, module formulas, Must answer for the row plan and paper details (2026-11-25, Mickey)
 - Core modules: Rows and Paper details (2026-11-25, Mickey)
+- The set-variable calculation in the Rows core module (2026-11-25, Mickey)

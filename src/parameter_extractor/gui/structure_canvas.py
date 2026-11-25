@@ -155,7 +155,7 @@ def structure_of(pack) -> Structure:
 
     steps, calcs = [], []
     for f in pack_overview.paper_flow(pack):
-        source = "app" if f.source.startswith(pack_overview.APP) else \
+        source = "app" if f.source.startswith(pack_overview.APP) or f.source.endswith("(core)") else \
             "pack" if f.source.startswith(pack_overview.PACK) else \
             f.source.removeprefix("the ").removesuffix(" module")       # the module's label ('Probe module' too)
         if f.kind == "local":

@@ -30,8 +30,8 @@ CALCULATED = {
     "exoplanet_masses": re.compile(r"^pl_(masse|msinie|rade|bmasse|bmassj|bmassprov)(err1|err2|lim)?$"),
     "reference_names": re.compile(r"^(pl|st|disc)_refname$"),
 }
-ALWAYS_CALCULATED = {"set_independent_variable": "calculated: what its set varies",
-                     "set_independent_value": "calculated: what its set varies"}
+ALWAYS_CALCULATED = {"set_independent_variable": "calculated: what its set varies (Rows module, core)",
+                     "set_independent_value": "calculated: what its set varies (Rows module, core)"}
 
 
 def _builtin_label(step: str) -> str:

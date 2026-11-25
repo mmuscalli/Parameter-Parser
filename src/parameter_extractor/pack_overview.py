@@ -99,6 +99,10 @@ def paper_flow(pack) -> List[FlowStep]:
         out.append(FlowStep("local", calc, calc.replace("_", " "),
                             PACK if calc in pack.own_manifest.postprocess else calc_source.get(calc, PACK),
                             "every paper", about))
+    for core in getattr(pack, "core_modules", []):       # the core modules' calculations (every pack)
+        for calc in core.manifest.postprocess:
+            out.append(FlowStep("local", calc, calc.replace("_", " "), f"the {core.label} module (core)",
+                                "every paper", core.manifest.calculations.get(calc, "")))
     for f in pack.manifest.formulas:
         out.append(FlowStep("local", f.get("column", ""), f"formula: {f.get('column', '')}", PACK, "every paper",
                             f.get("expression", "")))

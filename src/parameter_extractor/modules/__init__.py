@@ -93,6 +93,7 @@ class ModuleManifest(BaseModel):
     # row (app_columns: the row identifiers ...), described here; the run uses them as it always has
     core: bool = False
     app_columns: List[dict] = Field(default_factory=list)
+    calculations: Dict[str, str] = Field(default_factory=dict)    # a core module's calculations: {name: what it does}
 
 
 class Module:

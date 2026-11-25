@@ -1481,7 +1481,9 @@ class PackEditor(QDialog):
                     list(core.manifest.standard_columns) + list(core.manifest.app_columns)]
             pv.addWidget(QLabel(f"<h3>{escape(core.label)}</h3><p>{escape(core.manifest.description)}</p>"
                                 f"<p><b>Its request (built-in step):</b> {escape(', '.join(steps))} -- see the Steps "
-                                f"tab.</p><p><b>Its columns</b> (in every dataset; their names are fixed):</p>"
+                                f"tab.</p>" + "".join(f"<p><b>Its calculation:</b> {escape(c)} -- {escape(d)}</p>"
+                                                     for c, d in core.manifest.calculations.items())
+                                + "<p><b>Its columns</b> (in every dataset; their names are fixed):</p>"
                                 + "<table>" + "".join(f"<tr><td><code>{escape(c)}</code></td><td>{escape(d)}</td></tr>"
                                                       for c, d in cols) + "</table>"
                                 f"<p class='muted'>A core module is part of every data pack: it can't be unlinked "

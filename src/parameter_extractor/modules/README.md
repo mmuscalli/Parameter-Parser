@@ -43,12 +43,13 @@ improved here reaches every pack that links it. A pack changes how a module work
 | `row_values` | values the row plan records for every row, as columns: `[{column, plan_field, plan_key, unit, description}]` (`sample_time`'s `duration_hr`); a pack's module settings can describe one its own way (it reaches the row planning as a rule) or switch it off |
 | `formulas` | calculations written as formulas, as in pack.json (`peptides_oligomers`' peptide totals, `sample_time`'s `is_last_sample`); the pack's own formula for a column wins |
 | `joins_first_step` | its steps join the pack's first always-running step (parameters and rules) instead of being requests of their own; a step of their own only when the pack has none (`lab_experiment`) |
-| `core`, `app_columns` | the app's own core modules only (Rows, Paper details): part of every pack; the columns the app writes for every row |
+| `core`, `app_columns`, `calculations` | the app's own core modules only (Rows, Paper details): part of every pack; the columns the app writes for every row; what its calculations do |
 | `covers` | what the module records, in a sentence: drafting a pack leaves that to the module |
 | `evidence` | `{"words": [...]}`: drafting links the module when a paper's survey uses them (the app's first modules have code rules instead) |
 
 Two CORE modules are part of every data pack (`core: true`; `modules.core()`, not among `modules.available()`):
-**Rows** (the row plan, the identifiers and the row columns every dataset has) and **Paper details** (the paper's
+**Rows** (the row plan, the identifiers, the row columns every dataset has and the set_variables calculation:
+what each set varies) and **Paper details** (the paper's
 details request and its columns). They are not listed in a pack's `modules`, can't be unlinked and have no settings;
 the columns every pack gets are their `standard_columns` (in `order`; `packs.common_columns()`), the columns the app
 writes for every row their `app_columns`. The Modules tab shows them first, ticked and locked; the Overview, Map,

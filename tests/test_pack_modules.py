@@ -206,6 +206,8 @@ def test_the_core_modules():
     assert [m.id for m in pre.core_modules] == ["rows", "paper_details"] and "rows" not in pre.module_ids()
     flow = {s.name: s.source for s in pack_overview.paper_flow(packs.available()["exoplanets"])}
     assert flow["metadata"] == pack_overview.CORE_DETAILS
+    assert flow["set_variables"] == "the Rows module (core)"              # its calculation (2026-11-25)
+    assert core["rows"].manifest.postprocess == ["set_variables"]
     from parameter_extractor.gui.pack_windows import PackEditor
     with tempfile.TemporaryDirectory() as tmp, patch.object(packs, "user_packs_dir", lambda: Path(tmp) / "packs"):
         pack = _new_pack(Path(tmp))
@@ -218,7 +220,7 @@ def test_the_core_modules():
         e._show_module(0)
         from PySide6.QtWidgets import QLabel
         page_text = " ".join(lbl.text() for lbl in e.module_scroll.widget().findChildren(QLabel))
-        assert "full_id" in page_text and "can't be unlinked" in page_text
+        assert "full_id" in page_text and "can't be unlinked" in page_text and "set_variables" in page_text
         assert e.save()
         own = json.loads((pack.folder / "pack.json").read_text())
         assert "rows" not in own["modules"] and "paper_details" not in own["modules"]

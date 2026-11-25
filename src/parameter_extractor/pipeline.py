@@ -1569,9 +1569,11 @@ def finish(
         paper_flags += fill_in(rows, shared, group, m.column_pairs, ColumnOrder(pack))
     # what each set varies (set_independent_variable / _value) and compounds missing on some rows of a set
     # (calculators/set_variables.py, 2026-11-17)
-    from parameter_extractor.calculators.set_variables import add_set_variables, set_gap_flags
-    add_set_variables(rows)
-    paper_flags += set_gap_flags(rows)
+    # -- the Rows core module's calculation (every pack has it: modules.core())
+    if "set_variables" in {c for core in pack.core_modules for c in core.manifest.postprocess}:
+        from parameter_extractor.calculators.set_variables import add_set_variables, set_gap_flags
+        add_set_variables(rows)
+        paper_flags += set_gap_flags(rows)
     # rows lacking what their row plan says varies: a table read incompletely (calculators/plan_checks.py)
     from parameter_extractor.calculators.plan_checks import plan_mismatch_flags
     try:                                     # a check: never in the way of the run
