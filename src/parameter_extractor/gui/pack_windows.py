@@ -698,7 +698,8 @@ class PackEditor(QDialog):
                           "rename it; drag it to reorder, or onto another kind of value to move it there."))
         row = QHBoxLayout()
         self.column_tree = _ColumnTree()
-        self.column_tree.setHeaderLabels(["Column", "Unit", "Filled by"])
+        self.column_tree.setHeaderLabels(["Column", "Unit", "Filled by", "Must answer"])
+        self._required = set(self.draft.manifest.get("check_columns", []) or [])
         self.column_tree.header().setSectionResizeMode(0, QHeaderView.ResizeMode.Interactive)
         self.column_tree.header().setStretchLastSection(True)
         self.column_tree.setColumnWidth(0, 360)
@@ -713,6 +714,18 @@ class PackEditor(QDialog):
                                          "with its unit and the step that asks for it. Saves your edits first.")
         self.build_values_btn.setEnabled(not self.read_only)
         side.addWidget(self.build_values_btn)
+        side.addSpacing(16)
+        # 'Must answer' (2026-11-25, Mickey): runs with this pack answer for these columns, found or not
+        self.require_btn = QPushButton("Must answer", clicked=lambda: self._set_required(True))
+        self.require_btn.setToolTip("Mark the selected columns: every run with this data pack has to say whether the "
+                                    "paper reports them (reported / not reported / unclear) -- parameter_checks.csv. "
+                                    "For a step's values and compound columns. Select several to mark them at once.")
+        self.unrequire_btn = QPushButton("Not required", clicked=lambda: self._set_required(False))
+        for b in (self.require_btn, self.unrequire_btn):
+            b.setEnabled(not self.read_only)
+            if self.read_only:
+                b.setToolTip("Copy this data pack first: the app's own can't be changed.")
+            side.addWidget(b)
         side.addSpacing(16)
         side.addWidget(QPushButton("Add a kind of value…", clicked=self._add_category))
         side.addStretch(1)
@@ -987,7 +1000,56 @@ class PackEditor(QDialog):
                 item.setForeground(col, muted)
             item.setForeground(2, QBrush(self.column_tree.palette().color(QPalette.ColorRole.PlaceholderText)))
         parent.addChild(item)
+        self._show_required(item)
         return item
+
+    def answerable(self, column: str) -> bool:
+        """A column a run can be made to answer for: a step's parameter (the pack's or a module's) or a compound
+        column (the chemistry step)."""
+        from parameter_extractor.focused_search import _COMPOUND_COLUMN
+        if _COMPOUND_COLUMN.match(column):
+            return True
+        if not hasattr(self, "_step_param_columns"):
+            cols = set(self.draft.stage_columns())
+            try:
+                cols |= {c for _m, spec in self.draft.module_specs() for c in spec.columns}
+            except Exception:                        # noqa: BLE001 -- a module that can't load: its steps unknown
+                pass
+            self._step_param_columns = cols
+        return column in self._step_param_columns
+
+    def _show_required(self, item: QTreeWidgetItem) -> None:
+        """A 'Must answer' column: marked in its own column and highlighted (themes.MARKS['must_answer'])."""
+        from parameter_extractor.column_sources import NOTHING
+        from parameter_extractor.gui.themes import MARKS
+        on = item.text(0).strip() in self._required
+        item.setText(3, "must answer" if on else "")
+        muted = QBrush(self.column_tree.palette().color(QPalette.ColorRole.PlaceholderText))
+        unfilled = item.text(2) == NOTHING
+        for col in range(4):
+            item.setBackground(col, QBrush(MARKS["must_answer"]) if on else QBrush())
+            # marked: the marks' text colour in every column (readable on the tint in any theme); else as before
+            item.setForeground(col, QBrush(MARKS["mark_text"]) if on else (muted if unfilled and col < 3 else QBrush()))
+
+    def _set_required(self, on: bool) -> None:
+        """The selected columns (several at once) marked 'Must answer', or not; columns no step or compound fills
+        are left as they are and named."""
+        if self.read_only:
+            return
+        skipped = []
+        for item in self.column_tree.selectedItems():
+            if item.parent() is None or item.data(0, self.SUBHEADER):
+                continue
+            column = item.text(0).strip()
+            if on and not self.answerable(column):
+                skipped.append(column)
+                continue
+            (self._required.add if on else self._required.discard)(column)
+            self._show_required(item)
+        if skipped:
+            QMessageBox.information(self, "Must answer", "Not marked -- no step asks for these, and they aren't "
+                                    "compound columns, so a run has nothing to answer for them:\n\n"
+                                    + "\n".join(skipped[:20]))
 
     def _refresh_column_fills(self) -> None:
         """'Filled by' after the steps changed (in place: the columns move between the parts at the next Save)."""
@@ -2580,6 +2642,10 @@ class PackEditor(QDialog):
         m["units"] = units
         self.structure_page.store(m)
         m["focused_row_plan"] = self.focused_box.isChecked()
+        if getattr(self, "_required", None):                     # the Columns tab's 'Must answer' columns
+            m["check_columns"] = sorted(self._required)
+        else:
+            m.pop("check_columns", None)
         m["compact_text"] = self.compact_box.isChecked()
         provided = self._module_steps()
         m["builtin_stages"] = [n for n in self.builtin_boxes if n in self._own_steps and n not in provided] + \
@@ -2621,6 +2687,7 @@ class PackEditor(QDialog):
             QMessageBox.warning(self, "Not saved", str(e))
             return False
         self.setWindowTitle(f"Data pack: {self.draft.manifest.get('label', '')}")
+        self.__dict__.pop("_step_param_columns", None)            # the steps may have changed
         shown = self.category_panel.cid
         self._fill_column_tree(self.draft.columns)      # the kinds of value as saved (names, table order)
         if shown and self._category_header(shown) is not None:

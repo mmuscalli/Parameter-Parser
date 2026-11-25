@@ -31,6 +31,7 @@ _DEFAULT_MARKS = {
     "archive_row": (212, 237, 218),      # the fit the Exoplanet Archive took (soft green)
     "archive_diff": (255, 196, 140),     # a value that differs from the archive's (orange)
     "corrected": (196, 222, 255),        # a value you corrected (light blue)
+    "must_answer": (228, 216, 255),      # a column runs must answer for (data pack Columns tab; soft violet)
     "flag": (255, 150, 70),              # a flagged value (Flagged values window)
     "flag_checked": (230, 230, 230),     # a flagged value whose flags are all checked
     "group_tint": (110, 140, 210, 28),   # every other block of columns

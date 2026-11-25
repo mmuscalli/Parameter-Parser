@@ -109,9 +109,10 @@ class StageSpec(BaseModel):
     # send the rendered table pages along (tables whose text layer is garbled or sideways)
     table_images: bool = False
     grids: bool = True              # set by for_run: False when the run reads no table grids (RunConfig.table_grids)
-    # set by for_run (RunConfig.check_every_parameter, 2026-11-24): the answer has a required `checked` entry per
-    # parameter (parameter_checks.py); never written to a pack's files
-    check_every: bool = Field(default=False, exclude=True)
+    # set by for_run (2026-11-24/25): the parameters the answer has a required `checked` entry for -- all of them
+    # with RunConfig.check_every_parameter, else the pack's check_columns among them (parameter_checks.py); never
+    # written to a pack's files
+    check_columns: Tuple[str, ...] = Field(default=(), exclude=True)
     # the prompt rule for `alternatives`, when the default's examples (astronomy) don't fit the field
     alternatives_rule: str = ""
     # also collect conditions/parameters that have no column (`other`: name, value as stated, ...),
@@ -342,14 +343,14 @@ class StageSpec(BaseModel):
         if self.open_ended:
             from parameter_extractor.variable_categories import assignable
             categories = tuple(c.id for c in assignable())
-        return _models(self.model_dump_json(), categories, self.check_every)
+        return _models(self.model_dump_json(), categories, tuple(self.check_columns))
 
     def prompt(self, structure: StructurePlan, paper_text: str) -> str:
         return self.prompt_text(paper_text, step_plan_json(structure))
 
     def _check_rule(self) -> List[str]:
         from parameter_extractor.parameter_checks import rule
-        return [rule(self.columns, "parameter", "`rows`")]
+        return [rule(list(self.check_columns), "parameter", "`rows`")]
 
     def prompt_text(self, paper_text: str, plan_json: str) -> str:
         """The stage's prompt (also the static instructions cached for every paper of a run: api_client)."""
@@ -369,7 +370,7 @@ class StageSpec(BaseModel):
                                 f"... from 100°C, 150°C, 200°C and 250°C, respectively') are one value per "
                                 f"{self.units('sample')}: give each as its own row with its `sample`, never the whole "
                                 f"list as values of the set."]
-                               if self.per == "sample" else []) + (self._check_rule() if self.check_every else [])),
+                               if self.per == "sample" else []) + (self._check_rule() if self.check_columns else [])),
                            STRUCTURE_PLAN_JSON=plan_json, PAPER_TEXT=paper_text)
 
 
@@ -465,10 +466,10 @@ class _CompactResult(BaseModel):
 
 
 @lru_cache(maxsize=None)
-def _models(spec_json: str, categories: Tuple[str, ...] = (), check_every: bool = False) -> Tuple[type, type]:
+def _models(spec_json: str, categories: Tuple[str, ...] = (), check_columns: Tuple[str, ...] = ()) -> Tuple[type, type]:
     """(item model, result model) for a spec -- the same classes for the same spec (and the active
-    pack's new-variable categories, for an open-ended stage's `other` items). `check_every`: the result with a
-    required `checked` entry per parameter (parameter_checks.py)."""
+    pack's new-variable categories, for an open-ended stage's `other` items). `check_columns`: the result with a
+    required `checked` entry for each of these parameters (parameter_checks.py)."""
     spec = StageSpec.model_validate_json(spec_json)
     name = spec.model_name
     hidden_sample = {} if spec.per == "set" else {"sample_label": (SkipJsonSchema[str], "")}
@@ -641,9 +642,9 @@ def _models(spec_json: str, categories: Tuple[str, ...] = (), check_every: bool 
         legacy_parameters=(SkipJsonSchema[List[Item]], Field(default_factory=list, validation_alias="parameters")),
     )
     Result._columns = frozenset(spec.columns)
-    if check_every:
+    if check_columns:
         from parameter_extractor.parameter_checks import with_checks
-        Result = with_checks(Result, spec.columns)
+        Result = with_checks(Result, list(check_columns))
         Result._columns = frozenset(spec.columns)
     return Item, Result
 
@@ -848,9 +849,9 @@ def run_optional_stage(ctx, spec: StageSpec, paper_text: str, structure: Structu
             result.notes = (f"[The model reported a failure twice -- its values may be incomplete.] "
                             f"{result.notes}")
     fill_grids(spec, result, grids)       # tables mapped onto the app's grids: cells read here
-    if spec.check_every:
+    if spec.check_columns:
         from parameter_extractor.parameter_checks import record
-        record(ctx, spec.name, result, spec.columns)
+        record(ctx, spec.name, result, list(spec.check_columns))
     return result
 
 
@@ -1214,7 +1215,7 @@ def optional_results(optional=None, wet_dry=None) -> List[Tuple[StageSpec, objec
 def triggered_specs(structure: StructurePlan, paper_text: str,
                     choices: Optional[Dict[str, str]] = None, suggest: bool = True,
                     running: Optional[set] = None, left_out=(), grids: bool = True,
-                    check_every: bool = False) -> List[StageSpec]:
+                    check_all: bool = False, check=()) -> List[StageSpec]:
     """The stages to run: triggered ones, unless the user turned them off ('off'), plus
     any forced on ('on'). `suggest` False: without their open-ended part (see for_run). `running`: the
     other steps this run makes (for hint_by_stage)."""
@@ -1223,14 +1224,14 @@ def triggered_specs(structure: StructurePlan, paper_text: str,
     for name, spec in load_specs().items():
         choice = choices.get(name, "auto")
         if choice == "on" or (choice == "auto" and spec.triggered(structure, paper_text)):
-            spec = for_run(spec, suggest, running, left_out, grids, check_every)
+            spec = for_run(spec, suggest, running, left_out, grids, check_all, check)
             if spec.parameters:                     # every parameter left out: nothing to ask
                 out.append(spec)
     return out
 
 
 def for_run(spec: StageSpec, suggest: bool = True, running: Optional[set] = None, left_out=(),
-            grids: bool = True, check_every: bool = False) -> StageSpec:
+            grids: bool = True, check_all: bool = False, check=()) -> StageSpec:
     """The spec as a run uses it: with new-variable suggestions off (RunConfig.suggest_new_variables),
     an open-ended stage doesn't ask for `other` conditions; hint_by_stage's wording for the steps that run;
     `left_out` parameters (RunConfig.parameters_off -- a pre-parse found them irrelevant) aren't asked for."""
@@ -1246,8 +1247,10 @@ def for_run(spec: StageSpec, suggest: bool = True, running: Optional[set] = None
                  for stage, texts in spec.hint_by_stage.items()]
         update["open_ended_hint"] = "; ".join(x for x in [spec.open_ended_hint.rstrip(" .;")] + extra if x)
         update["hint_by_stage"] = {}
-    if check_every:                             # RunConfig.check_every_parameter: an answer for every parameter
-        update["check_every"] = True
+    columns = [p.column for p in update.get("parameters", spec.parameters)]
+    asked = tuple(c for c in columns if check_all or c in set(check or ()))
+    if asked:                                   # answers for every parameter / the pack's 'Must answer' columns
+        update["check_columns"] = asked
     return spec.model_copy(update=update) if update else spec
 
 

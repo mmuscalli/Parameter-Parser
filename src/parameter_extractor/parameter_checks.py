@@ -4,8 +4,9 @@ asked for whether the paper reports it -- found or not -- instead of leaving out
 
 - In an answer format: `checked`, an object with one REQUIRED entry per parameter (keyed by the column; other
   characters as '_'), each `s` reported / not reported / unclear and `n` a few words. A focused search has it with
-  `check_every` (focused_search.py); a full run with RunConfig.check_every_parameter (the configurable steps) and
-  RunConfig.check_compounds (the chemistry step, for the compounds listed).
+  `check_every` (focused_search.py); a full run with RunConfig.check_every_parameter (every configurable step's
+  parameters) and the data pack's check_columns (its Columns tab: step parameters and compound columns, the
+  chemistry step answering per compound column) plus RunConfig.check_columns.
 - After a run: what the model said, against the values it gave -- 'marked reported, but no value given' and
   'values given, but marked not reported' are problems (shown, nothing changed): parameter_checks.csv in the run's
   folder, a flag for each problem.
@@ -80,8 +81,9 @@ def rule(columns: Sequence[str], what: str = "parameter", where: str = "the valu
     """The instruction that goes with `checked`."""
     keys = check_keys(columns)
     renamed = [f"`{c}` is `{k}`" for c, k in keys.items() if k != c]
-    return (f"EVERY {what.upper()} CHECKED: `checked` has one entry per {what} listed above, keyed by its name"
-            + (f" ({', '.join(renamed)})" if renamed else "") + f". Look for EACH {what} specifically, in the "
+    return (f"EVERY {what.upper()} CHECKED: `checked` has one entry for each of these {what}s, keyed by its name: "
+            + ", ".join(f"`{c}`" for c in columns)
+            + (f" ({', '.join(renamed)})" if renamed else "") + f". Look for EACH of them specifically, in the "
             f"text and the tables, and answer for every one: `s` 'reported' when the paper gives a value for it "
             f"(its values go in {where} as usual), 'not reported' when it doesn't, 'unclear' when something might "
             f"be it but you aren't sure; `n` a few words: where it is, or what you checked.")
@@ -131,15 +133,20 @@ def finish(ctx, ex, run_dir: Path) -> list:
         c = counts.setdefault(name, {})
         for item in (getattr(result, "parameters", None) or []):
             c[item.parameter] = c.get(item.parameter, 0) + 1
-    if getattr(ex, "chemistry", None) is not None:
+    if getattr(ex, "chemistry", None) is not None:         # the chemistry step answers per compound column
+        from parameter_extractor.ingestion.flatten_to_template import _species_column_of
         c = counts.setdefault("chemistry", {})
         for s in ex.chemistry.solutes:
-            c[(s.name or "").lower()] = c.get((s.name or "").lower(), 0) + 1
+            try:
+                column = _species_column_of(s)
+            except Exception:                             # an entry the column can't be worked out for
+                continue
+            c[column] = c.get(column, 0) + 1
     flags, lines = [], []
     for step, found in store.items():
         bad = []
         for column, a in found.items():
-            n = counts.get(step, {}).get(column.lower() if step == "chemistry" else column, 0)
+            n = counts.get(step, {}).get(column, 0)
             p = problem(a["status"], n)
             lines.append([step, column, a["status"], n, a["note"], p])
             if p:

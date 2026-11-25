@@ -124,9 +124,10 @@ class RunConfig:
     rows_from_text: bool = False
     # Answering for every parameter (parameter_checks.py; Mickey, 2026-11-24: controlled tests; off by default -- about
     # +5-10% a paper, and it changes the tuned steps' requests): every configurable step's answer has a required entry
-    # per parameter (reported / not reported / unclear), and the chemistry step one per compound listed here
+    # per parameter (reported / not reported / unclear). The data pack's check_columns (its Columns tab) are always
+    # answered for, compound columns too; check_columns here adds more for this run (CLI --check-column)
     check_every_parameter: bool = False
-    check_compounds: List[str] = field(default_factory=list)
+    check_columns: List[str] = field(default_factory=list)
     # Developer only (dev_features.py, never in public builds): write model requests to this folder for
     # answers from a Claude Code session instead of calling the API (handoff.py); no API key needed
     handoff_dir: Optional[Path] = None

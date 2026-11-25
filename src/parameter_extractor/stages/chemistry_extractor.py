@@ -28,7 +28,7 @@ def prompt_text(paper_text: str, plan_json: str, controlled_vocab: list, scope: 
                 grids: bool = True, check: Sequence[str] = ()) -> str:
     """The step's prompt (also the static instructions cached for every paper of a run: api_client). `scope`: only
     these compounds (scopes.py; the vocabulary shown is then just them). `grids` False: without the table-grid rule.
-    `check` (RunConfig.check_compounds): an answer in `checked` for each of these compounds (parameter_checks.py)."""
+    `check`: compound columns to answer for in `checked` (the pack's 'Must answer' columns; parameter_checks.py)."""
     from parameter_extractor.scopes import compound_rule
     text = load_prompt("chemistry", PAPER_TEXT=paper_text, STRUCTURE_PLAN_JSON=plan_json,
                        CONTROLLED_VOCAB_JSON=json.dumps(scope or controlled_vocab), COMPOUND_SCOPE=compound_rule(scope)
@@ -36,15 +36,35 @@ def prompt_text(paper_text: str, plan_json: str, controlled_vocab: list, scope: 
     return text if grids else _GRID_PARAGRAPH.sub("", text, count=1)     # (the paper text inside stays as it is)
 
 
-def _check_paragraph(compounds: Sequence[str]) -> str:
+def _check_paragraph(columns: Sequence[str]) -> str:
     from parameter_extractor.parameter_checks import rule
-    return ("\nCOMPOUNDS TO ANSWER FOR: " + "; ".join(compounds) + ".\n"
-            + rule(compounds, "compound", "`tables` / `groups`").replace("listed above", "listed here") + "\n")
+    return ("\nCOLUMNS TO ANSWER FOR (each a compound in a role, phase and measure):\n"
+            + "".join(f"- `{c}`: {compound_column_meaning(c)}\n" for c in columns)
+            + rule(columns, "column", "`tables` / `groups`") + "\n")
+
+
+def compound_column_meaning(column: str) -> str:
+    """'starting concentration of Gly (dissolved) in the reaction mixture' for initial_Gly_aq_mM."""
+    from parameter_extractor.focused_search import _COMPOUND_COLUMN, _MEASURE_TEXT, _PHASE_TEXT, _ROLE_TEXT
+    m = _COMPOUND_COLUMN.match(column)
+    if not m:
+        return column
+    return _ROLE_TEXT[m.group("role")].format(m=_MEASURE_TEXT[m.group("measure")],
+                                              n=f"{m.group('name')} ({_PHASE_TEXT[m.group('phase')]})")
+
+
+def compound_checks(config) -> tuple:
+    """The compound columns this run answers for: the data pack's 'Must answer' columns (check_columns) and the
+    run's own (RunConfig.check_columns) that are compound columns."""
+    from parameter_extractor import packs
+    from parameter_extractor.focused_search import _COMPOUND_COLUMN
+    wanted = list(packs.current().manifest.check_columns) + list(getattr(config, "check_columns", []) or [])
+    return tuple(c for c in dict.fromkeys(wanted) if _COMPOUND_COLUMN.match(c))
 
 
 @lru_cache(maxsize=None)
 def answer_format(check: tuple = ()):
-    """The step's answer format: ChemistryExtraction, with a `checked` entry per compound when asked."""
+    """The step's answer format: ChemistryExtraction, with a `checked` entry per compound column when asked."""
     if not check:
         return ChemistryExtraction
     from parameter_extractor.parameter_checks import with_checks
@@ -55,7 +75,7 @@ def run_chemistry_extraction(
     ctx: RunContext, paper_text: str, structure_plan: StructurePlan,
     controlled_vocab: list[str], table_images: Optional[List[Path]] = None, grids: Optional[list] = None,
 ) -> ChemistryExtraction:
-    check = tuple(ctx.config.check_compounds or ())
+    check = compound_checks(ctx.config)
     prompt = prompt_text(paper_text, step_plan_json(structure_plan), controlled_vocab,
                          ctx.config.scopes.get("chemistry"), grids=ctx.config.table_grids, check=check)
     result = call_structured(

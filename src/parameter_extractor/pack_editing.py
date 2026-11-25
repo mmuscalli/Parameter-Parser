@@ -271,6 +271,12 @@ class PackDraft:
             names = ms.renames(m, settings)
             out += [e["column"] for e in m.manifest.standard_columns]
             out += [p["column"] for p in (ms.pack_parameter(e, settings, names) for e in m.manifest.pack_parameters) if p]
+            compounds = m.folder / "compounds.json"          # its compounds' columns (2026-11-22)
+            if compounds.is_file():
+                try:
+                    out += list(json.loads(compounds.read_text()).get("all_columns", []))
+                except ValueError:
+                    pass
         return list(dict.fromkeys(out))
 
     def has_analysis_vocab(self) -> bool:

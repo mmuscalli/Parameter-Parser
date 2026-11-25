@@ -573,7 +573,7 @@ def extract_steps(ex: "Extraction") -> "Extraction":
         specs = [] if skip else triggered_specs(ex.structure, parsed.text, config.optional_stages,
                                                 config.suggest_new_variables, set(running),
                                                 set(config.parameters_off), config.table_grids,
-                                                config.check_every_parameter)
+                                                config.check_every_parameter, _step_checks(config))
         for spec in specs:
             if spec.name not in always_on:
                 ctx.total_steps += 1
@@ -776,7 +776,7 @@ def _step_instructions(pack, config: RunConfig, tools: dict, vocab: dict) -> dic
         elif stage == "chemistry":
             out[stage] = chemistry_extractor.prompt_text(PAPER_ABOVE, PLAN_MARK, vocab["species_names"],
                                                          config.scopes.get("chemistry"), grids=config.table_grids,
-                                                         check=tuple(config.check_compounds or ()))
+                                                         check=chemistry_extractor.compound_checks(config))
         elif stage == "analysis":
             out[stage] = analysis_stage.prompt_text(PAPER_ABOVE, PLAN_MARK, config.scopes.get("analysis"))
         elif stage == "fit_models":
@@ -784,8 +784,14 @@ def _step_instructions(pack, config: RunConfig, tools: dict, vocab: dict) -> dic
         elif stage in specs:
             out[stage] = for_run(specs[stage], config.suggest_new_variables, running,
                                  set(config.parameters_off), config.table_grids,
-                                 config.check_every_parameter).prompt_text(PAPER_ABOVE, PLAN_MARK)
+                                 config.check_every_parameter, _step_checks(config)).prompt_text(PAPER_ABOVE, PLAN_MARK)
     return out
+
+
+def _step_checks(config: RunConfig) -> frozenset:
+    """The columns this run's steps answer for, found or not: the data pack's 'Must answer' columns (check_columns,
+    its Columns tab) and the run's own (RunConfig.check_columns); with check_every_parameter, every parameter."""
+    return frozenset(packs.current().manifest.check_columns) | frozenset(config.check_columns or ())
 
 
 def _paper_tools(pack, config: RunConfig, terms, has_figures: bool = False, paper_text: Optional[str] = None) -> dict:
@@ -798,7 +804,7 @@ def _paper_tools(pack, config: RunConfig, terms, has_figures: bool = False, pape
     if pack.uses("methodology"):
         tools["methodology"] = Methodology
     if _chemistry_on(pack, config):
-        tools["chemistry"] = chemistry_extractor.answer_format(tuple(config.check_compounds or ()))
+        tools["chemistry"] = chemistry_extractor.answer_format(chemistry_extractor.compound_checks(config))
     if terms:
         tools["term_search"] = TermSearch
     if pack.uses("fit_models") and config.optional_stages.get("fit_models", "auto") != "off":
@@ -814,7 +820,7 @@ def _paper_tools(pack, config: RunConfig, terms, has_figures: bool = False, pape
         if choice == "off" or (choice == "auto" and per_paper and not spec.could_trigger(paper_text)):
             continue
         spec = for_run(spec, config.suggest_new_variables, left_out=left_out, grids=config.table_grids,
-                       check_every=config.check_every_parameter)
+                       check_all=config.check_every_parameter, check=_step_checks(config))
         if spec.parameters:
             tools[name] = spec.models()[1]
     if has_figures and config.figure_suggestions_on_paper:

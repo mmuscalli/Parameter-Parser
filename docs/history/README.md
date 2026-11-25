@@ -190,3 +190,4 @@ current month's file (start `YYYY-MM.md` in a new month), with one line here.
 - Answering for every parameter in a focused search; building columns (2026-11-24, Mickey)
 - Compounds in a focused search; what answering for every parameter would cost a full run (2026-11-24, Mickey)
 - Answering for every parameter in a full run, as an option (2026-11-24, Mickey)
+- 'Must answer' columns in the data pack's Columns tab (2026-11-25, Mickey)

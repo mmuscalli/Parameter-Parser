@@ -89,9 +89,10 @@ def main() -> int:
                               "unclear, with a note): parameter_checks.csv -- for controlled tests. In a focused "
                               "search the --focus parameters; in a full run every configurable step's parameters "
                               "(about +5-10%% a paper)")
-    focused.add_argument("--check-compound", action="append", default=[], metavar="NAME",
-                         help="Full run: make the chemistry step answer for this compound (repeatable; the name as "
-                              "the data pack has it, e.g. Gly)")
+    focused.add_argument("--check-column", action="append", default=[], metavar="COLUMN",
+                         help="Full run: answer for this column too, found or not (repeatable), besides the data "
+                              "pack's 'Must answer' columns -- a step's parameter or a compound column, e.g. "
+                              "initial_Gly_aq_mM")
     plan = focused.add_mutually_exclusive_group()
     plan.add_argument("--plan-rows", dest="plan_rows", action="store_true", default=None,
                       help="Plan each paper's rows like a full extraction first (the pack's row planner, with "
@@ -276,7 +277,7 @@ def main() -> int:
                  "batch_mode": args.batch, "prefer_arxiv": args.arxiv,
                  "suggest_new_variables": not args.no_suggestions, "passes": args.passes,
                  "rows_from_text": args.rows_from_text,
-                 "check_every_parameter": args.check_every_parameter, "check_compounds": list(args.check_compound),
+                 "check_every_parameter": args.check_every_parameter, "check_columns": list(args.check_column),
                  "include_supplements": not args.no_si,
                  "save_images": not args.no_images, "save_all_figure_images": args.all_figure_images,
                  "auto_digitize_figures": args.auto_figures, "table_check": not args.no_table_check,
