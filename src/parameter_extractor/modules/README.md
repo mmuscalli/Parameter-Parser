@@ -20,6 +20,7 @@ improved here reaches every pack that links it. A pack changes how a module work
 | `stages/*.json` | its configurable steps, in the same format as a pack's |
 | `prompts/*.md` | a prompt one of its built-in steps needs (the chemistry step's) |
 | `analysis_vocab.json` | the analysis step's techniques and instrument settings |
+| `compounds.json`, `species_cids.json` | compounds (species names and their dataset columns) and their PubChem identities a pack linking the module gets when it lacks them, after its own (peptides_oligomers, solution_chemistry: from the prebiotic pack's vocabulary, `scripts/build_module_compounds.py`) |
 
 `module.json` keys:
 
@@ -39,6 +40,7 @@ improved here reaches every pack that links it. A pack changes how a module work
 | `compound_series` | compound setup fills in every length of an oligomer series between the shortest and longest found |
 | `column_pairs` | value pairs one fills from the other (sampled <- initial temperature); added when the pack has no pair for those columns |
 | `label_columns`, `category_fill`, `fill_columns` | a set label's values, and how far a value is shared (paper / set / none); the pack's own settings win |
+| `joins_first_step` | its steps join the pack's first always-running step (parameters and rules) instead of being requests of their own; a step of their own only when the pack has none (`lab_experiment`) |
 | `covers` | what the module records, in a sentence: drafting a pack leaves that to the module |
 | `evidence` | `{"words": [...]}`: drafting links the module when a paper's survey uses them (the app's first modules have code rules instead) |
 

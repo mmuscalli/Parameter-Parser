@@ -17,7 +17,7 @@ screening tool, never a gate in the pipeline.
 
 Front ends: a PySide6 window (`parameter-extractor-gui`), a command line (`parameter-extract`), and PyInstaller
 builds for macOS (unsigned; signing, notarization and the Windows build are deferred by Mickey; don't start them).
-Version: `parameter_extractor.__version__` (0.6.0, tag `v0.6.0`, on branch levels-and-facets), the one place it is set.
+Version: `parameter_extractor.__version__` (0.6.1, tag `v0.6.1`, on branch levels-and-facets), the one place it is set.
 
 ## Map of the code (`src/parameter_extractor/`, ~36K lines)
 
@@ -39,7 +39,9 @@ Version: `parameter_extractor.__version__` (0.6.0, tag `v0.6.0`, on branch level
 - `packs/` (`prebiotic_chemistry`, `exoplanets`, hidden `_template`; users' own in `<app data>/packs/`) and
   `modules/` (shared parts linked by reference: analysis, solution_chemistry, kinetics, wet_dry, peptides_oligomers,
   mineral_surfaces, impact_shock, heat_flow_chamber, flow_reactor, fluid_inclusions, lab_experiment (general lab
-  conditions, linked to every drafted lab pack); `modules/README.md`).
+  conditions, linked to every drafted lab pack; its conditions join the pack's first step, `joins_first_step`);
+  peptides_oligomers and solution_chemistry also carry compound vocabularies (`compounds.json`, from the prebiotic
+  pack's; `scripts/build_module_compounds.py`); `modules/README.md`).
   Loader `packs/__init__.py` (merged manifest = pack + linked modules + `module_settings.py`).
 - `ingestion/`: PDF parsing (`pdf_parser.py`: pdfplumber text, pypdfium2 renders; no poppler), table / figure /
   equation finders, supplements, arXiv and CrossRef sources, rows (`flatten_to_template.py`, `figure_rows.py`),
@@ -228,6 +230,6 @@ estimates, local-model speed-ups, ...) and their status: `docs/improvement_sugge
   when present, so "Always Allow" survives a rebuild.
 - Branches: `main` (on GitHub since 2026-11-11) and `flexible-variables`, both at the same commit; keep them
   together until Mickey retires `flexible-variables`. Tags: `v0.2-figure-digitizer`,
-  `backup/flexible-variables-before-public`, `v0.3.0`, `v0.4.0`, `v0.5.0`, `v0.6.0`. Tag a state whenever both apps are built for use.
+  `backup/flexible-variables-before-public`, `v0.3.0`, `v0.4.0`, `v0.5.0`, `v0.6.0`, `v0.6.1`. Tag a state whenever both apps are built for use.
 - Backups: full project archive `../Backups/EORE_Data_Project_FULL_BACKUP_20261012_030042.tar` (before this
   pipeline); dated `runs/` archives from `scripts/backup_runs.py` in `../Backups/`.

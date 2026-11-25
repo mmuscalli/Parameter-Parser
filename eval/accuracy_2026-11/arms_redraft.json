@@ -87,11 +87,31 @@
      "/Users/mickeymuscalli/Documents/Parameter Extractor/accuracy_20261122/P1_C3/queue_20261122-013110"
     ]
    }
+  },
+  "C4": {
+   "label": "C3 + conditions in the pack's first step, module conditions and compound vocabularies, \u00b5mol/mL read as mM",
+   "drafted_from": [
+    "Chen2007",
+    "Chung1971",
+    "Huber1998",
+    "Imai1998",
+    "Kawamura2009",
+    "Rode1990",
+    "Shen1990",
+    "Yamagata1997",
+    "lemke2009",
+    "shanker2012"
+   ],
+   "batches": {
+    "P1": [
+     "/Users/mickeymuscalli/Documents/Parameter Extractor/accuracy_20261122/P1_C4/queue_20261124-201315"
+    ]
+   }
   }
  },
  "model_standard": {
   "P1": [
-   "/Users/mickeymuscalli/Documents/Parameter Extractor/accuracy_20261120/ms_P1/runs/Alargov2002_20261120-222633",
+   "/Users/mickeymuscalli/Documents/Parameter Extractor/accuracy_20261122/ms_P1_rebuilt/Alargov2002_20261124-202014",
    "/Users/mickeymuscalli/Documents/Parameter Extractor/accuracy_20261120/ms_P1/runs/Bujdak1996_20261120-222747",
    "/Users/mickeymuscalli/Documents/Parameter Extractor/accuracy_20261120/ms_P1/runs/Chen2007_20261120-224102",
    "/Users/mickeymuscalli/Documents/Parameter Extractor/accuracy_20261120/ms_P1/runs/Gao2011_20261120-222853",
@@ -116,5 +136,6 @@
    "/Users/mickeymuscalli/Documents/Parameter Extractor/accuracy_20261120/ms_E1/runs/arXiv_2504.03572_20261121-160742",
    "/Users/mickeymuscalli/Documents/Parameter Extractor/accuracy_20261120/ms_E1/runs/arXiv_2509.04944_20261121-155623"
   ]
- }
+ },
+ "_note": "model_standard P1 Alargov2002: the standard's run rebuilt 2026-11-24 from its saved answers with \u00b5mol/mL read as mM ($0)"
 }

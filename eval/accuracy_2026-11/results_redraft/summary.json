@@ -311,9 +311,9 @@
     },
     "model_standard": {
      "papers": 12,
-     "recall": 0.726,
+     "recall": 0.725,
      "recall_close": 0.728,
-     "recall_pack_quantities": 0.915,
+     "recall_pack_quantities": 0.862,
      "precision": 0.775,
      "precision_close": 0.775,
      "cells_right": 0.922,
@@ -423,9 +423,9 @@
     },
     "model_standard": {
      "papers": 12,
-     "recall": 0.836,
-     "recall_close": 0.836,
-     "recall_pack_quantities": 0.875,
+     "recall": 0.835,
+     "recall_close": 0.835,
+     "recall_pack_quantities": 0.836,
      "precision": 0.774,
      "precision_close": 0.774,
      "cells_right": 0.945,
@@ -535,9 +535,9 @@
     },
     "model_standard": {
      "papers": 12,
-     "recall": 0.847,
-     "recall_close": 0.847,
-     "recall_pack_quantities": 0.924,
+     "recall": 0.846,
+     "recall_close": 0.846,
+     "recall_pack_quantities": 0.885,
      "precision": 0.774,
      "precision_close": 0.774,
      "cells_right": 0.948,
@@ -648,8 +648,8 @@
     "model_standard": {
      "papers": 12,
      "recall": 0.867,
-     "recall_close": 0.873,
-     "recall_pack_quantities": 0.946,
+     "recall_close": 0.872,
+     "recall_pack_quantities": 0.904,
      "precision": 0.781,
      "precision_close": 0.781,
      "cells_right": 0.935,
@@ -657,6 +657,118 @@
      "cells_wrong": 0.049,
      "cells_missing": 0.013,
      "rows_paired": 0.991
+    }
+   },
+   "C4": {
+    "label": "C3 + conditions in the pack's first step, module conditions and compound vocabularies, \u00b5mol/mL read as mM",
+    "papers": 12,
+    "papers_with_rows": 12,
+    "cost_usd": 1.54,
+    "rows": 227,
+    "figure_rows_waiting": 0,
+    "hand": {
+     "papers": 12,
+     "hand_values_not_printed": 996,
+     "metadata": {
+      "recall": 0.875,
+      "recall_close": 0.875,
+      "printed": 48
+     },
+     "methodology": {
+      "recall": 0.816,
+      "recall_close": 0.816,
+      "printed": 169
+     },
+     "chemistry_in": {
+      "recall": 0.926,
+      "recall_close": 0.926,
+      "printed": 21
+     },
+     "chemistry_out": {
+      "recall": 0.608,
+      "recall_close": 0.608,
+      "printed": 34
+     },
+     "overall": {
+      "recall": 0.823,
+      "recall_close": 0.823,
+      "printed": 272
+     },
+     "all_papers": {
+      "papers": 12,
+      "recall": 0.823,
+      "recall_close": 0.823
+     },
+     "new_values": 138,
+     "new_confirmed": 134,
+     "new_unsupported": 4,
+     "new_unverified": 0,
+     "drafted_from": {
+      "papers": 2,
+      "recall": 0.728
+     },
+     "held_out": {
+      "papers": 10,
+      "recall": 0.842
+     }
+    },
+    "archive": {
+     "papers": 0,
+     "planets": 0,
+     "planets_found": 0,
+     "pack_quantities": {
+      "recall": null,
+      "expected": 0
+     },
+     "planet": {
+      "recall": null,
+      "recall_close": null,
+      "differs": 0,
+      "expected": 0
+     },
+     "star": {
+      "recall": null,
+      "recall_close": null,
+      "differs": 0,
+      "expected": 0
+     },
+     "uncertainty": {
+      "recall": null,
+      "recall_close": null,
+      "differs": 0,
+      "expected": 0
+     },
+     "discovery": {
+      "recall": null,
+      "recall_close": null,
+      "differs": 0,
+      "expected": 0
+     },
+     "system": {
+      "recall": null,
+      "recall_close": null,
+      "differs": 0,
+      "expected": 0
+     },
+     "overall": {
+      "recall": null,
+      "recall_close": null,
+      "differs": 0,
+      "expected": 0
+     }
+    },
+    "model_standard": {
+     "papers": 12,
+     "recall": 0.819,
+     "recall_close": 0.824,
+     "recall_pack_quantities": 0.862,
+     "precision": 0.787,
+     "precision_close": 0.787,
+     "cells_right": 0.944,
+     "cells_elsewhere": 0.001,
+     "cells_wrong": 0.044,
+     "cells_missing": 0.012,
+     "rows_paired": 0.947
     }
    }
   }
@@ -973,9 +1085,9 @@
     },
     "model_standard": {
      "papers": 12,
-     "recall": 0.713,
-     "recall_close": 0.718,
-     "recall_pack_quantities": 0.872,
+     "recall": 0.7,
+     "recall_close": 0.705,
+     "recall_pack_quantities": 0.834,
      "precision": 0.808,
      "precision_close": 0.811,
      "cells_right": 0.921,
@@ -1085,9 +1197,9 @@
     },
     "model_standard": {
      "papers": 12,
-     "recall": 0.543,
-     "recall_close": 0.543,
-     "recall_pack_quantities": 0.851,
+     "recall": 0.518,
+     "recall_close": 0.518,
+     "recall_pack_quantities": 0.826,
      "precision": 0.724,
      "precision_close": 0.724,
      "cells_right": 0.949,
@@ -1197,9 +1309,9 @@
     },
     "model_standard": {
      "papers": 12,
-     "recall": 0.815,
-     "recall_close": 0.836,
-     "recall_pack_quantities": 0.823,
+     "recall": 0.791,
+     "recall_close": 0.812,
+     "recall_pack_quantities": 0.799,
      "precision": 0.786,
      "precision_close": 0.788,
      "cells_right": 0.948,
@@ -1309,9 +1421,9 @@
     },
     "model_standard": {
      "papers": 12,
-     "recall": 0.885,
-     "recall_close": 0.895,
-     "recall_pack_quantities": 0.896,
+     "recall": 0.86,
+     "recall_close": 0.871,
+     "recall_pack_quantities": 0.87,
      "precision": 0.812,
      "precision_close": 0.814,
      "cells_right": 0.934,
@@ -1319,6 +1431,118 @@
      "cells_wrong": 0.049,
      "cells_missing": 0.014,
      "rows_paired": 0.996
+    }
+   },
+   "C4": {
+    "label": "C3 + conditions in the pack's first step, module conditions and compound vocabularies, \u00b5mol/mL read as mM",
+    "papers": 12,
+    "papers_with_rows": 12,
+    "cost_usd": 1.54,
+    "rows": 227,
+    "figure_rows_waiting": 0,
+    "hand": {
+     "papers": 12,
+     "hand_values_not_printed": 996,
+     "metadata": {
+      "recall": 0.875,
+      "recall_close": 0.875,
+      "printed": 48
+     },
+     "methodology": {
+      "recall": 0.806,
+      "recall_close": 0.806,
+      "printed": 169
+     },
+     "chemistry_in": {
+      "recall": 0.815,
+      "recall_close": 0.815,
+      "printed": 21
+     },
+     "chemistry_out": {
+      "recall": 0.608,
+      "recall_close": 0.608,
+      "printed": 34
+     },
+     "overall": {
+      "recall": 0.809,
+      "recall_close": 0.809,
+      "printed": 272
+     },
+     "all_papers": {
+      "papers": 12,
+      "recall": 0.809,
+      "recall_close": 0.809
+     },
+     "new_values": 36,
+     "new_confirmed": 33,
+     "new_unsupported": 3,
+     "new_unverified": 0,
+     "drafted_from": {
+      "papers": 2,
+      "recall": 0.728
+     },
+     "held_out": {
+      "papers": 10,
+      "recall": 0.826
+     }
+    },
+    "archive": {
+     "papers": 0,
+     "planets": 0,
+     "planets_found": 0,
+     "pack_quantities": {
+      "recall": null,
+      "expected": 0
+     },
+     "planet": {
+      "recall": null,
+      "recall_close": null,
+      "differs": 0,
+      "expected": 0
+     },
+     "star": {
+      "recall": null,
+      "recall_close": null,
+      "differs": 0,
+      "expected": 0
+     },
+     "uncertainty": {
+      "recall": null,
+      "recall_close": null,
+      "differs": 0,
+      "expected": 0
+     },
+     "discovery": {
+      "recall": null,
+      "recall_close": null,
+      "differs": 0,
+      "expected": 0
+     },
+     "system": {
+      "recall": null,
+      "recall_close": null,
+      "differs": 0,
+      "expected": 0
+     },
+     "overall": {
+      "recall": null,
+      "recall_close": null,
+      "differs": 0,
+      "expected": 0
+     }
+    },
+    "model_standard": {
+     "papers": 12,
+     "recall": 0.844,
+     "recall_close": 0.849,
+     "recall_pack_quantities": 0.863,
+     "precision": 0.83,
+     "precision_close": 0.83,
+     "cells_right": 0.945,
+     "cells_elsewhere": 0.001,
+     "cells_wrong": 0.044,
+     "cells_missing": 0.009,
+     "rows_paired": 0.947
     }
    }
   }

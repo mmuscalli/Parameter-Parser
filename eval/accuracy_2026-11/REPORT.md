@@ -127,6 +127,33 @@ imaged companions). P1's conditions gain experiment type, solution type and vess
 materials recorded as the drafted `catalyst` lose `solid_material_name` (14 -> 7 of 14) since the conditions are a
 request of their own.
 
+A second round (2026-11-24, arm C4): the lab module's conditions join the pack's first step (one request fewer a
+paper), the remaining prebiotic conditions moved into their modules, peptides_oligomers and solution_chemistry carry
+the prebiotic pack's compounds, and µmol/mL reads as mM (the standard's Alargov2002 rebuilt with that fix, $0). P1,
+same 12 papers, reviewed (C = the first drafted pack, C3 = the round before):
+
+| Measure | C | C3 | C4 |
+|---|---|---|---|
+| MS recall (pack's own quantities) | 0.776 (0.902) | 0.890 (0.927) | 0.846 (0.898) |
+| MS precision | 0.830 | 0.817 | 0.826 |
+| hand recall | 0.817 | 0.801 | 0.824 |
+| solid material; pH | 14/14; 13/21 | 7/14; 14/21 | 14/14; 19/21 |
+| cost | $1.41 | $1.81 | $1.54 |
+
+C4 fixes what it targeted (solid materials back, the extra request gone) and has the best hand recall and precision;
+its lower MS recall comes from values the changed steps don't touch, varying from run to run: run labels the row plan
+gave once and not again (Rode1990, 12), particle sizes the mineral step gave once (iqubal2017, 5), and volumes
+(Rode1990, Chen2007) with the starting concentrations that depend on them. One run per arm can't separate the two.
+
+Why the drafted pack still misses values (C4, `column_gaps.py`, `miss_causes.py`): of 135 missed, 81 are in
+quantities it has no column for -- a paper's own constants accepted as new variables in the standard (Sakata2014,
+mitsuzawa2004: 29), run labels (12), Alargov2002's amino acids, whose unit the model wrote as 'µmol mL-1/sample' (26),
+and single values. The 59 in columns it has: 27 other rows (about half are wordings the text match doesn't accept:
+'ZnOCMo (Zn2[Mo(CN)8]·2H2O)' vs the formula alone), 13 not recorded (suppliers, controls), 11 recorded under another
+column (volumes), 5 not printed in the paper (the standard's derived values), 3 near. In Rode1990 the conditions
+step gave one temperature per table row without the row's sample, so every row of the set got the first (flagged,
+twice: a conflict and a label mismatch) while the rows' own labels state each temperature.
+
 ## Limits
 
 - One model family throughout, the standard included. The standard covers 48 of 118 papers; P2, P3 and E1 have no
