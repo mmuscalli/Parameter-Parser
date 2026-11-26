@@ -21,7 +21,7 @@ from PySide6.QtWidgets import (QAbstractItemView, QApplication, QCheckBox, QComb
                                QHBoxLayout, QHeaderView, QLabel, QMessageBox, QProgressBar, QPushButton, QTableWidget,
                                QTableWidgetItem, QVBoxLayout, QWidget)
 
-from parameter_extractor.gui.widgets import style_rows
+from parameter_extractor.gui.widgets import style_rows, fit_to_screen
 
 
 def _hint(text: str) -> QLabel:
@@ -66,7 +66,7 @@ class CompoundSetupDialog(QDialog):
         from parameter_extractor.pack_editing import PackDraft
         self.folder, self.applied, self.problems = Path(folder), [], []
         self.setWindowTitle("Find compounds and tidy column names")
-        self.resize(1080, 720)
+        fit_to_screen(self, 1080, 720)
         v = QVBoxLayout(self)
         v.addWidget(_hint("Compounds named in this data pack's columns, in its sample papers' examples and in its "
                           "parameter descriptions -- found by the app itself and identified on PubChem (free; only the "
@@ -167,7 +167,7 @@ class AdditionsDialog(QDialog):
         self.result_ = None
         self._cancel = None
         self.setWindowTitle("Suggest additions from papers")
-        self.resize(1100, 760)
+        fit_to_screen(self, 1100, 760)
         v = QVBoxLayout(self)
         v.addWidget(_hint("Add a few papers this data pack hasn't been tuned on. Each is surveyed cheaply for the "
                           "variables it reports (Claude Haiku, a few cents a paper), then one request (Claude Sonnet) "
@@ -316,7 +316,7 @@ class ModuleDraftDialog(QDialog):
         from parameter_extractor.gui.paper_list import PaperListPanel
         self._config, self.written, self.result_, self._cancel = config, [], None, None
         self.setWindowTitle("Suggest modules from papers")
-        self.resize(1150, 780)
+        fit_to_screen(self, 1150, 780)
         v = QVBoxLayout(self)
         v.addWidget(_hint("Add papers from one or several fields. Each is surveyed for the variables it reports "
                           "(Claude Haiku, about a cent a paper; surveys made before are reused), then one request "

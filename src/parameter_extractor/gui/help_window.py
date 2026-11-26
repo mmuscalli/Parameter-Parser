@@ -9,6 +9,8 @@ from PySide6.QtCore import Qt
 from PySide6.QtGui import QPalette
 from PySide6.QtWidgets import QDialog, QDialogButtonBox, QTextBrowser, QVBoxLayout
 
+from parameter_extractor.gui.widgets import fit_to_screen  # noqa: E402
+
 # (number, title, what to do) – the main window's numbered steps
 STEPS = [
     ("1", "Data pack",
@@ -89,7 +91,7 @@ class GettingStartedDialog(QDialog):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setWindowTitle("Getting started")
-        self.resize(640, 720)
+        fit_to_screen(self, 640, 720)
         v = QVBoxLayout(self)
         v.setContentsMargins(16, 16, 16, 12)
         self.browser = QTextBrowser()

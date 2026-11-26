@@ -25,6 +25,8 @@ from PySide6.QtWidgets import (QAbstractItemView, QComboBox, QCompleter, QDialog
                                QInputDialog, QLabel, QLineEdit, QMessageBox, QPushButton, QStyledItemDelegate,
                                QTabWidget, QTreeWidget, QTreeWidgetItem, QVBoxLayout, QWidget)
 
+from parameter_extractor.gui.widgets import fit_to_screen  # noqa: E402
+
 from parameter_extractor import packs, variable_categories
 from parameter_extractor.registry import STANDARD, STANDARD_LABEL, VariableRegistry, areas, common_column_names
 from parameter_extractor.value_types import TYPES, column_type
@@ -118,7 +120,7 @@ class RegistryDialog(QDialog):
     def __init__(self, registry_path: Path, parent=None, area: Optional[str] = None):
         super().__init__(parent)
         self.setWindowTitle("Remembered from your reviews")
-        self.resize(1050, 650)
+        fit_to_screen(self, 1050, 650)
         self.path = Path(registry_path)
         self.registry = VariableRegistry(self.path)        # edits apply to this copy until Save
         variable_categories.use_local(self.registry.local_categories)

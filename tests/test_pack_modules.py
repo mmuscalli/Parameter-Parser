@@ -344,6 +344,17 @@ def test_pages_and_module_groups():
         assert "kinetics" in groups()[1]
         assert e._chosen_modules() == ["sample_time"]                     # headings are never modules
 
+        # it fits a laptop screen (2026-11-26: it opened past the edge): no page forces the window's size, and a window
+        # asked to be larger than the screen is fitted to it and centred
+        hint = e.minimumSizeHint()
+        assert hint.width() < 1100 and hint.height() < 700, hint
+        from PySide6.QtWidgets import QWidget
+        from parameter_extractor.gui.widgets import fit_to_screen
+        big = QWidget()
+        fit_to_screen(big, 10000, 10000)
+        area = big.screen().availableGeometry()
+        assert big.width() <= area.width() and big.height() <= area.height() and area.contains(big.geometry().center())
+
 
 def test_modules_tab():
     """The editor's Modules tab: tick to link, what a module brings along, steps shown as the module's, saved as a

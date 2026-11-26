@@ -21,7 +21,7 @@ from PySide6.QtWidgets import (QDialog, QFrame, QHBoxLayout, QHeaderView, QLabel
                                QVBoxLayout, QWidget)
 
 from parameter_extractor.gui import themes
-from parameter_extractor.gui.widgets import RowSeparatorDelegate, style_rows
+from parameter_extractor.gui.widgets import RowSeparatorDelegate, style_rows, fit_to_screen
 from parameter_extractor.pack_editing import RULE_PROMPTS, items_to_rules, rules_to_items
 
 RULES_ROW_GAP = 13      # rules are long texts: more room between them and the lines (Mickey, 2026-11-06)
@@ -431,7 +431,7 @@ class RulesPage(QWidget):
             return
         dlg = QDialog(self)
         dlg.setWindowTitle(f"{PROMPTS.get(self.shown, (self.shown, ''))[0]}: the whole prompt")
-        dlg.resize(860, 700)
+        fit_to_screen(dlg, 860, 700)
         lay = QVBoxLayout(dlg)
         lay.addWidget(_muted("As it is sent for a paper with this data pack: its rules are highlighted (also ones not "
                              "saved yet); the parts in [brackets] are filled in for each paper. Read-only."))

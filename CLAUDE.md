@@ -18,7 +18,7 @@ screening tool, never a gate in the pipeline.
 
 Front ends: a PySide6 window (`parameter-extractor-gui`), a command line (`parameter-extract`), and PyInstaller
 builds for macOS (`dist/RUMMAGED.app`, `dist/RUMMAGED Dev.app`; unsigned; signing, notarization and the Windows build are deferred by Mickey; don't start them).
-Version: `parameter_extractor.__version__` (0.6.15, tag `v0.6.15`, on branch levels-and-facets), the one place it is set.
+Version: `parameter_extractor.__version__` (0.6.16, tag `v0.6.16`, on branch levels-and-facets), the one place it is set.
 
 ## Map of the code (`src/parameter_extractor/`, ~36K lines)
 
@@ -135,7 +135,7 @@ Version: `parameter_extractor.__version__` (0.6.15, tag `v0.6.15`, on branch lev
 - **GUI tests**: pump with `processEvents()` + `time.sleep`; never `QTest.qWait` (holds the GIL; the worker never
   runs). Check drawing natively too, not only offscreen. No window opens the next one from its own handlers (it
   records what comes next and closes; the opener opens it): `tests/test_window_chains.py`. Lists of settings use
-  `gui/widgets.style_rows`.
+  `gui/widgets.style_rows`; a window's opening size goes through `gui/widgets.fit_to_screen` (laptop screens).
 - **Schemas sent to the model**: flat, few `Optional`s (grammar size limit: "compiled grammar is too large"), every
   field required in the sent schema (`optional.ALL_REQUIRED`, `_required`) with Python defaults kept so old
   recordings load. Count with `json.dumps(transform_schema(Model)).count("anyOf")`. `count_tokens` is free; use it
@@ -253,6 +253,6 @@ estimates, local-model speed-ups, ...) and their status: `docs/improvement_sugge
   when present, so "Always Allow" survives a rebuild.
 - Branches: `main` (on GitHub since 2026-11-11) and `flexible-variables`, both at the same commit; keep them
   together until Mickey retires `flexible-variables`. Tags: `v0.2-figure-digitizer`,
-  `backup/flexible-variables-before-public`, `v0.3.0`, `v0.4.0`, `v0.5.0`, `v0.6.0`, `v0.6.1`, `v0.6.2`, `v0.6.3`, `v0.6.4`, `v0.6.5`, `v0.6.6`, `v0.6.7`, `v0.6.8`, `v0.6.9`, `v0.6.10`, `v0.6.11`, `v0.6.12`, `v0.6.13`, `v0.6.14`, `v0.6.15`. Tag a state whenever both apps are built for use.
+  `backup/flexible-variables-before-public`, `v0.3.0`, `v0.4.0`, `v0.5.0`, `v0.6.0`, `v0.6.1`, `v0.6.2`, `v0.6.3`, `v0.6.4`, `v0.6.5`, `v0.6.6`, `v0.6.7`, `v0.6.8`, `v0.6.9`, `v0.6.10`, `v0.6.11`, `v0.6.12`, `v0.6.13`, `v0.6.14`, `v0.6.15`, `v0.6.16`. Tag a state whenever both apps are built for use.
 - Backups: full project archive `../Backups/EORE_Data_Project_FULL_BACKUP_20261012_030042.tar` (before this
   pipeline); dated `runs/` archives from `scripts/backup_runs.py` in `../Backups/`.

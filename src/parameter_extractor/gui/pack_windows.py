@@ -34,7 +34,7 @@ from PySide6.QtWidgets import (QAbstractItemView, QCheckBox, QComboBox, QDialog,
 from parameter_extractor import packs
 from parameter_extractor.pack_editing import (BUILTIN_STAGES, CALCULATION_NEEDS, CALCULATION_STEP, CALCULATIONS,
                                               PackDraft, Problem, check)
-from parameter_extractor.gui.widgets import RowSeparatorDelegate, in_cell, style_rows
+from parameter_extractor.gui.widgets import RowSeparatorDelegate, in_cell, style_rows, fit_to_screen
 
 from parameter_extractor.gui import themes  # noqa: E402
 LEVEL_COLORS = {level: themes.MARKS[level] for level in ("error", "warning", "note")}   # follow the theme
@@ -188,8 +188,14 @@ class _PageTabs(QTabWidget):
         self.nav.addItem(item)
 
     def add_page(self, widget: QWidget, name: str, about: str) -> int:
+        """A page, scrolling when the window is smaller than it needs (2026-11-26: the tallest page made the window
+        taller than a laptop screen); `page(i)` is the page itself."""
         from PySide6.QtWidgets import QListWidgetItem
-        i = self.addTab(widget, name)
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QFrame.Shape.NoFrame)
+        scroll.setWidget(widget)
+        i = self.addTab(scroll, name)
         self._about[i] = about
         item = QListWidgetItem("   " + name)
         item.setData(self.PAGE, i)
@@ -200,6 +206,10 @@ class _PageTabs(QTabWidget):
             self.nav.setCurrentItem(item)
             self._follow(0)
         return i
+
+    def page(self, i: int) -> QWidget:
+        holder = self.widget(i)
+        return holder.widget() if isinstance(holder, QScrollArea) else holder
 
     def _item(self, i: int):
         return next((self.nav.item(r) for r in range(self.nav.count()) if self.nav.item(r).data(self.PAGE) == i), None)
@@ -261,7 +271,7 @@ class NewPackDialog(QDialog):
     def __init__(self, parent=None, source: Optional[str] = None, config=None):
         super().__init__(parent)
         self.setWindowTitle("New data pack")
-        self.resize(620, 420)
+        fit_to_screen(self, 620, 420)
         self.created: Optional[packs.Pack] = None
         self.draft_result = None
         self._config = config
@@ -491,7 +501,7 @@ class PackEditor(QDialog):
         self._actions: Dict[str, List[QPushButton]] = {}     # the pack-wide action buttons, by kind (_action)
         self.setWindowTitle(f"Data pack: {self.draft.manifest.get('label', '')}"
                             + ("  (built in, read-only)" if self.read_only else ""))
-        self.resize(1320, 820)
+        fit_to_screen(self, 1320, 820)
         layout = QVBoxLayout(self)
         if self.read_only:
             banner = QHBoxLayout()
@@ -558,7 +568,7 @@ class PackEditor(QDialog):
         layout.addLayout(bottom)
         if self.read_only:
             for tab in range(self.tabs.count() - 1):            # Check stays usable
-                self._lock(self.tabs.widget(tab))
+                self._lock(self.tabs.page(tab))
         self.run_check()
 
     def showEvent(self, event) -> None:
@@ -641,12 +651,18 @@ class PackEditor(QDialog):
         self.builtin_boxes = {}
         self._own_steps = set(m.get("builtin_stages", []))
         for name, about in BUILTIN_STAGES.items():
-            box = QCheckBox(f"{name} -- {about}", checked=name in self._own_steps)
+            # the step's name on the box, what it does wrapped under it (2026-11-26: a checkbox's text can't wrap, and
+            # these descriptions made the window wider than a laptop screen)
+            box = QCheckBox(name, checked=name in self._own_steps)
             box.setProperty("about", about)
+            box.setToolTip(about)
             box.toggled.connect(lambda on, n=name, b=box: (self._own_steps.add(n) if on else self._own_steps.discard(n))
                                 if b.isEnabled() else None)
             self.builtin_boxes[name] = box
             sv.addWidget(box)
+            what = _hint(about)
+            what.setContentsMargins(24, 0, 0, 4)
+            sv.addWidget(what)
         v.addWidget(steps)
 
         calcs = QGroupBox("Calculations run on the rows, in this order (tick to use; Move up / down to reorder)")
@@ -1263,7 +1279,7 @@ class PackEditor(QDialog):
 
     def tab(self, name: str) -> QWidget:
         """A tab by its title (tests and code use names: the tabs' positions change)."""
-        return self.tabs.widget(self.tab_index(name))
+        return self.tabs.page(self.tab_index(name))
 
     def tab_index(self, name: str) -> int:
         """The tab titled `name`, also when its title carries a count ('Check (1/2)' when the pack has problems)."""
@@ -1654,11 +1670,11 @@ class PackEditor(QDialog):
             if name in provided:
                 box.setChecked(True)
                 box.setEnabled(False)
-                box.setText(f"{name} -- {box.property('about')}  (from the {provided[name]} module)")
+                box.setText(f"{name}  (from the {provided[name]} module)")
             else:
                 box.setEnabled(not self.read_only)
                 box.setChecked(name in self._own_steps)
-                box.setText(f"{name} -- {box.property('about')}")
+                box.setText(name)
             box.blockSignals(False)
             box.toggled.emit(box.isChecked())          # the tabs that follow a step
         self._fill_calculations(self._chosen_calculations())

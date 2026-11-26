@@ -37,6 +37,8 @@ from PySide6.QtWidgets import (QAbstractItemView, QCheckBox, QComboBox, QComplet
                                QHeaderView, QLabel, QMessageBox, QPushButton, QSplitter, QTableWidget,
                                QTableWidgetItem, QVBoxLayout, QWidget)
 
+from parameter_extractor.gui.widgets import fit_to_screen  # noqa: E402
+
 from parameter_extractor.ingestion.new_variables import VariableDecision, VariableGroup, stored_value
 from parameter_extractor.names import closest_names, vocabulary
 from parameter_extractor.registry import VariableRegistry
@@ -70,7 +72,7 @@ class VariableReviewDialog(QDialog):
                  parent=None):
         super().__init__(parent)
         self.setWindowTitle("Review new variables")
-        self.resize(1250, 760)
+        fit_to_screen(self, 1250, 760)
         self.groups, self.registry = groups, registry
         self._shown = -1
         self._columns = registry.known_columns()

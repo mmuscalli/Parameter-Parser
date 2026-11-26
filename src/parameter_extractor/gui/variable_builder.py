@@ -22,7 +22,7 @@ from PySide6.QtWidgets import (QCheckBox, QComboBox, QDialog, QDialogButtonBox, 
                                QTableWidget, QTableWidgetItem, QTabWidget, QVBoxLayout, QWidget)
 
 from parameter_extractor import variable_builder as vb
-from parameter_extractor.gui.widgets import style_rows
+from parameter_extractor.gui.widgets import style_rows, fit_to_screen
 
 C_USE, C_TYPED, C_NAME, C_TITLE, C_CID, C_HOW = range(6)
 NO_STEP = "__column_only__"
@@ -39,7 +39,7 @@ class VariableBuilderDialog(QDialog):
         self._matches: List[vb.CompoundMatch] = []
         self._values: List[dict] = []
         self.setWindowTitle("Build columns")
-        self.resize(900, 640)
+        fit_to_screen(self, 900, 640)
         v = QVBoxLayout(self)
         self.tabs = QTabWidget()
         self.tabs.addTab(self._compounds_page(), "Compounds")

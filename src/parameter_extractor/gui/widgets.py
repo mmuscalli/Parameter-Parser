@@ -292,3 +292,23 @@ def style_rows(table: QTableWidget, delegate: "RowSeparatorDelegate" = None) -> 
     table.model().dataChanged.connect(refit)
     table._refit_timer = timer
     table.installEventFilter(_RefitOnShow(table))
+
+
+def fit_to_screen(window: QWidget, width: int, height: int, margin: int = 24) -> None:
+    """Open `window` at width x height, but never larger than the screen it opens on (its parent's, else the one under
+    the mouse), and centred there (2026-11-26, Mickey: the Data packs window opened past the edge of a laptop screen
+    until its title bar was double-clicked)."""
+    from PySide6.QtCore import QPoint
+    from PySide6.QtGui import QCursor, QGuiApplication
+    parent = window.parentWidget()
+    screen = (parent.screen() if parent is not None else None) or QGuiApplication.screenAt(QCursor.pos()) \
+        or QGuiApplication.primaryScreen()
+    if screen is None:
+        window.resize(width, height)
+        return
+    area = screen.availableGeometry()
+    title = 30                                         # the title bar, outside the size given here
+    w = max(min(width, area.width() - 2 * margin), 200)
+    h = max(min(height, area.height() - 2 * margin - title), 160)
+    window.resize(w, h)
+    window.move(area.center() - QPoint(w // 2, (h + title) // 2))

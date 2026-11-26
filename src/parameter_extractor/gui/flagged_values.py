@@ -40,6 +40,8 @@ from PySide6.QtWidgets import (QAbstractItemView, QCheckBox, QDialog, QDialogBut
                                QSplitter, QTableWidget, QTableWidgetItem, QTextBrowser, QToolButton, QVBoxLayout,
                                QWidget)
 
+from parameter_extractor.gui.widgets import fit_to_screen  # noqa: E402
+
 from parameter_extractor import corrections as corr
 from parameter_extractor import flag_targets as ft
 from parameter_extractor.gui import themes
@@ -227,7 +229,7 @@ class FlaggedValuesWindow(QDialog):
     def __init__(self, result, registry=None, parent=None, on_changed=None):
         super().__init__(parent)
         self.setWindowTitle(f"Flagged values — {result.paper_id}")
-        self.resize(1300, 860)
+        fit_to_screen(self, 1300, 860)
         self.result, self.registry, self.on_changed = result, registry, on_changed or (lambda: None)
         self.changed = False
         self._filling = False

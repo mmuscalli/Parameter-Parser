@@ -23,6 +23,8 @@ from PySide6.QtWidgets import (QAbstractItemView, QCheckBox, QComboBox, QDialog,
                                QSplitter, QTableWidget, QTableWidgetItem, QTabWidget, QVBoxLayout,
                                QWidget)
 
+from parameter_extractor.gui.widgets import fit_to_screen  # noqa: E402
+
 from parameter_extractor.gui import themes
 from parameter_extractor import local_models
 from parameter_extractor import model_profiles as mp
@@ -77,7 +79,7 @@ class ModelsWindow(QDialog):
     def __init__(self, parent=None, store: Optional[mp.ModelStore] = None, keys=None, tab: str = "profiles"):
         super().__init__(parent)
         self.setWindowTitle("Models")
-        self.resize(1080, 720)
+        fit_to_screen(self, 1080, 720)
         self.store = store or mp.ModelStore()
         if keys is None:
             from parameter_extractor.gui import key_store as keys

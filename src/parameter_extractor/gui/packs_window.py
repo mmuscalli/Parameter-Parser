@@ -17,6 +17,8 @@ from PySide6.QtGui import QDesktopServices
 from PySide6.QtWidgets import (QDialog, QHBoxLayout, QLabel, QListWidget, QListWidgetItem, QMessageBox, QPushButton,
                                QSplitter, QTabWidget, QTextBrowser, QVBoxLayout, QWidget)
 
+from parameter_extractor.gui.widgets import fit_to_screen  # noqa: E402
+
 from parameter_extractor import packs
 
 
@@ -82,7 +84,7 @@ class DataPacksWindow(QDialog):
         super().__init__(parent or main)
         self.main = main
         self.setWindowTitle("Data packs")
-        self.resize(1180, 780)
+        fit_to_screen(self, 1180, 780)
         v = QVBoxLayout(self)
         intro = QLabel("A <b>data pack</b> holds everything the app needs for one field: its columns, how rows are "
                        "planned, its own extraction steps and calculations, and the shared <b>modules</b> it links. "

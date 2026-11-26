@@ -30,6 +30,8 @@ from PySide6.QtWidgets import (
     QVBoxLayout, QWidget,
 )
 
+from parameter_extractor.gui.widgets import fit_to_screen  # noqa: E402
+
 from parameter_extractor import __version__
 from parameter_extractor.config.run_config import RunConfig
 from parameter_extractor.gui import key_store
@@ -121,7 +123,7 @@ class MainWindow(QMainWindow):
         super().__init__()
         from parameter_extractor import APP_TITLE
         self.setWindowTitle(APP_TITLE)
-        self.resize(1300, 900)
+        fit_to_screen(self, 1300, 900)
         self.setAcceptDrops(True)
 
         self._settings = QSettings()        # non-secret preferences only (never the key)
@@ -424,7 +426,7 @@ class MainWindow(QMainWindow):
         from parameter_extractor import pack_overview
         dlg = QDialog(self)
         dlg.setWindowTitle("How data packs work")
-        dlg.resize(820, 640)
+        fit_to_screen(dlg, 820, 640)
         v = QVBoxLayout(dlg)
         view = QTextBrowser()
         view.document().setDocumentMargin(18)

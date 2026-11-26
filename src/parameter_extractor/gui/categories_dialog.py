@@ -22,7 +22,7 @@ from PySide6.QtWidgets import (QAbstractItemView, QStyledItemDelegate, QCheckBox
 
 from parameter_extractor.gui import themes
 from parameter_extractor import packs, variable_categories as vc
-from parameter_extractor.gui.widgets import RowSeparatorDelegate, clear_cell_widgets, in_cell, style_rows
+from parameter_extractor.gui.widgets import RowSeparatorDelegate, clear_cell_widgets, in_cell, style_rows, fit_to_screen
 from parameter_extractor.registry import STANDARD, VariableRegistry, areas
 
 FORMATS = {"number": "One number with a unit", "text": "Text", "any": "Number or text"}
@@ -39,7 +39,7 @@ class CategoriesDialog(QDialog):
     def __init__(self, registry_path: Optional[Path], parent=None):
         super().__init__(parent)
         self.setWindowTitle("Variable categories")
-        self.resize(1150, 520)
+        fit_to_screen(self, 1150, 520)
         self.path = Path(registry_path) if registry_path else None
         self.registry = VariableRegistry(self.path)
         self.edits: Dict[str, dict] = copy.deepcopy(self.registry.local_categories)

@@ -21,6 +21,8 @@ from PySide6.QtGui import QPixmap
 from PySide6.QtWidgets import (QDialog, QHBoxLayout, QLabel, QMessageBox, QPushButton, QScrollArea,
                                QStackedWidget, QVBoxLayout, QWidget)
 
+from parameter_extractor.gui.widgets import fit_to_screen  # noqa: E402
+
 from parameter_extractor.digitizing.calibration import read_values
 from parameter_extractor.schemas.figures import DigitizedFigure, FigureCandidate, FigurePlan
 from parameter_extractor.gui.digitizer import DigitizerWidget
@@ -80,7 +82,7 @@ class FigureReviewDialog(QDialog):
         self.auto_done: List[str] = []
         self._auto_reasons: Dict[str, List[str]] = {}
         self.setWindowTitle("Figures")
-        self.resize(1400, 900)
+        fit_to_screen(self, 1400, 900)
         self.figures = figures
         self.columns = template_columns
         self.bridge = plan_bridge
