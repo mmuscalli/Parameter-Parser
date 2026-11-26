@@ -20,3 +20,27 @@ Weak columns (Standard hand recall): `initial_pressure_bar` 0.18 (the hand value
 0.6.0), `initial_pH` 0.43, `duration_hr` 0.70. `initial_total_monomers_aq_mM` (50 hand values) is calculated in the
 hand dataset and nothing in the app fills it. The 'printed' check is loose (a number anywhere in the text, x/÷ 1000 or
 100), so a few calculated hand values (1 bar from 1 atm) still count as printed.
+
+## Run 1 (2026-11-25, 0.6.11; Mickey's 43 columns after unticking initial_total_monomers_aq_mM and initial_pressure_bar), `run_20261125.json` -> `run_20261125/`
+
+Same 39 PDFs (the P1 copies), batch mode, the data pack *Controlled Test Prebio Dupe* with its Must answer columns.
+The baseline arms (A0, B0) are rescored on the same 43 columns. Queues: `~/Documents/Parameter Extractor/controlled_test_20261125/`.
+
+| Arm | Cost | Hand recall (1,208 printed values, 35 papers) | Agreement | MS recall (525 values, 11 papers) |
+|---|---|---|---|---|
+| A0 Standard, 0.6.0 | $4.22 | 0.768 | 0.864 | 0.943 |
+| **A1 Standard, 0.6.11, Must answer** | $4.67 | **0.803** | 0.870 | **0.970** |
+| B0 Economy x3, 0.6.0 | $0.70 | 0.785 | 0.861 | 0.958 |
+| B1 Economy x3, 0.6.11, Must answer | $0.93 | 0.783 | 0.876 | 0.960 |
+
+- A0 -> A1 is 0.6.0 -> 0.6.11 as well as Must answer (the solid-material fix among them), so the gain isn't Must
+  answer's alone. Gains: initial_pH 0.43 -> 0.60, solid_material_name 0.29 -> 0.71, initial_NaCl 0.67 -> 0.89.
+  Economy is unchanged overall.
+- Still low on both: duration_hr 0.70 (161 values), initial_pH (B1 0.43), sampled_(Gly)4 0.67, flow_rate 0.33;
+  Standard alone: cycle_number 0.56 and sampled_Asp-Asp 0 (Economy has both).
+- The B1 queue first failed on every paper: a step voted over 3 passes lost its `checked` answers (fixed in 0.6.12,
+  voting.vote_stage); resumed from the saved answers for $0.03.
+- parameter_checks.csv: Standard 490 'reported', 1,168 'not reported', 18 'unclear'; 32 answers disagree with the
+  values written (parameter_check flags), Economy 36.
+- Text columns: names match either way round ('goethite' / 'goethite (alpha-FeOOH)'); the baseline numbers above the
+  run moved slightly with that change.
