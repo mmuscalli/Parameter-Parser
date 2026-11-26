@@ -203,3 +203,4 @@ current month's file (start `YYYY-MM.md` in a new month), with one line here.
 - RUMMAGED; page actions on their pages; the Structure page laid out; the remembered window opens fast (2026-11-26, Mickey)
 - Windows open within the screen (2026-11-26, Mickey)
 - The Map gets more of the window (2026-11-26, Mickey)
+- The Map's title beside its headings; one-line headings with their explanation on a click (2026-11-26, Mickey)

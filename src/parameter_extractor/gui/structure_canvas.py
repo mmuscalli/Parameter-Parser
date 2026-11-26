@@ -44,6 +44,7 @@ BODY = 2         # item data: a step's or card's outline (outlined in the accent
 PEN = 3          # item data: its own pen, put back after
 TARGET = 4       # item data: a part without hovering that can still be opened elsewhere ("level:<id>", "paper")
 LANE = 5         # item data: a level's lane and its words (lit while what's hovered has a kind of value in it)
+INFO = 6         # item data: a column heading that opens its explanation when clicked ("steps" / "levels")
 
 
 @dataclass
@@ -300,11 +301,37 @@ class _Drawing:
             item.setData(TAGS, frozenset(tags))
 
 
-STEPS_HEAD = ("One request to the AI model for each paper, grouped by where it comes from. Hover over one to "
-              "follow its lines, click it for its details, double-click it to edit it.")
-LEVELS_HEAD = ("How a paper's values are organised, from the whole paper down to one row. Each card is a kind of "
-               "value; a line comes in from each step that fills it (dashed: only through its 'other values' "
-               "answers).")
+# one line under each column's heading; the whole explanation opens from the heading (2026-11-26, Mickey: the
+# descriptions took three lines of the picture)
+STEPS_HEAD = "One request to the AI model per paper, by where it comes from."
+LEVELS_HEAD = "From the whole paper down to one row; each card is a kind of value."
+INFO_TEXT = {
+    "steps": (
+        "<b>Steps</b>"
+        "<p>Each step is <b>one request to the AI model for each paper</b> it runs for. They're grouped by where "
+        "they come from:</p><ul>"
+        "<li><b>The app's steps</b> -- every data pack has them: planning the rows, and the paper's details.</li>"
+        "<li><b>This data pack's steps</b> -- its own (the Steps page).</li>"
+        "<li><b>From linked modules</b> -- shared parts several data packs use (the Modules page). "
+        "<i>BUILT-IN</i>: a step written in code.</li>"
+        "<li><b>On your computer</b> -- calculations and formulas: no request, free.</li></ul>"
+        "<p>A step's colour says where it comes from (the key under the levels).</p>"
+        "<p><b>Hover</b> over a step to follow its lines, <b>click</b> it for its details, <b>double-click</b> to "
+        "edit it, <b>right-click</b> for every place it's edited.</p>"),
+    "levels": (
+        "<b>Levels</b>"
+        "<p>How a paper's values are organised, from the whole paper down to one row of the dataset:</p><ul>"
+        "<li><b>{paper}</b> -- one per paper (the title, the authors).</li>"
+        "<li><b>{set}</b> -- a group of rows (how its experiments were set up).</li>"
+        "<li><b>Run</b> -- only when one {set_lower} holds several experiments, each sampled more than once.</li>"
+        "<li><b>{sample}</b> -- one row of the dataset (what was measured).</li></ul>"
+        "<p>Each <b>card</b> is a kind of value, at the level it's recorded for (the Structure page); it says how "
+        "many columns it has and whether values are filled in for rows that don't give them.</p>"
+        "<p>A <b>line</b> comes in from each step that fills it -- <i>dashed</i>: only through the step's 'other "
+        "values' answers. The <b>dots</b> on a card are the colours of those steps.</p>"
+        "<p><b>Hover</b> over a card to follow it, <b>click</b> it for its details, <b>double-click</b> to edit "
+        "it.</p>"),
+}
 STEP_GROUPS = {"app": "The app's steps (every data pack)", "pack": "This data pack's steps",
                "modules": "From linked modules"}
 FILL_TEXT = {"set": "fills in per {set}", "paper": "fills in across the paper", "none": ""}
@@ -336,9 +363,11 @@ def _card_fill(pal: QPalette) -> QColor:
     return pal.color(QPalette.ColorRole.Base)
 
 
-def build_scene(pack, palette: Optional[QPalette] = None, opened: Optional[Set[str]] = None) -> QGraphicsScene:
+def build_scene(pack, palette: Optional[QPalette] = None, opened: Optional[Set[str]] = None,
+                interactive: bool = True) -> QGraphicsScene:
     """The pack's structure (structure_of) drawn on a new scene; `scene.relations` {key: related keys} for hovering.
-    Steps and cards show their name (and a short line); the ones in `opened` (keys) show everything."""
+    Steps and cards show their name (and a short line); the ones in `opened` (keys) show everything. `interactive`:
+    the headings carry an 'ⓘ' that opens their explanation (not in an exported figure)."""
     s = structure_of(pack)
     opened = opened or set()
     pal = palette or QApplication.palette()
@@ -356,16 +385,23 @@ def build_scene(pack, palette: Optional[QPalette] = None, opened: Optional[Set[s
     set_word = units.get("set", "set")
     sub_font, sub_h = _font(SUB_PT), QFontMetricsF(_font(SUB_PT)).height()
 
-    # the pack's name; over each column its title and what it shows (the same height, so both start level)
-    y = d.lines([s.title], COL_PAPER, 0, text, 18, True) + 14
+    # the pack's name over the paper's column, level with the column headings (2026-11-26, Mickey: it took a row of
+    # its own above them); over each column its title, one line on what it shows, and an 'ⓘ' for the rest
+    y = 0
+    title_font = _font(15, True)
+    title_end = d.lines(wrap(s.title, title_font, COL_STEPS - COL_PAPER - 14, 4), COL_PAPER, y, text, 15, True)
     head_font = _font(10.5)
-    heads = [(COL_STEPS, COL_LANES - 40 - COL_STEPS, "Steps", STEPS_HEAD),
-             (COL_LANES, LANES_W, "Levels", LEVELS_HEAD)]
-    wrapped = [wrap(about, head_font, w, MANY) for _x, w, _t, about in heads]
-    for (x, _w, title, _about), lines in zip(heads, wrapped):
-        d.text(title, x, y, text, 14, True)
+    heads = [(COL_STEPS, COL_LANES - 40 - COL_STEPS, "Steps", STEPS_HEAD, "steps"),
+             (COL_LANES, LANES_W, "Levels", LEVELS_HEAD, "levels")]
+    wrapped = [wrap(about, head_font, w, MANY) for _x, w, _t, about, _i in heads]
+    for (x, _w, title, _about, info), lines in zip(heads, wrapped):
+        heading = d.text(title, x, y, text, 14, True)
+        if interactive:
+            heading.setData(INFO, info)
+            mark = d.text("ⓘ", x + heading.boundingRect().width() + 6, y + 1, muted, 13)
+            mark.setData(INFO, info)                    # no tooltip (the picture has none): the cursor is a hand
         d.lines(lines, x, y + 24, muted, 10.5)
-    top = y + 24 + max(len(lines) for lines in wrapped) * QFontMetricsF(head_font).height() + 16
+    top = max(y + 24 + max(len(lines) for lines in wrapped) * QFontMetricsF(head_font).height(), title_end) + 14
 
     paper_rect = QRectF(COL_PAPER, top, PAPER_W, 84)
     d.box(paper_rect, card, line, 10).setData(TARGET, "paper")
@@ -619,6 +655,11 @@ class StructureCanvas(QGraphicsView):
         self._clicked = None
         if event.button() == Qt.MouseButton.LeftButton and self._pressed is not None \
                 and (pos - self._pressed).manhattanLength() <= 4:
+            info = self.info_at(pos)
+            if info:
+                self._pressed = None
+                self.show_info(info, self.viewport().mapToGlobal(pos))
+                return
             key = self.key_at(pos)
             if key:
                 self.toggle(key)
@@ -695,7 +736,34 @@ class StructureCanvas(QGraphicsView):
     def mouseMoveEvent(self, event) -> None:
         super().mouseMoveEvent(event)
         if not event.buttons():
-            self.highlight(self.key_at(event.position().toPoint()))
+            pos = event.position().toPoint()
+            self.highlight(self.key_at(pos))
+            self.viewport().setCursor(Qt.CursorShape.PointingHandCursor if self.info_at(pos)
+                                      else Qt.CursorShape.OpenHandCursor)
+
+    def info_at(self, pos) -> Optional[str]:
+        """'steps' / 'levels' when `pos` is on a column heading (or its 'ⓘ')."""
+        return next((item.data(INFO) for item in self.items(pos) if item.data(INFO)), None)
+
+    def show_info(self, which: str, at) -> None:
+        """A column's whole explanation in a small pop-out under the click; closes on a click elsewhere or Esc."""
+        from PySide6.QtWidgets import QFrame, QLabel, QVBoxLayout
+        units = (self._pack.manifest.units or {}) if self._pack is not None else {}
+        group = units.get("set", "set")
+        row = units.get("sample", "sample")
+        html = INFO_TEXT[which].format(paper="Paper", set=group[:1].upper() + group[1:], set_lower=group,
+                                       sample=row[:1].upper() + row[1:])
+        popup = QFrame(self, Qt.WindowType.Popup)
+        popup.setFrameShape(QFrame.Shape.StyledPanel)
+        layout = QVBoxLayout(popup)
+        layout.setContentsMargins(14, 10, 14, 12)
+        label = QLabel(html, wordWrap=True, textFormat=Qt.TextFormat.RichText)
+        label.setFixedWidth(440)
+        layout.addWidget(label)
+        popup.adjustSize()
+        popup.move(at + QPointF(4, 10).toPoint())
+        popup.show()
+        self._info_popup = popup
 
     def leaveEvent(self, event) -> None:
         super().leaveEvent(event)
@@ -745,7 +813,7 @@ def render_png(pack, path, palette: Optional[QPalette] = None, scale: float = 2.
                opened: Optional[Set[str]] = None) -> None:
     """The picture as an image file (mockups, docs)."""
     from PySide6.QtGui import QImage
-    scene = build_scene(pack, palette, opened)
+    scene = build_scene(pack, palette, opened, interactive=False)
     rect = scene.sceneRect()
     image = QImage(int(rect.width() * scale), int(rect.height() * scale), QImage.Format.Format_ARGB32)
     image.fill(scene.backgroundBrush().color())
@@ -784,7 +852,7 @@ def export_image(pack, path, opened: Optional[Set[str]] = None, scale: float = 3
     from PySide6.QtCore import QSize
     from PySide6.QtGui import QImage
     path = Path(path)
-    scene = build_scene(pack, palette or print_palette(), opened)
+    scene = build_scene(pack, palette or print_palette(), opened, interactive=False)
     scene.setBackgroundBrush(QBrush(Qt.BrushStyle.NoBrush))
     rect = scene.sceneRect()
     if path.suffix.lower() == ".svg":

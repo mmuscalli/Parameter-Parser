@@ -190,6 +190,33 @@ def test_the_map_exports_as_an_image():
     e.close()
 
 
+
+def test_the_map_heading_row_and_explanations():
+    """The pack's name beside the column headings, not on a row of its own; one line under each heading; the
+    whole explanation opens from the heading -- not in an exported figure (2026-11-26, Mickey)."""
+    from PySide6.QtWidgets import QGraphicsSimpleTextItem, QLabel
+    from parameter_extractor.gui import structure_canvas as sc
+    pack = packs.available()["prebiotic_chemistry"]
+    scene = sc.build_scene(pack)
+    texts = {i.text(): i for i in scene.items() if isinstance(i, QGraphicsSimpleTextItem)}
+    first = next(t for t in texts if pack.label.startswith(t))                       # the name's first line
+    assert texts["Steps"].y() == texts["Levels"].y() == texts[first].y() == 0       # one row: name and headings
+    assert {i.data(sc.INFO) for i in scene.items() if i.data(sc.INFO)} == {"steps", "levels"}
+    assert len(sc.STEPS_HEAD) < 70 and len(sc.LEVELS_HEAD) < 70                     # a line each (on macOS)
+    figure = sc.build_scene(pack, interactive=False)                                 # kept while it's read
+    assert not any(i.data(sc.INFO) for i in figure.items())
+    canvas = sc.StructureCanvas(pack)
+    item = next(i for i in canvas.scene().items() if i.data(sc.INFO) == "levels")
+    canvas.resize(1400, 900)
+    canvas.fit()
+    pos = canvas.mapFromScene(item.sceneBoundingRect().center())
+    assert canvas.info_at(pos) == "levels"
+    canvas.show_info("levels", canvas.viewport().mapToGlobal(pos))
+    shown = canvas._info_popup.findChild(QLabel).text()
+    assert "Experiment set" in shown and "one row of the dataset" in shown          # the pack's own words
+    canvas._info_popup.close()
+
+
 def test_the_categories_window_refills_without_leftovers():
     """Choosing another data pack in the Variable categories window: only the new rows' controls are shown (the
     replaced ones used to stay drawn while the window was open from another window)."""
