@@ -157,10 +157,13 @@ def test_remembered_variables_window():
         dlg.choose(item, dlg.A_AREA, STANDARD)
         dlg._refresh()
         assert [i.text(0) for i in dlg.leaves(dlg.columns_tree, STANDARD)] == ["data_licence", "hplc_column"]
+        dlg.tabs.setCurrentIndex(1)                     # a tab is filled when it's opened (2026-11-26)
         assert dlg.leaves(dlg.alias_tree, STANDARD)[0].text(dlg.S_COLUMN) == "hplc_column"   # synonym followed
 
         # built-in: grouped per area, changes asked about once, shown against the defaults
         assert [g for g, _ in dlg.builtin_columns()] == [STANDARD, EXO, PRE]
+        assert not dlg.builtin_tree.topLevelItemCount()                   # not opened yet: not filled
+        dlg.tabs.setCurrentIndex(3)
         rep = next(i for i in dlg.leaves(dlg.builtin_tree, PRE) if i.text(0) == "replicates")
         assert rep.text(dlg.B_DEFAULT) == "Experimental Methodology · Whole number"
         dlg.builtin_confirmed = True
@@ -182,6 +185,7 @@ def test_remembered_variables_window():
                                             EXO: {"pl_orbper": {"category": "other"}}}
         # one area at a time (opened from a research area's window): that area's groups and the Standard ones
         dlg = RegistryDialog(path, area=EXO)
+        dlg.tabs.setCurrentIndex(3)
         visible = lambda tree: [tree.topLevelItem(i).data(0, 0x0100)[1] for i in range(tree.topLevelItemCount())
                                 if not tree.topLevelItem(i).isHidden()]
         assert dlg.area_combo.currentData() == EXO and visible(dlg.builtin_tree) == [STANDARD, EXO]

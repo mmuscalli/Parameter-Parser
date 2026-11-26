@@ -282,12 +282,12 @@ def test_the_structure_tab_saves_levels():
         page = e.structure_page
         rows = {page._kinds[r]["id"]: r for r in range(page.table.rowCount())}
         assert {"metadata", "methodology", own} <= set(rows)
-        assert page.table.cellWidget(rows["metadata"], 1).currentData() == "paper"
+        assert page.combo(rows["metadata"], page.K_LEVEL).currentData() == "paper"
         page.group_word.setText("reaction series")
         assert e.set_edit.text() == "reaction series"                          # the General tab's word too
-        assert page.table.cellWidget(rows["metadata"], 1).itemText(1) == "each reaction series"
-        page.table.cellWidget(rows["metadata"], 1).setCurrentIndex(1)            # a shared one: category_levels
-        page.table.cellWidget(rows[own], 1).setCurrentIndex(0)                   # the pack's own: in its entry
+        assert page.combo(rows["metadata"], page.K_LEVEL).itemText(1) == "each reaction series"
+        page.combo(rows["metadata"], page.K_LEVEL).setCurrentIndex(1)            # a shared one: category_levels
+        page.combo(rows[own], page.K_LEVEL).setCurrentIndex(0)                   # the pack's own: in its entry
         assert "Each reaction series" in page.picture.text()
         assert page.level_limit.value() == 4
         page.level_limit.setValue(5)                                             # the advanced override
@@ -305,7 +305,7 @@ def test_the_structure_tab_saves_levels():
         assert facets.levels[facets.caps["metadata"]].id == "set" and facets.levels[facets.caps[own]].id == "paper"
         e.close()
     built_in = PackEditor(packs.available()["prebiotic_chemistry"].folder)              # read-only: locked
-    assert not built_in.structure_page.table.cellWidget(0, 1).isEnabled()
+    assert not built_in.structure_page.combo(0, built_in.structure_page.K_LEVEL).isEnabled()
     built_in.close()
 
 

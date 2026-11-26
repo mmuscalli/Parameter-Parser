@@ -25,7 +25,7 @@ from datetime import date
 from pathlib import Path
 from typing import Dict, Optional, Set
 
-APP_NAME = "Parameter Extractor"
+APP_NAME = "Parameter Extractor"     # the data folder's name: kept when the app became RUMMAGED (2026-11-26)
 DATA_DIR_ENV = "PARAMETER_EXTRACTOR_DATA_DIR"
 
 

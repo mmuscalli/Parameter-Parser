@@ -76,7 +76,8 @@ td.n {{ color: {accent}; font-weight: 700; font-size: 15pt; padding: 2px 12px 10
 td.s {{ padding: 2px 0 10px 0; vertical-align: top; line-height: 130%; }}
 </style>
 <h2>Getting started</h2>
-<p class='lead'>Parameter Extractor reads the papers you choose and fills a dataset with the values they report,
+<p class='lead'><b>RUMMAGED</b> (Reconfigurable User-defined Modules for the Model-Assisted Gathering of
+Experimental Data) reads the papers you choose and fills a dataset with the values they report,
 for you to review. Work down the main window's numbered steps.</p>
 <table width='100%' cellpadding='9' cellspacing='0' bgcolor='{tint}'><tr><td>{FIRST_TIME}</td></tr></table>
 <h3>The five steps</h3>

@@ -8,7 +8,8 @@ the section around the hit. Before redoing research or proposing an idea, search
 
 ## What the project is
 
-Parameter Extractor reads scientific papers the USER has chosen and extracts the experimental values they report into
+RUMMAGED (Reconfigurable User-defined Modules for the Model-Assisted Gathering of Experimental Data; called
+Parameter Extractor until 2026-11-26) reads scientific papers the USER has chosen and extracts the experimental values they report into
 dataset rows, with an LLM, for review by a person. It speeds up building a dataset by hand; it does not replace the
 review (Mickey Muscalli, the owner and only developer). It started as a tool for the hand-built prebiotic
 peptide-synthesis dataset one level up (`../PaperDataTemplate.xlsx`, 50 papers / 1,356 rows) and is now general:
@@ -16,8 +17,8 @@ peptide-synthesis dataset one level up (`../PaperDataTemplate.xlsx`, 50 papers /
 screening tool, never a gate in the pipeline.
 
 Front ends: a PySide6 window (`parameter-extractor-gui`), a command line (`parameter-extract`), and PyInstaller
-builds for macOS (unsigned; signing, notarization and the Windows build are deferred by Mickey; don't start them).
-Version: `parameter_extractor.__version__` (0.6.14, tag `v0.6.14`, on branch levels-and-facets), the one place it is set.
+builds for macOS (`dist/RUMMAGED.app`, `dist/RUMMAGED Dev.app`; unsigned; signing, notarization and the Windows build are deferred by Mickey; don't start them).
+Version: `parameter_extractor.__version__` (0.6.15, tag `v0.6.15`, on branch levels-and-facets), the one place it is set.
 
 ## Map of the code (`src/parameter_extractor/`, ~36K lines)
 
@@ -147,7 +148,7 @@ Version: `parameter_extractor.__version__` (0.6.14, tag `v0.6.14`, on branch lev
 - **`runs/` is local, never pushed** (audits hold the papers' text). Back it up with `scripts/backup_runs.py`.
 - **After a round of code changes:** build both apps (`packaging/build_macos.sh`, `packaging/build_macos.sh --dev`;
   never while Mickey has that app open -- a bundle rebuilt under a running app breaks it; the script refuses),
-  run each with `--self-check` (`env -i HOME=$HOME ".../Contents/MacOS/Parameter Extractor" --self-check`), write
+  run each with `--self-check` (`env -i HOME=$HOME "dist/RUMMAGED.app/Contents/MacOS/RUMMAGED" --self-check`, the same for `RUMMAGED Dev`), write
   the round up (below), commit and push. A docs-only change needs no build.
 - **Writing a round up:** append a dated section (`## Title (YYYY-MM-DD, Mickey: why)`) to the current month's
   `docs/history/YYYY-MM.md` (a new month starts a new file) and add its line to `docs/history/README.md`. Change
@@ -157,6 +158,9 @@ Version: `parameter_extractor.__version__` (0.6.14, tag `v0.6.14`, on branch lev
 
 Search `docs/history/` for the details and the measurements behind each.
 
+- **Name**: the app is RUMMAGED (`APP_TITLE`, `APP_FULL_NAME` in `parameter_extractor/__init__.py`). Stored names keep
+  "Parameter Extractor" so nothing is lost: the data folder (`registry.APP_NAME`), QSettings, keychain entries, the
+  signing identity, the bundle id, `~/Documents/Parameter Extractor`, the package and the command-line tools.
 - **Wording**: the user-facing term is "data pack" (code and prompts keep "pack" / "research area"). A *step* is one
   model request per paper (built-in = code; configurable = JSON spec; the code still says "stage"); a *calculation*
   is local and free; a *module* is shared and linked by reference, never copied (`pack_modules.migrate_copies`).
@@ -249,6 +253,6 @@ estimates, local-model speed-ups, ...) and their status: `docs/improvement_sugge
   when present, so "Always Allow" survives a rebuild.
 - Branches: `main` (on GitHub since 2026-11-11) and `flexible-variables`, both at the same commit; keep them
   together until Mickey retires `flexible-variables`. Tags: `v0.2-figure-digitizer`,
-  `backup/flexible-variables-before-public`, `v0.3.0`, `v0.4.0`, `v0.5.0`, `v0.6.0`, `v0.6.1`, `v0.6.2`, `v0.6.3`, `v0.6.4`, `v0.6.5`, `v0.6.6`, `v0.6.7`, `v0.6.8`, `v0.6.9`, `v0.6.10`, `v0.6.11`, `v0.6.12`, `v0.6.13`, `v0.6.14`. Tag a state whenever both apps are built for use.
+  `backup/flexible-variables-before-public`, `v0.3.0`, `v0.4.0`, `v0.5.0`, `v0.6.0`, `v0.6.1`, `v0.6.2`, `v0.6.3`, `v0.6.4`, `v0.6.5`, `v0.6.6`, `v0.6.7`, `v0.6.8`, `v0.6.9`, `v0.6.10`, `v0.6.11`, `v0.6.12`, `v0.6.13`, `v0.6.14`, `v0.6.15`. Tag a state whenever both apps are built for use.
 - Backups: full project archive `../Backups/EORE_Data_Project_FULL_BACKUP_20261012_030042.tar` (before this
   pipeline); dated `runs/` archives from `scripts/backup_runs.py` in `../Backups/`.

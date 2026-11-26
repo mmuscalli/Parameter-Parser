@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Builds the macOS app and a .dmg to distribute it:
-#   dist/Parameter Extractor.app
-#   dist/ParameterExtractor-<version>-macOS-<arch>.dmg
+#   dist/RUMMAGED.app
+#   dist/RUMMAGED-<version>-macOS-<arch>.dmg
 #
 # Run from anywhere: it uses the project's environment (../.venv, with
 # `pip install -e ".[gui,build]"`) by default; PYTHON=/path/to/python overrides.
@@ -12,13 +12,13 @@
 # with a self-signed identity when packaging/make_signing_identity.sh has created one, so the
 # keychain's "Always Allow" for the stored keys survives rebuilds.
 # Developer build (adds the developer-only handoff mode; never distribute it):
-#   PYTHON=../.venv/bin/python packaging/build_macos.sh --dev   -> dist/Parameter Extractor Dev.app
+#   PYTHON=../.venv/bin/python packaging/build_macos.sh --dev   -> dist/RUMMAGED Dev.app
 set -euo pipefail
 cd "$(dirname "$0")/.."
-NAME="Parameter Extractor"
+NAME="RUMMAGED"          # the app is called RUMMAGED since 0.6.15 (was Parameter Extractor)
 if [[ "${1:-}" == "--dev" ]]; then
   export PE_DEV_BUILD=1
-  NAME="Parameter Extractor Dev"
+  NAME="RUMMAGED Dev"
 else
   unset PE_DEV_BUILD
 fi
@@ -68,9 +68,9 @@ if [[ -n "${PE_DEV_BUILD:-}" ]]; then
   echo "Self-check: \"$APP/Contents/MacOS/$NAME\" --self-check"
   exit 0
 fi
-DMG="dist/ParameterExtractor-${VERSION}-macOS-${ARCH}.dmg"
+DMG="dist/RUMMAGED-${VERSION}-macOS-${ARCH}.dmg"
 rm -f "$DMG"
-hdiutil create -quiet -volname "Parameter Extractor" -srcfolder "$APP" -ov -format UDZO "$DMG"
+hdiutil create -quiet -volname "RUMMAGED" -srcfolder "$APP" -ov -format UDZO "$DMG"
 
 echo "       $DMG ($(du -sh "$DMG" | cut -f1))"
-echo "Self-check: \"$APP/Contents/MacOS/Parameter Extractor\" --self-check"
+echo "Self-check: \"$APP/Contents/MacOS/$NAME\" --self-check"

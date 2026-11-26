@@ -35,7 +35,7 @@ _lock = threading.Lock()
 
 README = """# Answers needed
 
-This folder holds model requests from a Parameter Extractor run in developer handoff mode.
+This folder holds model requests from a RUMMAGED run in developer handoff mode.
 Each file in `requests/` is one step. For each one:
 
 1. Read its instructions and task, the paper in `paper.txt`, and any images it lists (paths are

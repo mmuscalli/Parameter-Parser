@@ -9,14 +9,14 @@ PYTHON=.venv/bin/python packaging/build_macos.sh
 
 Produces, in `dist/`:
 
-- `Parameter Extractor.app` (~125 MB): double-click to run
+- `RUMMAGED.app` (~125 MB): double-click to run
 - `ParameterExtractor-<version>-macOS-<arch>.dmg` (~60 MB): what you'd distribute
 
 The build takes under a minute. Check the result without running an
 extraction or spending API credit:
 
 ```bash
-"dist/Parameter Extractor.app/Contents/MacOS/Parameter Extractor" --self-check --pdf some-paper.pdf
+"dist/RUMMAGED.app/Contents/MacOS/RUMMAGED" --self-check --pdf some-paper.pdf
 ```
 
 The self-check confirms the bundled prompts and vocabulary are present, the
@@ -40,7 +40,7 @@ needs:
 
 1. An **Apple Developer Program** membership ($99/year) and a
    *Developer ID Application* certificate.
-2. Signing: `codesign --deep --force --options runtime --timestamp --sign "Developer ID Application: <name> (<team id>)" "dist/Parameter Extractor.app"`
+2. Signing: `codesign --deep --force --options runtime --timestamp --sign "Developer ID Application: <name> (<team id>)" "dist/RUMMAGED.app"`
    (PyInstaller can also do this via `codesign_identity=` in the spec).
 3. Notarization: `xcrun notarytool submit <dmg> --keychain-profile <profile> --wait`,
    then `xcrun stapler staple <dmg>`.
@@ -59,7 +59,7 @@ py -m venv .venv
 .venv\Scripts\python -m PyInstaller --noconfirm --clean packaging\parameter_extractor.spec
 ```
 
-This gives `dist\Parameter Extractor\Parameter Extractor.exe` (zip the
+This gives `dist\RUMMAGED\RUMMAGED.exe` (zip the
 folder, or wrap it with an installer such as Inno Setup). Unsigned Windows apps
 trigger a SmartScreen warning. A code-signing certificate removes it. Not yet
 tested on Windows.

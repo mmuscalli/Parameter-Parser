@@ -26,7 +26,7 @@ from PySide6.QtWidgets import (QAbstractItemView, QComboBox, QCompleter, QDialog
                                QTabWidget, QTreeWidget, QTreeWidgetItem, QVBoxLayout, QWidget)
 
 from parameter_extractor import packs, variable_categories
-from parameter_extractor.registry import STANDARD, VariableRegistry, area_label, areas, common_column_names
+from parameter_extractor.registry import STANDARD, STANDARD_LABEL, VariableRegistry, areas, common_column_names
 from parameter_extractor.value_types import TYPES, column_type
 
 KIND_LABELS = {"species": "Species", "parameter": "Experimental parameter", "figure_axis": "Figure axis"}
@@ -107,6 +107,14 @@ class RegistryDialog(QDialog):
     B_COLUMN, B_SOURCE, B_CATEGORY, B_TYPE, B_DEFAULT = range(5)
     C_NAME, C_ACTIVE, C_CID, C_SOURCE, C_SYNONYMS = range(5)
 
+    def area_label(self, area: str) -> str:
+        """A research area's name, from the packs loaded once for this window (2026-11-26: registry.area_label loads
+        every pack each time -- 356 calls took 4 s of the window's 6.8 s opening)."""
+        if area == STANDARD:
+            return STANDARD_LABEL
+        pack = self.packs.get(area)
+        return pack.label if pack else area
+
     def __init__(self, registry_path: Path, parent=None, area: Optional[str] = None):
         super().__init__(parent)
         self.setWindowTitle("Remembered from your reviews")
@@ -152,6 +160,7 @@ class RegistryDialog(QDialog):
         self.tabs.addTab(self._build_aliases_tab(), "Synonyms")
         self.tabs.addTab(self._build_compounds_tab(), "Compound names")
         self.tabs.addTab(self._build_builtin_tab(), "Changes to pack columns")
+        self.tabs.currentChanged.connect(self._fill_shown)
         layout.addWidget(self.tabs, 1)
 
         bottom = QHBoxLayout()
@@ -206,7 +215,7 @@ class RegistryDialog(QDialog):
                     f"{category} (not a category of this area)")
 
     def _group(self, tree: QTreeWidget, area: str, count: int) -> QTreeWidgetItem:
-        group = QTreeWidgetItem(tree, [f"{area_label(area)}  ({count})"])
+        group = QTreeWidgetItem(tree, [f"{self.area_label(area)}  ({count})"])
         group.setFirstColumnSpanned(True)
         f = group.font(0)
         f.setBold(True)
@@ -226,9 +235,12 @@ class RegistryDialog(QDialog):
             item.setToolTip(c, "Click to change")
         return item
 
-    @staticmethod
-    def leaves(tree: QTreeWidget, area: Optional[str] = None) -> List[QTreeWidgetItem]:
-        """The rows under the research-area groups (one group's with `area`), in order."""
+    def leaves(self, tree: QTreeWidget, area: Optional[str] = None) -> List[QTreeWidgetItem]:
+        """The rows under the research-area groups (one group's with `area`), in order -- the tab filled first when
+        it hasn't been opened yet (_refresh fills only the tab shown)."""
+        trees = (self.columns_tree, self.alias_tree, self.compound_tree, self.builtin_tree)
+        if tree in trees:
+            self._fill_tab(trees.index(tree))
         out = []
         for i in range(tree.topLevelItemCount()):
             group = tree.topLevelItem(i)
@@ -314,19 +326,28 @@ class RegistryDialog(QDialog):
     # ---- refresh -------------------------------------------------------------------
 
     def _refresh(self) -> None:
+        """Every tab out of date; the one shown is filled now, the others when they're opened (2026-11-26: filling
+        all four took most of the window's opening time -- 'Changes to pack columns' reads every pack's columns)."""
         self._category_cache = {}            # categories may have changed since the last fill
+        self._stale = set(range(self.tabs.count()))
+        self._fill_shown()
+
+    def _fill_shown(self, _index: int = -1) -> None:
+        self._fill_tab(self.tabs.currentIndex())
+
+    def _fill_tab(self, i: int) -> None:
+        if i not in getattr(self, "_stale", ()):
+            return
+        self._stale.discard(i)
         self._filling = True
         try:
-            self._fill_columns()
-            self._fill_aliases()
-            self._fill_compounds()
-            self._fill_builtin()
+            (self._fill_columns, self._fill_aliases, self._fill_compounds, self._fill_builtin)[i]()
         finally:
             self._filling = False
         self._apply_filter()
 
     def _area_order(self) -> List[str]:
-        return [a for a, _ in areas()]
+        return [STANDARD] + list(self.packs)           # as registry.areas(), from the packs already loaded
 
     def _fill_columns(self) -> None:
         reg, t = self.registry, self.columns_tree
@@ -344,7 +365,7 @@ class RegistryDialog(QDialog):
                 info = reg.all_columns[col]
                 names = ", ".join(reg.display_name(k) for k in reg.aliases_to(col))
                 self._row(group, "column", area, col,
-                          [col, area_label(area), self.category_label(area, info.get("category", "")) or AUTOMATIC,
+                          [col, self.area_label(area), self.category_label(area, info.get("category", "")) or AUTOMATIC,
                            TYPES.get(info.get("type", "any"), info.get("type", "")),
                            KIND_LABELS.get(info.get("kind"), info.get("kind", "")), info.get("added", ""), names],
                           (self.A_AREA, self.A_CATEGORY, self.A_TYPE))
@@ -368,7 +389,7 @@ class RegistryDialog(QDialog):
             for key in keys:
                 kind, _ = reg.split_alias(key)
                 self._row(group, "alias", area, key,
-                          [reg.display_name(key), area_label(area), reg.all_aliases[key], KIND_LABELS.get(kind, kind)],
+                          [reg.display_name(key), self.area_label(area), reg.all_aliases[key], KIND_LABELS.get(kind, kind)],
                           (self.S_AREA, self.S_COLUMN))
             group.setExpanded(open_.get(area, True))
         t.resizeColumnToContents(self.S_AREA)
@@ -661,7 +682,7 @@ class RegistryDialog(QDialog):
     def problems(self) -> List[str]:
         """Synonyms pointing to a column their data pack doesn't have."""
         reg = self.registry
-        return [f"{reg.display_name(k)} -> {c} ({area_label(reg.alias_area(k))})"
+        return [f"{reg.display_name(k)} -> {c} ({self.area_label(reg.alias_area(k))})"
                 for k, c in reg.all_aliases.items() if not self.known_in(reg.alias_area(k), c)]
 
     def _save(self) -> None:

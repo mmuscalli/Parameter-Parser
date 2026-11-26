@@ -1,8 +1,8 @@
 # PyInstaller recipe for the desktop app. Build with packaging/build_macos.sh
 # (or: pyinstaller packaging/parameter_extractor.spec from the repo root).
 #
-# Produces dist/Parameter Extractor.app on macOS, or dist/Parameter Extractor/
-# with "Parameter Extractor.exe" on Windows. PyInstaller doesn't cross-compile:
+# Produces dist/RUMMAGED.app on macOS, or dist/RUMMAGED/
+# with "RUMMAGED.exe" on Windows. PyInstaller doesn't cross-compile:
 # build each platform's app on that platform.
 import os
 import sys
@@ -18,7 +18,7 @@ from parameter_extractor import __version__  # noqa: E402
 # (answering model steps in Claude Code; dev_features.py). The PUBLIC build leaves handoff.py out and
 # has no DEV_BUILD marker, so that mode can't be switched on in it.
 DEV = os.environ.get("PE_DEV_BUILD") == "1"
-APP_NAME = "Parameter Extractor Dev" if DEV else "Parameter Extractor"
+APP_NAME = "RUMMAGED Dev" if DEV else "RUMMAGED"   # was "Parameter Extractor" (bundle id and data folder unchanged)
 BUNDLE_ID = "io.github.parameter-extractor" + (".dev" if DEV else "")   # placeholder -- set before a signed release
 datas = collect_data_files("parameter_extractor")
 if DEV:

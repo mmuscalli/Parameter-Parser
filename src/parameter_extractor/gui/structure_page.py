@@ -17,12 +17,56 @@ from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (QComboBox, QFormLayout, QHBoxLayout, QHeaderView, QLabel, QLineEdit, QPushButton,
                                QSpinBox, QTableWidget, QTableWidgetItem, QToolButton, QVBoxLayout, QWidget)
 
-from parameter_extractor.gui.widgets import clear_cell_widgets
+from parameter_extractor.gui.widgets import clear_cell_widgets, in_cell as _in_cell
 
 RESERVED = {"figure", "assumed"}
+FILL_WIDTH = 330                 # the 'If only some rows give it' column, the same in both tables (they line up)
+
+
+def _section(title: str, hint: str, help_text: str) -> QWidget:
+    """A section's title (with a '?' holding the details) and a one-line hint under it."""
+    from parameter_extractor.gui.pack_windows import HelpButton
+    w = QWidget()
+    v = QVBoxLayout(w)
+    v.setContentsMargins(0, 0, 0, 2)
+    v.setSpacing(1)
+    row = QHBoxLayout()
+    label = QLabel(title)
+    font = label.font()
+    font.setBold(True)
+    font.setPointSizeF(font.pointSizeF() * 1.12)
+    label.setFont(font)
+    row.addWidget(label)
+    if help_text:
+        row.addWidget(HelpButton(help_text))
+    row.addStretch(1)
+    v.addLayout(row)
+    if hint:
+        note = QLabel(hint, wordWrap=True)
+        note.setStyleSheet("color: palette(placeholder-text);")
+        v.addWidget(note)
+    return w
 
 
 class StructurePage(QWidget):
+    K_NAME, K_FROM, K_LEVEL, K_FILL = range(4)    # the kinds-of-value table's columns
+    V_NAME, V_FILL = range(2)                     # the single values' table
+
+    @staticmethod
+    def _table_style(table: QTableWidget, widths: dict) -> None:
+        """Name first (stretched), the given fixed widths, the fill column last at FILL_WIDTH; a vertical scroll bar
+        always there, so both tables' last columns end at the same place."""
+        from parameter_extractor.gui.widgets import style_rows
+        table.verticalHeader().setVisible(False)
+        style_rows(table)
+        head = table.horizontalHeader()
+        head.setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
+        head.setDefaultAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
+        for c in range(1, table.columnCount()):
+            head.setSectionResizeMode(c, QHeaderView.ResizeMode.Fixed)
+            table.setColumnWidth(c, widths.get(c, FILL_WIDTH))
+        table.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOn)
+
     def __init__(self, manifest: dict, pack=None, set_edit: Optional[QLineEdit] = None,
                  sample_edit: Optional[QLineEdit] = None, parent=None):
         super().__init__(parent)
@@ -30,65 +74,85 @@ class StructurePage(QWidget):
         self._set_edit, self._sample_edit = set_edit, sample_edit
         self._syncing = False
         v = QVBoxLayout(self)
-        intro = QLabel(
-            "<b>How this research area's data is organised.</b> Each paper is divided into groups of rows, and each "
-            "group into rows (the rows of the dataset). Every kind of value is recorded for one of these: the "
-            "<i>paper</i> (the title, the authors), each <i>group</i> (how its experiments were set up) or each "
-            "<i>row</i> (what was measured). <span style='color:gray'>A value recorded for a group is stored once "
-            "when all its rows share it, and per row when they differ; one recorded for each row always stays with "
-            "its row. This decides how results are arranged in the results tab named after your groups and in the "
-            "nested record (JSON); the dataset table has the same values whatever you choose.</span>", wordWrap=True,
-            textFormat=Qt.TextFormat.RichText)
-        v.addWidget(intro)
+        v.setSpacing(6)
+        # laid out in three sections (2026-11-26, Mickey: a block of text and two tables whose 'If only some rows
+        # give it' columns didn't line up): the levels, beside their picture; each kind of value; single values. The
+        # fill column is the last one of both tables, the same width, so the two line up.
+        v.addWidget(_section(
+            "Levels", "A paper is divided into groups of rows; each group holds rows -- the rows of the dataset.",
+            "Every kind of value is recorded for one of three levels: the paper (the title, the authors), each group "
+            "(how its experiments were set up) or each row (what was measured). The words are the same as on the "
+            "General tab."))
+        levels = QHBoxLayout()
+        levels.setSpacing(24)
         names = QFormLayout()
+        names.setFieldGrowthPolicy(QFormLayout.FieldGrowthPolicy.AllNonFixedFieldsGrow)
         units = manifest.get("units", {})
         self.group_word = QLineEdit(units.get("set", "set"))
         self.row_word = QLineEdit(units.get("sample", "sample"))
-        names.addRow("A paper is divided into (one group is called):", self.group_word)
-        names.addRow("Each group holds (one row is called):", self.row_word)
-        v.addLayout(names)
+        names.addRow("One group of rows is called:", self.group_word)
+        names.addRow("One row is called:", self.row_word)
+        names_box = QVBoxLayout()                     # the two words at the top, whatever the picture's height
+        names_box.addLayout(names)
+        names_box.addStretch(1)
+        levels.addLayout(names_box, 2)
         for mine, theirs in ((self.group_word, set_edit), (self.row_word, sample_edit)):
             mine.textChanged.connect(lambda _t: self._words_changed())
             if theirs is not None:                    # the General tab's same words
                 mine.textChanged.connect(lambda t, w=theirs: self._sync(w, t))
                 theirs.textChanged.connect(lambda t, w=mine: self._sync(w, t))
         self.picture = QLabel(textFormat=Qt.TextFormat.RichText, wordWrap=True)
-        v.addWidget(self.picture)
+        self.picture.setAlignment(Qt.AlignmentFlag.AlignTop)
+        levels.addWidget(self.picture, 3)
+        v.addLayout(levels)
+        v.addSpacing(14)
+
+        v.addWidget(_section(
+            "What each kind of value is recorded for",
+            "Recorded for: the level it belongs to. If only some rows give it: leave the others empty, or fill them "
+            "in from their group or from the whole paper.",
+            "A value recorded for a group is stored once when all its rows share it, and per row when they differ; "
+            "one recorded for each row always stays with its row. This decides how results are arranged in the "
+            "results tab named after your groups and in the nested record (JSON); the dataset table has the same "
+            "values whatever you choose.\n\nFilling in: papers often state a method or condition once, for one "
+            "experiment. The rows that don't give it get the value the others agree on (marked as assumed, and "
+            "listed under Things to check); never filled when the rows that give it disagree."))
         self.table = QTableWidget(0, 4)
-        self.table.setHorizontalHeaderLabels(["Kind of value", "Recorded for", "If only some rows give it",
-                                              "Comes from"])
-        self.table.horizontalHeaderItem(2).setToolTip(
+        self.table.setHorizontalHeaderLabels(["Kind of value", "Comes from", "Recorded for",
+                                              "If only some rows give it"])
+        self.table.horizontalHeaderItem(self.K_FILL).setToolTip(
             "Papers often state a method or condition once, for one experiment. Fill in: the rows that don't give it "
             "get the value the others agree on (marked as assumed, and listed under Things to check). Never filled "
             "when the rows that give it disagree.")
-        self.table.verticalHeader().setVisible(False)
-        head = self.table.horizontalHeader()
-        head.setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
-        for i in (1, 2, 3):
-            head.setSectionResizeMode(i, QHeaderView.ResizeMode.ResizeToContents)
+        self._table_style(self.table, {self.K_FROM: 230, self.K_LEVEL: 210})
         v.addWidget(self.table, 1)
+        v.addSpacing(14)
+
         # single columns with a setting of their own (a time that differs per row is never filled in)
-        v.addWidget(QLabel("<b>Single values with their own setting</b> <span style='color:gray'>(over their kind's; "
-                           "e.g. a duration, which differs from row to row, is never filled in)</span>",
-                           textFormat=Qt.TextFormat.RichText, wordWrap=True))
-        self.columns = QTableWidget(0, 3)
-        self.columns.setHorizontalHeaderLabels(["Value (column)", "If only some rows give it", ""])
-        self.columns.verticalHeader().setVisible(False)
-        ch = self.columns.horizontalHeader()
-        ch.setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
-        ch.setSectionResizeMode(1, QHeaderView.ResizeMode.ResizeToContents)
-        ch.setSectionResizeMode(2, QHeaderView.ResizeMode.ResizeToContents)
-        self.columns.setMaximumHeight(170)
+        v.addWidget(_section(
+            "Single values with their own setting",
+            "A column that shouldn't follow its kind's setting -- e.g. a duration, which differs from row to row, is "
+            "never filled in.", ""))
+        self.columns = QTableWidget(0, 2)
+        self.columns.setHorizontalHeaderLabels(["Value (column)", "If only some rows give it"])
+        self._table_style(self.columns, {})
+        self.columns.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
+        self.columns.setMaximumHeight(150)
         v.addWidget(self.columns)
         add = QHBoxLayout()
         self.new_column = QLineEdit(placeholderText="a column's name, e.g. stirring_rate_rpm")
+        self.new_column.returnPressed.connect(self._add_column)
         self.add_column_btn = QPushButton("Add", clicked=self._add_column)
+        self.remove_column_btn = QPushButton("Remove selected", clicked=self._remove_selected)
         add.addWidget(self.new_column, 1)
         add.addWidget(self.add_column_btn)
+        add.addSpacing(12)
+        add.addWidget(self.remove_column_btn)
         v.addLayout(add)
         self.fill_note = QLabel(wordWrap=True)
-        self.fill_note.setStyleSheet("color: gray;")
+        self.fill_note.setStyleSheet("color: palette(placeholder-text);")
         v.addWidget(self.fill_note)
+        v.addSpacing(6)
         # advanced: how many levels a paper's record may have (Mickey, 2026-11-18: four by default, an override)
         from parameter_extractor import record_tree
         self.advanced_btn = QToolButton(text="Advanced", checkable=True)
@@ -118,6 +182,11 @@ class StructurePage(QWidget):
 
     # ---- the words ----------------------------------------------------------------------------------------------
 
+    def combo(self, row: int, column: int, table: Optional[QTableWidget] = None) -> Optional[QComboBox]:
+        """The dropdown in a cell of the kinds table (or `table`): held centred in its row (widgets.in_cell)."""
+        holder = (table or self.table).cellWidget(row, column)
+        return holder if isinstance(holder, QComboBox) or holder is None else holder.findChild(QComboBox)
+
     def _sync(self, widget: QLineEdit, text: str) -> None:
         if self._syncing or widget.text() == text:
             return
@@ -141,13 +210,13 @@ class StructurePage(QWidget):
 
     def _words_changed(self) -> None:
         for r in range(self.table.rowCount()):
-            for col, choices in ((1, self._level_choices()), (2, self._fill_choices())):
-                combo = self.table.cellWidget(r, col)
+            for col, choices in ((self.K_LEVEL, self._level_choices()), (self.K_FILL, self._fill_choices())):
+                combo = self.combo(r, col)
                 if combo is not None:
                     for i, (_v, text) in enumerate(choices):
                         combo.setItemText(i, text)
         for r in range(self.columns.rowCount()):
-            combo = self.columns.cellWidget(r, 1)
+            combo = self.combo(r, self.V_FILL, self.columns)
             if combo is not None:
                 for i, (_v, text) in enumerate(self._fill_choices()):
                     combo.setItemText(i, text)
@@ -240,23 +309,23 @@ class StructurePage(QWidget):
             name = QTableWidgetItem(k["label"])
             name.setFlags(Qt.ItemFlag.ItemIsEnabled)
             name.setToolTip(k["description"] or k["id"])
-            self.table.setItem(r, 0, name)
+            self.table.setItem(r, self.K_NAME, name)
+            origin = QTableWidgetItem(k["origin"])
+            origin.setFlags(Qt.ItemFlag.ItemIsEnabled)
+            self.table.setItem(r, self.K_FROM, origin)
             combo = QComboBox()
             for lv, text in self._level_choices():
                 combo.addItem(text, lv)
             combo.setCurrentIndex(max(combo.findData(k["level"]), 0))
             combo.currentIndexChanged.connect(lambda _i, r=r, c=combo: self._moved(r, c.currentData()))
-            self.table.setCellWidget(r, 1, combo)
+            self.table.setCellWidget(r, self.K_LEVEL, _in_cell(combo))
             fill = QComboBox()
             for f, text in self._fill_choices():
                 fill.addItem(text, f)
             fill.setCurrentIndex(max(fill.findData(k["fill"]), 0))
             fill.currentIndexChanged.connect(lambda _i, r=r, c=fill: self._fill_set(r, c.currentData()))
             fill.setEnabled(not self._patterns)
-            self.table.setCellWidget(r, 2, fill)
-            origin = QTableWidgetItem(k["origin"])
-            origin.setFlags(Qt.ItemFlag.ItemIsEnabled)
-            self.table.setItem(r, 3, origin)
+            self.table.setCellWidget(r, self.K_FILL, _in_cell(fill))
         self.fill_note.setText("This data pack chooses the values to fill in by name patterns (pack.json "
                                "shared_columns / group_columns): edit them there." if self._patterns else "")
         self._draw()
@@ -271,17 +340,15 @@ class StructurePage(QWidget):
         for r, (column, fill) in enumerate(sorted(self._column_fill.items())):
             name = QTableWidgetItem(column)
             name.setFlags(Qt.ItemFlag.ItemIsEnabled)
-            self.columns.setItem(r, 0, name)
+            self.columns.setItem(r, self.V_NAME, name)
             combo = QComboBox()
             for f, text in self._fill_choices():
                 combo.addItem(text, f)
             combo.setCurrentIndex(max(combo.findData(fill), 0))
             combo.currentIndexChanged.connect(lambda _i, col=column, c=combo: self._column_set(col, c.currentData()))
             combo.setEnabled(not self._patterns)
-            self.columns.setCellWidget(r, 1, combo)
-            remove = QPushButton("Remove", clicked=lambda _c=False, col=column: self._remove_column(col))
-            remove.setEnabled(not self._patterns)
-            self.columns.setCellWidget(r, 2, remove)
+            self.columns.setCellWidget(r, self.V_FILL, _in_cell(combo))
+        self.remove_column_btn.setEnabled(not self._patterns)
 
     def _column_set(self, column: str, fill: str) -> None:
         self._column_fill[column] = fill
@@ -290,6 +357,14 @@ class StructurePage(QWidget):
     def _remove_column(self, column: str) -> None:
         self._column_fill.pop(column, None)
         self.fill_changed = True
+        self._fill_columns()
+
+    def _remove_selected(self) -> None:
+        for r in sorted({i.row() for i in self.columns.selectedIndexes()}, reverse=True):
+            item = self.columns.item(r, self.V_NAME)
+            if item is not None:
+                self._column_fill.pop(item.text(), None)
+                self.fill_changed = True
         self._fill_columns()
 
     def _add_column(self) -> None:

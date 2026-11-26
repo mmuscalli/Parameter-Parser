@@ -42,7 +42,7 @@ from parameter_extractor.pricing import PRICES_CHECKED, format_usd
 from parameter_extractor.registry import default_arxiv_cache_dir, default_pubchem_cache_path, default_registry_path
 from parameter_extractor.pipeline import Extraction, finish, plan_figure, stage_label
 
-DEFAULT_OUTPUT_DIR = Path.home() / "Documents" / "Parameter Extractor"
+DEFAULT_OUTPUT_DIR = Path.home() / "Documents" / "Parameter Extractor"   # kept as RUMMAGED: earlier runs are there
 # highlight colours: shared with gui/themes.py, which changes them in place for a theme
 from parameter_extractor.gui import themes  # noqa: E402
 FLAGGED_ROW_COLOR = themes.MARKS["flagged_row"]   # soft amber, readable in light and dark themes
@@ -119,7 +119,8 @@ MODEL_PROFILE_CHOICES = [
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("Parameter Extractor")
+        from parameter_extractor import APP_TITLE
+        self.setWindowTitle(APP_TITLE)
         self.resize(1300, 900)
         self.setAcceptDrops(True)
 
@@ -279,6 +280,10 @@ class MainWindow(QMainWindow):
         help_menu.addAction(self.getting_started_action)
         self.how_packs_action = QAction("How data packs work…", self, triggered=self.show_how_packs_work)
         help_menu.addAction(self.how_packs_action)
+        help_menu.addSeparator()
+        self.about_action = QAction("About RUMMAGED", self, triggered=self.show_about)
+        self.about_action.setMenuRole(QAction.MenuRole.AboutRole)      # macOS: in the app menu
+        help_menu.addAction(self.about_action)
 
         from parameter_extractor.gui.multi_runs import FocusedRun, QueueRun
         self.focused_run = FocusedRun(self)
@@ -441,6 +446,14 @@ class MainWindow(QMainWindow):
         dlg.exec()
         if wanted:
             self.open_packs_window()
+
+    def show_about(self) -> None:
+        """The app's name, what it stands for and its version (2026-11-26: Parameter Extractor became RUMMAGED)."""
+        from parameter_extractor import APP_FULL_NAME, APP_TITLE, __version__
+        QMessageBox.about(self, f"About {APP_TITLE}",
+                          f"<h3>{APP_TITLE}</h3><p>{APP_FULL_NAME}</p><p>Version {__version__}</p>"
+                          "<p style='color:gray'>Reads the papers you choose and fills a dataset with the values "
+                          "they report, for you to review. Formerly Parameter Extractor.</p>")
 
     def show_getting_started(self) -> None:
         """The workflow, step by step (Help menu; also offered on first launch): gui/help_window.py."""
@@ -2337,7 +2350,7 @@ class MainWindow(QMainWindow):
             <p style="color:gray">Costs are estimates from Anthropic's list prices as of {PRICES_CHECKED}
             (the API reports tokens, not charges); your invoice is the authority. Cached input -- the
             paper, sent once and reused by the later steps -- costs 5-10% of the normal input price.</p>
-            <p style="color:gray">Parameter Extractor {__version__}. Every value should be
+            <p style="color:gray">RUMMAGED {__version__}. Every value should be
             checked against the paper; flagged items first.</p>""")
 
     @staticmethod

@@ -23,7 +23,7 @@ def error_log_path() -> Path:
 
 def record(text: str, run_dir: Optional[Path] = None) -> Path:
     """Append `text` (a message or traceback) to errors.log, and to run_dir/error.txt."""
-    stamp = f"--- {datetime.now().isoformat(timespec='seconds')} (Parameter Extractor {__version__})\n"
+    stamp = f"--- {datetime.now().isoformat(timespec='seconds')} (RUMMAGED {__version__})\n"
     path = error_log_path()
     try:
         path.parent.mkdir(parents=True, exist_ok=True)

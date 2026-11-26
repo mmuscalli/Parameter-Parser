@@ -1,6 +1,10 @@
-# Parameter Extractor
+# RUMMAGED
 
-Parameter Extractor reads published scientific papers and pulls the experimental values they report into a
+**Reconfigurable User-defined Modules for the Model-Assisted Gathering of Experimental Data** (formerly Parameter
+Extractor; the Python package and command-line tools keep their names: `parameter_extractor`, `parameter-extract`,
+`parameter-extractor-gui`).
+
+RUMMAGED reads published scientific papers and pulls the experimental values they report into a
 dataset: one row per experiment or sample, one column per variable, with the quote, page and confidence behind
 every value. It uses an AI model (Anthropic's Claude, or a model you host yourself) to read the paper, and local
 code for everything that can be done without one: parsing the PDF, unit conversions, calculations, checks.

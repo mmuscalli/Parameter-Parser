@@ -65,14 +65,14 @@ def test_an_older_pack_keeps_its_lists_until_a_fill_changes():
         e = PackEditor(pack.folder)
         page = e.structure_page
         rows = {k["id"]: r for r, k in enumerate(page._kinds)}
-        assert page.table.cellWidget(rows["methodology"], 2).currentData() == "paper"     # read from the lists
+        assert page.combo(rows["methodology"], page.K_FILL).currentData() == "paper"     # read from the lists
         with patch("PySide6.QtWidgets.QMessageBox.warning", lambda *a, **k: None):
             e.collect()
             assert e.save()
         saved = json.loads((pack.folder / "pack.json").read_text())
         assert "shared_columns" in saved and "category_fill" not in saved     # nothing changed: kept as it was
         # a fill changed: the settings replace the lists
-        page.table.cellWidget(rows["methodology"], 2).setCurrentIndex(1)       # within its set only
+        page.combo(rows["methodology"], page.K_FILL).setCurrentIndex(1)       # within its set only
         page.new_column.setText("stirring_rate_rpm")
         page._add_column()
         with patch("PySide6.QtWidgets.QMessageBox.warning", lambda *a, **k: None):

@@ -200,3 +200,4 @@ current month's file (start `YYYY-MM.md` in a new month), with one line here.
 - Why duration_hr and initial_pH were missed (2026-11-25, Mickey)
 - The pH wording measured; empty answers; final pH stays sampled (2026-11-25, Mickey)
 - Data pack editor: grouped pages; modules grouped by linked / not linked (2026-11-25, Mickey)
+- RUMMAGED; page actions on their pages; the Structure page laid out; the remembered window opens fast (2026-11-26, Mickey)

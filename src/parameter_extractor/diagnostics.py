@@ -3,7 +3,7 @@ Self-check: confirms an installation (or a packaged app) has everything a run
 needs, WITHOUT running an extraction or spending API credit.
 
     parameter-extract --self-check [--pdf paper.pdf]
-    "Parameter Extractor.app/Contents/MacOS/Parameter Extractor" --self-check [--pdf paper.pdf]
+    "RUMMAGED.app/Contents/MacOS/RUMMAGED" --self-check [--pdf paper.pdf]
 
 Checks: the bundled prompts and vocabulary are present; the PDF libraries
 load (and, with --pdf, actually parse and render that file and look for
@@ -204,7 +204,7 @@ def main(argv: Optional[List[str]] = None) -> int:
 
     from parameter_extractor.config import settings
     frozen = getattr(sys, "frozen", False)
-    print(f"Parameter Extractor {__version__} -- {'packaged app' if frozen else 'Python install'}, "
+    print(f"RUMMAGED {__version__} -- {'packaged app' if frozen else 'Python install'}, "
           f"Python {platform.python_version()}, {platform.platform()}")
     checks = run_checks(args.pdf, settings.ANTHROPIC_API_KEY or None)
     for name, ok, detail in checks:

@@ -440,7 +440,7 @@ def _instructions(entries: List[dict], pack, id_note: str) -> str:
     units = pack.manifest.units or {}
     lines = [
         f"# Requests to answer: {pack.label}", "",
-        "This folder holds the requests a research tool (Parameter Extractor) needs answered to turn one scientific "
+        "This folder holds the requests a research tool (RUMMAGED) needs answered to turn one scientific "
         "paper into rows of a dataset. Work through them yourself -- you are the assistant answering them. Nothing "
         "here needs a network connection or another program.", "",
         "## Work economically", "",
@@ -482,7 +482,7 @@ def _instructions(entries: List[dict], pack, id_note: str) -> str:
         '   {"model": "<the model\'s name and version>", "provider": "<who provides it>", '
         '"assistant": "<the app or agent you ran in>", "date": "<today>", "notes": "<anything worth knowing>"}',
         "   ```", "",
-        "Then import the folder in Parameter Extractor (File > Import answers from another assistant…). It checks "
+        "Then import the folder in RUMMAGED (File > Import answers from another assistant…). It checks "
         "every answer against its format; an answer that doesn't fit gets an `answers/<name>.error.txt` saying why -- "
         "fix it and import again.", "",
         "## The requests", ""]

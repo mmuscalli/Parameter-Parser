@@ -42,7 +42,9 @@ def main() -> int:
         from parameter_extractor.diagnostics import main as self_check
         return self_check(sys.argv[1:])
 
-    parser = argparse.ArgumentParser(description="Extract experimental data from a paper PDF.")
+    parser = argparse.ArgumentParser(description="RUMMAGED (Reconfigurable User-defined Modules for the Model-"
+                                     "Assisted Gathering of Experimental Data): extract experimental data from "
+                                     "papers.")
     parser.add_argument("--pdf", help="Path to the paper PDF")
     parser.add_argument("--paper", metavar="ID",
                         help="A paper by arXiv ID, DOI or ADS bibcode instead of --pdf: read from arXiv")

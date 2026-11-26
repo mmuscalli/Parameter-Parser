@@ -488,6 +488,7 @@ class PackEditor(QDialog):
         # nested modal windows left the main window without input)
         self.next_folder: Optional[Path] = None
         self._stage = None                         # the stage file shown in the Stages tab
+        self._actions: Dict[str, List[QPushButton]] = {}     # the pack-wide action buttons, by kind (_action)
         self.setWindowTitle(f"Data pack: {self.draft.manifest.get('label', '')}"
                             + ("  (built in, read-only)" if self.read_only else ""))
         self.resize(1320, 820)
@@ -548,34 +549,8 @@ class PackEditor(QDialog):
         page.addWidget(self.tabs, 1)
         body.addLayout(page, 1)
         layout.addLayout(body, 1)
-        bottom = QHBoxLayout()
-        where = _hint(f"Folder: {self.draft.folder}")
-        where.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
-        bottom.addWidget(where, 1)
-        bottom.addWidget(QPushButton("Open folder", clicked=lambda: QDesktopServices.openUrl(
-            QUrl.fromLocalFile(str(self.draft.folder)))))
-        if self.registry_path:
-            remembered = QPushButton("Remembered from your reviews…", clicked=self._open_remembered)
-            remembered.setToolTip("What you've taught the app for this data pack while reviewing papers (accepted "
-                                  "columns, synonyms, compound names, changes to this pack's columns). Kept apart "
-                                  "from the pack, so it applies on top of it.")
-            bottom.addWidget(remembered)
-        self.compounds_btn = QPushButton("Find compounds / tidy names…", clicked=self._find_compounds)
-        self.compounds_btn.setToolTip("Find the compounds named in this data pack's columns and examples, identify "
-                                      "them on PubChem (free, no model) and switch the chemistry step on for them -- "
-                                      "you review everything before it's changed. Saves your edits first.")
-        self.suggest_btn = QPushButton("Suggest additions from papers…", clicked=self._suggest_additions)
-        self.suggest_btn.setToolTip("Survey a few new sample papers (cheap) and get suggestions for what this research "
-                                    "area lacks: parameters, steps, categories, rules, compounds. You choose what's "
-                                    "added. Saves your edits first.")
-        for b in (self.compounds_btn, self.suggest_btn):
-            b.setEnabled(not self.read_only)
-            bottom.addWidget(b)
-        if self.read_only:
-            for b in (self.compounds_btn, self.suggest_btn):
-                b.setToolTip("Copy this data pack first: the app's own can't be changed.")
-        if config is None:
-            self.suggest_btn.setEnabled(False)
+        bottom = QHBoxLayout()            # the page actions are on their pages (2026-11-26, Mickey: a crowded row)
+        bottom.addStretch(1)
         bottom.addWidget(QPushButton("Close", clicked=self.reject))
         self.save_btn = QPushButton("Save", clicked=self.save, default=True)
         self.save_btn.setEnabled(not self.read_only)
@@ -622,7 +597,27 @@ class PackEditor(QDialog):
         form.addRow("Name:", self.label_edit)
         form.addRow("ID:", QLabel(m.get("id", "")))
         form.addRow("Description:", self.desc_edit)
+        folder = QHBoxLayout()
+        where = _hint(str(self.draft.folder))
+        where.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
+        folder.addWidget(where, 1)
+        folder.addWidget(QPushButton("Open folder", clicked=lambda: QDesktopServices.openUrl(
+            QUrl.fromLocalFile(str(self.draft.folder)))))
+        form.addRow("Folder:", folder)
         v.addLayout(form)
+
+        improve = QGroupBox("Improve this data pack")
+        grid = QGridLayout(improve)
+        grid.setColumnStretch(1, 1)
+        grid.setHorizontalSpacing(14)
+        for r, (kind, what) in enumerate((
+                ("suggest", "New sample papers surveyed for what this data pack lacks; you choose what's added."),
+                ("remembered", "Columns, synonyms and compound names you accepted while reviewing papers."))):
+            button = self._action(kind)
+            if button is not None:
+                grid.addWidget(button, r, 0)
+                grid.addWidget(_hint(what), r, 1)
+        v.addWidget(improve)
 
         rows_box = QGroupBox("Row options")          # what the area's rows and their groups are called (2026-11-06)
         rf = _form()
@@ -788,6 +783,41 @@ class PackEditor(QDialog):
             from PySide6.QtCore import QTimer
             QTimer.singleShot(0, lambda: self._fill_calculations(self._chosen_calculations()))
 
+    ACTIONS = {
+        "suggest": ("Suggest additions from papers…", "_suggest_additions",
+                    "Survey a few new sample papers (cheap) and get suggestions for what this research area lacks: "
+                    "parameters, steps, categories, rules, compounds. You choose what's added. Saves your edits first."),
+        "remembered": ("Remembered from your reviews…", "_open_remembered",
+                       "What you've taught the app for this data pack while reviewing papers (accepted columns, "
+                       "synonyms, compound names, changes to this pack's columns). Kept apart from the pack, so it "
+                       "applies on top of it."),
+        "compounds": ("Find compounds / tidy names…", "_find_compounds",
+                      "Find the compounds named in this data pack's columns and examples, identify them on PubChem "
+                      "(free, no model) and switch the chemistry step on for them -- you review everything before "
+                      "it's changed. Saves your edits first."),
+    }
+
+    def _action(self, kind: str) -> Optional[QPushButton]:
+        """A button for one of the pack-wide actions, placed on the pages it belongs to (2026-11-26, Mickey: they were
+        all in the bottom row): suggestions and what you taught the app on General and Overview, finding compounds on
+        Columns and Compounds. None where it doesn't apply (no registry: nothing remembered)."""
+        if kind == "remembered" and not self.registry_path:
+            return None
+        text, slot, tip = self.ACTIONS[kind]
+        button = QPushButton(text, clicked=getattr(self, slot))
+        button.setToolTip(tip)
+        if kind != "remembered" and self.read_only:
+            button.setEnabled(False)
+            button.setToolTip("Copy this data pack first: the app's own can't be changed.")
+        if kind == "suggest" and self._config is None:
+            button.setEnabled(False)
+        self._actions.setdefault(kind, []).append(button)
+        if kind == "suggest" and not hasattr(self, "suggest_btn"):
+            self.suggest_btn = button
+        if kind == "compounds" and not hasattr(self, "compounds_btn"):
+            self.compounds_btn = button
+        return button
+
     def _open_remembered(self) -> None:
         from parameter_extractor.gui.registry_dialog import RegistryDialog
         RegistryDialog(self.registry_path, parent=self, area=self.draft.manifest.get("id")).exec()
@@ -839,6 +869,7 @@ class PackEditor(QDialog):
                                          "with its unit and the step that asks for it. Saves your edits first.")
         self.build_values_btn.setEnabled(not self.read_only)
         side.addWidget(self.build_values_btn)
+        side.addWidget(self._action("compounds"))
         side.addSpacing(16)
         # 'Must answer' (2026-11-25, Mickey): runs with this pack answer for these columns, found or not
         self.require_btn = QPushButton("Must answer", clicked=lambda: self._set_required(True))
@@ -1383,6 +1414,13 @@ class PackEditor(QDialog):
         from PySide6.QtWidgets import QTextBrowser
         w = QWidget()
         v = QVBoxLayout(w)
+        actions = QHBoxLayout()
+        for kind in ("suggest", "remembered"):
+            button = self._action(kind)
+            if button is not None:
+                actions.addWidget(button)
+        actions.addStretch(1)
+        v.addLayout(actions)
         self.overview = QTextBrowser()
         self.overview.setOpenExternalLinks(False)
         self.overview.document().setDocumentMargin(18)
@@ -1779,6 +1817,7 @@ class PackEditor(QDialog):
         row.addWidget(self.build_compounds_btn)
         row.addWidget(QPushButton("Remove", clicked=lambda: [self.compound_table.removeRow(r) for r in sorted(
             {i.row() for i in self.compound_table.selectedIndexes()}, reverse=True)]))
+        row.addWidget(self._action("compounds"))
         self.lookup_btn = QPushButton("Look up missing CIDs on PubChem", clicked=self._lookup_cids)
         self.lookup_btn.setToolTip("Asks PubChem for each compound without a CID (needs the internet). Check the "
                                    "titles it finds: a first hit can be the wrong compound.")
@@ -2969,8 +3008,9 @@ class PackEditor(QDialog):
                 child.setReadOnly(True)
             elif child in (self.rules_page.show_btn, self.rules_page.modules_btn, self.require_btn,
                            self.unrequire_btn) or (isinstance(child, QPushButton)
-                                               and child.text() in ("Fit to window", "Export image…",
-                                                                    "Variable categories (all data packs)…")):
+                                               and child.text() in ("Fit to window", "Export image…", "Open folder",
+                                                                    "Variable categories (all data packs)…")) \
+                    or child in self._actions.get("remembered", []):
                 continue                       # looking at things: a prompt, the map, other tabs; 'Must answer'
                                                # (kept in the user's app data, not the pack)
             elif isinstance(child, (QCheckBox, QComboBox, QPushButton)):

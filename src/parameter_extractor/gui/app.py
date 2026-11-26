@@ -9,14 +9,19 @@ from PySide6.QtWidgets import QApplication
 from parameter_extractor import __version__
 
 
+from parameter_extractor import APP_TITLE  # noqa: E402
+
+
 def main() -> int:
     if "--self-check" in sys.argv:   # diagnostics, no window (see diagnostics.py)
         from parameter_extractor.diagnostics import main as self_check
         return self_check(sys.argv[1:])
 
     app = QApplication(sys.argv)
+    # the stored names stay (where QSettings keeps your preferences); the name shown is RUMMAGED (2026-11-26)
     app.setApplicationName("Parameter Extractor")
     app.setOrganizationName("Parameter Extractor")   # where QSettings stores preferences
+    app.setApplicationDisplayName(APP_TITLE)
     app.setApplicationVersion(__version__)
     app.setWindowIcon(QIcon(str(Path(__file__).parent / "resources" / "app.png")))
     from parameter_extractor.gui.error_log import install_excepthook
