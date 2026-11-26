@@ -171,6 +171,7 @@ def test_must_answer_columns_in_the_columns_tab():
     the user's app data, by pack); a column no step or compound fills isn't marked; a run with the pack answers for
     them; the app's own (read-only) packs can be marked too."""
     from unittest.mock import patch
+    from PySide6.QtCore import Qt
     from PySide6.QtWidgets import QApplication, QMessageBox
     QApplication.instance() or QApplication([])
     from parameter_extractor.gui.pack_windows import PackEditor
@@ -196,6 +197,9 @@ def test_must_answer_columns_in_the_columns_tab():
         assert editor._required == set(step_cols[:2]) and shown and "nothing_fills_this" in shown[0]
         marked = [i for i in items if i.text(0) in step_cols[:2]]
         assert all(i.text(3) == "must answer" and i.background(0).color() == MARKS["must_answer"] for i in marked)
+        editor._refresh_column_fills()                                   # "Filled by" redone: still readable
+        assert all(i.foreground(c).style() == Qt.BrushStyle.SolidPattern and i.foreground(c).color() == MARKS["mark_text"]
+                   for i in marked for c in range(4))
         assert json.loads(pc.markings_path().read_text())[pack.id] == sorted(step_cols[:2])     # saved at once
         assert editor.save() and "check_columns" not in PackDraft.load(pack.folder).manifest
         packs.activate(pack.id)

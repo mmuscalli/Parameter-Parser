@@ -1069,6 +1069,7 @@ class PackEditor(QDialog):
                 item.setText(2, ", ".join(stages) if stages else NOTHING)
                 for col in (0, 1, 2):
                     item.setForeground(col, QBrush() if stages else muted)
+                self._show_required(item)            # a marked row keeps the marks' text colour (readable on the tint)
 
     def _tree_columns(self) -> List[str]:
         """The columns as the tree lists them (category by category)."""
