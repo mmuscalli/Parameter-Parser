@@ -194,10 +194,10 @@ def test_modules_tab_settings():
         assert names[:2] == ["Map", "Overview"] and "Modules" in names and "Module settings" not in names and names[-1] == "Check"
         assert "Kinetics" in e.overview.toPlainText()
         t = e.module_table
-        rows = {t.item(r, 0).data(Qt.ItemDataRole.UserRole): r for r in range(t.rowCount())}
-        t.setCurrentCell(rows["wet_dry"], 0)                       # not linked: no settings yet
+        row = lambda mid: next(r for r in range(t.rowCount()) if e._module_row_id(r) == mid)   # noqa: E731 (rows move)
+        t.setCurrentCell(row("wet_dry"), 0)                       # not linked: no settings yet
         assert e.module_settings_tab._shown != "wet_dry"
-        t.setCurrentCell(rows["kinetics"], 0)
+        t.setCurrentCell(row("kinetics"), 0)
         table = e.module_settings_tab.values_table
         for r in range(table.rowCount()):
             if table.item(r, 1).text() == "half_life_hr":
@@ -206,15 +206,15 @@ def test_modules_tab_settings():
                 assert table.item(r, 1).text() == "half_life_min"
             if table.item(r, 1).text() == "kinetic_model":
                 table.cellWidget(r, 0).findChild(QCheckBox).setChecked(False)
-        assert t.item(rows["kinetics"], 1).text() == "linked • changed"
-        t.setCurrentCell(rows["analysis"], 0)                      # moving away keeps the edits
-        t.setCurrentCell(rows["kinetics"], 0)
+        assert t.item(row("kinetics"), 1).text() == "linked • changed"
+        t.setCurrentCell(row("analysis"), 0)                      # moving away keeps the edits
+        t.setCurrentCell(row("kinetics"), 0)
         assert e.save()
         saved = json.loads((pack.folder / "pack.json").read_text())["module_settings"]
         assert saved == {"kinetics": {"parameters": {"half_life_hr": {"unit": "min"}, "kinetic_model": {"off": True}}}}
         assert "half_life_min" in {p.column for p in load_specs(packs.Pack(pack.folder))["kinetics"].parameters}
         e._reset_module("kinetics")
-        assert t.item(rows["kinetics"], 1).text() == "linked"
+        assert t.item(row("kinetics"), 1).text() == "linked"
         assert e.save() and "module_settings" not in json.loads((pack.folder / "pack.json").read_text())
         # settings of a module the pack no longer links aren't kept
         e2 = PackEditor(pack.folder)

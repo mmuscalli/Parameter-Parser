@@ -213,11 +213,11 @@ def test_the_core_modules():
         pack = _new_pack(Path(tmp))
         e = PackEditor(pack.folder)
         t = e.module_table
-        first = [t.item(r, 0) for r in range(2)]
+        first = [t.item(r, 0) for r in range(t.rowCount()) if e._module_row_id(r)][:2]     # after the group heading
         assert [i.data(Qt.ItemDataRole.UserRole) for i in first] == ["rows", "paper_details"]
         assert all(i.checkState() == Qt.CheckState.Checked and not i.flags() & Qt.ItemFlag.ItemIsUserCheckable
                    for i in first)
-        e._show_module(0)
+        e._show_module(t.row(first[0]))
         from PySide6.QtWidgets import QLabel
         page_text = " ".join(lbl.text() for lbl in e.module_scroll.widget().findChildren(QLabel))
         assert "full_id" in page_text and "can't be unlinked" in page_text and "set_variables" in page_text
@@ -308,6 +308,43 @@ def test_evidence_for_modules():
     assert all("d" not in found for found in ev.values())
 
 
+def test_pages_and_module_groups():
+    """The editor's pages in grouped sidebar entries (the tab bar hidden; names still work), and the module list in
+    two groups -- in this data pack, then not linked -- that a module moves between when ticked (2026-11-25)."""
+    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+    from PySide6.QtCore import Qt
+    from PySide6.QtWidgets import QApplication
+    QApplication.instance() or QApplication([])
+    from parameter_extractor.gui.pack_windows import PackEditor
+    with tempfile.TemporaryDirectory() as tmp, patch.object(packs, "user_packs_dir", lambda: Path(tmp) / "packs"):
+        e = PackEditor(_new_pack(Path(tmp)).folder)
+        nav = e.tabs.nav
+        rows = [nav.item(r) for r in range(nav.count())]
+        headings = [i.text() for i in rows if i.data(e.tabs.PAGE) is None]
+        assert headings == ["SEE THE PACK", "SET UP", "WHAT'S EXTRACTED", "REVIEW"]
+        assert e.tabs.tabBar().isHidden() and e.tabs.count() == sum(i.data(e.tabs.PAGE) is not None for i in rows)
+        modules_item = next(i for i in rows if i.text().strip() == "Modules")
+        nav.setCurrentItem(modules_item)                                 # the sidebar picks the page ...
+        assert e.tabs.tabText(e.tabs.currentIndex()) == "Modules" and e.tabs.title.text() == "Modules"
+        e.tabs.setCurrentIndex(e.tab_index("Columns"))                    # ... and follows code that does
+        assert nav.currentItem().text().strip() == "Columns" and "by category" in e.tabs.about.text()
+        assert e.tabs.tabText(e.tabs.count() - 1).startswith("Check")
+
+        t = e.module_table
+        order = lambda: [e._module_row_id(r) or t.item(r, 0).text() for r in range(t.rowCount())]   # noqa: E731
+        groups = lambda: (order()[:order().index("NOT LINKED")], order()[order().index("NOT LINKED") + 1:])  # noqa
+        linked, unlinked = groups()
+        assert linked[:3] == ["IN THIS DATA PACK", "rows", "paper_details"] and "kinetics" in unlinked
+        row = next(r for r in range(t.rowCount()) if e._module_row_id(r) == "kinetics")
+        t.item(row, 0).setCheckState(Qt.CheckState.Checked)
+        linked, unlinked = groups()
+        assert "kinetics" in linked and "kinetics" not in unlinked
+        row = next(r for r in range(t.rowCount()) if e._module_row_id(r) == "kinetics")
+        t.item(row, 0).setCheckState(Qt.CheckState.Unchecked)
+        assert "kinetics" in groups()[1]
+        assert e._chosen_modules() == ["sample_time"]                     # headings are never modules
+
+
 def test_modules_tab():
     """The editor's Modules tab: tick to link, what a module brings along, steps shown as the module's, saved as a
     reference; the app's own packs read-only."""
@@ -319,25 +356,26 @@ def test_modules_tab():
     e = PackEditor(packs.BUILTIN_DIR / "prebiotic_chemistry")
     assert "Analysis methods" not in [e.tabs.tabText(i) for i in range(e.tabs.count())]
     assert not e.builtin_boxes["chemistry"].isEnabled() and "Solution chemistry module" in e.builtin_boxes["chemistry"].text()
-    assert not e.module_table.item(0, 0).flags() & Qt.ItemFlag.ItemIsUserCheckable
+    core_row = next(r for r in range(e.module_table.rowCount()) if e._module_row_id(r))
+    assert not e.module_table.item(core_row, 0).flags() & Qt.ItemFlag.ItemIsUserCheckable
     with tempfile.TemporaryDirectory() as tmp, patch.object(packs, "user_packs_dir", lambda: Path(tmp) / "packs"):
         pack = _new_pack(Path(tmp))
         e = PackEditor(pack.folder)
         t = e.module_table
-        rows = {t.item(r, 0).data(Qt.ItemDataRole.UserRole): r for r in range(t.rowCount())}
+        row = lambda mid: next(r for r in range(t.rowCount()) if e._module_row_id(r) == mid)   # noqa: E731 (rows move)
         compounds = e.tab_index("Compounds")
         assert not e.tabs.isTabEnabled(compounds)
-        t.item(rows["peptides_oligomers"], 0).setCheckState(Qt.CheckState.Checked)
-        assert t.item(rows["solution_chemistry"], 1).text().startswith("brought along by")
+        t.item(row("peptides_oligomers"), 0).setCheckState(Qt.CheckState.Checked)
+        assert t.item(row("solution_chemistry"), 1).text().startswith("brought along by")
         assert e.tabs.isTabEnabled(compounds) and e.builtin_boxes["chemistry"].isChecked()
         assert "Peptides and oligomers module" in e.module_stages_note.text()   # its linkage step (2026-11-09)
-        t.item(rows["kinetics"], 0).setCheckState(Qt.CheckState.Checked)
+        t.item(row("kinetics"), 0).setCheckState(Qt.CheckState.Checked)
         assert "Kinetics module" in e.module_stages_note.text()
-        t.item(rows["kinetics"], 0).setCheckState(Qt.CheckState.Unchecked)
-        t.setCurrentCell(rows["analysis"], 0)
+        t.item(row("kinetics"), 0).setCheckState(Qt.CheckState.Unchecked)
+        t.setCurrentCell(row("analysis"), 0)
         assert e.analysis_stack.currentIndex() == 0                          # not linked: no vocabulary
         assert e.vocab_box.parent() is not None                              # shown on the module's page
-        t.item(rows["analysis"], 0).setCheckState(Qt.CheckState.Checked)
+        t.item(row("analysis"), 0).setCheckState(Qt.CheckState.Checked)
         assert e.analysis_stack.currentIndex() == 1 and e.tech_table.rowCount() > 20
         assert not e._vocab_editable()                                        # the module's: read-only here
         assert e.save()

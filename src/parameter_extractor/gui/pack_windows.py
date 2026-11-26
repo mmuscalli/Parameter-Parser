@@ -24,7 +24,7 @@ from PySide6.QtCore import QObject, Qt, QUrl, Signal
 from PySide6.QtCore import QSize
 from PySide6.QtGui import QBrush, QColor, QDesktopServices, QFont, QPalette
 from PySide6.QtWidgets import (QAbstractItemView, QCheckBox, QComboBox, QDialog, QDialogButtonBox, QFileDialog,
-                               QFormLayout,
+                               QFormLayout, QFrame,
                                QGridLayout,
                                QGroupBox, QHBoxLayout, QHeaderView, QInputDialog, QLabel, QLineEdit, QListWidget,
                                QListWidgetItem, QMessageBox, QPlainTextEdit, QProgressBar, QPushButton, QScrollArea, QSplitter,
@@ -139,6 +139,104 @@ class _ColumnTree(QTreeWidget):
         super().dropEvent(event)
         for i in range(self.topLevelItemCount()):
             self.topLevelItem(i).setExpanded(True)
+
+
+class _PageTabs(QTabWidget):
+    """The data pack editor's pages, chosen from a sidebar grouped by what the user is doing (2026-11-25, Mickey: eleven
+    tabs in one row had become hard to read). A QTabWidget with its bar hidden, so code and tests keep using tab names
+    (tab_index, setTabEnabled, setTabText); the sidebar (`nav`) and the page heading follow every change."""
+
+    PAGE = Qt.ItemDataRole.UserRole + 1           # a sidebar row's page index (None: a group heading)
+
+    def __init__(self):
+        from PySide6.QtWidgets import QListWidget
+        super().__init__()
+        self.tabBar().hide()
+        self.setDocumentMode(True)
+        self.nav = QListWidget()
+        self.nav.setObjectName("packPages")
+        self.nav.setFixedWidth(196)
+        self.nav.setFrameShape(QFrame.Shape.NoFrame)
+        self.nav.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self.nav.setStyleSheet("QListWidget#packPages { background: palette(window); outline: 0; }"
+                               "QListWidget#packPages::item { padding: 5px 10px; border-radius: 5px; }"
+                               "QListWidget#packPages::item:selected { background: palette(highlight); "
+                               "color: palette(highlighted-text); }"
+                               "QListWidget#packPages::item:hover:!selected { background: palette(alternate-base); }")
+        self.title = QLabel()
+        font = self.title.font()
+        font.setPointSizeF(font.pointSizeF() * 1.35)
+        font.setBold(True)
+        self.title.setFont(font)
+        self.about = _hint("")
+        self._about: Dict[int, str] = {}
+        self.nav.currentItemChanged.connect(self._picked)
+        self.currentChanged.connect(self._follow)
+
+    def add_group(self, heading: str) -> None:
+        from PySide6.QtWidgets import QListWidgetItem
+        item = QListWidgetItem(heading.upper())
+        item.setFlags(Qt.ItemFlag.NoItemFlags)
+        font = item.font()
+        font.setPointSizeF(font.pointSizeF() * 0.82)
+        font.setBold(True)
+        font.setLetterSpacing(QFont.SpacingType.PercentageSpacing, 108)
+        item.setFont(font)
+        item.setForeground(QBrush(themes.MARKS["muted"]))
+        item.setSizeHint(QSize(0, 22 if self.nav.count() == 0 else 38))       # space above every group but the first
+        item.setTextAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignBottom)
+        self.nav.addItem(item)
+
+    def add_page(self, widget: QWidget, name: str, about: str) -> int:
+        from PySide6.QtWidgets import QListWidgetItem
+        i = self.addTab(widget, name)
+        self._about[i] = about
+        item = QListWidgetItem("   " + name)
+        item.setData(self.PAGE, i)
+        item.setToolTip(about)
+        item.setSizeHint(QSize(0, 30))
+        self.nav.addItem(item)
+        if i == 0:
+            self.nav.setCurrentItem(item)
+            self._follow(0)
+        return i
+
+    def _item(self, i: int):
+        return next((self.nav.item(r) for r in range(self.nav.count()) if self.nav.item(r).data(self.PAGE) == i), None)
+
+    def _picked(self, item, _previous) -> None:
+        if item is not None and item.data(self.PAGE) is not None:
+            self.setCurrentIndex(item.data(self.PAGE))
+
+    def _follow(self, i: int) -> None:
+        item = self._item(i)
+        if item is not None and self.nav.currentItem() is not item:
+            self.nav.setCurrentItem(item)
+        self.title.setText(self.tabText(i))
+        self.about.setText(self._about.get(i, ""))
+
+    # the sidebar follows what code does to the (hidden) tabs
+    def setTabText(self, i: int, text: str) -> None:
+        super().setTabText(i, text)
+        item = self._item(i)
+        if item is not None:
+            item.setText("   " + text)
+            problems = text != text.split(" (")[0]          # 'Check (1/2)': the pack has problems
+            item.setForeground(QBrush(themes.MARKS["error"]) if problems else QBrush())
+        if i == self.currentIndex():
+            self.title.setText(text)
+
+    def setTabEnabled(self, i: int, on: bool) -> None:
+        super().setTabEnabled(i, on)
+        item = self._item(i)
+        if item is not None:
+            item.setFlags(Qt.ItemFlag.ItemIsEnabled | Qt.ItemFlag.ItemIsSelectable if on else Qt.ItemFlag.NoItemFlags)
+
+    def setTabToolTip(self, i: int, tip: str) -> None:
+        super().setTabToolTip(i, tip)
+        item = self._item(i)
+        if item is not None:
+            item.setToolTip(tip or self._about.get(i, ""))
 
 
 DRAFT = "__draft__"            # source_combo: drafted from sample papers (pack_drafting.py)
@@ -400,35 +498,56 @@ class PackEditor(QDialog):
                                     "your own version.", wordWrap=True), 1)
             banner.addWidget(QPushButton("Copy to a new data pack…", clicked=self._copy))
             layout.addLayout(banner)
-        self.tabs = QTabWidget()
-        # the order says how a pack is put together (2026-11-09): what happens to a paper; the pack's own parts;
-        # the shared modules it links and this pack's settings for them; the check
-        tabs = (("Map", self._map_tab(), "This data pack as a picture: the steps that read a paper, the kinds of value "
-                 "they fill, and the levels those are recorded for. Hover over a step or a kind of value to follow it."),
+        self.tabs = _PageTabs()
+        # the pages in groups that follow how a pack is put together (2026-11-25, Mickey: readability and workflow --
+        # was one row of eleven tabs): see it whole; set it up (name and rows, levels, the modules it links: those
+        # decide much of the rest); what's extracted (columns, compounds, steps, rules, formulas); the check
+        pages = (
+            ("See the pack", (
+                ("Map", self._map_tab(), "This data pack as a picture: the steps that read a paper, the kinds of value "
+                 "they fill, and the levels those are recorded for. Hover over a step or a kind of value to follow it; "
+                 "double-click one to edit it."),
                 ("Overview", self._overview_tab(), "What happens to each paper with this data pack: every request to "
-                 "the AI model (and where it comes from) and every calculation done on your computer."),
-                ("General", self._general_tab(), "This data pack's name, row words, built-in steps and calculations."),
+                 "the AI model (and where it comes from) and every calculation done on your computer."))),
+            ("Set up", (
+                ("General", self._general_tab(), "This data pack's name, what its rows are called, its built-in steps "
+                 "and calculations."),
                 ("Structure", self._structure_tab(), "How this data pack's data is organised: a paper, its groups "
                  "of rows, their rows -- and what each kind of value is recorded for."),
-                ("Columns", self._columns_tab(), "This data pack's columns, by category."),
+                ("Modules", self._modules_tab(), "The shared modules this data pack links, what each brings, and this "
+                 "pack's own settings for them (the modules themselves stay the same in every pack)."))),
+            ("What's extracted", (
+                ("Columns", self._columns_tab(), "This data pack's columns, by category: what fills each one, and the "
+                 "ones every run must answer for."),
+                ("Compounds", self._compounds_tab(), "This data pack's compound vocabulary, used by the chemistry step "
+                 "(from the Solution chemistry module)."),
                 ("Steps", self._stages_tab(), "This data pack's own configurable steps: each is one model request per "
                  "paper it runs for (files in the pack's stages/ folder)."),
                 ("Rules", self._rules_tab(), "This data pack's rules for the shared prompts (e.g. planning rows)."),
-                ("Formulas", self._formulas_tab(), "This data pack's calculations written as formulas."),
-                ("Compounds", self._compounds_tab(), "This data pack's compound vocabulary, used by the chemistry step "
-                 "(from the Solution chemistry module)."),
-                ("Modules", self._modules_tab(), "The shared modules this data pack links, what each brings, and this "
-                 "pack's own settings for them (the modules themselves stay the same in every pack)."),
-                ("Check", self._check_tab(), "Problems the app finds in this data pack."))
-        for name, widget, tip in tabs:
-            self.tabs.setTabToolTip(self.tabs.addTab(widget, name), tip)
+                ("Formulas", self._formulas_tab(), "This data pack's calculations written as formulas."))),
+            ("Review", (
+                ("Check", self._check_tab(), "Problems the app finds in this data pack."),)))
+        for heading, group in pages:
+            self.tabs.add_group(heading)
+            for name, widget, about in group:
+                self.tabs.add_page(widget, name, about)
         self.tabs.currentChanged.connect(lambda _i: self._fit_rows())
         self._follow_step("chemistry", "Compounds")
         self._refresh_module_effects()
         self._refresh_overview()
         self.tabs.currentChanged.connect(lambda i: self._refresh_formula_columns()
                                          if self.tabs.tabText(i) == "Formulas" else None)
-        layout.addWidget(self.tabs, 1)
+        body = QHBoxLayout()
+        body.setSpacing(14)
+        body.addWidget(self.tabs.nav)
+        page = QVBoxLayout()
+        page.setSpacing(2)
+        page.addWidget(self.tabs.title)
+        page.addWidget(self.tabs.about)
+        page.addSpacing(8)
+        page.addWidget(self.tabs, 1)
+        body.addLayout(page, 1)
+        layout.addLayout(body, 1)
         bottom = QHBoxLayout()
         where = _hint(f"Folder: {self.draft.folder}")
         where.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
@@ -1299,8 +1418,9 @@ class PackEditor(QDialog):
                             "change how it works IN THIS DATA PACK (switch its parts off, store a value in another "
                             "unit, change trigger words, add rules); only your changes are kept, the rest follows the "
                             "module. Saved with Save."))
-        self.module_table = QTableWidget(0, 2)
-        self.module_table.setHorizontalHeaderLabels(["Module", "In this data pack"])
+        self.module_table = QTableWidget(0, 3)                  # column 2 (hidden): the order (_regroup_modules)
+        self.module_table.setHorizontalHeaderLabels(["Module", "In this data pack", ""])
+        self.module_table.setColumnHidden(2, True)
         self.module_table.verticalHeader().setVisible(False)
         head = self.module_table.horizontalHeader()
         head.setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
@@ -1309,7 +1429,25 @@ class PackEditor(QDialog):
         self.module_table.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
         style_rows(self.module_table)
         own = set(self.draft.manifest.get("modules", []))
-        for mid, mod in module_store.core().items():        # part of every data pack: shown ticked, locked, first
+        for heading in ("In this data pack", "Not linked"):     # the two groups (_regroup_modules)
+            r = self.module_table.rowCount()
+            self.module_table.insertRow(r)
+            item = QTableWidgetItem(heading.upper())
+            item.setData(self.MODULE_HEADING, heading)
+            item.setFlags(Qt.ItemFlag.NoItemFlags)
+            font = item.font()
+            font.setPointSizeF(font.pointSizeF() * 0.82)
+            font.setBold(True)
+            font.setLetterSpacing(QFont.SpacingType.PercentageSpacing, 108)
+            item.setFont(font)
+            item.setForeground(QBrush(themes.MARKS["muted"]))
+            item.setTextAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignBottom)
+            self.module_table.setItem(r, 0, item)
+            for c in (1, 2):
+                blank = QTableWidgetItem("")
+                blank.setFlags(Qt.ItemFlag.NoItemFlags)
+                self.module_table.setItem(r, c, blank)
+        for n, (mid, mod) in enumerate(module_store.core().items()):   # part of every data pack: ticked, locked, first
             r = self.module_table.rowCount()
             self.module_table.insertRow(r)
             item = QTableWidgetItem(mod.label)
@@ -1322,6 +1460,7 @@ class PackEditor(QDialog):
             status = QTableWidgetItem("core: every data pack")
             status.setFlags(status.flags() & ~Qt.ItemFlag.ItemIsEditable)
             self.module_table.setItem(r, 1, status)
+            self.module_table.setItem(r, 2, QTableWidgetItem(f"1{n:03d}"))
         for mid, mod in module_store.available().items():
             r = self.module_table.rowCount()
             self.module_table.insertRow(r)
@@ -1336,6 +1475,7 @@ class PackEditor(QDialog):
             linked = QTableWidgetItem("")
             linked.setFlags(linked.flags() & ~Qt.ItemFlag.ItemIsEditable)
             self.module_table.setItem(r, 1, linked)
+            self.module_table.setItem(r, 2, QTableWidgetItem(""))
         self.module_table.setColumnWidth(1, 190)
         self.module_table.itemChanged.connect(lambda it: self._refresh_module_effects() if it.column() == 0 else None)
         self.module_table.currentCellChanged.connect(lambda r, _c, pr, _pc: self._show_module(r) if r != pr else None)
@@ -1358,11 +1498,46 @@ class PackEditor(QDialog):
         split.setSizes([360, 1000])
         split.setChildrenCollapsible(False)
         v.addWidget(split, 1)
-        if self.module_table.rowCount():
-            self.module_table.setCurrentCell(0, 0)
+        self._regroup_modules()
+        first = next((r for r in range(self.module_table.rowCount()) if self._module_row_id(r)), -1)
+        if first >= 0:
+            self.module_table.setCurrentCell(first, 0)
         return w
 
     CORE_MODULE = Qt.ItemDataRole.UserRole + 5        # a core module's row: part of every pack, not the pack's to link
+    MODULE_HEADING = Qt.ItemDataRole.UserRole + 6     # a group heading's row in the module list
+
+    def _module_row_id(self, r: int) -> Optional[str]:
+        """The module on row r of the module list (None: a group heading)."""
+        item = self.module_table.item(r, 0)
+        return None if item is None or item.data(self.MODULE_HEADING) else item.data(Qt.ItemDataRole.UserRole)
+
+    def _regroup_modules(self) -> None:
+        """The module list in two groups (2026-11-25, Mickey): the modules in this data pack -- core, linked, brought
+        along by another -- then the ones not linked, each group under its heading with space above the second; a
+        module moves between them when ticked or unticked."""
+        t = self.module_table
+        t.blockSignals(True)
+        unlinked = 0
+        for r in range(t.rowCount()):
+            item, order = t.item(r, 0), t.item(r, 2)
+            heading = item.data(self.MODULE_HEADING)
+            if heading:
+                order.setText("0" if heading == "In this data pack" else "3")
+            elif item.data(self.CORE_MODULE):
+                pass                                          # '1nnn', set when the list was made
+            elif item.checkState() == Qt.CheckState.Checked:  # linked, or brought along by a linked module
+                order.setText("2" + item.text().lower())
+            else:
+                order.setText("4" + item.text().lower())
+                unlinked += 1
+        t.sortItems(2)
+        for r in range(t.rowCount()):
+            heading = t.item(r, 0).data(self.MODULE_HEADING)
+            if heading:
+                t.setRowHeight(r, 26 if heading == "In this data pack" else 46)
+                t.setRowHidden(r, heading == "Not linked" and not unlinked)
+        t.blockSignals(False)
 
     def _module_status(self, mid: str) -> str:
         from parameter_extractor import modules as module_store
@@ -1382,7 +1557,8 @@ class PackEditor(QDialog):
             return
         t.blockSignals(True)
         for r in range(t.rowCount()):
-            t.item(r, 1).setText(self._module_status(t.item(r, 0).data(Qt.ItemDataRole.UserRole)))
+            if self._module_row_id(r):
+                t.item(r, 1).setText(self._module_status(self._module_row_id(r)))
         t.blockSignals(False)
 
     def _chosen_modules(self) -> list:
@@ -1394,7 +1570,7 @@ class PackEditor(QDialog):
         for r in range(t.rowCount()):
             item = t.item(r, 0)
             if item.checkState() == Qt.CheckState.Checked and item.flags() & Qt.ItemFlag.ItemIsEnabled \
-                    and not item.data(self.CORE_MODULE):
+                    and not item.data(self.CORE_MODULE) and self._module_row_id(r):
                 out.append(item.data(Qt.ItemDataRole.UserRole))
         return out
 
@@ -1422,7 +1598,9 @@ class PackEditor(QDialog):
         t.blockSignals(True)
         for r in range(t.rowCount()):
             item = t.item(r, 0)
-            mid = item.data(Qt.ItemDataRole.UserRole)
+            mid = self._module_row_id(r)
+            if mid is None:
+                continue
             by = [found[o].label for o in chosen if o in found and mid in found[o].manifest.needs]
             if mid not in chosen and mid in linked and by:
                 item.setCheckState(Qt.CheckState.Checked)
@@ -1430,6 +1608,7 @@ class PackEditor(QDialog):
             elif not self.read_only:
                 item.setFlags(item.flags() | Qt.ItemFlag.ItemIsEnabled)
         t.blockSignals(False)
+        self._regroup_modules()
         self._mark_module_changes()
         provided = self._module_steps()
         for name, box in self.builtin_boxes.items():
@@ -1466,7 +1645,7 @@ class PackEditor(QDialog):
         from parameter_extractor import modules as module_store, pack_modules
         self.module_settings_tab.release()
         self.vocab_box.setParent(None)                 # kept across pages (built once)
-        item = self.module_table.item(row, 0) if row >= 0 else None
+        item = self.module_table.item(row, 0) if row >= 0 and self._module_row_id(row) else None
         mod = module_store.available().get(item.data(Qt.ItemDataRole.UserRole)) if item else None
         page = QWidget()
         from PySide6.QtWidgets import QSizePolicy
