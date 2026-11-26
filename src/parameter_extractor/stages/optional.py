@@ -901,6 +901,11 @@ def stage_values(spec: StageSpec, item) -> Tuple[Dict[str, StageValue], List[str
                         f"text ('{text}'), not a number."]
         val, high, printed = parsed
         read_note = f"read from '{text}'"
+    if not val and not high and not text and not any((getattr(item, k, "") or "").strip()
+                                                     for k in ("quote", "source", "note")):
+        # an empty entry: 0 with no quote, source or note (Haiku, Sakata2014 / Rode1990 2026-11-25: written as pH 0.0)
+        return {}, [f"{spec.label}: {param.column} for '{item.set_label or 'every set'}' left out -- an empty answer "
+                    f"(0, with no quote, source or note)."]
     if high and high > val:            # a range: '<column>_range<unit>' = 'low:high' (Mickey, 2026-10-31)
         from parameter_extractor.ingestion.flatten_to_template import with_range
         from parameter_extractor.units import format_range

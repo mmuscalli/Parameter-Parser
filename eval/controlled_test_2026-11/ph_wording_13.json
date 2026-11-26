@@ -1,0 +1,73 @@
+{
+ "hand_csv": "/Users/mickeymuscalli/Documents/EORE Data Project/PaperDataTemplate Archive/PaperDataTemplate_Nov15_2026.csv",
+ "batch": "P1",
+ "must_answer_pack": "controlled_test_prebio_dupe",
+ "model_standard": [
+  "/Users/mickeymuscalli/Documents/Parameter Extractor/accuracy_20261120/ms_P1/runs/Alargov2002_20261120-222633",
+  "/Users/mickeymuscalli/Documents/Parameter Extractor/accuracy_20261120/ms_P1/runs/Bujdak1996_20261120-222747",
+  "/Users/mickeymuscalli/Documents/Parameter Extractor/accuracy_20261120/ms_P1/runs/Chen2007_20261120-224102",
+  "/Users/mickeymuscalli/Documents/Parameter Extractor/accuracy_20261120/ms_P1/runs/Gao2011_20261120-222853",
+  "/Users/mickeymuscalli/Documents/Parameter Extractor/accuracy_20261120/ms_P1/runs/Halmann1968_20261120-223122",
+  "/Users/mickeymuscalli/Documents/Parameter Extractor/accuracy_20261120/ms_P1/runs/Inoue1994_20261120-223212",
+  "/Users/mickeymuscalli/Documents/Parameter Extractor/accuracy_20261120/ms_P1/runs/Islam2003_20261120-223326",
+  "/Users/mickeymuscalli/Documents/Parameter Extractor/accuracy_20261120/ms_P1/runs/Rode1990_20261120-224225",
+  "/Users/mickeymuscalli/Documents/Parameter Extractor/accuracy_20261120/ms_P1/runs/Sakata2014_20261120-223452",
+  "/Users/mickeymuscalli/Documents/Parameter Extractor/accuracy_20261120/ms_P1/runs/iqubal2017_20261120-223651",
+  "/Users/mickeymuscalli/Documents/Parameter Extractor/accuracy_20261120/ms_P1/runs/kumar2012_20261120-223802",
+  "/Users/mickeymuscalli/Documents/Parameter Extractor/accuracy_20261120/ms_P1/runs/mitsuzawa2004_20261120-223928"
+ ],
+ "papers": [
+  "Chang1969",
+  "Eder1994",
+  "Gao2011",
+  "Huber1998",
+  "Leman2004",
+  "Matrajt2003",
+  "Mizutani1981",
+  "Rabinowitz1985",
+  "Rode1990",
+  "Sakata2014",
+  "Schwendinger1991",
+  "Zamaraev1996",
+  "faisal2005"
+ ],
+ "arms": {
+  "A1": {
+   "label": "Standard, 0.6.11, Must answer pack",
+   "folders": [
+    "/Users/mickeymuscalli/Documents/Parameter Extractor/controlled_test_20261125/standard/queue_20261125-202929"
+   ]
+  },
+  "A2": {
+   "label": "Standard, new pH wording (conditions step re-asked)",
+   "folders": [
+    "/Users/mickeymuscalli/Documents/Parameter Extractor/controlled_test_20261125/conditions_rerun_test/Chang1969_20261125-213233",
+    "/Users/mickeymuscalli/Documents/Parameter Extractor/controlled_test_20261125/conditions_rerun_test/Eder1994_20261125-213731",
+    "/Users/mickeymuscalli/Documents/Parameter Extractor/controlled_test_20261125/conditions_rerun_test/Gao2011_20261125-213731",
+    "/Users/mickeymuscalli/Documents/Parameter Extractor/controlled_test_20261125/conditions_rerun_test/Huber1998_20261125-213731",
+    "/Users/mickeymuscalli/Documents/Parameter Extractor/controlled_test_20261125/conditions_rerun_test/Leman2004_20261125-213731",
+    "/Users/mickeymuscalli/Documents/Parameter Extractor/controlled_test_20261125/conditions_rerun_test/Matrajt2003_20261125-213731",
+    "/Users/mickeymuscalli/Documents/Parameter Extractor/controlled_test_20261125/conditions_rerun_test/Mizutani1981_20261125-213731",
+    "/Users/mickeymuscalli/Documents/Parameter Extractor/controlled_test_20261125/conditions_rerun_test/Rabinowitz1985_20261125-213731",
+    "/Users/mickeymuscalli/Documents/Parameter Extractor/controlled_test_20261125/conditions_rerun_test/Rode1990_20261125-213731",
+    "/Users/mickeymuscalli/Documents/Parameter Extractor/controlled_test_20261125/conditions_rerun_test/Sakata2014_20261125-213731",
+    "/Users/mickeymuscalli/Documents/Parameter Extractor/controlled_test_20261125/conditions_rerun_test/Schwendinger1991_20261125-213731",
+    "/Users/mickeymuscalli/Documents/Parameter Extractor/controlled_test_20261125/conditions_rerun_test/Zamaraev1996_20261125-213731",
+    "/Users/mickeymuscalli/Documents/Parameter Extractor/controlled_test_20261125/conditions_rerun_test/faisal2005_20261125-213731"
+   ]
+  },
+  "B1": {
+   "label": "Economy x3, 0.6.11, Must answer pack",
+   "folders": [
+    "/Users/mickeymuscalli/Documents/Parameter Extractor/controlled_test_20261125/economy/queue_20261125-205004"
+   ]
+  },
+  "B2": {
+   "label": "Economy x3, new pH wording (conditions step re-asked)",
+   "folders": [
+    "/Users/mickeymuscalli/Documents/Parameter Extractor/controlled_test_20261125/economy/queue_20261125-213731"
+   ]
+  }
+ },
+ "out": "eval/controlled_test_2026-11/ph_wording_13"
+}

@@ -2,18 +2,18 @@
 
 ## A0: Standard, 0.6.0 (Nov 20), built-in pack
 
-Hand: 1037 printed values in 35 papers; recall 0.841 (close 0.863); agreement 0.861; 569 hand values not printed (figures, calculated) not scored.
+Hand: 1002 printed values in 35 papers; recall 0.864 (close 0.878); agreement 0.861; 556 hand values not printed (figures, calculated) not scored.
 Model standard: 525 values in 11 papers; recall 0.943 (close 0.943); agreement 0.996.
 
 | Column | Hand values | Hand recall | Agreement | MS values | MS recall | MS agreement |
 |---|---|---|---|---|---|---|
 | `sampled_Gly-Gly_aq_%yield` | 240 | 0.883 | 0.882 | 109 | 1.0 | 1.0 |
 | `duration_hr` | 118 | 0.814 | 0.829 | 48 | 1.0 | 1.0 |
-| `initial_pH` | 81 | 0.481 | 0.636 | 12 | 1.0 | 1.0 |
 | `sampled_cyclo_Gly-Gly_aq_%yield` | 75 | 0.92 | 0.886 | 69 | 1.0 | 1.0 |
 | `initial_temperature_C` | 66 | 0.955 | 0.857 | 25 | 1.0 | 0.926 |
 | `sampled_cyclo_Ala-Ala_aq_%yield` | 51 | 1.0 | 1.0 | 42 | 1.0 | 1.0 |
 | `sampled_Phe-Phe_aq_%yield` | 49 | 1.0 | 0.961 | 1 | 0.0 | – |
+| `initial_pH` | 46 | 0.717 | 0.621 | 12 | 1.0 | 1.0 |
 | `sampled_Ala-Ala_aq_%yield` | 46 | 0.957 | 0.754 | 35 | 0.971 | 1.0 |
 | `sampled_Gly-Gly-Gly_aq_%yield` | 41 | 0.927 | 0.821 | 42 | 1.0 | 1.0 |
 | `paper_title` | 35 | 0.943 | 0.971 | 11 | 1.0 | 1.0 |
@@ -53,18 +53,18 @@ Model standard: 525 values in 11 papers; recall 0.943 (close 0.943); agreement 0
 
 ## A1: Standard, 0.6.11, Must answer pack
 
-Hand: 1037 printed values in 35 papers; recall 0.875 (close 0.894); agreement 0.866; 569 hand values not printed (figures, calculated) not scored.
+Hand: 1002 printed values in 35 papers; recall 0.893 (close 0.904); agreement 0.865; 556 hand values not printed (figures, calculated) not scored.
 Model standard: 525 values in 11 papers; recall 0.97 (close 0.97); agreement 0.996.
 
 | Column | Hand values | Hand recall | Agreement | MS values | MS recall | MS agreement |
 |---|---|---|---|---|---|---|
 | `sampled_Gly-Gly_aq_%yield` | 240 | 0.908 | 0.895 | 109 | 0.991 | 1.0 |
 | `duration_hr` | 118 | 0.814 | 0.833 | 48 | 1.0 | 1.0 |
-| `initial_pH` | 81 | 0.58 | 0.705 | 12 | 1.0 | 1.0 |
 | `sampled_cyclo_Gly-Gly_aq_%yield` | 75 | 0.92 | 0.886 | 69 | 1.0 | 1.0 |
 | `initial_temperature_C` | 66 | 0.97 | 0.859 | 25 | 1.0 | 0.926 |
 | `sampled_cyclo_Ala-Ala_aq_%yield` | 51 | 1.0 | 0.984 | 42 | 1.0 | 1.0 |
 | `sampled_Phe-Phe_aq_%yield` | 49 | 1.0 | 0.942 | 1 | 1.0 | 1.0 |
+| `initial_pH` | 46 | 0.761 | 0.613 | 12 | 1.0 | 1.0 |
 | `sampled_Ala-Ala_aq_%yield` | 46 | 0.957 | 0.75 | 35 | 1.0 | 1.0 |
 | `sampled_Gly-Gly-Gly_aq_%yield` | 41 | 0.951 | 0.823 | 42 | 1.0 | 1.0 |
 | `paper_title` | 35 | 0.971 | 1.0 | 11 | 1.0 | 1.0 |
@@ -104,18 +104,18 @@ Model standard: 525 values in 11 papers; recall 0.97 (close 0.97); agreement 0.9
 
 ## B0: Economy x3, 0.6.0 (Nov 20), built-in pack
 
-Hand: 1037 printed values in 35 papers; recall 0.86 (close 0.881); agreement 0.856; 569 hand values not printed (figures, calculated) not scored.
+Hand: 1002 printed values in 35 papers; recall 0.884 (close 0.894); agreement 0.858; 556 hand values not printed (figures, calculated) not scored.
 Model standard: 525 values in 11 papers; recall 0.958 (close 0.964); agreement 0.994.
 
 | Column | Hand values | Hand recall | Agreement | MS values | MS recall | MS agreement |
 |---|---|---|---|---|---|---|
 | `sampled_Gly-Gly_aq_%yield` | 240 | 0.854 | 0.886 | 109 | 0.991 | 1.0 |
 | `duration_hr` | 118 | 0.797 | 0.821 | 48 | 0.979 | 1.0 |
-| `initial_pH` | 81 | 0.432 | 0.535 | 12 | 0.417 | 1.0 |
 | `sampled_cyclo_Gly-Gly_aq_%yield` | 75 | 0.92 | 0.886 | 69 | 1.0 | 1.0 |
 | `initial_temperature_C` | 66 | 0.955 | 0.837 | 25 | 1.0 | 0.926 |
 | `sampled_cyclo_Ala-Ala_aq_%yield` | 51 | 1.0 | 1.0 | 42 | 1.0 | 1.0 |
 | `sampled_Phe-Phe_aq_%yield` | 49 | 1.0 | 0.98 | 1 | 0.0 | – |
+| `initial_pH` | 46 | 0.63 | 0.533 | 12 | 0.417 | 1.0 |
 | `sampled_Ala-Ala_aq_%yield` | 46 | 0.826 | 0.75 | 35 | 0.943 | 1.0 |
 | `sampled_Gly-Gly-Gly_aq_%yield` | 41 | 0.927 | 0.842 | 42 | 0.952 | 1.0 |
 | `paper_title` | 35 | 0.971 | 0.971 | 11 | 1.0 | 1.0 |
@@ -155,18 +155,18 @@ Model standard: 525 values in 11 papers; recall 0.958 (close 0.964); agreement 0
 
 ## B1: Economy x3, 0.6.11, Must answer pack
 
-Hand: 1037 printed values in 35 papers; recall 0.86 (close 0.881); agreement 0.872; 569 hand values not printed (figures, calculated) not scored.
+Hand: 1002 printed values in 35 papers; recall 0.88 (close 0.891); agreement 0.875; 556 hand values not printed (figures, calculated) not scored.
 Model standard: 525 values in 11 papers; recall 0.96 (close 0.962); agreement 0.99.
 
 | Column | Hand values | Hand recall | Agreement | MS values | MS recall | MS agreement |
 |---|---|---|---|---|---|---|
 | `sampled_Gly-Gly_aq_%yield` | 240 | 0.888 | 0.892 | 109 | 0.991 | 1.0 |
 | `duration_hr` | 118 | 0.814 | 0.837 | 48 | 1.0 | 1.0 |
-| `initial_pH` | 81 | 0.506 | 0.746 | 12 | 1.0 | 1.0 |
 | `sampled_cyclo_Gly-Gly_aq_%yield` | 75 | 0.92 | 0.886 | 69 | 1.0 | 1.0 |
 | `initial_temperature_C` | 66 | 0.939 | 0.855 | 25 | 0.96 | 0.923 |
 | `sampled_cyclo_Ala-Ala_aq_%yield` | 51 | 1.0 | 0.984 | 42 | 1.0 | 1.0 |
 | `sampled_Phe-Phe_aq_%yield` | 49 | 0.918 | 1.0 | 1 | 0.0 | – |
+| `initial_pH` | 46 | 0.674 | 0.773 | 12 | 1.0 | 1.0 |
 | `sampled_Ala-Ala_aq_%yield` | 46 | 0.87 | 0.742 | 35 | 0.943 | 1.0 |
 | `sampled_Gly-Gly-Gly_aq_%yield` | 41 | 0.951 | 0.823 | 42 | 0.976 | 1.0 |
 | `paper_title` | 35 | 0.943 | 0.971 | 11 | 1.0 | 1.0 |

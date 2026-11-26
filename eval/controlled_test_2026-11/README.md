@@ -78,3 +78,28 @@ lab_conditions, and Mickey's dupe pack, backed up in pack_backups/): an untimed 
 reaction mixture or suspension, and a pH stated once for all experiments (methods or only figure captions, as a
 paper-wide value) go to initial_pH; sampled_pH only when the paper says after the reaction / at sampling. A Must
 answer marked 'unclear' with no value is now a parameter_check flag carrying the model's note.
+
+## The pH wording measured (2026-11-25; option 2: Economy x3 on all 39, Standard on 13), `ph_wording_13.json`, `ph_wording_economy_39.json`
+
+Only the conditions step was asked again (resume reuses every unchanged request): Standard $0.91 for 13 papers (the
+step alone costs ~$0.06-0.21 a paper: it can't read the paper from the cache the other steps wrote), Economy $0.28.
+Mickey (2026-11-25): a final pH stays in sampled_pH only; the scorer no longer counts a hand row's initial_pH that
+equals its sampled_pH (the hand dataset's copy). With that, on the 43 columns:
+
+| | old wording | new wording |
+|---|---|---|
+| Standard, 13 papers: hand recall / initial_pH | 0.906 / 0.694 | 0.908 / 0.722 |
+| Economy x3, 13 papers | 0.895 / 0.583 | 0.897 / 0.583 |
+| Economy x3, 39 papers | 0.880 / 0.674 | 0.888 / 0.674 |
+
+Per paper: Schwendinger1991 now has pH 2.8 (Standard); faisal2005's Table 1 "pH of products" goes to sampled_pH on
+both profiles (right under the convention); Rabinowitz1985 (Standard) took the pH measured BEFORE base was added
+(6.0/6.1) instead of the pH it was adjusted to (8.9/10.5) -- the wording now says "when the pH was adjusted, the value
+it was adjusted to" (not measured yet); Zamaraev1996 is still judged not to apply to the rows. Small and mixed: the
+wording is about neutral; what remains of initial_pH is mostly figure values and debatable cases.
+
+Found on the way: Economy (Haiku) sometimes sends an empty entry -- initial_pH 0, no quote, source or note --
+written as pH 0.0 (Sakata2014, Rode1990). Such an entry is now left out and said (stage_values), as a 0 given in text
+already was.
+
+With the scorer's final rules, the main run's hand recall on the 39 papers: A0 0.864, **A1 0.893**, B0 0.884, B1 0.880.

@@ -198,3 +198,4 @@ current month's file (start `YYYY-MM.md` in a new month), with one line here.
 - Controlled test: scoring on the Must answer columns; Must answer rows readable (2026-11-25, Mickey)
 - Controlled test, run 1; Must answer with several passes (2026-11-25, Mickey)
 - Why duration_hr and initial_pH were missed (2026-11-25, Mickey)
+- The pH wording measured; empty answers; final pH stays sampled (2026-11-25, Mickey)

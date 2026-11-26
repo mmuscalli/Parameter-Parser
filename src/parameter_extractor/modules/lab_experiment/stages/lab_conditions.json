@@ -104,7 +104,7 @@
       "column": "initial_pH",
       "unit": "",
       "uncertainties": true,
-      "description": "pH at the start, as set or measured before the reaction: per set or row when a table gives it (a 'pH' or 'starting pH' column of the conditions, or a 'pH' column that doesn't say when it was measured); the measured pH of the reaction mixture or suspension when the paper doesn't say when; a pH stated once for all the experiments (in the methods, or only in figure captions) as a value for the whole paper; a buffer's stated pH when the paper gives no other."
+      "description": "pH at the start, as set or measured before the reaction: per set or row when a table gives it (a 'pH' or 'starting pH' column of the conditions, or a 'pH' column that doesn't say when it was measured); the measured pH of the reaction mixture or suspension when the paper doesn't say when; a pH stated once for all the experiments (in the methods, or only in figure captions) as a value for the whole paper; when the pH was adjusted, the value it was adjusted to, not one measured before adjusting; a buffer's stated pH when the paper gives no other."
     },
     {
       "column": "sampled_pH",

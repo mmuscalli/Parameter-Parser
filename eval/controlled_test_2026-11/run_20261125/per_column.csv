@@ -18,7 +18,7 @@ A0,initial_Phe_aq_mM,6,0.5,0.5,0.5,0,1,0.0,0.0,
 A0,initial_Ser_aq_mM,0,,,1.0,1,1,0.0,0.0,
 A0,initial_Trp_aq_mM,1,0.0,0.0,,0,0,,,
 A0,initial_Val_aq_mM,1,0.0,0.0,1.0,1,0,,,
-A0,initial_pH,81,0.481,0.753,0.636,18,12,1.0,1.0,1.0
+A0,initial_pH,46,0.717,1.0,0.621,5,12,1.0,1.0,1.0
 A0,initial_sodium_triMP_aq_mM,4,1.0,1.0,0.857,2,0,,,
 A0,initial_temperature_C,66,0.955,0.955,0.857,9,25,1.0,1.0,0.926
 A0,max_oligomer_length_nt,0,,,,0,4,0.25,0.25,1.0
@@ -61,7 +61,7 @@ A1,initial_Phe_aq_mM,6,0.667,0.667,0.5,0,1,1.0,1.0,1.0
 A1,initial_Ser_aq_mM,0,,,1.0,1,1,1.0,1.0,1.0
 A1,initial_Trp_aq_mM,1,1.0,1.0,1.0,0,0,,,
 A1,initial_Val_aq_mM,1,1.0,1.0,1.0,1,0,,,
-A1,initial_pH,81,0.58,0.815,0.705,18,12,1.0,1.0,1.0
+A1,initial_pH,46,0.761,0.978,0.613,5,12,1.0,1.0,1.0
 A1,initial_sodium_triMP_aq_mM,4,1.0,1.0,0.857,2,0,,,
 A1,initial_temperature_C,66,0.97,0.97,0.859,9,25,1.0,1.0,0.926
 A1,max_oligomer_length_nt,0,,,,0,4,0.0,0.0,
@@ -104,7 +104,7 @@ B0,initial_Phe_aq_mM,6,0.667,0.667,0.5,0,1,1.0,1.0,1.0
 B0,initial_Ser_aq_mM,0,,,1.0,1,1,1.0,1.0,1.0
 B0,initial_Trp_aq_mM,1,1.0,1.0,1.0,0,0,,,
 B0,initial_Val_aq_mM,1,1.0,1.0,1.0,1,0,,,
-B0,initial_pH,81,0.432,0.691,0.535,18,12,0.417,0.667,1.0
+B0,initial_pH,46,0.63,0.826,0.533,5,12,0.417,0.667,1.0
 B0,initial_sodium_triMP_aq_mM,4,1.0,1.0,0.857,2,0,,,
 B0,initial_temperature_C,66,0.955,0.955,0.837,9,25,1.0,1.0,0.926
 B0,max_oligomer_length_nt,0,,,,0,4,0.0,0.0,
@@ -147,7 +147,7 @@ B1,initial_Phe_aq_mM,6,0.667,0.667,0.5,0,1,1.0,1.0,1.0
 B1,initial_Ser_aq_mM,0,,,1.0,1,1,1.0,1.0,1.0
 B1,initial_Trp_aq_mM,1,1.0,1.0,1.0,0,0,,,
 B1,initial_Val_aq_mM,1,1.0,1.0,1.0,1,0,,,
-B1,initial_pH,81,0.506,0.753,0.746,18,12,1.0,1.0,1.0
+B1,initial_pH,46,0.674,0.87,0.773,5,12,1.0,1.0,1.0
 B1,initial_sodium_triMP_aq_mM,4,1.0,1.0,0.857,2,0,,,
 B1,initial_temperature_C,66,0.939,0.955,0.855,9,25,0.96,1.0,0.923
 B1,max_oligomer_length_nt,0,,,,0,4,0.0,0.0,

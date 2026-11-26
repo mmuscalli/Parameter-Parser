@@ -133,6 +133,8 @@ def test_number_parameter_answered_in_its_text():
     left, problems = values(col="initial_pH", v=0, txt="varies by run")
     assert left == {} and "given as text" in problems[0], problems
     assert values(col="initial_pH", v=0)[0] == {"initial_pH": 0}            # a real 0 with no text is kept
+    empty, problems = stage_values(spec, Item.model_validate(dict(col="initial_pH", v=0, q="", src="", c="low")))
+    assert empty == {} and "an empty answer" in problems[0]          # 0 with no quote, source or note (2026-11-25)
     assert values(col="initial_pH", v=7.1, txt="7.1")[0] == {"initial_pH": 7.1}
 
 

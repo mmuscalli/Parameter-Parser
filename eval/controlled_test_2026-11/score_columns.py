@@ -122,7 +122,13 @@ def compare(ref: tuple, run: tuple, only_printed=None) -> dict:
 def hand_frame(path: str) -> pd.DataFrame:
     hand = pd.read_csv(path, encoding="utf-8-sig", dtype=str, keep_default_na=False).replace("", None)
     hand["_paper"] = hand.full_id.str[:3]
-    return hand.rename(columns={c: current_column_name(c) for c in hand.columns if c != "_paper"})
+    hand = hand.rename(columns={c: current_column_name(c) for c in hand.columns if c != "_paper"})
+    # the hand dataset often copied a final pH into initial_pH (Mickey 2026-11-25: the app keeps a final pH in
+    # sampled_pH only, which is better): a row's initial_pH equal to its sampled_pH isn't scored as an initial pH
+    if {"initial_pH", "sampled_pH"} <= set(hand.columns):
+        copy = hand.initial_pH.notna() & (hand.initial_pH == hand.sampled_pH)
+        hand.loc[copy, "initial_pH"] = None
+    return hand
 
 
 def score(config: dict) -> pd.DataFrame:
