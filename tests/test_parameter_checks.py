@@ -60,6 +60,12 @@ def test_off_the_step_is_as_before_on_it_answers_for_every_parameter():
         keys[c]: {"s": "reported" if i == 0 else "not reported", "n": "Methods"} for i, c in enumerate(spec.columns)}})
     got = pc.answers(answer, spec.columns)
     assert got[spec.columns[0]]["status"] == "reported" and got[spec.columns[1]]["status"] == "not reported"
+    # several passes (Economy x3): the voted answer keeps the first pass's answers (2026-11-25: it lost them, and
+    # every paper of a 3-pass run with 'Must answer' columns failed)
+    from parameter_extractor.voting import vote_stage
+    voted, data, _ = vote_stage(checking, [answer, answer, answer])
+    assert pc.answers(voted, spec.columns) == got and "checked" in data
+    assert "checked" not in vote_stage(plain, [plain.models()[1].model_validate({"rows": [], "notes": ""})] * 3)[1]
 
 
 def test_the_chemistry_step_answers_for_compound_columns():

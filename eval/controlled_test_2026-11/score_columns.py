@@ -69,9 +69,16 @@ def printed(v: float, numbers: list) -> bool:
     return any(acc.close(v * f, t, PRINTED) for f in FACTORS for t in numbers)
 
 
+def _covers(a: str, b: str) -> bool:
+    """At least half of a's words are in b."""
+    w = acc.words(a)
+    return len(w & acc.words(b)) >= max(1, 0.5 * len(w)) if w else a == b
+
+
 def text_hit(ref: str, pool: set) -> bool:
-    w = acc.words(ref)
-    return any(len(w & acc.words(r)) >= max(1, 0.5 * len(w)) for r in pool) if w else ref in pool
+    """The same name either way round: 'CdOCMo' and 'CdOCMo (Cd2[Mo(CN)8]·6H2O)', 'goethite' and 'goethite
+    (alpha-FeOOH)'."""
+    return any(_covers(ref, r) or _covers(r, ref) for r in pool)
 
 
 def compare(ref: tuple, run: tuple, only_printed=None) -> dict:

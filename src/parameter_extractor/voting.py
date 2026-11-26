@@ -109,7 +109,9 @@ def vote_stage(spec, results: list) -> Tuple[object, dict, List[Disagreement]]:
     data = {"parameters": [w.model_dump(by_alias=True) for w in winners],
             "notes": " | ".join(dict.fromkeys(r.notes for r in results if r.notes)),
             **({"other": [_without_empty_category(o.model_dump(by_alias=True)) for o in other]}
-               if hasattr(results[0], "other") else {})}
+               if hasattr(results[0], "other") else {}),
+            # 'Must answer' (parameter_checks): the first pass's answers, as parameter_checks.record keeps them
+            **({"checked": results[0].checked.model_dump(by_alias=True)} if hasattr(results[0], "checked") else {})}
     _, Result = spec.models()
     return Result.model_validate(data), data, notes
 

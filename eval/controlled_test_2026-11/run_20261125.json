@@ -1,0 +1,81 @@
+{
+ "hand_csv": "/Users/mickeymuscalli/Documents/EORE Data Project/PaperDataTemplate Archive/PaperDataTemplate_Nov15_2026.csv",
+ "batch": "P1",
+ "papers": [
+  "Alargov2002",
+  "Bujdak1994",
+  "Bujdak1996",
+  "Chang1969",
+  "Chen2007",
+  "Chung1971",
+  "Eder1992",
+  "Eder1994",
+  "Flores1973",
+  "Fuchida2016",
+  "Gao2011",
+  "Halmann1968",
+  "Huber1998",
+  "Inoue1993",
+  "Inoue1994",
+  "Islam2003",
+  "Leman2004",
+  "Leman2015",
+  "Matrajt2003",
+  "Mizutani1981",
+  "Nooner1977",
+  "Rabinowitz1969",
+  "Rabinowitz1970",
+  "Rabinowitz1978",
+  "Rabinowitz1985",
+  "Rishpon1982",
+  "Rode1990",
+  "Sakata2014",
+  "Schwendinger1991",
+  "Steinman1966",
+  "Takaoka1991",
+  "Truman2024",
+  "Ying2019",
+  "Zamaraev1996",
+  "faisal2005",
+  "fuchida2014",
+  "iqubal2017",
+  "kumar2012",
+  "shanker2012"
+ ],
+ "must_answer_pack": "controlled_test_prebio_dupe",
+ "arms": {
+  "A0": {
+   "label": "Standard, 0.6.0 (Nov 20), built-in pack",
+   "folders": [
+    "/Users/mickeymuscalli/Documents/Parameter Extractor/accuracy_20261120/P1_A/queue_20261120-225036"
+   ]
+  },
+  "B0": {
+   "label": "Economy x3, 0.6.0 (Nov 20), built-in pack",
+   "folders": [
+    "/Users/mickeymuscalli/Documents/Parameter Extractor/accuracy_20261120/P1_B/queue_20261120-225036"
+   ]
+  },
+  "A1": {
+   "label": "Standard, 0.6.11, Must answer pack",
+   "folders": [
+    "/Users/mickeymuscalli/Documents/Parameter Extractor/controlled_test_20261125/standard/queue_20261125-202929"
+   ]
+  }
+ },
+ "model_standard": [
+  "/Users/mickeymuscalli/Documents/Parameter Extractor/accuracy_20261120/ms_P1/runs/Alargov2002_20261120-222633",
+  "/Users/mickeymuscalli/Documents/Parameter Extractor/accuracy_20261120/ms_P1/runs/Bujdak1996_20261120-222747",
+  "/Users/mickeymuscalli/Documents/Parameter Extractor/accuracy_20261120/ms_P1/runs/Chen2007_20261120-224102",
+  "/Users/mickeymuscalli/Documents/Parameter Extractor/accuracy_20261120/ms_P1/runs/Gao2011_20261120-222853",
+  "/Users/mickeymuscalli/Documents/Parameter Extractor/accuracy_20261120/ms_P1/runs/Halmann1968_20261120-223122",
+  "/Users/mickeymuscalli/Documents/Parameter Extractor/accuracy_20261120/ms_P1/runs/Inoue1994_20261120-223212",
+  "/Users/mickeymuscalli/Documents/Parameter Extractor/accuracy_20261120/ms_P1/runs/Islam2003_20261120-223326",
+  "/Users/mickeymuscalli/Documents/Parameter Extractor/accuracy_20261120/ms_P1/runs/Rode1990_20261120-224225",
+  "/Users/mickeymuscalli/Documents/Parameter Extractor/accuracy_20261120/ms_P1/runs/Sakata2014_20261120-223452",
+  "/Users/mickeymuscalli/Documents/Parameter Extractor/accuracy_20261120/ms_P1/runs/iqubal2017_20261120-223651",
+  "/Users/mickeymuscalli/Documents/Parameter Extractor/accuracy_20261120/ms_P1/runs/kumar2012_20261120-223802",
+  "/Users/mickeymuscalli/Documents/Parameter Extractor/accuracy_20261120/ms_P1/runs/mitsuzawa2004_20261120-223928"
+ ],
+ "out": "eval/controlled_test_2026-11/run_20261125"
+}
