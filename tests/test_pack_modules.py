@@ -344,6 +344,14 @@ def test_pages_and_module_groups():
         assert "kinetics" in groups()[1]
         assert e._chosen_modules() == ["sample_time"]                     # headings are never modules
 
+        # the Map: one heading row with its controls, the sidebar hidden for more room and back on leaving it
+        e.tabs.setCurrentIndex(e.tab_index("Map"))
+        assert e.map_bar.isVisibleTo(e) or not e.isVisible()
+        assert e.tabs.title.toolTip() and not e.tabs.about.isVisibleTo(e.tabs.about.parentWidget())
+        e.sidebar_btn.setChecked(True)
+        assert e.tabs.nav.isHidden()
+        e.tabs.setCurrentIndex(e.tab_index("Columns"))
+        assert not e.tabs.nav.isHidden() and not e.sidebar_btn.isChecked()
         # it fits a laptop screen (2026-11-26: it opened past the edge): no page forces the window's size, and a window
         # asked to be larger than the screen is fitted to it and centred
         hint = e.minimumSizeHint()

@@ -202,3 +202,4 @@ current month's file (start `YYYY-MM.md` in a new month), with one line here.
 - Data pack editor: grouped pages; modules grouped by linked / not linked (2026-11-25, Mickey)
 - RUMMAGED; page actions on their pages; the Structure page laid out; the remembered window opens fast (2026-11-26, Mickey)
 - Windows open within the screen (2026-11-26, Mickey)
+- The Map gets more of the window (2026-11-26, Mickey)

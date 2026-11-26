@@ -170,6 +170,17 @@ class _PageTabs(QTabWidget):
         self.title.setFont(font)
         self.about = _hint("")
         self._about: Dict[int, str] = {}
+        # the heading row: the page's title and, for a page that wants it, its own controls beside the title
+        # (2026-11-26, Mickey: the Map's view had too little of the window)
+        self.header = QWidget()
+        hl = QHBoxLayout(self.header)
+        hl.setContentsMargins(0, 0, 0, 0)
+        hl.setSpacing(10)
+        hl.addWidget(self.title)
+        self._header_row = hl
+        hl.addStretch(1)
+        self._extras: Dict[int, QWidget] = {}
+        self._compact: set = set()
         self.nav.currentItemChanged.connect(self._picked)
         self.currentChanged.connect(self._follow)
 
@@ -211,6 +222,15 @@ class _PageTabs(QTabWidget):
         holder = self.widget(i)
         return holder.widget() if isinstance(holder, QScrollArea) else holder
 
+    def set_compact(self, i: int, extras: Optional[QWidget] = None) -> None:
+        """Page i keeps its heading to one row: its description goes into the title's tooltip and `extras` (its
+        controls) sit beside the title, shown only with that page."""
+        self._compact.add(i)
+        if extras is not None:
+            self._header_row.addWidget(extras)
+            self._extras[i] = extras
+        self._follow(self.currentIndex())
+
     def _item(self, i: int):
         return next((self.nav.item(r) for r in range(self.nav.count()) if self.nav.item(r).data(self.PAGE) == i), None)
 
@@ -224,6 +244,11 @@ class _PageTabs(QTabWidget):
             self.nav.setCurrentItem(item)
         self.title.setText(self.tabText(i))
         self.about.setText(self._about.get(i, ""))
+        compact = i in self._compact
+        self.about.setVisible(not compact)
+        self.title.setToolTip(self._about.get(i, "") if compact else "")
+        for j, extras in self._extras.items():
+            extras.setVisible(j == i)
 
     # the sidebar follows what code does to the (hidden) tabs
     def setTabText(self, i: int, text: str) -> None:
@@ -501,7 +526,7 @@ class PackEditor(QDialog):
         self._actions: Dict[str, List[QPushButton]] = {}     # the pack-wide action buttons, by kind (_action)
         self.setWindowTitle(f"Data pack: {self.draft.manifest.get('label', '')}"
                             + ("  (built in, read-only)" if self.read_only else ""))
-        fit_to_screen(self, 1320, 820)
+        fit_to_screen(self, 1700, 1050)            # as much of the screen as it allows (the map uses it)
         layout = QVBoxLayout(self)
         if self.read_only:
             banner = QHBoxLayout()
@@ -542,6 +567,10 @@ class PackEditor(QDialog):
             self.tabs.add_group(heading)
             for name, widget, about in group:
                 self.tabs.add_page(widget, name, about)
+        self.tabs.set_compact(self.tab_index("Map"), self.map_bar)      # the map: one heading row, the most view
+        # the sidebar comes back on leaving the Map (a double-click on the map opens another page)
+        self.tabs.currentChanged.connect(lambda i: self.sidebar_btn.setChecked(False)
+                                         if i != self.tab_index("Map") else None)
         self.tabs.currentChanged.connect(lambda _i: self._fit_rows())
         self._follow_step("chemistry", "Compounds")
         self._refresh_module_effects()
@@ -553,7 +582,7 @@ class PackEditor(QDialog):
         body.addWidget(self.tabs.nav)
         page = QVBoxLayout()
         page.setSpacing(2)
-        page.addWidget(self.tabs.title)
+        page.addWidget(self.tabs.header)
         page.addWidget(self.tabs.about)
         page.addSpacing(8)
         page.addWidget(self.tabs, 1)
@@ -1318,18 +1347,32 @@ class PackEditor(QDialog):
         from parameter_extractor.gui.structure_canvas import StructureCanvas
         w = QWidget()
         v = QVBoxLayout(w)
-        bar = QHBoxLayout()
-        bar.addWidget(_hint("As saved -- Save updates it. Right-click a part for every place it's edited; pinch or "
-                            "Ctrl+scroll to zoom, drag to move."), 1)
+        v.setContentsMargins(0, 0, 0, 0)                 # the view gets all of the page (2026-11-26, Mickey)
+        # its controls beside the page's title (_PageTabs.set_compact, after the pages are added)
+        self.map_bar = QWidget()
+        bar = QHBoxLayout(self.map_bar)
+        bar.setContentsMargins(0, 0, 0, 0)
+        saved_note = _hint("As saved -- Save updates it.")
+        saved_note.setWordWrap(False)
+        bar.addWidget(saved_note)
+        bar.addWidget(HelpButton("Hover over a step or a kind of value to follow it; click it for its details; "
+                                 "double-click one to edit it, right-click for every place it's edited. Pinch or "
+                                 "Ctrl+scroll to zoom, drag to move; Fit to window shows it whole again."))
+        bar.addSpacing(12)
         self.map_canvas = StructureCanvas()
+        self.map_canvas.setFrameShape(QFrame.Shape.NoFrame)
         self.map_canvas.actions_for = self._map_actions
+        self.sidebar_btn = QPushButton("Hide sidebar", checkable=True)
+        self.sidebar_btn.setToolTip("More room for the map: hide the list of pages (show it again here).")
+        self.sidebar_btn.toggled.connect(lambda on: (self.tabs.nav.setVisible(not on),
+                                                     self.sidebar_btn.setText("Show sidebar" if on else "Hide sidebar")))
+        bar.addWidget(self.sidebar_btn)
         bar.addWidget(QPushButton("Fit to window", clicked=lambda: self.map_canvas.fit()))
         export = QPushButton("Export image…", clicked=lambda: self.export_map())
         export.setToolTip("The map as an image for a figure: PNG with a transparent background, or SVG (vector); "
                           "dark text for a white page or light text for a dark slide. Opened nodes are exported "
                           "opened.")
         bar.addWidget(export)
-        v.addLayout(bar)
         v.addWidget(self.map_canvas, 1)
         self._refresh_map()
         return w
