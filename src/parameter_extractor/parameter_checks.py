@@ -190,6 +190,8 @@ def problem(status: str, n: int) -> str:
         return "marked reported, but no value given"
     if status == "not reported" and n:
         return f"{n} value(s) given, but marked not reported"
+    if status == "unclear" and n == 0:          # found something it wasn't sure of and wrote nothing (2026-11-25:
+        return "marked unclear, no value given"   # Schwendinger1991's pH 2.8, only in figure captions): for review
     return ""
 
 
@@ -233,7 +235,7 @@ def finish(ctx, ex, run_dir: Path) -> list:
             p = problem(a["status"], n)
             lines.append([step, column, a["status"], n, a["note"], p])
             if p:
-                bad.append(f"{column}: {p}")
+                bad.append(f"{column}: {p}" + (f" ('{a['note']}')" if a["status"] == "unclear" and a["note"] else ""))
         if bad:
             flags.append(Flag("parameter_check", f"Answers for every parameter ({step}) that don't match the values "
                                                  f"given: " + "; ".join(bad[:12]) + (" ..." if len(bad) > 12 else "")

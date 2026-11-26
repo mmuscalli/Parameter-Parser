@@ -3,11 +3,12 @@
 
 Per arm, paper and column, the distinct values each side has (a value on any row counts):
   HAND   PaperDataTemplate (the hand dataset; its old column names converted by current_column_name). Recall counts
-         only hand values the paper PRINTS (a number in its text, as printed or x/÷ 1000 or 100 for a unit change);
+         only hand values the paper PRINTS at their precision (as printed, or x/÷ 1000 or 100 for a unit change);
          values from figures or calculated are counted as 'not printed', not scored. Agreement: the run's values that
          match any hand value of that column, over the run's values, where the hand dataset fills the column.
   MS     a checked model-standard run where there is one (same measures, every value counted).
-Numbers match within 1 % ('match') or 10 % ('close'); text when at least half the reference's words appear (the
+Numbers match within 1 % ('match') or 10 % ('close'), or within the reference's rounding; a column's range column
+(initial_pH_range 4:5) counts as its values; text when at least half the reference's words appear (the
 accuracy evaluation's `words`, with its equivalent names).
 
 Usage: python score_columns.py config.json  -> <out>/per_column.csv, per_paper_column.csv, summary.md
@@ -61,12 +62,33 @@ def values(series) -> tuple:
     return nums, texts
 
 
+def _half_unit(text: str) -> float:
+    """Half a unit of a number's last printed decimal: '2.6' -> 0.05, '24' -> 0.5."""
+    text = text.lower().split("e")[0]
+    return 0.5 * 10 ** -(len(text.split(".")[1]) if "." in text else 0)
+
+
 def text_numbers(text: str) -> list:
-    return [x for x in (acc.num(m.replace(",", ".")) for m in _NUMBER.findall(text)) if x is not None]
+    """(value, half a unit of its last printed decimal) of each number in the text."""
+    out = []
+    for m in _NUMBER.findall(text):
+        m = m.replace(",", ".")
+        x = acc.num(m)
+        if x is not None:
+            out.append((x, _half_unit(m)))
+    return out
 
 
 def printed(v: float, numbers: list) -> bool:
-    return any(acc.close(v * f, t, PRINTED) for f in FACTORS for t in numbers)
+    """The paper prints v (or v x/÷ 1000 or 100, a unit change) AT ITS PRECISION: 7.2177 read off a figure isn't
+    printed because the text has a '7' somewhere."""
+    own = _half_unit(repr(v))
+    return any(abs(v * f - t) <= min(half, own * f) + 1e-9 for f in FACTORS for t, half in numbers)
+
+
+def same(ref: float, run: float, tol) -> bool:
+    """Within tol, or within the reference's own rounding (0.08 h and 0.0833 h)."""
+    return acc.close(ref, run, tol) or abs(ref - run) <= _half_unit(repr(ref)) + 1e-12
 
 
 def _covers(a: str, b: str) -> bool:
@@ -87,12 +109,12 @@ def compare(ref: tuple, run: tuple, only_printed=None) -> dict:
     un, ut = run
     scored = {v for v in rn if only_printed is None or printed(v, only_printed)}
     out = {"ref_values": len(scored) + len(rt), "not_printed": len(rn) - len(scored),
-           "found": sum(any(acc.close(v, u, MATCH) for u in un) for v in scored) + sum(text_hit(t, ut) for t in rt),
-           "found_close": sum(any(acc.close(v, u, CLOSE) for u in un) for v in scored)
+           "found": sum(any(same(v, u, MATCH) for u in un) for v in scored) + sum(text_hit(t, ut) for t in rt),
+           "found_close": sum(any(same(v, u, CLOSE) for u in un) for v in scored)
            + sum(text_hit(t, ut) for t in rt),
            "run_values": len(un) + len(ut)}
     if rn or rt:                                          # agreement only where the reference fills the column
-        out["run_agree"] = sum(any(acc.close(u, v, MATCH) for v in rn) for u in un) + sum(text_hit(t, rt) for t in ut)
+        out["run_agree"] = sum(any(same(v, u, MATCH) for v in rn) for u in un) + sum(text_hit(t, rt) for t in ut)
         out["run_compared"] = len(un) + len(ut)
     return out
 
@@ -126,6 +148,11 @@ def score(config: dict) -> pd.DataFrame:
                 ms_rows[key] = acc.rows_of(ms[key])
             for col in columns:
                 rv = values(run[col]) if col in run else (set(), set())
+                rng = col.rsplit("_", 1)[0] + "_range_" + col.rsplit("_", 1)[1] if "_" in col else ""
+                for extra in (col + "_range", rng):                # 'initial_pH_range' 4:5 holds pH 4 and 5
+                    if extra in run:
+                        en, et = values(run[extra])
+                        rv = (rv[0] | en, rv[1] | et)
                 rec = {"arm": arm_id, "paper": key, "column": col}
                 if hd is not None and col in hd:
                     rec.update({f"hand_{k}": v for k, v in compare(values(hd[col]), rv, texts[key]).items()})

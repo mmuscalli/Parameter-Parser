@@ -91,11 +91,11 @@ def test_answers_compared_with_the_values_given():
     checking = for_run(spec, check_all=True)
     Result = checking.models()[1]
     keys = pc.check_keys(spec.columns)
-    c0, c1, c2 = spec.columns[:3]
+    c0, c1, c2, c3 = spec.columns[:4]
     answer = Result.model_validate({"rows": [], "notes": "", "checked": {
         keys[c]: {"s": "not reported", "n": "-"} for c in spec.columns} | {
         keys[c0]: {"s": "reported", "n": "Table 1"}, keys[c1]: {"s": "not reported", "n": "-"},
-        keys[c2]: {"s": "reported", "n": "Methods"}}})
+        keys[c2]: {"s": "reported", "n": "Methods"}, keys[c3]: {"s": "unclear", "n": "only in figure captions"}}})
     ctx = SimpleNamespace()
     pc.record(ctx, spec.name, answer, spec.columns)
     pc.record(ctx, spec.name, Result.model_validate({"rows": [], "notes": "", "checked": {
@@ -119,6 +119,8 @@ def test_answers_compared_with_the_values_given():
     assert rows[c0]["problem"] == "" and rows[c0]["values"] == "1"
     assert "marked not reported" in rows[c1]["problem"]
     assert rows[c2]["problem"] == "marked reported, but no value given"
+    assert rows[c3]["problem"] == "marked unclear, no value given"                  # found, held back: for review
+    assert any(f"{c3}: marked unclear, no value given ('only in figure captions')" in f.message for f in flags)
     with tempfile.TemporaryDirectory() as tmp:
         pc.finish(ctx, ex, Path(tmp))
         chem_rows = {r["parameter"]: r for r in csv.DictReader(open(Path(tmp) / pc.CHECKS_FILE)) if r["step"] == "chemistry"}
